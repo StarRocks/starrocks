@@ -41,9 +41,10 @@ public class ClusterSnapshotJob implements Writable {
      * EXPIRED: Not the latest finished backup snapshot
      * DELETED: Not the lastest finished backup snapshot and the cluster snapshot
      * has been deleted from remote
+     * CLEANING: Cleaning expired cluster snapshot files
      */
     public enum ClusterSnapshotJobState {
-        INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, EXPIRED, DELETED, ERROR
+        INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, EXPIRED, DELETED, ERROR, CLEANING
     }
 
     @SerializedName(value = "snapshot")
@@ -125,7 +126,8 @@ public class ClusterSnapshotJob implements Writable {
     public boolean isUnFinishedState() {
         return state == ClusterSnapshotJobState.INITIALIZING ||
                 state == ClusterSnapshotJobState.SNAPSHOTING ||
-                state == ClusterSnapshotJobState.UPLOADING;
+                state == ClusterSnapshotJobState.UPLOADING ||
+                state == ClusterSnapshotJobState.CLEANING;
     }
 
     public boolean isInitializing() {
@@ -270,7 +272,7 @@ public class ClusterSnapshotJob implements Writable {
                 getFeJournalId(), getStarMgrJournalId());
     }
 
-    protected void runFinishedJob(SnapshotJobContext context) throws StarRocksException {
+    protected void runCleaningJob(SnapshotJobContext context) throws StarRocksException {
         // Default implementation: do nothing
     }
 
@@ -288,11 +290,13 @@ public class ClusterSnapshotJob implements Writable {
                     case UPLOADING:
                         runUploadingJob(context);
                         break;
+                    case CLEANING:
+                        runCleaningJob(context);
+                        break;
                     case FINISHED:
                     case EXPIRED:
                     case DELETED:
                     case ERROR:
-                        runFinishedJob(context);
                         break;
                     default:
                         break;

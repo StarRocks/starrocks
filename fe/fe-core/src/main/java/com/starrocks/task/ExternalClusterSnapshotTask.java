@@ -27,21 +27,22 @@ public class ExternalClusterSnapshotTask extends AgentTask {
     private final long preVersion;
     private final long newVersion;
     private final long physicalPartitionId;
+    private final boolean isFileBundling;
+    private final boolean isDropPartition;
     private final long destTablet;
-    private final boolean isFilebundling;
     private List<TComputeNodeTablets> computeNodeTablets;
 
-
     public ExternalClusterSnapshotTask(long backendId, long dbId, long tableId, long partitionId,
-            long physicalPartitionId, long jobId, long preVersion, long newVersion, 
-            boolean isFileBundling, long destTablet) {
+            long physicalPartitionId, long jobId, long preVersion, long newVersion, boolean isFileBundling, 
+            boolean isDropPartition, long destTablet, long signature) {
         super(null, backendId, TTaskType.EXTERNAL_CLUSTER_SNAPSHOT, dbId, tableId, partitionId, -1L, -1L,
-                physicalPartitionId);
+                signature);
         this.jobId = jobId;
         this.preVersion = preVersion;
         this.newVersion = newVersion;
         this.physicalPartitionId = physicalPartitionId;
-        this.isFilebundling = isFileBundling;
+        this.isFileBundling = isFileBundling;
+        this.isDropPartition = isDropPartition;
         this.destTablet = destTablet;
     }
 
@@ -62,8 +63,9 @@ public class ExternalClusterSnapshotTask extends AgentTask {
         request.setPhysical_partition_id(physicalPartitionId);
         request.setPre_version(preVersion);
         request.setNew_version(newVersion);
+        request.setIs_filebundling(isFileBundling);
+        request.setIs_drop_partition(isDropPartition);
         request.setDest_tablet_id(destTablet);
-        request.setIs_filebundling(isFilebundling);
         request.setCompute_node_tablets(computeNodeTablets);
         return request;
     }

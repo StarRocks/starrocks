@@ -48,6 +48,25 @@ public:
         std::string custom_root_location = join_path(root_location(tablet_id), partition_path);
         return join_path(custom_root_location, kSegmentDirectoryName);
     }
+
+    std::string data_file_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
+                                   const std::string& file) {
+        return join_path(segment_root_location(tablet_id, db_id, table_id, partition_id), file);
+    }
+
+    std::string metadata_file_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
+                                       const std::string& file) {
+        return join_path(metadata_root_location(tablet_id, db_id, table_id, partition_id), file);
+    }
+
+    std::string schema_file_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
+                                     const std::string& file) {
+        return join_path(root_location(tablet_id), file);
+    }
+
+    std::string partition_directory_location(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id) {
+        return join_path(root_location(tablet_id), fmt::format("db{}/{}/{}", db_id, table_id, partition_id));
+    }
 };
 
 } // namespace starrocks::lake

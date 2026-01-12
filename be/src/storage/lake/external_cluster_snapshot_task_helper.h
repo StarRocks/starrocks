@@ -50,15 +50,23 @@ FileSet collect_sstable_files(const TabletMetadataPtr& metadata);
 FileSet collect_dcg_files(const TabletMetadataPtr& metadata);
 FileSet collect_delvec_files(const TabletMetadataPtr& metadata);
 void collect_schema_ids(const TabletMetadataPtr& metadata, phmap::flat_hash_set<int64_t>& schema_ids);
+void collect_unused_files(const TabletFileCollections& collections, FileSet& unused_data_files,
+                          FileSet& pre_bundle_data_files);
 
 TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFileCollections& collections,
-                                               FileSet& globally_bound_segments,
+                                               FileSet& pre_bundle_data_files,
+                                               phmap::flat_hash_set<std::string>& globally_bound_segments,
                                                UploadSnapshotFilesRequestPB& node_req);
 
-void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t tablet_id,
-                                const TabletMetadataPtr& pre_tablet_metadata,
+void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t tablet_id, int64_t pre_version,
+                                int64_t new_version, const TabletMetadataPtr& pre_tablet_metadata,
                                 const TabletMetadataPtr& new_tablet_metadata,
                                 phmap::flat_hash_set<int64_t>& pre_schema_ids,
-                                phmap::flat_hash_set<int64_t>& new_schema_ids, TabletDataSnapshotPB* tablet_pb);
+                                phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_meta_files,
+                                TabletDataSnapshotPB* tablet_pb);
+
+void prepare_unused_files_for_log(int64_t pre_version, const FileSet& pre_bundle_data_files, FileSet& unused_data_files,
+                                  const FileSet& unused_meta_files, const phmap::flat_hash_set<int64_t>& pre_schema_ids,
+                                  const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files);
 
 } // namespace starrocks::lake

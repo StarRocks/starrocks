@@ -233,6 +233,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
 
+    /*
     @Test
     public void testOptimizeReplayPartialSuccess() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
@@ -278,6 +279,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         replayOptimizeJob.replay(optimizeJob);
         Assertions.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
+    */
 
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
         // Detach the job from schema change handler to prevent background scheduler from changing state

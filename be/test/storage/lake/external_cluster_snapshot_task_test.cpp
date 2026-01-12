@@ -40,7 +40,7 @@ public:
 
     void TearDown() override { remove_test_dir_ignore_error(); }
 
-    MutableTabletMetadataPtr create_tablet_metadata(int64_t tablet_id, int64_t version,
+    MutableTabletMetadataPtr create_tablet_metadata(int64_t tablet_id, int64_t version, int64_t rowset_id,
                                                     const std::vector<std::string>& segments = {},
                                                     const std::vector<std::string>& sstable_files = {},
                                                     const std::vector<std::string>& dcg_files = {},
@@ -70,7 +70,6 @@ public:
         c1->set_is_nullable(false);
 
         // Add rowsets with segments
-        uint32_t rowset_id = 1;
         for (const auto& segment : segments) {
             auto* rowset = metadata->add_rowsets();
             rowset->set_id(rowset_id++);
@@ -150,11 +149,11 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_basic_snapshot_with_new_segments) {
     int64_t new_version = 2;
 
     // Create pre-version metadata with one segment
-    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, {"segment1.dat"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {"segment1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
 
     // Create new-version metadata with two segments (one new, one existing)
-    auto new_metadata = create_tablet_metadata(tablet_id, new_version, {"segment1.dat", "segment2.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"segment1.dat", "segment2.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
 
     TBackend backend;
@@ -179,11 +178,11 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_with_new_sstable_files) {
     int64_t new_version = 2;
 
     // Create pre-version metadata with one sstable
-    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, {}, {"sstable1.sst"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {}, {"sstable1.sst"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
 
     // Create new-version metadata with two sstables (one new)
-    auto new_metadata = create_tablet_metadata(tablet_id, new_version, {}, {"sstable1.sst", "sstable2.sst"});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {}, {"sstable1.sst", "sstable2.sst"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
 
     TBackend backend;
@@ -206,11 +205,11 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_with_new_dcg_files) {
     int64_t new_version = 2;
 
     // Create pre-version metadata with one dcg file
-    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, {}, {}, {"dcg1.dat"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {}, {}, {"dcg1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
 
     // Create new-version metadata with two dcg files (one new)
-    auto new_metadata = create_tablet_metadata(tablet_id, new_version, {}, {}, {"dcg1.dat", "dcg2.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {}, {}, {"dcg1.dat", "dcg2.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
 
     TBackend backend;
@@ -233,12 +232,12 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_with_new_delvec_files) {
     int64_t new_version = 2;
 
     // Create pre-version metadata with one delvec file
-    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, {}, {}, {}, {"delvec1.delvec"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {}, {}, {}, {"delvec1.delvec"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
 
     // Create new-version metadata with two delvec files (one new)
     auto new_metadata =
-            create_tablet_metadata(tablet_id, new_version, {}, {}, {}, {"delvec1.delvec", "delvec2.delvec"});
+            create_tablet_metadata(tablet_id, new_version, 1, {}, {}, {}, {"delvec1.delvec", "delvec2.delvec"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
 
     TBackend backend;
@@ -261,7 +260,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_without_pre_version) {
     int64_t new_version = 1;
 
     // Create new-version metadata
-    auto new_metadata = create_tablet_metadata(tablet_id, new_version, {"segment1.dat", "segment2.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"segment1.dat", "segment2.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
 
     TBackend backend;
@@ -284,7 +283,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_new_version_not_found) {
     int64_t new_version = 2;
 
     // Only create pre-version metadata
-    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, {"segment1.dat"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {"segment1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
 
     TBackend backend;
@@ -337,15 +336,15 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_multiple_tablets) {
     int64_t new_version = 2;
 
     // Create metadata for tablet 1
-    auto pre_metadata1 = create_tablet_metadata(tablet_id1, pre_version, {"segment1.dat"});
+    auto pre_metadata1 = create_tablet_metadata(tablet_id1, pre_version, 1, {"segment1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata1));
-    auto new_metadata1 = create_tablet_metadata(tablet_id1, new_version, {"segment1.dat", "segment2.dat"});
+    auto new_metadata1 = create_tablet_metadata(tablet_id1, new_version, 1, {"segment1.dat", "segment2.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata1));
 
     // Create metadata for tablet 2
-    auto pre_metadata2 = create_tablet_metadata(tablet_id2, pre_version, {"segment3.dat"});
+    auto pre_metadata2 = create_tablet_metadata(tablet_id2, pre_version, 1, {"segment3.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata2));
-    auto new_metadata2 = create_tablet_metadata(tablet_id2, new_version, {"segment3.dat", "segment4.dat"});
+    auto new_metadata2 = create_tablet_metadata(tablet_id2, new_version, 1, {"segment3.dat", "segment4.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata2));
 
     TBackend backend;
@@ -369,15 +368,15 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_multiple_backends) {
     int64_t new_version = 2;
 
     // Create metadata for tablet 1
-    auto pre_metadata1 = create_tablet_metadata(tablet_id1, pre_version, {"segment1.dat"});
+    auto pre_metadata1 = create_tablet_metadata(tablet_id1, pre_version, 1, {"segment1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata1));
-    auto new_metadata1 = create_tablet_metadata(tablet_id1, new_version, {"segment1.dat", "segment2.dat"});
+    auto new_metadata1 = create_tablet_metadata(tablet_id1, new_version, 1, {"segment1.dat", "segment2.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata1));
 
     // Create metadata for tablet 2
-    auto pre_metadata2 = create_tablet_metadata(tablet_id2, pre_version, {"segment3.dat"});
+    auto pre_metadata2 = create_tablet_metadata(tablet_id2, pre_version, 1, {"segment3.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata2));
-    auto new_metadata2 = create_tablet_metadata(tablet_id2, new_version, {"segment3.dat", "segment4.dat"});
+    auto new_metadata2 = create_tablet_metadata(tablet_id2, new_version, 1, {"segment3.dat", "segment4.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata2));
 
     TBackend backend1;
@@ -404,9 +403,9 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_no_new_files) {
     int64_t new_version = 2;
 
     // Create pre-version and new-version metadata with same files
-    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, {"segment1.dat"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {"segment1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
-    auto new_metadata = create_tablet_metadata(tablet_id, new_version, {"segment1.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"segment1.dat"});
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
 
     TBackend backend;
@@ -434,7 +433,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_no_new_files) {
 // Test build_rowset_index with valid metadata
 TEST_F(ExternalClusterSnapshotTaskTest, test_build_rowset_index_with_metadata) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {"segment1.dat", "segment2.dat"});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat", "segment2.dat"});
 
     auto index = build_rowset_index(metadata);
 
@@ -457,7 +456,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_build_rowset_index_with_null_metada
 // Test build_rowset_index with empty rowsets
 TEST_F(ExternalClusterSnapshotTaskTest, test_build_rowset_index_with_empty_rowsets) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {});
 
     auto index = build_rowset_index(metadata);
 
@@ -467,7 +466,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_build_rowset_index_with_empty_rowse
 // Test collect_sstable_files with valid metadata
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_sstable_files_with_metadata) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {}, {"sstable1.sst", "sstable2.sst"});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {}, {"sstable1.sst", "sstable2.sst"});
 
     auto files = collect_sstable_files(metadata);
 
@@ -488,7 +487,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_sstable_files_with_null_met
 // Test collect_sstable_files with empty sstable_meta
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_sstable_files_with_empty_sstable_meta) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {});
 
     auto files = collect_sstable_files(metadata);
 
@@ -498,7 +497,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_sstable_files_with_empty_ss
 // Test collect_dcg_files with valid metadata
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_dcg_files_with_metadata) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {}, {}, {"111.dcg", "222.dcg"});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {}, {}, {"111.dcg", "222.dcg"});
 
     auto files = collect_dcg_files(metadata);
 
@@ -519,7 +518,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_dcg_files_with_null_metadat
 // Test collect_dcg_files with empty dcg_meta
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_dcg_files_with_empty_dcg_meta) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {});
 
     auto files = collect_dcg_files(metadata);
 
@@ -529,7 +528,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_dcg_files_with_empty_dcg_me
 // Test collect_delvec_files with valid metadata
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_delvec_files_with_metadata) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {}, {}, {}, {"delvec1.delvec", "delvec2.delvec"});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {}, {}, {}, {"delvec1.delvec", "delvec2.delvec"});
 
     auto files = collect_delvec_files(metadata);
 
@@ -550,7 +549,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_delvec_files_with_null_meta
 // Test collect_delvec_files with empty delvec_meta
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_delvec_files_with_empty_delvec_meta) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {});
 
     auto files = collect_delvec_files(metadata);
 
@@ -560,7 +559,7 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_delvec_files_with_empty_del
 // Test collect_schema_ids with valid metadata
 TEST_F(ExternalClusterSnapshotTaskTest, test_collect_schema_ids_with_metadata) {
     int64_t tablet_id = next_id();
-    auto metadata = create_tablet_metadata(tablet_id, 1, {});
+    auto metadata = create_tablet_metadata(tablet_id, 1, 1, {});
 
     phmap::flat_hash_set<int64_t> schema_ids;
     collect_schema_ids(metadata, schema_ids);
@@ -582,10 +581,10 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_collect_schema_ids_with_null_metada
 // Test TabletFileCollections::collect with both pre and new metadata
 TEST_F(ExternalClusterSnapshotTaskTest, test_tablet_file_collections_collect_with_both_metadata) {
     int64_t tablet_id = next_id();
-    auto pre_metadata =
-            create_tablet_metadata(tablet_id, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"}, {"delvec1.delvec"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"},
+                                               {"delvec1.delvec"});
     auto new_metadata =
-            create_tablet_metadata(tablet_id, 2, {"segment1.dat", "segment2.dat"}, {"sstable1.sst", "sstable2.sst"},
+            create_tablet_metadata(tablet_id, 2, 1, {"segment1.dat", "segment2.dat"}, {"sstable1.sst", "sstable2.sst"},
                                    {"dcg1.dat", "dcg2.dat"}, {"delvec1.delvec", "delvec2.delvec"});
 
     auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
@@ -631,8 +630,8 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_tablet_file_collections_collect_wit
 TEST_F(ExternalClusterSnapshotTaskTest, test_tablet_file_collections_collect_with_null_pre_metadata) {
     int64_t tablet_id = next_id();
     TabletMetadataPtr pre_metadata = nullptr;
-    auto new_metadata =
-            create_tablet_metadata(tablet_id, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"}, {"delvec1.delvec"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"},
+                                               {"delvec1.delvec"});
 
     auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
 
@@ -652,17 +651,19 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_tablet_file_collections_collect_wit
 // Test populate_tablet_snapshot with new files
 TEST_F(ExternalClusterSnapshotTaskTest, test_populate_tablet_snapshot_with_new_files) {
     int64_t tablet_id = next_id();
-    auto pre_metadata =
-            create_tablet_metadata(tablet_id, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"}, {"delvec1.delvec"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"},
+                                               {"delvec1.delvec"});
     auto new_metadata =
-            create_tablet_metadata(tablet_id, 2, {"segment1.dat", "segment2.dat"}, {"sstable1.sst", "sstable2.sst"},
+            create_tablet_metadata(tablet_id, 2, 1, {"segment1.dat", "segment2.dat"}, {"sstable1.sst", "sstable2.sst"},
                                    {"dcg1.dat", "dcg2.dat"}, {"delvec1.delvec", "delvec2.delvec"});
 
     auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
-    FileSet globally_bound_segments;
+    FileSet pre_bundle_data_files;
+    phmap::flat_hash_set<std::string> globally_bound_segments;
     UploadSnapshotFilesRequestPB node_req;
 
-    auto* tablet_pb = populate_tablet_snapshot(tablet_id, collections, globally_bound_segments, node_req);
+    auto* tablet_pb =
+            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_segments, node_req);
 
     ASSERT_NE(tablet_pb, nullptr);
     ASSERT_EQ(tablet_pb->tablet_id(), tablet_id);
@@ -684,16 +685,18 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_tablet_snapshot_with_new_f
 // Test populate_tablet_snapshot with no new files
 TEST_F(ExternalClusterSnapshotTaskTest, test_populate_tablet_snapshot_with_no_new_files) {
     int64_t tablet_id = next_id();
-    auto pre_metadata =
-            create_tablet_metadata(tablet_id, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"}, {"delvec1.delvec"});
-    auto new_metadata =
-            create_tablet_metadata(tablet_id, 2, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"}, {"delvec1.delvec"});
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"},
+                                               {"delvec1.delvec"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 1, {"segment1.dat"}, {"sstable1.sst"}, {"dcg1.dat"},
+                                               {"delvec1.delvec"});
 
     auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
-    FileSet globally_bound_segments;
+    FileSet pre_bundle_data_files;
+    phmap::flat_hash_set<std::string> globally_bound_segments;
     UploadSnapshotFilesRequestPB node_req;
 
-    auto* tablet_pb = populate_tablet_snapshot(tablet_id, collections, globally_bound_segments, node_req);
+    auto* tablet_pb =
+            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_segments, node_req);
 
     ASSERT_NE(tablet_pb, nullptr);
     ASSERT_EQ(tablet_pb->tablet_id(), tablet_id);
@@ -705,22 +708,25 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_tablet_snapshot_with_globa
     int64_t tablet_id1 = next_id();
     int64_t tablet_id2 = next_id();
 
-    auto pre_metadata1 = create_tablet_metadata(tablet_id1, 1, {"segment1.dat"});
-    auto new_metadata1 = create_tablet_metadata(tablet_id1, 2, {"segment1.dat", "segment2.dat"});
+    auto pre_metadata1 = create_tablet_metadata(tablet_id1, 1, 1, {"segment1.dat"});
+    auto new_metadata1 = create_tablet_metadata(tablet_id1, 2, 1, {"segment1.dat", "segment2.dat"});
 
-    auto pre_metadata2 = create_tablet_metadata(tablet_id2, 1, {});
-    auto new_metadata2 = create_tablet_metadata(tablet_id2, 2, {"segment2.dat"});
+    auto pre_metadata2 = create_tablet_metadata(tablet_id2, 1, 1, {});
+    auto new_metadata2 = create_tablet_metadata(tablet_id2, 2, 1, {"segment2.dat"});
 
-    FileSet globally_bound_segments;
+    FileSet pre_bundle_data_files;
+    phmap::flat_hash_set<std::string> globally_bound_segments;
     UploadSnapshotFilesRequestPB node_req;
 
     // First tablet adds segment2.dat
     auto collections1 = TabletFileCollections::collect(pre_metadata1, new_metadata1);
-    auto* tablet_pb1 = populate_tablet_snapshot(tablet_id1, collections1, globally_bound_segments, node_req);
+    auto* tablet_pb1 = populate_tablet_snapshot(tablet_id1, collections1, pre_bundle_data_files,
+                                                globally_bound_segments, node_req);
 
     // Second tablet should not add segment2.dat again (already in globally_bound_segments)
     auto collections2 = TabletFileCollections::collect(pre_metadata2, new_metadata2);
-    auto* tablet_pb2 = populate_tablet_snapshot(tablet_id2, collections2, globally_bound_segments, node_req);
+    auto* tablet_pb2 = populate_tablet_snapshot(tablet_id2, collections2, pre_bundle_data_files,
+                                                globally_bound_segments, node_req);
 
     ASSERT_NE(tablet_pb1, nullptr);
     ASSERT_NE(tablet_pb2, nullptr);
@@ -733,11 +739,37 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_tablet_snapshot_with_globa
     ASSERT_FALSE(files2.contains("segment2.dat"));
 }
 
+// Test populate_tablet_snapshot with pre_bundle_data_files removal
+TEST_F(ExternalClusterSnapshotTaskTest, test_populate_tablet_snapshot_with_pre_bundle_data_files) {
+    int64_t tablet_id = next_id();
+
+    // Create metadata where a segment from pre_bundle_data_files appears in new version
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 2, {"segment1.dat", "segment2.dat"});
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet pre_bundle_data_files = {"segment1.dat"}; // segment1.dat is in pre_bundle_data_files
+    phmap::flat_hash_set<std::string> globally_bound_segments;
+    UploadSnapshotFilesRequestPB node_req;
+
+    auto* tablet_pb =
+            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_segments, node_req);
+
+    ASSERT_NE(tablet_pb, nullptr);
+    // segment1.dat should be removed from pre_bundle_data_files since it appears in new version
+    ASSERT_FALSE(pre_bundle_data_files.contains("segment1.dat"));
+    // segment2.dat should be added to new_data_files
+    std::set<std::string> new_files(tablet_pb->new_data_files().begin(), tablet_pb->new_data_files().end());
+    ASSERT_TRUE(new_files.contains("segment2.dat"));
+}
+
 // Test populate_meta_schema_files with filebundling
 TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_filebundling) {
     int64_t tablet_id = next_id();
-    auto pre_metadata = create_tablet_metadata(tablet_id, 1, {});
-    auto new_metadata = create_tablet_metadata(tablet_id, 2, {});
+    int64_t pre_version = 1;
+    int64_t new_version = 2;
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {});
 
     UploadSnapshotFilesRequestPB node_req;
     auto* tablet_pb = node_req.add_tablet_snapshots();
@@ -745,19 +777,23 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_fil
 
     phmap::flat_hash_set<int64_t> pre_schema_ids;
     phmap::flat_hash_set<int64_t> new_schema_ids;
+    FileSet unused_meta_files;
 
     // First call with meta_added = false
-    populate_meta_schema_files(true, false, tablet_id, pre_metadata, new_metadata, pre_schema_ids, new_schema_ids,
-                               tablet_pb);
+    populate_meta_schema_files(true, false, tablet_id, pre_version, new_version, pre_metadata, new_metadata,
+                               pre_schema_ids, new_schema_ids, unused_meta_files, tablet_pb);
 
     ASSERT_EQ(tablet_pb->new_metadata_files_size(), 1);
-    ASSERT_EQ(tablet_pb->new_metadata_files(0), tablet_metadata_filename(0, new_metadata->version()));
+    ASSERT_EQ(tablet_pb->new_metadata_files(0), tablet_metadata_filename(0, new_version));
+    ASSERT_EQ(unused_meta_files.size(), 1);
+    ASSERT_TRUE(unused_meta_files.contains(tablet_metadata_filename(0, pre_version)));
 
     // Second call with meta_added = true (should not add metadata again)
     auto* tablet_pb2 = node_req.add_tablet_snapshots();
     tablet_pb2->set_tablet_id(tablet_id + 1);
-    populate_meta_schema_files(true, true, tablet_id + 1, pre_metadata, new_metadata, pre_schema_ids, new_schema_ids,
-                               tablet_pb2);
+    FileSet unused_meta_files2;
+    populate_meta_schema_files(true, true, tablet_id + 1, pre_version, new_version, pre_metadata, new_metadata,
+                               pre_schema_ids, new_schema_ids, unused_meta_files2, tablet_pb2);
 
     ASSERT_EQ(tablet_pb2->new_metadata_files_size(), 0);
 }
@@ -765,8 +801,10 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_fil
 // Test populate_meta_schema_files without filebundling
 TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_without_filebundling) {
     int64_t tablet_id = next_id();
-    auto pre_metadata = create_tablet_metadata(tablet_id, 1, {});
-    auto new_metadata = create_tablet_metadata(tablet_id, 2, {});
+    int64_t pre_version = 1;
+    int64_t new_version = 2;
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {});
 
     UploadSnapshotFilesRequestPB node_req;
     auto* tablet_pb = node_req.add_tablet_snapshots();
@@ -774,19 +812,24 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_without_
 
     phmap::flat_hash_set<int64_t> pre_schema_ids;
     phmap::flat_hash_set<int64_t> new_schema_ids;
+    FileSet unused_meta_files;
 
-    populate_meta_schema_files(false, false, tablet_id, pre_metadata, new_metadata, pre_schema_ids, new_schema_ids,
-                               tablet_pb);
+    populate_meta_schema_files(false, false, tablet_id, pre_version, new_version, pre_metadata, new_metadata,
+                               pre_schema_ids, new_schema_ids, unused_meta_files, tablet_pb);
 
     ASSERT_EQ(tablet_pb->new_metadata_files_size(), 1);
-    ASSERT_EQ(tablet_pb->new_metadata_files(0), tablet_metadata_filename(tablet_id, new_metadata->version()));
+    ASSERT_EQ(tablet_pb->new_metadata_files(0), tablet_metadata_filename(tablet_id, new_version));
+    ASSERT_EQ(unused_meta_files.size(), 1);
+    ASSERT_TRUE(unused_meta_files.contains(tablet_metadata_filename(tablet_id, pre_version)));
 }
 
 // Test populate_meta_schema_files with schema files
 TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_schema_files) {
     int64_t tablet_id = next_id();
-    auto pre_metadata = create_tablet_metadata(tablet_id, 1, {});
-    auto new_metadata = create_tablet_metadata(tablet_id, 2, {});
+    int64_t pre_version = 1;
+    int64_t new_version = 2;
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {});
 
     // Add historical schema to new_metadata
     int64_t historical_schema_id = next_id();
@@ -801,9 +844,10 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_sch
 
     phmap::flat_hash_set<int64_t> pre_schema_ids;
     phmap::flat_hash_set<int64_t> new_schema_ids;
+    FileSet unused_meta_files;
 
-    populate_meta_schema_files(false, false, tablet_id, pre_metadata, new_metadata, pre_schema_ids, new_schema_ids,
-                               tablet_pb);
+    populate_meta_schema_files(false, false, tablet_id, pre_version, new_version, pre_metadata, new_metadata,
+                               pre_schema_ids, new_schema_ids, unused_meta_files, tablet_pb);
 
     // Should have schema files for both main schema and historical schema
     ASSERT_GE(tablet_pb->new_schema_files_size(), 1);
@@ -812,8 +856,10 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_sch
 // Test populate_meta_schema_files with duplicate schema IDs
 TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_duplicate_schema_ids) {
     int64_t tablet_id = next_id();
-    auto pre_metadata = create_tablet_metadata(tablet_id, 1, {});
-    auto new_metadata = create_tablet_metadata(tablet_id, 2, {});
+    int64_t pre_version = 1;
+    int64_t new_version = 2;
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {});
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {});
 
     UploadSnapshotFilesRequestPB node_req;
     auto* tablet_pb = node_req.add_tablet_snapshots();
@@ -821,19 +867,302 @@ TEST_F(ExternalClusterSnapshotTaskTest, test_populate_meta_schema_files_with_dup
 
     phmap::flat_hash_set<int64_t> pre_schema_ids;
     phmap::flat_hash_set<int64_t> new_schema_ids;
+    FileSet unused_meta_files;
 
     // First call
-    populate_meta_schema_files(false, false, tablet_id, pre_metadata, new_metadata, pre_schema_ids, new_schema_ids,
-                               tablet_pb);
+    populate_meta_schema_files(false, false, tablet_id, pre_version, new_version, pre_metadata, new_metadata,
+                               pre_schema_ids, new_schema_ids, unused_meta_files, tablet_pb);
 
     // Second call with same metadata (should not add duplicate schema files)
     auto* tablet_pb2 = node_req.add_tablet_snapshots();
     tablet_pb2->set_tablet_id(tablet_id + 1);
-    populate_meta_schema_files(false, false, tablet_id + 1, pre_metadata, new_metadata, pre_schema_ids, new_schema_ids,
-                               tablet_pb2);
+    FileSet unused_meta_files2;
+    populate_meta_schema_files(false, false, tablet_id + 1, pre_version, new_version, pre_metadata, new_metadata,
+                               pre_schema_ids, new_schema_ids, unused_meta_files2, tablet_pb2);
 
     // Schema files should not be added again
     ASSERT_EQ(tablet_pb2->new_schema_files_size(), 0);
+}
+
+// ==================== Tests for collect_unused_files ====================
+
+// Test collect_unused_files with unused segments
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_unused_files_with_unused_segments) {
+    int64_t tablet_id = next_id();
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat", "segment2.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 3, {"segment3.dat"});
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet unused_data_files;
+    FileSet pre_bundle_data_files;
+
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+
+    // segment1.dat should be in unused_data_files
+    ASSERT_TRUE(unused_data_files.contains("segment1.dat"));
+    ASSERT_TRUE(unused_data_files.contains("segment2.dat"));
+}
+
+// Test collect_unused_files with unused sstable files
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_unused_files_with_unused_sstable) {
+    int64_t tablet_id = next_id();
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {}, {"sstable1.sst", "sstable2.sst"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 1, {}, {"sstable2.sst"});
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet unused_data_files;
+    FileSet pre_bundle_data_files;
+
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+
+    ASSERT_TRUE(unused_data_files.contains("sstable1.sst"));
+    ASSERT_FALSE(unused_data_files.contains("sstable2.sst"));
+}
+
+// Test collect_unused_files with unused dcg files
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_unused_files_with_unused_dcg) {
+    int64_t tablet_id = next_id();
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {}, {}, {"dcg1.dat", "dcg2.dat"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 1, {}, {}, {"dcg2.dat"});
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet unused_data_files;
+    FileSet pre_bundle_data_files;
+
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+
+    ASSERT_TRUE(unused_data_files.contains("dcg1.dat"));
+    ASSERT_FALSE(unused_data_files.contains("dcg2.dat"));
+}
+
+// Test collect_unused_files with unused delvec files
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_unused_files_with_unused_delvec) {
+    int64_t tablet_id = next_id();
+    auto pre_metadata = create_tablet_metadata(tablet_id, 1, 1, {}, {}, {}, {"delvec1.delvec", "delvec2.delvec"});
+    auto new_metadata = create_tablet_metadata(tablet_id, 2, 1, {}, {}, {}, {"delvec2.delvec"});
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet unused_data_files;
+    FileSet pre_bundle_data_files;
+
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+
+    ASSERT_TRUE(unused_data_files.contains("delvec1.delvec"));
+    ASSERT_FALSE(unused_data_files.contains("delvec2.delvec"));
+}
+
+// Test collect_unused_files with empty pre_rowsets
+TEST_F(ExternalClusterSnapshotTaskTest, test_collect_unused_files_with_empty_pre_rowsets) {
+    int64_t tablet_id = next_id();
+    TabletMetadataPtr pre_metadata = nullptr;
+    auto new_metadata = create_tablet_metadata(tablet_id, 1, 1, {"segment1.dat"});
+
+    auto collections = TabletFileCollections::collect(pre_metadata, new_metadata);
+    FileSet unused_data_files;
+    FileSet pre_bundle_data_files;
+
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+
+    ASSERT_TRUE(unused_data_files.empty());
+    ASSERT_TRUE(pre_bundle_data_files.empty());
+}
+
+// ==================== Tests for prepare_unused_files_for_log ====================
+
+// Test prepare_unused_files_for_log with pre_version >= 0
+TEST_F(ExternalClusterSnapshotTaskTest, test_prepare_unused_files_for_log_with_pre_version) {
+    int64_t pre_version = 1;
+    FileSet pre_bundle_data_files = {"bundle1.dat", "bundle2.dat"};
+    FileSet unused_data_files = {"segment1.dat"};
+    FileSet unused_meta_files = {"meta1.meta"};
+    phmap::flat_hash_set<int64_t> pre_schema_ids = {100, 200};
+    phmap::flat_hash_set<int64_t> new_schema_ids = {200};
+    FileSet unused_schema_files;
+
+    prepare_unused_files_for_log(pre_version, pre_bundle_data_files, unused_data_files, unused_meta_files,
+                                 pre_schema_ids, new_schema_ids, unused_schema_files);
+
+    // Bundle files should be added to unused_data_files
+    ASSERT_TRUE(unused_data_files.contains("bundle1.dat"));
+    ASSERT_TRUE(unused_data_files.contains("bundle2.dat"));
+    ASSERT_TRUE(unused_data_files.contains("segment1.dat"));
+
+    // Schema 100 should be in unused_schema_files (not in new_schema_ids)
+    ASSERT_TRUE(unused_schema_files.contains(schema_filename(100)));
+    ASSERT_FALSE(unused_schema_files.contains(schema_filename(200)));
+}
+
+// Test prepare_unused_files_for_log with pre_version < 0
+TEST_F(ExternalClusterSnapshotTaskTest, test_prepare_unused_files_for_log_with_negative_pre_version) {
+    int64_t pre_version = -1;
+    FileSet pre_bundle_data_files = {"bundle1.dat"};
+    FileSet unused_data_files = {"segment1.dat"};
+    FileSet unused_meta_files = {"meta1.meta"};
+    phmap::flat_hash_set<int64_t> pre_schema_ids = {100};
+    phmap::flat_hash_set<int64_t> new_schema_ids = {};
+    FileSet unused_schema_files;
+
+    prepare_unused_files_for_log(pre_version, pre_bundle_data_files, unused_data_files, unused_meta_files,
+                                 pre_schema_ids, new_schema_ids, unused_schema_files);
+
+    // Should return early, no changes
+    ASSERT_FALSE(unused_data_files.contains("bundle1.dat"));
+    ASSERT_TRUE(unused_schema_files.empty());
+}
+
+// ==================== Tests for delete partition task ====================
+
+// Test run_delete_partition_task
+TEST_F(ExternalClusterSnapshotTaskTest, test_run_delete_partition_task) {
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_dest_tablet_id(500);
+    request.__set_is_drop_partition(true);
+
+    int64_t signature = next_id();
+
+    // The function will attempt to delete partition, which may fail in test environment
+    // but we can verify that the function completes
+    run_delete_partition_task(request, signature, _exec_env);
+}
+
+// ==================== Tests for delete files task ====================
+
+// Test run_delete_files_task
+TEST_F(ExternalClusterSnapshotTaskTest, test_run_delete_files_task) {
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_job_id(500);
+    request.__set_dest_tablet_id(600);
+    request.__set_new_version(-1);
+
+    TBackend backend;
+    backend.__set_host("127.0.0.1");
+    backend.__set_be_port(9060);
+    std::vector<int64_t> src_tablets = {next_id()};
+    TComputeNodeTablets cn_tablets;
+    cn_tablets.__set_compute_node(backend);
+    cn_tablets.__set_tablets(src_tablets);
+    std::vector<TComputeNodeTablets> compute_node_tablets;
+    compute_node_tablets.emplace_back(std::move(cn_tablets));
+    request.__set_compute_node_tablets(compute_node_tablets);
+
+    int64_t signature = next_id();
+
+    // The function will attempt to load and delete files, which may fail in test environment
+    // but we can verify that the function completes
+    run_delete_files_task(request, signature, _exec_env);
+}
+
+// ==================== Tests for snapshot task with new delete logic ====================
+
+// Test snapshot task with is_drop_partition flag
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_is_drop_partition) {
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_dest_tablet_id(500);
+    request.__set_is_drop_partition(true);
+
+    int64_t signature = next_id();
+
+    // Should call run_delete_partition_task
+    run_external_cluster_snapshot_task(request, signature, _exec_env);
+}
+
+// Test snapshot task with new_version == -1 (delete files case)
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_delete_files) {
+    TExternalClusterSnapshotRequest request;
+    request.__set_db_id(100);
+    request.__set_table_id(200);
+    request.__set_partition_id(300);
+    request.__set_physical_partition_id(400);
+    request.__set_job_id(500);
+    request.__set_dest_tablet_id(600);
+    request.__set_new_version(-1);
+
+    TBackend backend;
+    backend.__set_host("127.0.0.1");
+    backend.__set_be_port(9060);
+    std::vector<int64_t> src_tablets = {next_id()};
+    TComputeNodeTablets cn_tablets;
+    cn_tablets.__set_compute_node(backend);
+    cn_tablets.__set_tablets(src_tablets);
+    std::vector<TComputeNodeTablets> compute_node_tablets;
+    compute_node_tablets.emplace_back(std::move(cn_tablets));
+    request.__set_compute_node_tablets(compute_node_tablets);
+
+    int64_t signature = next_id();
+
+    // Should call run_delete_files_task
+    run_external_cluster_snapshot_task(request, signature, _exec_env);
+}
+
+// Test snapshot task with write_snapshot_log (unused files collection)
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_unused_files_collection) {
+    int64_t tablet_id = next_id();
+    int64_t pre_version = 1;
+    int64_t new_version = 2;
+
+    // Create pre-version metadata with files that will become unused
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {"segment1.dat", "segment2.dat"},
+                                               {"sstable1.sst"}, {"dcg1.dat"}, {"delvec1.delvec"});
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
+
+    // Create new-version metadata without some files (they become unused)
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"segment2.dat"}, {"sstable1.sst"}, {}, {});
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
+
+    TBackend backend;
+    backend.__set_host("127.0.0.1");
+    backend.__set_be_port(9060);
+    std::vector<int64_t> src_tablets = {tablet_id};
+    std::vector<TBackend> backends = {backend};
+
+    auto request = create_snapshot_request(100, 200, 300, 400, pre_version, new_version, 500, src_tablets, backends);
+    int64_t signature = next_id();
+
+    // The function will collect unused files and write snapshot log
+    // RPC call may fail in test environment, but function should complete
+    run_external_cluster_snapshot_task(request, signature, _exec_env);
+}
+
+// Test snapshot task with bundle files handling
+TEST_F(ExternalClusterSnapshotTaskTest, test_snapshot_task_with_bundle_files) {
+    int64_t tablet_id = next_id();
+    int64_t pre_version = 1;
+    int64_t new_version = 2;
+
+    // Create pre-version metadata with bundle file
+    auto pre_metadata = create_tablet_metadata(tablet_id, pre_version, 1, {"segment1.dat"});
+    // Add bundle_file_offsets to make it a bundle file
+    auto* rowset = pre_metadata->mutable_rowsets(0);
+    rowset->add_bundle_file_offsets(0);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*pre_metadata));
+
+    // Create new-version metadata without this rowset
+    auto new_metadata = create_tablet_metadata(tablet_id, new_version, 1, {"segment2.dat"});
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*new_metadata));
+
+    TBackend backend;
+    backend.__set_host("127.0.0.1");
+    backend.__set_be_port(9060);
+    std::vector<int64_t> src_tablets = {tablet_id};
+    std::vector<TBackend> backends = {backend};
+
+    auto request = create_snapshot_request(100, 200, 300, 400, pre_version, new_version, 500, src_tablets, backends);
+    int64_t signature = next_id();
+
+    // Bundle files should be collected in pre_bundle_data_files
+    run_external_cluster_snapshot_task(request, signature, _exec_env);
 }
 
 } // namespace starrocks::lake

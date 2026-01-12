@@ -98,11 +98,31 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testListPartitionNames(@Mocked IcebergCatalog icebergCatalog, @Mocked Table nativeTable) {
+    public void testListPartitionNames(@Mocked IcebergCatalog icebergCatalog, @Mocked PartitionSpec spec) {
+        // Create a real BaseTable instance instead of using a mocked Table
+        // This is necessary because IcebergTable.getTableIdentifier() casts to BaseTable
+        TableMetadata meta = Mockito.mock(TableMetadata.class);
+        Mockito.when(meta.metadataFileLocation()).thenReturn("hdfs://path/to/table");
+        Mockito.when(meta.spec()).thenReturn(spec);
+        Mockito.when(meta.uuid()).thenReturn("test-uuid");
+
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        Mockito.when(ops.current()).thenReturn(meta);
+
+        BaseTable nativeTable = new BaseTable(ops, "db.test");
+
         new Expectations() {
             {
-                nativeTable.spec().isUnpartitioned();
+                spec.isUnpartitioned();
                 result = false;
+                minTimes = 0;
+
+                icebergCatalog.getTable((ConnectContext) any, "db", "test");
+                result = nativeTable;
+                minTimes = 0;
+
+                icebergCatalog.getPartitions((IcebergTable) any, anyLong, null);
+                result = new HashMap<String, Partition>();
                 minTimes = 0;
             }
         };

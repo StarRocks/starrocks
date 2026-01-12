@@ -275,6 +275,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     public List<Long> getVacuumRetainVersions(long dbId, long tableId, long partId, long physicalPartId) {
         List<Long> versions = Lists.newArrayList();
         List<ClusterSnapshotInfo> infos = getAllClusterSnapshotInfo();
+        infos.addAll(super.getRetainExternalClusterSnapshotInfo());
         for (ClusterSnapshotInfo info : infos) {
             long version = info.getVersion(dbId, tableId, partId, physicalPartId);
             if (version != 0) {

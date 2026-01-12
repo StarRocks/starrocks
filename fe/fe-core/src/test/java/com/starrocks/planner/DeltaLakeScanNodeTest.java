@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -95,8 +96,8 @@ public class DeltaLakeScanNodeTest {
 
     @Test
     public void testNodeExplainContainsVersion(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
-                                               @Mocked DeltaLakeTable table, @Mocked Snapshot snapshot,
-                                               @Mocked DeltaLakeEngine engine) {
+                                               @Mocked ConnectorMetadata metadata, @Mocked DeltaLakeTable table,
+                                               @Mocked Snapshot snapshot, @Mocked DeltaLakeEngine engine) {
         String catalogName = "delta0";
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.
                 buildCloudConfigurationForStorage(new HashMap<>());
@@ -106,7 +107,15 @@ public class DeltaLakeScanNodeTest {
                 result = connector;
                 minTimes = 0;
 
-                connector.getMetadata().getCloudConfiguration();
+                table.getCloudConfiguration();
+                result = null;
+                minTimes = 0;
+
+                connector.getMetadata();
+                result = metadata;
+                minTimes = 0;
+
+                metadata.getCloudConfiguration();
                 result = cloudConfiguration;
                 minTimes = 0;
 

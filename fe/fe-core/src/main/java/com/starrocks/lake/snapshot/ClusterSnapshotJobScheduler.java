@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.leader.CheckpointController;
@@ -42,6 +43,10 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
         this.starMgrController = starMgrController;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
         this.lastAutomatedJobStartTimeMs = 0;
+    }
+
+    public void setRunningJob(ClusterSnapshotJob runningJob) {
+        this.runningJob = runningJob;
     }
 
     @Override
@@ -90,24 +95,24 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
             return;
         }
 
-        /*
-         * Control the interval of automated cluster snapshot manually instead of by
-         * Daemon framework
-         * for the future purpose.
-         */
-        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)) {
+        setInterval(Config.automated_cluster_snapshot_schedule_interval_millisecond);
+        if (runningJob == null && 
+                !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().canScheduleNextJob(lastAutomatedJobStartTimeMs)) {
             return;
         }
-
         CheckpointController.exclusiveLock();
         try {
-            runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
+            if (runningJob == null) {
+                runningJob = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getNextCluterSnapshotJob();
+            }
 
             // set last start time when job has been created and begin to submit
             lastAutomatedJobStartTimeMs = runningJob.getCreatedTimeMs();
             runningJob.run(this);
         } finally {
-            runningJob = null;
+            if (runningJob != null && !runningJob.isUnFinishedState()) {
+                runningJob = null;
+            }
             CheckpointController.exclusiveUnlock();
         }
     }

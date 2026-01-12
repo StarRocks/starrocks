@@ -19,6 +19,10 @@
 
 namespace starrocks::lake {
 
+void run_delete_partition_task(const TExternalClusterSnapshotRequest& request, int64_t signature, ExecEnv* exec_env);
+
+void run_delete_files_task(const TExternalClusterSnapshotRequest& request, int64_t signature, ExecEnv* exec_env);
+
 void run_external_cluster_snapshot_task(const TExternalClusterSnapshotRequest& request, int64_t signature,
                                         ExecEnv* exec_env);
 

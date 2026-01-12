@@ -311,6 +311,17 @@ message CombinedTxnLogPB {
     repeated TxnLogPB txn_logs = 1;    
 }
 
+message ExternalClusterSnapshotLogPB {
+    optional int64 job_id = 1;
+    optional int64 db_id = 2;
+    optional int64 table_id = 3;
+    optional int64 partition_id = 4;
+    optional int64 physical_partition_id = 5;
+    repeated string delete_data_files = 6;
+    repeated string delete_meta_files = 7;
+    repeated string delete_schema_files = 8;
+}
+
 message TabletMetadataLockPB {}
 
 message TxnInfoPB {

@@ -101,6 +101,7 @@ class PipelineTimer;
 
 namespace lake {
 class LocationProvider;
+class RemoteStarletLocationProvider;
 class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
@@ -344,6 +345,10 @@ public:
 
     std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
 
+    std::shared_ptr<lake::RemoteStarletLocationProvider> remote_starlet_location_provider() const {
+        return _remote_starlet_location_provider;
+    }
+
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
@@ -435,6 +440,7 @@ private:
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
     std::shared_ptr<lake::LocationProvider> _lake_location_provider;
+    std::shared_ptr<lake::RemoteStarletLocationProvider> _remote_starlet_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
     std::unique_ptr<ThreadPool> _put_aggregate_metadata_thread_pool = nullptr;

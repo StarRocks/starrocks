@@ -1168,11 +1168,8 @@ public class HiveMetadataTest {
             }
         };
 
-        // Use reflection to call private addPartition method
-        java.lang.reflect.Method method = HiveMetadata.class.getDeclaredMethod(
-                "addPartition", ConnectContext.class, AlterTableStmt.class, AlterClause.class);
-        method.setAccessible(true);
-        method.invoke(hiveMetadata, ctx, alterTableStmt, addPartitionClause);
+        // Call alterTable method which internally handles addPartition
+        hiveMetadata.alterTable(ctx, alterTableStmt);
 
         // Verify addPartitions was called
         Assertions.assertTrue(addPartitionsCalled.get());

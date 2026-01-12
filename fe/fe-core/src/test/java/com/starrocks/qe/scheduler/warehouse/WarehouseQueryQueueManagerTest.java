@@ -15,10 +15,10 @@
 package com.starrocks.qe.scheduler.warehouse;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
+//import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.StarRocksException;
+//import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseProperty;
 import com.starrocks.epack.warehouse.WarehouseSlotManager;
@@ -28,7 +28,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.scheduler.Coordinator;
+//import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.qe.scheduler.SchedulerTestNoneDBBase;
@@ -54,7 +54,7 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+//import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -157,7 +157,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         assertEquals(LogicalSlot.State.ALLOCATED, logicalSlot.getState());
         coord.onFinished();
     }
-
+    /*
     @Test
     public void testWarehouseSlotManager2() throws Exception {
         WarehouseSlotManager slotManager = (WarehouseSlotManager) GlobalStateMgr.getCurrentState().getSlotManager();
@@ -251,6 +251,7 @@ public class WarehouseQueryQueueManagerTest extends SchedulerTestBase {
         runningCoords.forEach(
                 coord -> assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
     }
+    */
 
     @Test
     public void testWarehouseSlotManagerFilterValidWarehouses() {

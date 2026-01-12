@@ -75,7 +75,8 @@ void send_snapshot_rpc_to_backend(const TBackend& backend, const std::vector<int
 // Tablet processing for RPC
 Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id, int64_t pre_version,
                                    int64_t new_version, bool is_filebundling, bool meta_added,
-                                   phmap::flat_hash_set<int64_t>& pre_schema_ids,
+                                   FileSet& pre_bundle_data_files, FileSet& unused_data_files,
+                                   FileSet& unused_meta_files, phmap::flat_hash_set<int64_t>& pre_schema_ids,
                                    phmap::flat_hash_set<int64_t>& new_schema_ids,
                                    phmap::flat_hash_set<std::string>& globally_bound_segments,
                                    UploadSnapshotFilesRequestPB& node_req);

@@ -20,6 +20,7 @@
 #include "glog/logging.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/remote_starlet_location_provider.h"
 
 namespace starrocks::lake {
 
@@ -58,15 +59,15 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
     auto physical_partition_id = snapshot_info.physical_partition_id;
 
     auto location_provider = _env->lake_location_provider();
-    auto dst_tablet_root = location_provider->root_location(dst_tablet_id);
-    auto dst_prefix = fmt::format("db{}/{}/{}", db_id, table_id, physical_partition_id);
+    auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
 
+#ifdef USE_STAROS
     RETURN_IF_ERROR(copy_files(
             snapshot_info.tablet_snapshot->new_data_files(),
             [&](const auto& name) { return join_path(location_provider->segment_root_location(src_tablet_id), name); },
             [&](const auto& name) {
-                return join_path(dst_tablet_root,
-                                 fmt::format("{}/{}/{}", dst_prefix, lake::kSegmentDirectoryName, name));
+                return remote_starlet_location_provider->data_file_location(dst_tablet_id, db_id, table_id,
+                                                                            physical_partition_id, name);
             },
             true));
 
@@ -74,18 +75,69 @@ Status SnapshotFileSyncer::upload(const TabletSnapshotInfo& snapshot_info, Uploa
             snapshot_info.tablet_snapshot->new_metadata_files(),
             [&](const auto& name) { return join_path(location_provider->metadata_root_location(src_tablet_id), name); },
             [&](const auto& name) {
-                return join_path(dst_tablet_root,
-                                 fmt::format("{}/{}/{}", dst_prefix, lake::kMetadataDirectoryName, name));
+                return remote_starlet_location_provider->metadata_file_location(dst_tablet_id, db_id, table_id,
+                                                                                physical_partition_id, name);
             },
             false));
 
     RETURN_IF_ERROR(copy_files(
             snapshot_info.tablet_snapshot->new_schema_files(),
             [&](const auto& name) { return join_path(location_provider->root_location(src_tablet_id), name); },
-            [&](const auto& name) { return join_path(dst_tablet_root, fmt::format("{}/{}", dst_prefix, name)); },
+            [&](const auto& name) {
+                return remote_starlet_location_provider->schema_file_location(dst_tablet_id, db_id, table_id,
+                                                                              physical_partition_id, name);
+            },
             true));
-
+#endif
     return Status::OK();
+}
+
+Status SnapshotFileSyncer::delete_partition(int64_t tablet_id, int64_t db_id, int64_t table_id, int64_t partition_id,
+                                            int64_t physical_partition_id) {
+    auto location_provider = _env->lake_location_provider();
+    auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
+#ifdef USE_STAROS
+    auto tablet_root = location_provider->root_location(tablet_id);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_root));
+    auto dir_path = remote_starlet_location_provider->partition_directory_location(tablet_id, db_id, table_id,
+                                                                                   physical_partition_id);
+    RETURN_IF_ERROR(fs->delete_dir_recursive(dir_path));
+#endif
+    return Status::OK();
+}
+
+Status SnapshotFileSyncer::delete_files(int64_t tablet_id, const ExternalClusterSnapshotLogPB& log_pb) {
+    auto location_provider = _env->lake_location_provider();
+    auto remote_starlet_location_provider = _env->remote_starlet_location_provider();
+#ifdef USE_STAROS
+    auto tablet_root = location_provider->root_location(tablet_id);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_root));
+
+    std::vector<std::string> files;
+    files.reserve(log_pb.delete_data_files_size() + log_pb.delete_meta_files_size() +
+                  log_pb.delete_schema_files_size());
+
+    for (const auto& file : log_pb.delete_data_files()) {
+        files.emplace_back(remote_starlet_location_provider->data_file_location(
+                tablet_id, log_pb.db_id(), log_pb.table_id(), log_pb.physical_partition_id(), file));
+    }
+    for (const auto& file : log_pb.delete_meta_files()) {
+        files.emplace_back(remote_starlet_location_provider->metadata_file_location(
+                tablet_id, log_pb.db_id(), log_pb.table_id(), log_pb.physical_partition_id(), file));
+    }
+    for (const auto& file : log_pb.delete_schema_files()) {
+        files.emplace_back(remote_starlet_location_provider->schema_file_location(
+                tablet_id, log_pb.db_id(), log_pb.table_id(), log_pb.physical_partition_id(), file));
+    }
+
+    for (const auto& file : files) {
+        VLOG(3) << "delete file: " << file;
+    }
+
+    return fs->delete_files(files);
+#else
+    return Status::OK();
+#endif
 }
 
 } // end namespace starrocks::lake

@@ -30,6 +30,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.lake.TabletRepairHelper.PhysicalPartitionInfo;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
@@ -43,7 +44,6 @@ import com.starrocks.proto.TabletMetadataRepairStatus;
 import com.starrocks.proto.TabletResult;
 import com.starrocks.rpc.LakeServiceWithMetrics;
 import com.starrocks.rpc.RpcException;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QualifiedName;
@@ -157,7 +157,7 @@ public class TabletRepairHelperTest {
     @Test
     public void testGetPhysicalPartitionInfo() {
         // mock warehouse manager
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 return node;
@@ -867,7 +867,7 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepair() {
         // mock warehouse manager
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 return node;
@@ -954,7 +954,7 @@ public class TabletRepairHelperTest {
     @Test
     public void testRepairFail() {
         // mock warehouse manager
-        new MockUp<WarehouseManager>() {
+        new MockUp<WarehouseManagerEPack>() {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 return node;

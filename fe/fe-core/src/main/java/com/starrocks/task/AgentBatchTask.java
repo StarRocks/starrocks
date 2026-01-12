@@ -196,11 +196,12 @@ public class AgentBatchTask implements Runnable {
                     agentTaskRequests.add(toAgentTaskRequest(task));
                 }
 
+
                 ThriftRPCRequestExecutor.call(
                         ThriftConnectionPool.backendPool,
                         new TNetworkAddress(host, port),
                         client -> client.submit_tasks(agentTaskRequests));
-
+                
                 if (LOG.isDebugEnabled()) {
                     for (AgentTask task : tasks) {
                         LOG.debug("send task: type[{}], backend[{}], signature[{}]",

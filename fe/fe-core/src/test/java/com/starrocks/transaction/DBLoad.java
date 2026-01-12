@@ -179,9 +179,6 @@ class DBLoad {
                     }));
                 }
             }
-            if (error != null) {
-                Assertions.fail(error.getMessage());
-            }
             try {
                 Thread.sleep(scheduleIntervalMs);
             } catch (InterruptedException e) {

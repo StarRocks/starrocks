@@ -118,6 +118,11 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         storageVolumeName = null;
     }
 
+    public boolean isExternalSnapshot() {
+        return properties != null && properties.get(PROPERTIES_SNAPSHOT_SCOPE) != null && 
+                properties.get(PROPERTIES_SNAPSHOT_SCOPE).equalsIgnoreCase("external");
+    }
+
     protected void clearFinishedAutomatedClusterSnapshot(String keepSnapshotName) {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
@@ -161,15 +166,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         String snapshotName = AUTOMATED_NAME_PREFIX + String.valueOf(createTimeMs);
 
         ClusterSnapshotJob job;
-        boolean isExternal = false;
-        if (properties != null) {
-            String snapshotScope = properties.get(PROPERTIES_SNAPSHOT_SCOPE);
-            if (snapshotScope != null && snapshotScope.equalsIgnoreCase("external")) {
-                isExternal = true;
-            }
-        }
 
-        if (isExternal) {
+        if (isExternalSnapshot()) {
             job = new ExternalClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
         } else {
             job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
@@ -180,7 +178,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         addSnapshotJob(job);
 
         LOG.info("Create automated cluster snapshot job successfully, job id: {}, snapshot name: {}, scope: {}",
-                id, snapshotName, isExternal ? "external" : "local");
+                id, snapshotName, isExternalSnapshot() ? "external" : "local");
 
         return job;
     }
@@ -329,6 +327,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             if (lastUnfinishedJob instanceof ExternalClusterSnapshotJob) {
                 LOG.info("Keep unfinished ExternalClusterSnapshotJob {} in state {} after FE restart",
                         lastUnfinishedJob.getId(), lastUnfinishedJob.getState());
+                clusterSnapshotJobScheduler.setRunningJob(lastUnfinishedJob);
                 return;
             }
 
@@ -439,6 +438,20 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return response;
     }
 
+    public List<ClusterSnapshotInfo> getRetainExternalClusterSnapshotInfo() {
+        List<ClusterSnapshotInfo> clusterSnapshotInfos = Lists.newArrayList();
+        if (isExternalSnapshot()) {
+            for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
+                // we should make sure the files in snapshot image are uploaded to remote storage before vacuuming
+                if (job.getState() != ClusterSnapshotJobState.UPLOADING) {
+                    continue;
+                }
+                clusterSnapshotInfos.add(job.getSnapshot().getClusterSnapshotInfo());
+            }
+        }
+        return clusterSnapshotInfos;
+    }
+
     public void replayLog(ClusterSnapshotLog log) {
         ClusterSnapshotLog.ClusterSnapshotLogType logType = log.getType();
         switch (logType) {
@@ -464,6 +477,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                     }
                     case SNAPSHOTING:
                     case UPLOADING:
+                    case CLEANING:
                     case FINISHED:
                     case EXPIRED:
                     case DELETED:

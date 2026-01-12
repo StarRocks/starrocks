@@ -130,8 +130,10 @@ void send_snapshot_rpc_to_backend(const TBackend& backend, const std::vector<int
 
 Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id, int64_t pre_version,
                                    int64_t new_version, bool is_filebundling, bool meta_added,
-                                   phmap::flat_hash_set<int64_t>& pre_schema_ids,
-                                   phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& globally_bound_segments,
+                                   FileSet& pre_bundle_data_files, FileSet& unused_data_files,
+                                   FileSet& unused_meta_files, phmap::flat_hash_set<int64_t>& pre_schema_ids,
+                                   phmap::flat_hash_set<int64_t>& new_schema_ids,
+                                   phmap::flat_hash_set<std::string>& globally_bound_segments,
                                    UploadSnapshotFilesRequestPB& node_req) {
     // Get pre-version tablet metadata
     TabletMetadataPtr pre_tablet_metadata;
@@ -151,12 +153,16 @@ Status process_tablet_for_snapshot(TabletManager* tablet_mgr, int64_t tablet_id,
     // Collect file collections
     auto collections = TabletFileCollections::collect(pre_tablet_metadata, new_tablet_metadata);
 
+    // Collect unused files
+    collect_unused_files(collections, unused_data_files, pre_bundle_data_files);
+
     // Populate tablet snapshot in node request
-    auto* tablet_pb = populate_tablet_snapshot(tablet_id, collections, globally_bound_segments, node_req);
+    auto* tablet_pb =
+            populate_tablet_snapshot(tablet_id, collections, pre_bundle_data_files, globally_bound_segments, node_req);
 
     // Populate metadata and schema files
-    populate_meta_schema_files(is_filebundling, meta_added, tablet_id, pre_tablet_metadata, new_tablet_metadata,
-                               pre_schema_ids, new_schema_ids, tablet_pb);
+    populate_meta_schema_files(is_filebundling, meta_added, tablet_id, pre_version, new_version, pre_tablet_metadata,
+                               new_tablet_metadata, pre_schema_ids, new_schema_ids, unused_meta_files, tablet_pb);
 
     return Status::OK();
 }

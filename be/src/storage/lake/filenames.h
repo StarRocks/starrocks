@@ -106,6 +106,10 @@ inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.vlog", tablet_id, version);
 }
 
+inline std::string snapshot_log_filename(int64_t job_id, int64_t physical_partition_id) {
+    return fmt::format("{:016X}_{:016X}.log", job_id, physical_partition_id);
+}
+
 inline std::string combined_txn_log_filename(int64_t txn_id) {
     return fmt::format("{:016X}.logs", txn_id);
 }

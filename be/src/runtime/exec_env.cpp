@@ -88,6 +88,7 @@
 #include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/remote_starlet_location_provider.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -548,6 +549,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         LOG(ERROR) << "load path mgr init failed." << status.message();
         exit(-1);
     }
+
+#ifdef USE_STAROS
+    _remote_starlet_location_provider = std::make_shared<lake::RemoteStarletLocationProvider>();
+#endif
 
 #if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
     _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();

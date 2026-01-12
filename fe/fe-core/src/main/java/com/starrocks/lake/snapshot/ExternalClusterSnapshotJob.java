@@ -18,11 +18,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeAggregator;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -36,6 +40,7 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -82,7 +87,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
     @Override
     protected void runSnapshottingJob(SnapshotJobContext context) throws StarRocksException {
-        LOG.info("begin to snapshot cluster snapshot job. job: {}", getId());
+        LOG.debug("begin to snapshot cluster snapshot job. job: {}", getId());
 
         ClusterSnapshotInfo newClusterSnapshotInfo = createImagesAndGetSnapshotInfo(context);
         setClusterSnapshotInfo(newClusterSnapshotInfo);
@@ -97,7 +102,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                 snapshotDiff.getDeletedPartitions().size());
 
         // create data snapshot tasks
-        createExternalClusterSnapshotTasks();
+        createUploadClusterSnapshotTasks();
         setState(ClusterSnapshotJobState.UPLOADING);
         logJob();
     }
@@ -138,16 +143,23 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         ClusterSnapshot snapshot = getSnapshot();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                 .setLastSuccFullSnapshotInfo(snapshot.getClusterSnapshotInfo());
-        setState(ClusterSnapshotJobState.FINISHED);
+        setState(ClusterSnapshotJobState.CLEANING);
         logJob();
         LOG.info("Finish upload snapshot meta file for Cluster Snapshot, job: {}", getId());
     }
 
     @Override
-    protected void runFinishedJob(SnapshotJobContext context) throws StarRocksException {
-        // TODO(zhangqiang)
-        // send delete expire partition tasks
-        // implement in next PR
+    protected void runCleaningJob(SnapshotJobContext context) throws StarRocksException {
+        try {
+            createDeleteClusterSnasphotTasks();
+            setState(ClusterSnapshotJobState.FINISHED);
+            logJob();
+        } catch (StarRocksException e) {
+            LOG.warn("failed to create delete cluster snapshot tasks when run finished job {}", getId(), e);
+            setState(ClusterSnapshotJobState.ERROR);
+            logJob();
+            return;
+        }
     }
 
     @Override
@@ -170,6 +182,9 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                 break;
             case UPLOADING:
                 replayUploadingJob();
+                break;
+            case CLEANING:
+                replayCleaningJob();
                 break;
             default:
                 return;
@@ -203,7 +218,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             return;
         }
         try {
-            createExternalClusterSnapshotTasks();
+            createUploadClusterSnapshotTasks();
         } catch (StarRocksException e) {
             LOG.warn("failed to create cluster snapshot tasks when replay external snapshot job {}", getId(), e);
             setState(ClusterSnapshotJobState.ERROR);
@@ -211,14 +226,56 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         }
     }
 
-    private long getVirtualTabletId() throws StarRocksException {
-        // TODO(zhangqiang)
-        // reuse the virtual tablet id implementation of this
-        // pr(https://github.com/StarRocks/starrocks/pull/60586)
-        return 0;
+    public void replayCleaningJob() {
+        Preconditions.checkState(getState() == ClusterSnapshotJobState.CLEANING, getState());
+        LOG.info("begin to replay cluster snapshot job. job: {}", getId());
+        if (snapshotDiff == null) {
+            LOG.warn("snapshot diff is null when replay external snapshot job {}", getId());
+            setState(ClusterSnapshotJobState.FINISHED);
+            return;
+        }
+        try {
+            runCleaningJob(null);
+        } catch (StarRocksException e) {
+            LOG.warn("failed to run cleaning job when replay external snapshot job {}", getId(), e);
+            return;
+        }
     }
 
-    private void createExternalClusterSnapshotTasks() throws StarRocksException {
+    public long getVirtualTabletId() throws StarRocksException {
+        String svName = getStorageVolumeName();
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeByName(svName);
+        if (sv == null) {
+            throw new StarRocksException("storage volume not found: " + svName);
+        }
+        if (sv.getVTabletId() == -1L) {
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            FilePathInfo pathInfo = null;
+            try {
+                pathInfo = starOSAgent.allocateFilePath(sv.getId(), "");
+            } catch (Exception e) {
+                throw new StarRocksException("failed to allocate file path for storage volume: " + svName, e);
+            }
+            FileCacheInfo cacheInfo =
+                    FileCacheInfo.newBuilder().setEnableCache(false).setTtlSeconds(-1).setAsyncWriteBack(false).build();
+
+            long shardGroupId = starOSAgent.createShardGroupForVirtualTablet();
+            Map<String, String> properties = new HashMap<>();
+            // create a new id as tablet id
+            long vTabletId = GlobalStateMgr.getCurrentState().getNextId();
+            starOSAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, shardGroupId, properties, vTabletId,
+                            WarehouseManager.DEFAULT_RESOURCE);
+            sv.setVTabletGroupId(shardGroupId);
+            sv.setVTabletId(vTabletId);
+            GlobalStateMgr.getCurrentState().getStorageVolumeMgr().
+                            updateStorageVolumeVTabletMapping(svName, vTabletId, shardGroupId);
+            return vTabletId;
+        } else {
+            return sv.getVTabletId();
+        }
+    }
+
+    private void createUploadClusterSnapshotTasks() throws StarRocksException {
         long vTabletId = getVirtualTabletId();
         lakeSnapshotBatchTask = new AgentBatchTask();
         for (PartitionVersionInfo partition : snapshotDiff.getAddedPartitions()) {
@@ -230,11 +287,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             partition.setAggregatorNodeId(aggregatorNodeId);
             List<TComputeNodeTablets> computeNodeTablets = collectComputeNodeTablets(partition.getTabletIds());
 
-            LOG.info("collect node to tablets for added partition, aggregatorNodeId: {}", aggregatorNodeId);
             PartitionKey partitionKey = partition.getPartitionKey();
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
                     partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), -1,
-                    partition.getVersion(), partition.isFileBundling(), vTabletId);
+                    partition.getVersion(), partition.isFileBundling(), false, vTabletId,
+                    GlobalStateMgr.getCurrentState().getNextId());
             task.setComputeNodeTablets(computeNodeTablets);
             lakeSnapshotBatchTask.addTask(task);
         }
@@ -249,20 +306,58 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             List<TComputeNodeTablets> computeNodeTablets = 
                             collectComputeNodeTablets(partition.getCurrentPartitionInfo().getTabletIds());
 
-            LOG.info("collect node to tablets for changed partition, aggregatorNodeId: {}", aggregatorNodeId);
             PartitionKey partitionKey = partition.getCurrentPartitionInfo().getPartitionKey();
             ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
-                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(),
-                    partition.getPrevVersion(), partition.getCurrentPartitionInfo().getVersion(),
-                    partition.getCurrentPartitionInfo().isFileBundling(), vTabletId);
+                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(),
+                    getId(), partition.getPrevVersion(), partition.getCurrentPartitionInfo().getVersion(), 
+                    partition.getCurrentPartitionInfo().isFileBundling(), false, vTabletId,
+                    GlobalStateMgr.getCurrentState().getNextId());
             task.setComputeNodeTablets(computeNodeTablets);
             lakeSnapshotBatchTask.addTask(task);
         }
 
         AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
         AgentTaskExecutor.submit(lakeSnapshotBatchTask);
-        LOG.info("Finish create cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId,
-                lakeSnapshotBatchTask.getAllTasks().size());
+        LOG.debug("Finish create cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId,
+                 lakeSnapshotBatchTask.getAllTasks().size());
+    }
+
+    private void createDeleteClusterSnasphotTasks() throws StarRocksException {
+        long vTabletId = getVirtualTabletId();
+        lakeSnapshotBatchTask = new AgentBatchTask();
+        for (PartitionVersionInfo partition : snapshotDiff.getDeletedPartitions()) {
+            long aggregatorNodeId = chooseAggregatorNodeId(partition.getAggregatorNodeId());
+            if (aggregatorNodeId == 0) {
+                throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
+            }
+            partition.setAggregatorNodeId(aggregatorNodeId);
+            PartitionKey partitionKey = partition.getPartitionKey();
+            ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(), 
+                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), 
+                    -1, -1, true, true, vTabletId, GlobalStateMgr.getCurrentState().getNextId());
+            lakeSnapshotBatchTask.addTask(task);
+        }
+
+        for (PartitionVersionChangeInfo partition : snapshotDiff.getChangedPartitions()) {
+            long aggregatorNodeId = chooseAggregatorNodeId(partition.getCurrentPartitionInfo().getAggregatorNodeId());
+            if (aggregatorNodeId == 0) {
+                throw new StarRocksException("failed to choose aggregator node for cluster snapshot task");
+            }
+            partition.getCurrentPartitionInfo().setAggregatorNodeId(aggregatorNodeId);
+            PartitionKey partitionKey = partition.getCurrentPartitionInfo().getPartitionKey();
+            ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(aggregatorNodeId, partitionKey.getDbId(),
+                    partitionKey.getTableId(), partitionKey.getPartId(), partitionKey.getPhysicalPartId(), getId(), 
+                    -1, -1, partition.isPreviousFileBundling(), false, vTabletId, GlobalStateMgr.getCurrentState().getNextId());
+            List<TComputeNodeTablets> computeNodeTablets = 
+                            collectComputeNodeTablets(partition.getCurrentPartitionInfo().getTabletIds());
+            task.setComputeNodeTablets(computeNodeTablets);
+            lakeSnapshotBatchTask.addTask(task);
+        }
+
+        AgentTaskQueue.addBatchTask(lakeSnapshotBatchTask);
+        AgentTaskExecutor.submit(lakeSnapshotBatchTask);
+        LOG.debug("Finish create delete cluster snapshot tasks. job: {}, vTabletId: {}, task count: {}", getId(), vTabletId,
+                  lakeSnapshotBatchTask.getAllTasks().size());
     }
 
     private long chooseAggregatorNodeId(long preAggregatorNodeId) {
@@ -325,7 +420,6 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
         // Handle null cases
         if (prevClusterSnapshotInfo == null || prevClusterSnapshotInfo.isEmpty()) {
-            LOG.info("prevClusterSnapshotInfo is null or empty");
             // All partitions in new are added
             if (newClusterSnapshotInfo != null && !newClusterSnapshotInfo.isEmpty()) {
                 collectAllPartitions(newClusterSnapshotInfo, diff.getAddedPartitions());
@@ -350,9 +444,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
             // Find changed partitions (in both but version changed)
             PartitionVersionInfo prevVersionInfo = prevPartitionVersions.get(key);
             Long prevVersion = prevVersionInfo.getVersion();
+            boolean isPreviousFileBundling = prevVersionInfo.isFileBundling();
             Long newVersion = entry.getValue().getVersion();
             if (prevVersion != null && !prevVersion.equals(newVersion)) {
-                diff.getChangedPartitions().add(new PartitionVersionChangeInfo(prevVersion, entry.getValue()));
+                diff.getChangedPartitions().add(
+                    new PartitionVersionChangeInfo(prevVersion, isPreviousFileBundling, entry.getValue()));
             }
 
         }
@@ -530,8 +626,9 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         @SerializedName(value = "aggregatorNodeId")
         private long aggregatorNodeId = 0;
 
-        public PartitionVersionInfo(PartitionKey partitionKey, long version, 
-                boolean isFileBundling, List<Long> tabletIds) {
+
+        public PartitionVersionInfo(PartitionKey partitionKey, long version, boolean isFileBundling, 
+                                    List<Long> tabletIds) {
             this.partitionKey = partitionKey;
             this.version = version;
             this.isFileBundling = isFileBundling;
@@ -570,9 +667,12 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     private static class PartitionVersionChangeInfo {
         private final PartitionVersionInfo currentPartitionInfo;
         private long prevVersion;
+        private boolean isPreviousFileBundling;
 
-        public PartitionVersionChangeInfo(long prevVersion, PartitionVersionInfo currentPartitionInfo) {
+        public PartitionVersionChangeInfo(long prevVersion, boolean isPreviousFileBundling, 
+                                          PartitionVersionInfo currentPartitionInfo) {
             this.prevVersion = prevVersion;
+            this.isPreviousFileBundling = isPreviousFileBundling;
             this.currentPartitionInfo = currentPartitionInfo;
         }
 
@@ -582,6 +682,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
         public long getPrevVersion() {
             return prevVersion;
+        }
+
+        public boolean isPreviousFileBundling() {
+            return isPreviousFileBundling;
         }
     }
 

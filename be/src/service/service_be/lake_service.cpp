@@ -1774,10 +1774,11 @@ void LakeServiceImpl::upload_snapshot_files(::google::protobuf::RpcController* c
                                             const ::starrocks::UploadSnapshotFilesRequestPB* request,
                                             ::starrocks::UploadSnapshotFilesResponsePB* response,
                                             ::google::protobuf::Closure* done) {
-    LOG(INFO) << "upload_snapshot_files, job_id: " << request->job_id() << ", db_id: " << request->db_id()
-              << ", table_id: " << request->table_id() << ", partition_id: " << request->partition_id()
-              << ", physical_partition_id: " << request->physical_partition_id()
-              << ", tablet_snapshots: " << request->tablet_snapshots().size();
+    VLOG(3) << "upload_snapshot_files, job_id: " << request->job_id() << ", db_id: " << request->db_id()
+            << ", table_id: " << request->table_id() << ", partition_id: " << request->partition_id()
+            << ", physical_partition_id: " << request->physical_partition_id()
+            << ", tablet_snapshots: " << request->tablet_snapshots().size()
+            << ", dest_tablet_id: " << request->dest_tablet_id();
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
     auto thread_pool = _env->snapshot_file_syncer_thread_pool();

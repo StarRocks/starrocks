@@ -28,6 +28,7 @@ namespace starrocks::lake {
 static const char* const kMetadataDirectoryName = "meta";
 static const char* const kTxnLogDirectoryName = "log";
 static const char* const kSegmentDirectoryName = "data";
+static const char* const kSnapshotLogDirectoryName = "snapshot_log";
 
 class LocationProvider {
 public:
@@ -59,6 +60,10 @@ public:
 
     std::string segment_root_location(int64_t tablet_id) const {
         return join_path(root_location(tablet_id), kSegmentDirectoryName);
+    }
+
+    std::string snapshot_log_root_location(int64_t tablet_id) const {
+        return join_path(root_location(tablet_id), kSnapshotLogDirectoryName);
     }
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const {
@@ -111,6 +116,10 @@ public:
 
     std::string schema_file_location(int64_t tablet_id, int64_t schema_id) const {
         return join_path(root_location(tablet_id), schema_filename(schema_id));
+    }
+
+    std::string snapshot_log_location(int64_t tablet_id, int64_t job_id, int64_t physical_partition_id) const {
+        return join_path(snapshot_log_root_location(tablet_id), snapshot_log_filename(job_id, physical_partition_id));
     }
 
 protected:

@@ -1037,7 +1037,6 @@ public class ClusterSnapshotTest {
         int initCnt;
         int snapCnt;
         int uploadCnt;
-        int finishedCnt;
 
         DummyClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
             super(id, snapshotName, storageVolumeName, createdTimeMs);
@@ -1060,11 +1059,6 @@ public class ClusterSnapshotTest {
             uploadCnt++;
             setState(ClusterSnapshotJobState.FINISHED);
         }
-
-        @Override
-        protected void runFinishedJob(SnapshotJobContext context) {
-            finishedCnt++;
-        }
     }
 
     private static class FailingClusterSnapshotJob extends ClusterSnapshotJob {
@@ -1086,7 +1080,6 @@ public class ClusterSnapshotTest {
         Assertions.assertEquals(1, job.initCnt);
         Assertions.assertEquals(1, job.snapCnt);
         Assertions.assertEquals(1, job.uploadCnt);
-        Assertions.assertEquals(1, job.finishedCnt);
         Assertions.assertTrue(job.isFinished());
 
         FailingClusterSnapshotJob failingJob = new FailingClusterSnapshotJob(8L, "dummy_fail", storageVolumeName,

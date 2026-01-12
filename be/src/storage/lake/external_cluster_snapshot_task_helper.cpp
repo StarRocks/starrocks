@@ -111,8 +111,50 @@ TabletFileCollections TabletFileCollections::collect(const TabletMetadataPtr& pr
     return collections;
 }
 
+void collect_unused_files(const TabletFileCollections& collections, FileSet& unused_data_files,
+                          FileSet& pre_bundle_data_files) {
+    // Collect unused DCG files
+    for (const auto& dcg_file : collections.pre_dcg_files) {
+        if (!collections.new_dcg_files.contains(dcg_file)) {
+            unused_data_files.emplace(dcg_file);
+        }
+    }
+
+    // Collect unused SSTable files
+    for (const auto& sstable_file : collections.pre_sstable_files) {
+        if (!collections.new_sstable_files.contains(sstable_file)) {
+            unused_data_files.emplace(sstable_file);
+        }
+    }
+
+    // Collect unused delvec files
+    for (const auto& delvec_file : collections.pre_delvec_files) {
+        if (!collections.new_delvec_files.contains(delvec_file)) {
+            unused_data_files.emplace(delvec_file);
+        }
+    }
+
+    // Process rowsets for bundle/non-bundle files
+    for (const auto& [rowset_id, rowset] : collections.pre_rowsets) {
+        if (collections.new_rowsets.contains(rowset_id)) {
+            continue;
+        }
+
+        if (rowset->bundle_file_offsets_size() > 0) {
+            for (const auto& segment : rowset->segments()) {
+                pre_bundle_data_files.insert(segment);
+            }
+        } else {
+            for (const auto& segment : rowset->segments()) {
+                unused_data_files.insert(segment);
+            }
+        }
+    }
+}
+
 TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFileCollections& collections,
-                                               FileSet& globally_bound_segments,
+                                               FileSet& pre_bundle_data_files,
+                                               phmap::flat_hash_set<std::string>& globally_bound_segments,
                                                UploadSnapshotFilesRequestPB& node_req) {
     auto* tablet_pb = node_req.add_tablet_snapshots();
     tablet_pb->set_tablet_id(tablet_id);
@@ -144,6 +186,9 @@ TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFi
             continue;
         }
         for (const auto& segment : rowset->segments()) {
+            if (pre_bundle_data_files.contains(segment)) {
+                pre_bundle_data_files.erase(segment);
+            }
             auto [it, inserted] = globally_bound_segments.emplace(segment);
             if (inserted) {
                 tablet_pb->add_new_data_files(segment);
@@ -155,22 +200,25 @@ TabletDataSnapshotPB* populate_tablet_snapshot(int64_t tablet_id, const TabletFi
     for (const auto& file : tablet_pb->new_data_files()) {
         VLOG(3) << "tablet_id: " << tablet_id << ", new_data_file: " << file;
     }
-
     return tablet_pb;
 }
 
-void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t tablet_id,
-                                const TabletMetadataPtr& pre_tablet_metadata,
+void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t tablet_id, int64_t pre_version,
+                                int64_t new_version, const TabletMetadataPtr& pre_tablet_metadata,
                                 const TabletMetadataPtr& new_tablet_metadata,
                                 phmap::flat_hash_set<int64_t>& pre_schema_ids,
-                                phmap::flat_hash_set<int64_t>& new_schema_ids, TabletDataSnapshotPB* tablet_pb) {
+                                phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_meta_files,
+                                TabletDataSnapshotPB* tablet_pb) {
+    DCHECK(tablet_pb != nullptr);
     // Handle metadata files
     if (is_filebundling) {
         if (!meta_added) {
-            tablet_pb->add_new_metadata_files(tablet_metadata_filename(0, new_tablet_metadata->version()));
+            tablet_pb->add_new_metadata_files(tablet_metadata_filename(0, new_version));
+            unused_meta_files.emplace(tablet_metadata_filename(0, pre_version));
         }
     } else {
-        tablet_pb->add_new_metadata_files(tablet_metadata_filename(tablet_id, new_tablet_metadata->version()));
+        unused_meta_files.emplace(tablet_metadata_filename(tablet_id, pre_version));
+        tablet_pb->add_new_metadata_files(tablet_metadata_filename(tablet_id, new_version));
     }
 
     // Collect and process schema files
@@ -183,6 +231,26 @@ void populate_meta_schema_files(bool is_filebundling, bool meta_added, int64_t t
         if (!pre_schema_ids.contains(schema_id)) {
             tablet_pb->add_new_schema_files(schema_filename(schema_id));
             pre_schema_ids.insert(schema_id);
+        }
+    }
+}
+
+void prepare_unused_files_for_log(int64_t pre_version, const FileSet& pre_bundle_data_files, FileSet& unused_data_files,
+                                  const FileSet& unused_meta_files, const phmap::flat_hash_set<int64_t>& pre_schema_ids,
+                                  const phmap::flat_hash_set<int64_t>& new_schema_ids, FileSet& unused_schema_files) {
+    if (pre_version < 0) {
+        return;
+    }
+
+    // Add bundle files to unused data files
+    for (const auto& file : pre_bundle_data_files) {
+        unused_data_files.emplace(file);
+    }
+
+    // Collect unused schema files
+    for (auto schema_id : pre_schema_ids) {
+        if (!new_schema_ids.contains(schema_id)) {
+            unused_schema_files.emplace(schema_filename(schema_id));
         }
     }
 }

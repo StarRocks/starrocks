@@ -15,6 +15,7 @@
 package com.starrocks.lake.snapshot;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -34,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -41,6 +43,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ExternalClusterSnapshotTask;
 import com.starrocks.thrift.TClusterSnapshotJobsItem;
+import com.starrocks.thrift.TComputeNodeTablets;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -147,6 +150,11 @@ public class ExternalClusterSnapshotJobTest {
             @Mock
             public void prepare() {
                 // no-op for tests
+            }
+
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+                return Lists.newArrayList();
             }
         };
 
@@ -319,8 +327,9 @@ public class ExternalClusterSnapshotJobTest {
             }
         };
 
-        mockWarehouseAliveNodesWithTablets();
+        mockWarehouseAliveNodes();
         mockAggregatorSuccess();
+        mockGetVirtualTabletId();
 
         job.runSnapshottingJob(context);
 
@@ -366,7 +375,9 @@ public class ExternalClusterSnapshotJobTest {
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
         AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, true, 100L);
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, false,
+                false, 100L,
+                1L);
         batchTask.addTask(task);
 
         new MockUp<AgentBatchTask>() {
@@ -409,7 +420,9 @@ public class ExternalClusterSnapshotJobTest {
         SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
 
         AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, true, 100L);
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, false,
+                false,
+                100L, 1L);
         task.setErrorMsg("Test error");
         batchTask.addTask(task);
 
@@ -468,8 +481,7 @@ public class ExternalClusterSnapshotJobTest {
 
         job.runUploadingJob(context);
 
-        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
-        Assertions.assertTrue(job.getFinishedTimeMs() > 0);
+        Assertions.assertEquals(ClusterSnapshotJobState.CLEANING, job.getState());
     }
 
     @Test
@@ -679,12 +691,13 @@ public class ExternalClusterSnapshotJobTest {
         snapshotDiffField.setAccessible(true);
         snapshotDiffField.set(job, snapshotDiff);
 
-        mockWarehouseAliveNodesWithTablets();
+        mockWarehouseAssign();
         mockAggregatorSuccess();
+        mockGetVirtualTabletId();
 
         // Call createExternalClusterSnapshotTasks
         java.lang.reflect.Method createTasksMethod = ExternalClusterSnapshotJob.class.getDeclaredMethod(
-                "createExternalClusterSnapshotTasks");
+                "createUploadClusterSnapshotTasks");
         createTasksMethod.setAccessible(true);
         createTasksMethod.invoke(job);
 
@@ -739,7 +752,9 @@ public class ExternalClusterSnapshotJobTest {
     public void testFinishSnapshotTaskStatusHandling() {
         ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
                 storageVolumeName, System.currentTimeMillis());
-        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, true, 100L);
+        ExternalClusterSnapshotTask task = new ExternalClusterSnapshotTask(1L, 1L, 2L, 3L, 4L, 1L, -1L, 10L, false,
+                false,
+                100L, 1L);
 
         TFinishTaskRequest okReq = new TFinishTaskRequest();
         okReq.setTask_status(new TStatus(TStatusCode.OK));
@@ -777,6 +792,159 @@ public class ExternalClusterSnapshotJobTest {
         job.setState(ClusterSnapshotJobState.UPLOADING);
         job.replay();
         Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+    }
+
+    @Test
+    public void testReplayUploadingJobCreateTaskFailure() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        Object diff = createSnapshotDiffWithAddedPartition(true);
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorFailure();
+        mockGetVirtualTabletId();
+
+        job.replayUploadingJob();
+        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+    }
+
+    @Test
+    public void testCreateExternalClusterSnapshotTaskshotTasksWithChangedPartitions() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot", storageVolumeName,
+                System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.SNAPSHOTING);
+
+        Object diff = createSnapshotDiffWithChangedPartition();
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockWarehouseAssign();
+        mockGetVirtualTabletId();
+
+        java.lang.reflect.Method createTasksMethod = ExternalClusterSnapshotJob.class.getDeclaredMethod(
+                "createUploadClusterSnapshotTasks");
+        createTasksMethod.setAccessible(true);
+        createTasksMethod.invoke(job);
+
+        Assertions.assertTrue(job.getLakeSnapshotBatchTask().getAllTasks().size() > 0);
+    }
+
+    @Test
+    public void testPartitionKeyEqualityAndHash() throws Exception {
+        Object key1 = newPartitionKey(1, 2, 3, 4);
+        Object key2 = newPartitionKey(1, 2, 3, 4);
+        Object key3 = newPartitionKey(1, 2, 3, 5);
+
+        Assertions.assertEquals(key1, key2);
+        Assertions.assertEquals(key1.hashCode(), key2.hashCode());
+        Assertions.assertNotEquals(key1, key3);
+        Assertions.assertTrue(key1.toString().contains("PartitionKey"));
+    }
+
+    @Test
+    public void testCollectComputeNodeTablets() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+
+        List<Long> tabletIds = Lists.newArrayList(1001L, 1002L, 1003L);
+        List<TComputeNodeTablets> computeNodes = Lists.newArrayList();
+        long aggregatorNodeId = 0L;
+
+        mockWarehouseAssign();
+
+        // Use reflection to call private method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
+                "collectComputeNodeTablets", List.class);
+        method.setAccessible(true);
+        computeNodes = (List<TComputeNodeTablets>) method.invoke(job, tabletIds);
+        Assertions.assertTrue(computeNodes.size() > 0);
+    }
+
+    @Test
+    public void testJobStateTransitionsWithRun() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName,
+                System.currentTimeMillis());
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
+
+        // Mock all required methods for successful run
+        new MockUp<SnapshotJobContext>() {
+
+            @Mock
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
+                return Pair.create(100L, 200L);
+            }
+        };
+
+        new MockUp<CheckpointController>() {
+
+            @Mock
+            public ClusterSnapshotInfo getClusterSnapshotInfo() {
+                return new ClusterSnapshotInfo(new HashMap<>());
+            }
+
+            @Mock
+            public long getImageJournalId() {
+                return 100L;
+            }
+
+            @Mock
+            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
+                    boolean needClusterSnapshotInfo) {
+                return Pair.create(true, "");
+            }
+        };
+
+        new MockUp<AgentBatchTask>() {
+
+            @Mock
+            public boolean isFinished() {
+                return true;
+            }
+
+            @Mock
+            public List<AgentTask> getAllTasks() {
+                return Lists.newArrayList();
+            }
+        };
+
+        mockGetVirtualTabletId();
+        // Run the job
+        job.run(context);
+        // Should transition through states and end up in FINISHED
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+    }
+
+    @Test
+    public void testJobWithException() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName,
+                System.currentTimeMillis());
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
+
+        new MockUp<SnapshotJobContext>() {
+
+            @Mock
+            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr()
+                    throws StarRocksException {
+                throw new StarRocksException("Test exception");
+            }
+        };
+
+        // Run the job - should catch exception and set error state
+        job.run(context);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+        Assertions.assertTrue(job.isError());
+        Assertions.assertNotNull(job.getInfo().getError_message());
     }
 
     @Test
@@ -912,172 +1080,6 @@ public class ExternalClusterSnapshotJobTest {
         Assertions.assertNull(clusterSnapshotMgr.getLastSuccFullSnapshotInfo());
     }
 
-    @Test
-    public void testReplayUploadingJobCreateTaskFailure() throws Exception {
-        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
-                storageVolumeName, System.currentTimeMillis());
-        job.setState(ClusterSnapshotJobState.UPLOADING);
-
-        Object diff = createSnapshotDiffWithAddedPartition(true);
-        setSnapshotDiff(job, diff);
-
-        mockAggregatorFailure();
-
-        job.replayUploadingJob();
-        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
-    }
-
-    @Test
-    public void testRunFinishedJobNoDiffOrEmpty() throws Exception {
-        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
-                storageVolumeName, System.currentTimeMillis());
-        job.setState(ClusterSnapshotJobState.FINISHED);
-
-        // snapshotDiff is null
-        job.runFinishedJob(createSnapshotJobContext(new CheckpointController("fe", null, ""),
-                new CheckpointController("starMgr", null, "")));
-
-        // empty deleted partitions
-        Object diff = createEmptySnapshotDiff();
-        setSnapshotDiff(job, diff);
-        job.runFinishedJob(createSnapshotJobContext(new CheckpointController("fe", null, ""),
-                new CheckpointController("starMgr", null, "")));
-    }
-
-    @Test
-    public void testCreateExternalClusterSnapshotTaskshotTasksWithChangedPartitions() throws Exception {
-        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot", storageVolumeName,
-                System.currentTimeMillis());
-        job.setState(ClusterSnapshotJobState.SNAPSHOTING);
-
-        Object diff = createSnapshotDiffWithChangedPartition();
-        setSnapshotDiff(job, diff);
-
-        mockAggregatorSuccess();
-        mockWarehouseAliveNodesWithTablets();
-
-        java.lang.reflect.Method createTasksMethod = ExternalClusterSnapshotJob.class.getDeclaredMethod(
-                "createExternalClusterSnapshotTasks");
-        createTasksMethod.setAccessible(true);
-        createTasksMethod.invoke(job);
-
-        Assertions.assertTrue(job.getLakeSnapshotBatchTask().getAllTasks().size() > 0);
-    }
-
-    @Test
-    public void testPartitionKeyEqualityAndHash() throws Exception {
-        Object key1 = newPartitionKey(1, 2, 3, 4);
-        Object key2 = newPartitionKey(1, 2, 3, 4);
-        Object key3 = newPartitionKey(1, 2, 3, 5);
-
-        Assertions.assertEquals(key1, key2);
-        Assertions.assertEquals(key1.hashCode(), key2.hashCode());
-        Assertions.assertNotEquals(key1, key3);
-        Assertions.assertTrue(key1.toString().contains("PartitionKey"));
-    }
-
-    @Test
-    public void testCollectComputeNodeTablets() throws Exception {
-        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
-                storageVolumeName, System.currentTimeMillis());
-
-        List<Long> tabletIds = Lists.newArrayList(1001L, 1002L, 1003L);
-        mockWarehouseAliveNodesWithTablets();
-
-        // Use reflection to call private method
-        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
-                "collectComputeNodeTablets", List.class);
-        method.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        List<?> resultNodes = (List<?>) method.invoke(job, tabletIds);
-        Assertions.assertTrue(resultNodes.size() > 0);
-    }
-
-    @Test
-    public void testJobStateTransitionsWithRun() throws Exception {
-        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
-                storageVolumeName,
-                System.currentTimeMillis());
-
-        CheckpointController feController = new CheckpointController("fe", null, "");
-        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
-        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
-
-        // Mock all required methods for successful run
-        new MockUp<SnapshotJobContext>() {
-
-            @Mock
-            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr() {
-                return Pair.create(100L, 200L);
-            }
-        };
-
-        new MockUp<CheckpointController>() {
-
-            @Mock
-            public ClusterSnapshotInfo getClusterSnapshotInfo() {
-                return new ClusterSnapshotInfo(new HashMap<>());
-            }
-
-            @Mock
-            public long getImageJournalId() {
-                return 100L;
-            }
-
-            @Mock
-            public Pair<Boolean, String> runCheckpointControllerWithIds(long imageJournalId, long maxJournalId,
-                    boolean needClusterSnapshotInfo) {
-                return Pair.create(true, "");
-            }
-        };
-
-        new MockUp<AgentBatchTask>() {
-
-            @Mock
-            public boolean isFinished() {
-                return true;
-            }
-
-            @Mock
-            public List<AgentTask> getAllTasks() {
-                return Lists.newArrayList();
-            }
-        };
-
-        // Run the job
-        job.run(context);
-
-        // Should transition through states and end up in FINISHED
-        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
-    }
-
-    @Test
-    public void testJobWithException() throws Exception {
-        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
-                storageVolumeName,
-                System.currentTimeMillis());
-
-        CheckpointController feController = new CheckpointController("fe", null, "");
-        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
-        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
-
-        new MockUp<SnapshotJobContext>() {
-
-            @Mock
-            public Pair<Long, Long> captureConsistentCheckpointIdBetweenFEAndStarMgr()
-                    throws StarRocksException {
-                throw new StarRocksException("Test exception");
-            }
-        };
-
-        // Run the job - should catch exception and set error state
-        job.run(context);
-
-        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
-        Assertions.assertTrue(job.isError());
-        Assertions.assertNotNull(job.getInfo().getError_message());
-    }
-
     // Helper method to create mock ClusterSnapshotInfo for testing
     private ClusterSnapshotInfo createMockClusterSnapshotInfo(long dbId, long tableId, long partId,
             long physicalPartId, long version) {
@@ -1153,13 +1155,14 @@ public class ExternalClusterSnapshotJobTest {
         return ctor.newInstance(key, version, true, tabletIds);
     }
 
-    private Object newPartitionVersionChangeInfo(long prevVersion, Object currentPartitionInfo) throws Exception {
+    private Object newPartitionVersionChangeInfo(long prevVersion, boolean isPreviousFileBundling, 
+                                                 Object currentPartitionInfo) throws Exception {
         Class<?> pvcClass = Class
                 .forName("com.starrocks.lake.snapshot.ExternalClusterSnapshotJob$PartitionVersionChangeInfo");
-        java.lang.reflect.Constructor<?> ctor = pvcClass.getDeclaredConstructor(long.class, Class
+        java.lang.reflect.Constructor<?> ctor = pvcClass.getDeclaredConstructor(long.class, boolean.class, Class
                 .forName("com.starrocks.lake.snapshot.ExternalClusterSnapshotJob$PartitionVersionInfo"));
         ctor.setAccessible(true);
-        return ctor.newInstance(prevVersion, currentPartitionInfo);
+        return ctor.newInstance(prevVersion, isPreviousFileBundling, currentPartitionInfo);
     }
 
     private Object createEmptySnapshotDiff() throws Exception {
@@ -1206,7 +1209,7 @@ public class ExternalClusterSnapshotJobTest {
         @SuppressWarnings("unchecked")
         List<Object> changedPartitions = (List<Object>) diff.getClass().getMethod("getChangedPartitions").invoke(diff);
         Object current = newPartitionVersionInfo(1, 2, 3, 4, 2L, Lists.newArrayList(1001L));
-        Object changeInfo = newPartitionVersionChangeInfo(1L, current);
+        Object changeInfo = newPartitionVersionChangeInfo(1L, true, current);
         changedPartitions.add(changeInfo);
         return diff;
     }
@@ -1229,6 +1232,15 @@ public class ExternalClusterSnapshotJobTest {
         };
     }
 
+    private void mockWarehouseAssign() {
+        new MockUp<WarehouseManagerEPack>() {
+            @Mock
+            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
+                return new ComputeNode(1L, "127.0.0.1", 9050);
+            }
+        };
+    }
+
     private void mockWarehouseAliveNodes() {
         new MockUp<WarehouseManagerEPack>() {
             @Mock
@@ -1238,13 +1250,223 @@ public class ExternalClusterSnapshotJobTest {
         };
     }
 
-    private void mockWarehouseAliveNodesWithTablets() {
-        new MockUp<WarehouseManagerEPack>() {
+    private void mockGetVirtualTabletId() {
+        new MockUp<ExternalClusterSnapshotJob>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
-                // Always return a valid compute node so collectComputeNodeTablets() succeeds
-                return new ComputeNode(1L, "127.0.0.1", 9050);
+            public long getVirtualTabletId() throws StarRocksException {
+                return 1001L;
             }
         };
+    }
+
+    @Test
+    public void testGetVirtualTabletIdExistingVTabletId() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
+        Assertions.assertNotNull(sv);
+        sv.setVTabletId(999L);
+
+        // Use reflection to call private method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod("getVirtualTabletId");
+        method.setAccessible(true);
+
+        long vTabletId = (Long) method.invoke(job);
+        Assertions.assertEquals(999L, vTabletId);
+    }
+
+    @Test
+    public void testGetVirtualTabletIdCreateNew() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
+                .getStorageVolumeByName(storageVolumeName);
+        Assertions.assertNotNull(sv);
+        sv.setVTabletId(-1L); // Reset to -1 to trigger creation
+
+        // Mock StarOSAgent methods
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, String rootDir) throws Exception {
+                return FilePathInfo.newBuilder().setFullPath("s3://test-bucket/path").build();
+            }
+
+            @Mock
+            public long createShardGroupForVirtualTablet() throws DdlException {
+                return 200L;
+            }
+
+            @Mock
+            public void createShardWithVirtualTabletId(FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                    long groupId, Map<String, String> properties, long vTabletId, ComputeResource computeResource) {
+                // Mock implementation - do nothing
+            }
+        };
+
+        // Mock StorageVolumeMgr.updateStorageVolumeVTabletMapping
+        new MockUp<StorageVolumeMgr>() {
+            @Mock
+            public void updateStorageVolumeVTabletMapping(String name, long vTabletId, long vTabletGroupId) {
+                // Mock implementation - do nothing
+            }
+        };
+
+        // Use reflection to call private method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod("getVirtualTabletId");
+        method.setAccessible(true);
+
+        long vTabletId = (Long) method.invoke(job);
+        Assertions.assertTrue(vTabletId > 0);
+        Assertions.assertEquals(vTabletId, sv.getVTabletId());
+        Assertions.assertEquals(200L, sv.getVTabletGroupId());
+    }
+
+    @Test
+    public void testRunCleaningJobSuccess() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.CLEANING);
+
+        // Create a snapshot diff with deleted partitions
+        Object diff = createSnapshotDiffWithDeletedPartition();
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockWarehouseAliveNodes();
+        mockGetVirtualTabletId();
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
+
+        // Use reflection to call protected method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
+                "runCleaningJob", SnapshotJobContext.class);
+        method.setAccessible(true);
+        method.invoke(job, context);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        Assertions.assertNotNull(job.getLakeSnapshotBatchTask());
+    }
+
+    @Test
+    public void testRunCleaningJobWithChangedPartitions() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.CLEANING);
+
+        // Create a snapshot diff with both deleted and changed partitions
+        Object diff = createEmptySnapshotDiff();
+        @SuppressWarnings("unchecked")
+        List<Object> deletedPartitions = (List<Object>) diff.getClass().getMethod("getDeletedPartitions").invoke(diff);
+        @SuppressWarnings("unchecked")
+        List<Object> changedPartitions = (List<Object>) diff.getClass().getMethod("getChangedPartitions").invoke(diff);
+
+        Object deletedPartition = newPartitionVersionInfo(1, 2, 3, 4, 10L, Lists.newArrayList(1001L));
+        deletedPartitions.add(deletedPartition);
+
+        Object current = newPartitionVersionInfo(5, 6, 7, 8, 2L, Lists.newArrayList(2001L));
+        Object changeInfo = newPartitionVersionChangeInfo(1L, true, current);
+        changedPartitions.add(changeInfo);
+
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockWarehouseAliveNodes();
+        mockWarehouseAssign();
+        mockGetVirtualTabletId();
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
+
+        // Use reflection to call protected method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
+                "runCleaningJob", SnapshotJobContext.class);
+        method.setAccessible(true);
+        method.invoke(job, context);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
+        Assertions.assertNotNull(batchTask);
+        Assertions.assertTrue(batchTask.getAllTasks().size() > 0);
+    }
+
+    @Test
+    public void testRunCleaningJobFailure() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.CLEANING);
+
+        // Create a snapshot diff with deleted partitions
+        Object diff = createSnapshotDiffWithDeletedPartition();
+        setSnapshotDiff(job, diff);
+
+        // Mock aggregator to fail (returns 0)
+        mockAggregatorFailure();
+        mockGetVirtualTabletId();
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
+
+        // Use reflection to call protected method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
+                "runCleaningJob", SnapshotJobContext.class);
+        method.setAccessible(true);
+        method.invoke(job, context);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.ERROR, job.getState());
+    }
+
+    @Test
+    public void testRunCleaningJobEmptyDiff() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.CLEANING);
+
+        // Create an empty snapshot diff
+        Object diff = createEmptySnapshotDiff();
+        setSnapshotDiff(job, diff);
+
+        mockGetVirtualTabletId();
+
+        CheckpointController feController = new CheckpointController("fe", null, "");
+        CheckpointController starMgrController = new CheckpointController("starMgr", null, "");
+        SnapshotJobContext context = createSnapshotJobContext(feController, starMgrController);
+
+        // Use reflection to call protected method
+        java.lang.reflect.Method method = ExternalClusterSnapshotJob.class.getDeclaredMethod(
+                "runCleaningJob", SnapshotJobContext.class);
+        method.setAccessible(true);
+        method.invoke(job, context);
+
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
+        AgentBatchTask batchTask = job.getLakeSnapshotBatchTask();
+        Assertions.assertNotNull(batchTask);
+        Assertions.assertEquals(0, batchTask.getAllTasks().size());
+    }
+
+    @Test
+    public void testReplayCleaningState() throws Exception {
+        ExternalClusterSnapshotJob job = new ExternalClusterSnapshotJob(1L, "test_snapshot",
+                storageVolumeName, System.currentTimeMillis());
+        job.setState(ClusterSnapshotJobState.CLEANING);
+
+        // Create a snapshot diff with deleted partitions
+        Object diff = createSnapshotDiffWithDeletedPartition();
+        setSnapshotDiff(job, diff);
+
+        mockAggregatorSuccess();
+        mockWarehouseAliveNodes();
+        mockGetVirtualTabletId();
+
+        // Replay should call runCleaningJob
+        job.replay();
+
+        Assertions.assertEquals(ClusterSnapshotJobState.FINISHED, job.getState());
     }
 }
