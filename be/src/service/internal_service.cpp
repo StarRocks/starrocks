@@ -465,7 +465,9 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     int64_t remaining_ms = query_ctx->get_query_remaining_time_ms();
     auto handle_prepare_failure = [&](std::string_view msg) {
-        status = Status::ServiceUnavailable(std::string(msg));
+        if (status.ok()) {
+            status = Status::ServiceUnavailable(std::string(msg));
+        }
         finalize_state->prepare_failed.store(true);
         query_ctx->mark_prepare_failed();
         // Mark as confirmed-cancel to make QueryContext removable immediately once all active fragments count down,
@@ -482,18 +484,19 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 
     failed_idx = unique_requests.size();
     for (size_t i = 0; i < unique_requests.size(); ++i) {
-        Status status;
+        Status st;
         // when be exited, a submitted task will never do, so we only wait for query timeout
         if (prepare_futures[i].wait_for(std::chrono::milliseconds(query_ctx->get_query_remaining_time_ms())) ==
             std::future_status::timeout) {
-            status =
+            st =
                     Status::TimedOut(fmt::format("exec_batch_plan_fragments wait fragment prepare timed out, "
                                                  "query_id={}, query_timeout={}s, idx={}",
                                                  print_id(common_request.params.query_id), remaining_ms, i));
         } else {
-            status = prepare_futures[i].get();
+            st = prepare_futures[i].get();
         }
-        if (!status.ok()) {
+        if (!st.ok()) {
+            status = st;
             failed_idx = i;
             break;
         }
