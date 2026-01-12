@@ -312,7 +312,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         };
         metrics.add(counterPartitionCount);
 
-        mvWarehouseName = new GaugeMetric<String>("mv_warehouse_name", MetricUnit.NOUNIT,
+        mvWarehouseName = new GaugeMetric<String>("warehouse_name", MetricUnit.NOUNIT,
                 "the materialized view's warehouse name") {
             @Override
             public String getValue() {
