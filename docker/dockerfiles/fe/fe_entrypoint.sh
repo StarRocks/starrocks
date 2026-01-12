@@ -24,6 +24,7 @@ STARROCKS_HOME=${STARROCKS_ROOT}/fe
 FE_CONFFILE=$STARROCKS_HOME/conf/fe.conf
 META_DIR=$STARROCKS_HOME/meta
 EXIT_IN_PROGRESS=false
+IS_FE_OBSERVER=${IS_FE_OBSERVER:-"false"}
 
 log_stderr()
 {
@@ -218,8 +219,13 @@ start_fe_no_meta()
         local start=`date +%s`
         while true
         do
-            log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
-            mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            if [[ "$IS_FE_OBSERVER" == 'true' ]]; then
+              log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as observer ..."
+              mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD OBSERVER \"$MYSELF:$EDIT_LOG_PORT\";"
+            else
+              log_stderr "Add myself($MYSELF:$EDIT_LOG_PORT) to leader as follower ..."
+              mysql --connect-timeout 2 -h $FE_LEADER -P $QUERY_PORT -u root --skip-column-names --batch -e "ALTER SYSTEM ADD FOLLOWER \"$MYSELF:$EDIT_LOG_PORT\";"
+            fi
             # check if added successful
             if show_frontends $svc | grep -q -w "$MYSELF" &>/dev/null ; then
                 break;
