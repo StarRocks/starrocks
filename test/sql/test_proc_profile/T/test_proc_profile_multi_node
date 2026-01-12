@@ -1,4 +1,4 @@
--- name: test_proc_profile_multi_node
+-- name: test_proc_profile_multi_node @sequential
 -- Test FE /proc_profile page accessing different nodes (FE and BE)
 
 -- Get BE IP and HTTP port from show backends command
