@@ -3,15 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 0.95
 ---
 
-# SQL Function
+# SQL UDF
 
-Since version 4.1, StarRocks supports creating SQL Functions, allowing users to create functions using SQL expressions.
+Since version 4.1, StarRocks supports creating SQL user-define-functions(UDFs), allowing users to create functions using SQL expressions.
 
-SQL Function is a lightweight function definition method that encapsulates a SQL expression into a reusable function, which is dynamically expanded into the actual SQL expression at query time.
+SQL UDF is a lightweight function definition method that encapsulates a SQL expression into a reusable function, which is dynamically expanded into the actual SQL expression at query time.
 
 ## Overview
 
-Main features of SQL Function:
+Main features of SQL UDF:
 
 - **Dynamic Expansion**: Expands function calls into actual SQL expressions during the query optimization phase
 - **Type Safety**: Supports explicit declaration of parameter types and return types
@@ -24,7 +24,7 @@ Applicable scenarios:
 
 ## Syntax
 
-### Creating SQL Function
+### Creating SQL UDF
 
 ```SQL
 CREATE [GLOBAL] FUNCTION
@@ -42,13 +42,13 @@ RETURNS expression
 | arg_type           | Parameter type, supports all StarRocks basic data types                                              |
 | expression         | SQL expression that will be expanded into actual expression when function is called                  |
 
-### Dropping SQL Function
+### Dropping SQL UDF
 
 ```SQL
 DROP FUNCTION [IF EXISTS] function_name(arg_type [, ...])
 ```
 
-### Showing SQL Function
+### Showing SQL UDF
 
 ```SQL
 SHOW [GLOBAL] FUNCTIONS;
@@ -110,7 +110,7 @@ END;
 SELECT classify_temperature(25);  -- Result: warm
 ```
 
-### Example 5: Global SQL Function
+### Example 5: Global SQL UDF
 
 ```SQL
 -- Create a global function visible to all databases
@@ -125,7 +125,7 @@ SELECT format_date_display(create_time) from my_table;
 
 ### 1. Nested Usage
 
-SQL Function supports nested calls:
+SQL UDF supports nested calls:
 
 ```SQL
 CREATE FUNCTION func_a(x INT, y INT) RETURNS x + y;
@@ -136,7 +136,7 @@ SELECT func_b(3, 4);  -- Result: 14
 
 ### 2. Type Conversion
 
-SQL Function supports implicit type conversion:
+SQL UDF supports implicit type conversion:
 
 ```SQL
 CREATE FUNCTION convert_and_add(a STRING, b INT)
@@ -147,7 +147,7 @@ SELECT convert_and_add('100', 50);  -- Result: 150
 
 ### 3. Combination with Built-in Functions
 
-SQL Function can be freely combined with StarRocks built-in functions:
+SQL UDF can be freely combined with StarRocks built-in functions:
 
 ```SQL
 CREATE FUNCTION get_year_month(dt DATETIME)
@@ -193,7 +193,7 @@ RETURNS amount * 0.1 + 5.0;
 
 ## Performance Characteristics
 
-SQL Function is expanded into actual SQL expressions during the query optimization phase, with the following performance characteristics:
+SQL UDF is expanded into actual SQL expressions during the query optimization phase, with the following performance characteristics:
 
 1. **Zero Function Call Overhead**: No function call overhead like traditional UDFs
 2. **Optimizer Visibility**: The optimizer can see the complete expression for better optimization
