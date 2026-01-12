@@ -290,7 +290,7 @@ public class InsertOverwriteJobRunner {
                         FrontendOptions.getLocalHostAddress()),
                 sourceType,
                 context.getExecTimeout(),
-                context.getCurrentComputeResource());
+                context.getCurrentWarehouseId());
 
         // add table indexes to transaction state
         // If any operation fails after beginTransaction succeeds, we must abort the transaction
