@@ -180,15 +180,6 @@ public class AuditEvent {
     @AuditField(value = "CacheHitRatio", ignore_empty = true)
     public String cacheHitRatio = "";
 
-    @AuditField(value = "PlanMaxScanRows")
-    public long planMaxScanRows = -1;
-
-    @AuditField(value = "PlanMaxScanPartitions")
-    public long planMaxScanPartitions = -1;
-
-    @AuditField(value = "PlanMaxScanTablet")
-    public long planMaxScanTablets = -1;
-
     public void calculateCacheHitRatio() {
         if (!isQuery || RunMode.isSharedNothingMode()) {
             return;
@@ -502,22 +493,6 @@ public class AuditEvent {
             auditEvent.preparedStmtId = preparedStmtId;
             return this;
         }
-
-        public AuditEventBuilder setPlanMaxScanRows(long planMaxScanRows) {
-            auditEvent.planMaxScanRows = planMaxScanRows;
-            return this;
-        }
-
-        public AuditEventBuilder setPlanMaxScanPartitions(long planMaxScanPartitions) {
-            auditEvent.planMaxScanPartitions = planMaxScanPartitions;
-            return this;
-        }
-
-        public AuditEventBuilder setPlanMaxScanTablets(long planMaxScanTablets) {
-            auditEvent.planMaxScanTablets = planMaxScanTablets;
-            return this;
-        }
-
         public AuditEvent build() {
             this.auditEvent.calculateCacheHitRatio();
             return this.auditEvent;

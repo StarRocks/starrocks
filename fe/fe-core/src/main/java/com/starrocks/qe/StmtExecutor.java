@@ -300,6 +300,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
+import static com.starrocks.common.util.ScanLimitChecker.checkScanLimit;
 import static com.starrocks.service.arrow.flight.sql.ArrowFlightSqlServiceImpl.buildSchema;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.AnalyzeMgr.IS_MULTI_COLUMN_STATS;
@@ -3496,40 +3497,17 @@ public class StmtExecutor {
                         planMaxScanPartitions, scanNode.getScanNodePredicates()
                                 .getSelectedPartitionIds().size());
             }
-        }
 
-        context.getAuditEventBuilder()
-                .setPlanMaxScanRows(planMaxScanRows)
-                .setPlanMaxScanPartitions(planMaxScanPartitions)
-                .setPlanMaxScanTablets(planMaxScanTablets);
+            if (scanNode instanceof IcebergScanNode) {
+                scanNode.setPlanScanPartitionsLimit(planMaxScanPartitions);
+            }
+        }
 
         checkPlanScanLimits(
                 context,
                 planMaxScanRows,
                 planMaxScanPartitions,
                 planMaxScanTablets);
-    }
-
-
-    private void checkScanLimit(long scannedValue,
-                                long scanLimit,
-                                String ruleName)
-            throws DdlException {
-
-        if (scanLimit <= 0 || scannedValue <= scanLimit) {
-            return;
-        }
-
-        String errorMsg = String.format(
-                "%s %d over %d",
-                ruleName,
-                scannedValue,
-                scanLimit);
-
-        ErrorReport.reportDdlException(
-                ErrorCode.ERR_PERFORM_QUERY_ERROR,
-                errorMsg
-        );
     }
 
     private void checkPlanScanLimits(ConnectContext context,

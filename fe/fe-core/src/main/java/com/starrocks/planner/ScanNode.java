@@ -38,6 +38,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
@@ -87,6 +88,13 @@ public abstract class ScanNode extends PlanNode {
     protected long selectedPartitionNum = -1;
 
     protected final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+
+    protected Long planScanPartitionsLimit = -1L;
+
+    protected Long planScanRowsLimit = -1L;
+
+    protected Long planScanTabletsLimit = -1L;
+
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -150,7 +158,7 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
-    public boolean hasMoreScanRanges() {
+    public boolean hasMoreScanRanges() throws DdlException {
         return false;
     }
 
@@ -281,5 +289,17 @@ public abstract class ScanNode extends PlanNode {
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
+    }
+
+    public void setPlanScanPartitionsLimit(Long planScanPartitionsLimit) {
+        this.planScanPartitionsLimit = planScanPartitionsLimit;
+    }
+
+    public void setPlanScanRowsLimit(Long planScanRowsLimit) {
+        this.planScanRowsLimit = planScanRowsLimit;
+    }
+
+    public void setPlanScanTabletsLimit(Long planScanTabletsLimit) {
+        this.planScanTabletsLimit = planScanTabletsLimit;
     }
 }

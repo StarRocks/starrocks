@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
@@ -55,6 +56,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.util.ScanLimitChecker.checkScanLimit;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergScanNode extends ScanNode {
@@ -85,12 +87,19 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
-    public boolean hasMoreScanRanges() {
+    public boolean hasMoreScanRanges() throws DdlException {
         if (scanRangeSource == null) {
             return false;
         }
 
-        return !reachLimit && scanRangeSource.hasMoreOutput();
+        boolean hasMore = scanRangeSource.hasMoreOutput();
+
+        if (!hasMore) {
+            checkScanLimit(getCardinality(), planScanRowsLimit, "scan rows");
+            checkScanLimit(scanRangeSource.selectedPartitionCount(), planScanPartitionsLimit, "scan partitions");
+        }
+
+        return !reachLimit && hasMore;
     }
 
     @Override

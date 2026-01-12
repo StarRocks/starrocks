@@ -45,10 +45,7 @@ public class AuditEventTest {
                 .setCustomQueryId("customQueryId")
                 .setCNGroup("test_cngroup")
                 .addReadLocalCnt(100)
-                .addReadRemoteCnt(100)
-                .setPlanMaxScanPartitions(10)
-                .setPlanMaxScanRows(100000)
-                .setPlanMaxScanTablets(1000);
+                .addReadRemoteCnt(100);
 
         new MockUp<RunMode>() {
             @Mock
@@ -79,9 +76,6 @@ public class AuditEventTest {
         Assertions.assertEquals("test_cngroup", event.cnGroup);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
         Assertions.assertEquals(100, event.writeClientTimeMs);
-        Assertions.assertEquals(10, event.planMaxScanPartitions);
-        Assertions.assertEquals(100000, event.planMaxScanRows);
-        Assertions.assertEquals(1000, event.planMaxScanTablets);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());
     }
 }
