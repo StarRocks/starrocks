@@ -1381,6 +1381,122 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Generate partition names from partition values without constructing full AddPartitionClause.
+     * This method is used for request deduplication and fast path checking in partition creation.
+     * It reads table metadata without acquiring locks - the actual partition creation will re-validate with proper locking.
+     *
+     * @param olapTable the table to create partitions for
+     * @param partitionValues the partition values from request
+     * @param partitionNamePrefix optional prefix for temp partitions (e.g., "txn123")
+     * @return set of partition names that would be created
+     */
+    public static Set<String> generatePartitionNamesFromValues(OlapTable olapTable,
+                                                               List<List<String>> partitionValues,
+                                                               String partitionNamePrefix) throws AnalysisException {
+        Set<String> partitionNames = Sets.newHashSet();
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExprs = exprPartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+            if (partitionExprs.isEmpty()) {
+                throw new AnalysisException("No partition expression found");
+            }
+            PartitionMeasure measure = checkAndGetPartitionMeasure(partitionExprs.get(0));
+            String granularity = measure.getGranularity();
+
+            for (List<String> partitionValue : partitionValues) {
+                if (partitionValue.size() != 1) {
+                    throw new AnalysisException("automatic partition only support single column for range partition.");
+                }
+                String partitionName = generateRangePartitionName(partitionValue.get(0), granularity, partitionNamePrefix);
+                partitionNames.add(partitionName);
+            }
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            for (List<String> partitionValue : partitionValues) {
+                String partitionName = generateListPartitionName(partitionValue, partitionNamePrefix);
+                partitionNames.add(partitionName);
+            }
+        } else {
+            throw new AnalysisException("automatic partition only support expression range or list partition.");
+        }
+
+        return partitionNames;
+    }
+
+    /**
+     * Generate partition name for range partition based on date value and granularity.
+     */
+    public static String generateRangePartitionName(String dateValue, String granularity,
+                                                    String partitionNamePrefix) throws AnalysisException {
+        String partitionName;
+        try {
+            if ("NULL".equalsIgnoreCase(dateValue)) {
+                dateValue = "0000-01-01";
+            }
+            DateTimeFormatter inputFormat = DateUtils.probeFormat(dateValue);
+            LocalDateTime dateTime = DateUtils.parseStringWithDefaultHSM(dateValue, inputFormat);
+
+            switch (granularity.toLowerCase()) {
+                case "minute":
+                    dateTime = dateTime.withSecond(0).withNano(0);
+                    partitionName = DEFAULT_PARTITION_NAME_PREFIX + dateTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
+                    break;
+                case "hour":
+                    dateTime = dateTime.withMinute(0).withSecond(0).withNano(0);
+                    partitionName = DEFAULT_PARTITION_NAME_PREFIX + dateTime.format(DateUtils.HOUR_FORMATTER_UNIX);
+                    break;
+                case "day":
+                    dateTime = dateTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    partitionName = DEFAULT_PARTITION_NAME_PREFIX + dateTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
+                    break;
+                case "month":
+                    dateTime = dateTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    partitionName = DEFAULT_PARTITION_NAME_PREFIX + dateTime.format(DateUtils.MONTH_FORMATTER_UNIX);
+                    break;
+                case "year":
+                    dateTime = dateTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+                    partitionName = DEFAULT_PARTITION_NAME_PREFIX + dateTime.format(DateUtils.YEAR_FORMATTER_UNIX);
+                    break;
+                default:
+                    throw new AnalysisException("unsupported automatic partition granularity: " + granularity);
+            }
+        } catch (AnalysisException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AnalysisException("failed to parse partition value: " + dateValue);
+        }
+
+        if (partitionNamePrefix != null) {
+            partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
+        }
+        return partitionName;
+    }
+
+    /**
+     * Generate partition name for list partition based on partition values.
+     */
+    public static String generateListPartitionName(List<String> partitionValue,
+                                                   String partitionNamePrefix) {
+        List<String> formattedValues = Lists.newArrayList();
+        for (String value : partitionValue) {
+            formattedValues.add(getFormatPartitionValue(value));
+        }
+
+        String partitionName = DEFAULT_PARTITION_NAME_PREFIX + Joiner.on("_").join(formattedValues);
+
+        if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
+            partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
+                    + "_" + Integer.toHexString(partitionName.hashCode());
+        }
+
+        if (partitionNamePrefix != null) {
+            partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
+        }
+        return partitionName;
+    }
+
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;

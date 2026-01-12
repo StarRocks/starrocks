@@ -413,7 +413,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -426,6 +432,12 @@ import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(FrontendServiceImpl.class);
+
+    // Pending partition creation requests: Key = "tableId_sortedPartitionNames" -> CompletableFuture
+    // Used to deduplicate concurrent identical partition creation requests
+    private static final ConcurrentHashMap<String, CompletableFuture<TCreatePartitionResult>>
+            PENDING_PARTITION_REQUESTS = new ConcurrentHashMap<>();
+
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
     private final ProxyContextManager proxyContextManager;
@@ -2129,184 +2141,388 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @NotNull
     private static TCreatePartitionResult createPartitionProcess(TCreatePartitionRequest request) {
+        CreatePartitionMetrics metrics = new CreatePartitionMetrics();
+        
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
-        TCreatePartitionResult result = new TCreatePartitionResult();
-        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
-        String partitionNamePrefix = null;
-        boolean isTemp = false;
-        if (request.isSetIs_temp() && request.isIs_temp()) {
-            isTemp = true;
-            partitionNamePrefix = "txn" + request.getTxn_id();
+        boolean isTemp = request.isSetIs_temp() && request.isIs_temp();
+        String partitionNamePrefix = isTemp ? "txn" + request.getTxn_id() : null;
+
+        // Validate request parameters
+        TCreatePartitionResult errorResult = validateCreatePartitionRequest(request, dbId, tableId);
+        metrics.recordValidateRequest();
+        if (errorResult != null) {
+            metrics.finish();
+            LOG.info("{}", metrics.toLogString(request));
+            return errorResult;
         }
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
-            result.setStatus(errorStatus);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+
+        // Generate partition names without lock for request deduplication and fast path check
+        Set<String> creatingPartitionNames;
+        try {
+            creatingPartitionNames = AnalyzerUtils.generatePartitionNamesFromValues(
+                    olapTable, request.partition_values, partitionNamePrefix);
+        } catch (AnalysisException ex) {
+            metrics.recordGeneratePartitionNames(0);
+            metrics.finish();
+            LOG.info("{}", metrics.toLogString(request));
+            return buildErrorResult(ex.getMessage());
+        }
+        metrics.recordGeneratePartitionNames(creatingPartitionNames.size());
+
+        // Get transaction state
+        TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+        errorResult = validateTransactionState(txnState, request.getTxn_id(), tableId, olapTable.getName());
+        metrics.recordValidateTxnState();
+        if (errorResult != null) {
+            metrics.finish();
+            LOG.info("{}", metrics.toLogString(request));
+            return errorResult;
+        }
+
+        ConcurrentMap<String, TOlapTablePartition> cachedPartitions = txnState.getPartitionNameToTPartition(tableId);
+
+        // Fast path: if all partitions are cached, return directly without acquiring any locks
+        boolean isFastPath = areAllPartitionsCached(cachedPartitions, creatingPartitionNames);
+        metrics.recordFastPathCheck(isFastPath);
+        if (isFastPath) {
+            TCreatePartitionResult result = buildResponseWithLock(db, olapTable, txnState, creatingPartitionNames, isTemp);
+            metrics.recordBuildResponse();
+            metrics.finish();
+            LOG.info("{}", metrics.toLogString(request));
             return result;
         }
+
+        // Build request key for deduplicating identical concurrent requests
+        String requestKey = buildPartitionRequestKey(tableId, creatingPartitionNames);
+        int timeoutMs = getPartitionRequestTimeout(request);
+        metrics.recordBuildRequestKey();
+
+        // Use CompletableFuture to deduplicate identical concurrent requests
+        // Only the first request will execute creation, others will wait for the result
+        AtomicBoolean isCreator = new AtomicBoolean(false);
+        CompletableFuture<TCreatePartitionResult> future = PENDING_PARTITION_REQUESTS.computeIfAbsent(requestKey, k -> {
+            isCreator.set(true);
+            return new CompletableFuture<>();
+        });
+
+        if (!isCreator.get()) {
+            // This is a duplicate request - wait for the first request to complete
+            try {
+                TCreatePartitionResult result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
+                metrics.recordWaitForOtherRequest(false, false);
+                metrics.recordBuildResponse();
+                metrics.finish();
+                LOG.info("{}", metrics.toLogString(request));
+                return result;
+            } catch (TimeoutException e) {
+                metrics.recordWaitForOtherRequest(false, true);
+                metrics.finish();
+                LOG.info("{}", metrics.toLogString(request));
+                LOG.warn("Timeout waiting for partition creation: {}", requestKey);
+                return buildErrorResult("Timeout waiting for partition creation");
+            } catch (ExecutionException e) {
+                metrics.recordWaitForOtherRequest(false, false);
+                metrics.finish();
+                LOG.info("{}", metrics.toLogString(request));
+                LOG.warn("Partition creation failed for requestKey: {}", requestKey, e.getCause());
+                return buildErrorResult("Partition creation failed: " + e.getCause().getMessage());
+            } catch (InterruptedException e) {
+                metrics.recordWaitForOtherRequest(false, false);
+                metrics.finish();
+                LOG.info("{}", metrics.toLogString(request));
+                Thread.currentThread().interrupt();
+                LOG.warn("Partition creation interrupted for requestKey: {}", requestKey);
+                return buildErrorResult("Partition creation interrupted");
+            }
+        }
+
+        metrics.recordWaitForOtherRequest(true, false);
+
+        // This is the first request - execute partition creation
+        try {
+            TCreatePartitionResult result = doCreatePartitionWithLock(state, db, olapTable, txnState,
+                    request.getTxn_id(), request.partition_values, creatingPartitionNames, cachedPartitions,
+                    isTemp, partitionNamePrefix, metrics);
+            metrics.recordBuildResponse();
+            future.complete(result);
+            metrics.finish();
+            LOG.info("{}", metrics.toLogString(request));
+            return result;
+        } catch (Exception e) {
+            LOG.warn("Failed to create partitions for requestKey: {}", requestKey, e);
+            txnState.setIsCreatePartitionFailed(true);
+            TCreatePartitionResult errResult = buildErrorResult(
+                    String.format("automatic create partition failed. error:%s", e.getMessage()));
+            future.complete(errResult);
+            metrics.finish();
+            LOG.info("{}", metrics.toLogString(request));
+            return errResult;
+        } finally {
+            PENDING_PARTITION_REQUESTS.remove(requestKey);
+        }
+    }
+
+    /**
+     * Build a unique key for partition creation request based on tableId and partition names.
+     * This key is used to deduplicate identical concurrent requests.
+     */
+    private static String buildPartitionRequestKey(long tableId, Set<String> partitionNames) {
+        List<String> sortedNames = partitionNames.stream().sorted().collect(Collectors.toList());
+        return tableId + "_" + String.join(",", sortedNames);
+    }
+
+    /**
+     * Get the timeout for partition creation request.
+     * Uses the request timeout if set, otherwise defaults to 30 seconds.
+     */
+    private static int getPartitionRequestTimeout(TCreatePartitionRequest request) {
+        if (request.isSetTimeout()) {
+            // Convert seconds to milliseconds
+            return request.getTimeout() * 1000;
+        }
+        // Default timeout: 30 seconds
+        return 30000;
+    }
+
+    /**
+     * Execute partition creation with proper locking.
+     * This method acquires partition-level locks, performs double-check, and creates partitions if needed.
+     * Note: parseAddPartitionClause is called here (inside the creator path) to avoid lock contention
+     * for duplicate requests that wait on the Future.
+     */
+    private static TCreatePartitionResult doCreatePartitionWithLock(
+            GlobalStateMgr state, Database db, OlapTable olapTable, TransactionState txnState, long txnId,
+            List<List<String>> partitionValues, Set<String> creatingPartitionNames,
+            ConcurrentMap<String, TOlapTablePartition> cachedPartitions,
+            boolean isTemp, String partitionNamePrefix, CreatePartitionMetrics metrics) throws Exception {
+
+        try {
+            acquirePartitionLocks(olapTable, creatingPartitionNames);
+            metrics.recordAcquireLocks();
+
+            // Double-check after acquiring lock (another request may have created the partition)
+            boolean needCreate = !areAllPartitionsCached(cachedPartitions, creatingPartitionNames);
+            metrics.recordDoubleCheck();
+            
+            if (needCreate) {
+                // Parse partition clause with lock - only the creator needs to do this
+                AddPartitionClause addPartitionClause = parseAddPartitionClause(
+                        db, olapTable, partitionValues, isTemp, partitionNamePrefix);
+                metrics.recordParseClause();
+                
+                createPartitionsIfNeeded(state, db, olapTable, txnState, txnId,
+                        addPartitionClause, creatingPartitionNames);
+                metrics.recordCreatePartitions();
+            } else {
+                metrics.recordParseClause();
+                metrics.recordCreatePartitions();
+            }
+        } finally {
+            releasePartitionLocks(olapTable, creatingPartitionNames);
+            metrics.recordReleaseLocks();
+        }
+
+        // Check transaction status before building response
+        if (txnState.getTransactionStatus().isFinalStatus()) {
+            return buildErrorResult(String.format("automatic create partition failed. error: txn %d is %s",
+                    txnId, txnState.getTransactionStatus().name()));
+        }
+
+        return buildResponseWithLock(db, olapTable, txnState, creatingPartitionNames, isTemp);
+    }
+
+    private static TCreatePartitionResult validateCreatePartitionRequest(TCreatePartitionRequest request,
+                                                                         long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return buildErrorResult(String.format("dbId=%d is not exists", dbId));
+        }
+
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
-            result.setStatus(errorStatus);
-            return result;
+            return buildErrorResult(String.format("dbId=%d tableId=%d is not exists", dbId, tableId));
         }
         if (!(table instanceof OlapTable)) {
-            errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId)));
-            result.setStatus(errorStatus);
-            return result;
+            return buildErrorResult(String.format("dbId=%d tableId=%d is not olap table", dbId, tableId));
         }
-        OlapTable olapTable = (OlapTable) table;
 
         if (request.partition_values == null) {
-            errorStatus.setError_msgs(Lists.newArrayList("partition_values should not null."));
-            result.setStatus(errorStatus);
-            return result;
+            return buildErrorResult("partition_values should not null.");
         }
 
-        // Now only supports the case of automatically creating single range partition
+        OlapTable olapTable = (OlapTable) table;
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.isRangePartition() && olapTable.getPartitionColumnNames().size() != 1) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    "automatic partition only support single column for range partition."));
-            result.setStatus(errorStatus);
-            return result;
+            return buildErrorResult("automatic partition only support single column for range partition.");
         }
 
-        AddPartitionClause addPartitionClause;
-        List<String> partitionColNames = Lists.newArrayList();
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                LockType.READ)) {
-            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
-                    request.partition_values, isTemp, partitionNamePrefix);
-            PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
-            if (partitionDesc instanceof RangePartitionDesc) {
-                partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
-            } else if (partitionDesc instanceof ListPartitionDesc) {
-                partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
-            }
+        return null;
+    }
+
+    private static TCreatePartitionResult validateTransactionState(TransactionState txnState, long txnId,
+                                                                   long tableId, String tableName) {
+        if (txnState == null) {
+            return buildErrorResult(String.format("automatic create partition failed. error: txn %d not exist", txnId));
+        }
+
+        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
+            return buildErrorResult(String.format(
+                    "Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
+                            "You can modify this restriction on by setting max_partitions_in_one_batch larger.",
+                    tableName, Config.max_partitions_in_one_batch));
+        }
+
+        return null;
+    }
+
+    private static TCreatePartitionResult buildErrorResult(String errorMsg) {
+        TCreatePartitionResult result = new TCreatePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+        errorStatus.setError_msgs(Lists.newArrayList(errorMsg));
+        result.setStatus(errorStatus);
+        return result;
+    }
+
+    private static AddPartitionClause parseAddPartitionClause(Database db, OlapTable olapTable,
+                                                              List<List<String>> partitionValues,
+                                                              boolean isTemp, String partitionNamePrefix)
+            throws AnalysisException {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+            AddPartitionClause clause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                    olapTable, partitionValues, isTemp, partitionNamePrefix);
+
+            List<String> partitionColNames = getPartitionColNames(clause);
             if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_partition_number_per_table) {
                 throw new AnalysisException("Table " + olapTable.getName() +
                         " automatically created partitions exceeded the maximum limit: " +
                         Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
                         " max_partition_number_per_table larger.");
             }
-        } catch (AnalysisException ex) {
-            errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
-            result.setStatus(errorStatus);
-            return result;
+            return clause;
+        }
+    }
+
+    private static List<String> getPartitionColNames(AddPartitionClause addPartitionClause) {
+        PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
+        if (partitionDesc instanceof RangePartitionDesc) {
+            return ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            return ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+        }
+        return Lists.newArrayList();
+    }
+
+    private static boolean areAllPartitionsCached(ConcurrentMap<String, TOlapTablePartition> cachedPartitions,
+                                                  Set<String> partitionNames) {
+        for (String partitionName : partitionNames) {
+            if (cachedPartitions.get(partitionName) == null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void acquirePartitionLocks(OlapTable olapTable, Set<String> partitionNames) {
+        // Sort partition names to ensure consistent lock ordering and prevent deadlocks
+        List<String> sortedNames = partitionNames.stream().sorted().collect(Collectors.toList());
+        for (String partitionName : sortedNames) {
+            olapTable.lockCreatePartition(partitionName);
+        }
+    }
+
+    private static void releasePartitionLocks(OlapTable olapTable, Set<String> partitionNames) {
+        // Release locks in reverse order (best practice, though not strictly required for ReentrantLock)
+        List<String> sortedNames = partitionNames.stream().sorted().collect(Collectors.toList());
+        Collections.reverse(sortedNames);
+        for (String partitionName : sortedNames) {
+            try {
+                olapTable.unlockCreatePartition(partitionName);
+            } catch (IllegalMonitorStateException e) {
+                // This can happen if lock acquisition was interrupted before this lock was acquired.
+                // Log and continue to release other locks.
+                LOG.warn("Failed to release partition lock for partition: {}, lock not held by current thread",
+                        partitionName);
+            }
+        }
+    }
+
+    private static void createPartitionsIfNeeded(GlobalStateMgr state, Database db, OlapTable olapTable,
+                                                 TransactionState txnState, long txnId,
+                                                 AddPartitionClause addPartitionClause,
+                                                 Set<String> creatingPartitionNames) throws Exception {
+        if (txnState.getIsCreatePartitionFailed()) {
+            throw new StarRocksException("automatic create partition failed. error: txn " + txnId +
+                    " already create partition failed");
         }
 
-        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        boolean willCreateNewPartition = CatalogUtils.checkIfNewPartitionExists(olapTable, creatingPartitionNames);
+        cancelConflictingAlterJobs(state, db, olapTable, txnId, willCreateNewPartition);
 
-        TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
-        if (txnState == null) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
-            result.setStatus(errorStatus);
-            return result;
+        ConnectContext ctx = Util.getOrCreateInnerContext();
+        if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            ctx.setCurrentWarehouseId(txnState.getWarehouseId());
         }
 
-        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
-                                    "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
-                            olapTable.getName(), Config.max_partitions_in_one_batch)));
-            result.setStatus(errorStatus);
-            return result;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                Lists.newArrayList(olapTable.getId()), LockType.READ)) {
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+            analyzer.analyze(ctx, addPartitionClause);
         }
 
-        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+        state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
+    }
+
+    private static void cancelConflictingAlterJobs(GlobalStateMgr state, Database db, OlapTable olapTable,
+                                                   long txnId, boolean willCreateNewPartition) {
+        if (!willCreateNewPartition) {
+            return;
+        }
+
+        String errMsg = "Alter job conflicts with partition creation, for more details please check "
+                + "https://docs.starrocks.io/docs/faq/Others#how-can-i-prevent-expression-partition-conflicts"
+                + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
 
         try {
-            // creating partition names is ordered
-            for (String partitionName : creatingPartitionNames) {
-                olapTable.lockCreatePartition(partitionName);
+            if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
+                LOG.info("cancel rollup for automatic create partition txn_id={}", txnId);
+                cancelAlterJob(state, db, olapTable, ShowAlterStmt.AlterType.ROLLUP, errMsg);
             }
 
-            // if the txn is already create partition failed, we should not create partition again
-            // because create partition failed will cause the txn to be aborted
-            if (txnState.getIsCreatePartitionFailed()) {
-                throw new StarRocksException("automatic create partition failed. error: txn " + request.getTxn_id() +
-                        " already create partition failed");
+            if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
+                LOG.info("cancel schema change for automatic create partition txn_id={}", txnId);
+                cancelAlterJob(state, db, olapTable, ShowAlterStmt.AlterType.COLUMN, errMsg);
             }
-
-            boolean willCreateNewPartition =
-                    CatalogUtils.checkIfNewPartitionExists(olapTable, creatingPartitionNames);
-
-            // ingestion is top priority, if schema change or rollup is running, cancel it
-            try {
-                String errMsg = "Alter job conflicts with partition creation, for more details please check "
-                        + "https://docs.starrocks.io/docs/faq/Others#how-can-i-prevent-expression-partition-conflicts"
-                        + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
-                if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP && willCreateNewPartition) {
-                    LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
-                    QualifiedName qualifiedName = QualifiedName.of(
-                            Lists.newArrayList(db.getFullName(), olapTable.getName()));
-                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
-                    state.getLocalMetastore().cancelAlter(
-                            new CancelAlterTableStmt(ShowAlterStmt.AlterType.ROLLUP, tableRef), errMsg);
-                }
-
-                if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE && willCreateNewPartition) {
-                    LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
-                    QualifiedName qualifiedName = QualifiedName.of(
-                            Lists.newArrayList(db.getFullName(), olapTable.getName()));
-                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
-                    state.getLocalMetastore().cancelAlter(
-                            new CancelAlterTableStmt(ShowAlterStmt.AlterType.COLUMN, tableRef), errMsg);
-                }
-            } catch (Exception e) {
-                LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
-            }
-
-            // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = Util.getOrCreateInnerContext();
-            if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                ctx.setCurrentWarehouseId(txnState.getWarehouseId());
-            }
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
-                    LockType.READ)) {
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                analyzer.analyze(ctx, addPartitionClause);
-            }
-            state.getLocalMetastore().addPartitions(ctx, db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
-            LOG.warn("failed to add partitions", e);
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error:%s", e.getMessage())));
-            result.setStatus(errorStatus);
-            txnState.setIsCreatePartitionFailed(true);
-            return result;
-        } finally {
-            for (String partitionName : creatingPartitionNames) {
-                olapTable.unlockCreatePartition(partitionName);
-            }
+            LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
         }
+    }
 
-        // build partition & tablets
+    private static void cancelAlterJob(GlobalStateMgr state, Database db, OlapTable olapTable,
+                                       ShowAlterStmt.AlterType alterType, String errMsg) throws Exception {
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList(db.getFullName(), olapTable.getName()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        state.getLocalMetastore().cancelAlter(new CancelAlterTableStmt(alterType, tableRef), errMsg);
+    }
+
+    private static TCreatePartitionResult buildResponseWithLock(Database db, OlapTable olapTable,
+                                                                TransactionState txnState,
+                                                                Set<String> partitionNames, boolean isTemp) {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
+        List<String> partitionNameList = Lists.newArrayList(partitionNames);
 
-        if (txnState.getTransactionStatus().isFinalStatus()) {
-            errorStatus.setError_msgs(Lists.newArrayList(
-                    String.format("automatic create partition failed. error: txn %d is %s", request.getTxn_id(),
-                            txnState.getTransactionStatus().name())));
-            result.setStatus(errorStatus);
-            return result;
-        }
-
-        // update partition info snapshot for txn should be protected by txn lock
-        // NOTE: lock order must be: db/table lock first, then txnState lock
-        // to avoid deadlock with other transaction operations
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
         try {
             txnState.writeLock();
             try {
-                return buildCreatePartitionResponse(
-                        olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
+                return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionNameList, isTemp);
             } finally {
                 txnState.writeUnlock();
             }
@@ -3239,5 +3455,144 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         return batchResponse;
+    }
+
+    /**
+     * Metrics class for tracking createPartition request timing.
+     * Records elapsed time for each stage of partition creation.
+     */
+    private static class CreatePartitionMetrics {
+        private final long startTimeNs;
+        private long validateRequestNs;
+        private long generatePartitionNamesNs;
+        private long validateTxnStateNs;
+        private long fastPathCheckNs;
+        private long buildRequestKeyNs;
+        private long waitForOtherRequestNs;
+        private long acquireLocksNs;
+        private long doubleCheckNs;
+        private long parseClauseNs;
+        private long createPartitionsNs;
+        private long releaseLocksNs;
+        private long buildResponseNs;
+        private long totalNs;
+        private boolean isCreator;
+        private boolean isFastPath;
+        private boolean isWaitTimeout;
+        private int partitionCount;
+
+        public CreatePartitionMetrics() {
+            this.startTimeNs = System.nanoTime();
+        }
+
+        public void recordValidateRequest() {
+            this.validateRequestNs = System.nanoTime() - startTimeNs;
+        }
+
+        public void recordGeneratePartitionNames(int count) {
+            this.generatePartitionNamesNs = System.nanoTime() - startTimeNs - validateRequestNs;
+            this.partitionCount = count;
+        }
+
+        public void recordValidateTxnState() {
+            this.validateTxnStateNs = System.nanoTime() - startTimeNs - validateRequestNs - generatePartitionNamesNs;
+        }
+
+        public void recordFastPathCheck(boolean isFastPath) {
+            this.fastPathCheckNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs;
+            this.isFastPath = isFastPath;
+        }
+
+        public void recordBuildRequestKey() {
+            this.buildRequestKeyNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs;
+        }
+
+        public void recordWaitForOtherRequest(boolean isCreator, boolean isWaitTimeout) {
+            this.waitForOtherRequestNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs - buildRequestKeyNs;
+            this.isCreator = isCreator;
+            this.isWaitTimeout = isWaitTimeout;
+        }
+
+        public void recordAcquireLocks() {
+            this.acquireLocksNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs 
+                    - buildRequestKeyNs - waitForOtherRequestNs;
+        }
+
+        public void recordDoubleCheck() {
+            this.doubleCheckNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs 
+                    - buildRequestKeyNs - waitForOtherRequestNs - acquireLocksNs;
+        }
+
+        public void recordParseClause() {
+            this.parseClauseNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs 
+                    - buildRequestKeyNs - waitForOtherRequestNs - acquireLocksNs - doubleCheckNs;
+        }
+
+        public void recordCreatePartitions() {
+            this.createPartitionsNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs 
+                    - buildRequestKeyNs - waitForOtherRequestNs - acquireLocksNs 
+                    - doubleCheckNs - parseClauseNs;
+        }
+
+        public void recordReleaseLocks() {
+            this.releaseLocksNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs 
+                    - buildRequestKeyNs - waitForOtherRequestNs - acquireLocksNs 
+                    - doubleCheckNs - parseClauseNs - createPartitionsNs;
+        }
+
+        public void recordBuildResponse() {
+            this.buildResponseNs = System.nanoTime() - startTimeNs - validateRequestNs 
+                    - generatePartitionNamesNs - validateTxnStateNs - fastPathCheckNs 
+                    - buildRequestKeyNs - waitForOtherRequestNs - acquireLocksNs 
+                    - doubleCheckNs - parseClauseNs - createPartitionsNs - releaseLocksNs;
+        }
+
+        public void finish() {
+            this.totalNs = System.nanoTime() - startTimeNs;
+        }
+
+        private static double nsToMs(long ns) {
+            return ns / 1_000_000.0;
+        }
+
+        public String toLogString(TCreatePartitionRequest request) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CreatePartition metrics: ");
+            sb.append("txn_id=").append(request.getTxn_id());
+            sb.append(", db_id=").append(request.getDb_id());
+            sb.append(", table_id=").append(request.getTable_id());
+            sb.append(", partition_count=").append(partitionCount);
+            sb.append(", is_temp=").append(request.isSetIs_temp() && request.isIs_temp());
+            sb.append(", is_creator=").append(isCreator);
+            sb.append(", is_fast_path=").append(isFastPath);
+            sb.append(", is_wait_timeout=").append(isWaitTimeout);
+            sb.append(" | Timing(ms): ");
+            sb.append("validate_request=").append(String.format("%.2f", nsToMs(validateRequestNs)));
+            sb.append(", generate_names=").append(String.format("%.2f", nsToMs(generatePartitionNamesNs)));
+            sb.append(", validate_txn=").append(String.format("%.2f", nsToMs(validateTxnStateNs)));
+            sb.append(", fast_path_check=").append(String.format("%.2f", nsToMs(fastPathCheckNs)));
+            if (!isFastPath) {
+                sb.append(", build_key=").append(String.format("%.2f", nsToMs(buildRequestKeyNs)));
+                sb.append(", wait_for_other=").append(String.format("%.2f", nsToMs(waitForOtherRequestNs)));
+                if (isCreator) {
+                    sb.append(", acquire_locks=").append(String.format("%.2f", nsToMs(acquireLocksNs)));
+                    sb.append(", double_check=").append(String.format("%.2f", nsToMs(doubleCheckNs)));
+                    sb.append(", parse_clause=").append(String.format("%.2f", nsToMs(parseClauseNs)));
+                    sb.append(", create_partitions=").append(String.format("%.2f", nsToMs(createPartitionsNs)));
+                    sb.append(", release_locks=").append(String.format("%.2f", nsToMs(releaseLocksNs)));
+                }
+            }
+            sb.append(", build_response=").append(String.format("%.2f", nsToMs(buildResponseNs)));
+            sb.append(", total=").append(String.format("%.2f", nsToMs(totalNs)));
+            return sb.toString();
+        }
     }
 }
