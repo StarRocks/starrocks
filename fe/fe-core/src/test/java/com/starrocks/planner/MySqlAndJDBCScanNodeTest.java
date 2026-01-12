@@ -109,7 +109,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.postgres.Driver");
         JDBCTable pgTable = new JDBCTable(1, "order",
-                Collections.singletonList(new Column("user", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("user", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
@@ -129,7 +129,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.postgres.Driver");
         JDBCTable pgTable = new JDBCTable(1, "order",
-                Collections.singletonList(new Column("user", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("user", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
@@ -149,7 +149,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "oracle.jdbc.driver.OracleDriver");
         JDBCTable oracleTable = new JDBCTable(1, "select",
-                Collections.singletonList(new Column("group", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("group", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(oracleTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
@@ -169,7 +169,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.microsoft.sqlserver.jdbc.SQLServerDriver");
         JDBCTable sqlServerTable = new JDBCTable(1, "table",
-                Collections.singletonList(new Column("index", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("index", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(sqlServerTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, sqlServerTable);
