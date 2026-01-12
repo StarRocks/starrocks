@@ -25,6 +25,11 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> 45e20277ff ([BugFix] add client factory for iceberg jdbc catalog (#67613))
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,6 +38,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.jdbc.JdbcCatalog;
@@ -72,6 +78,7 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
 
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
 
         // init catalog tables set default value false
         if (!copiedProperties.containsKey(JdbcCatalog.PROPERTY_PREFIX + "init-catalog-tables")) {
