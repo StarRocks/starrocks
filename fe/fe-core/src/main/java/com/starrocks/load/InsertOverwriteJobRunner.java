@@ -52,11 +52,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.common.DmlException;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.parser.NodePosition;
->>>>>>> a9af427a13 ([BugFix] Fix temp partitions not cleaned up after FE restart for dynamic overwrite (#67629))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertOverwriteJobStats;
