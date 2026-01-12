@@ -59,8 +59,7 @@ public class SqlDigestBlackList {
                 MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
                 ErrorReport.reportAnalysisException(
                         ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR.formatErrorMsg() + ". Digest: %s",
-                        ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR,
-                        digest);
+                        ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR, -1, digest);
             }
         }
     }
