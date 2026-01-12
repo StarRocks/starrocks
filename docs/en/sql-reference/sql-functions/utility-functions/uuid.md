@@ -33,3 +33,9 @@ mysql> select uuid();
 +--------------------------------------+
 1 row in set (0.01 sec)
 ```
+
+## See also
+
+- [uuid_numeric](./uuid_numeric.md): Returns a random UUID as LARGEINT
+- [uuid_v7](./uuidv7.md): Returns a time-ordered UUID v7
+- [uuid_v7_numeric](./uuid_v7_numeric.md): Returns a time-ordered UUID v7 as LARGEINT
