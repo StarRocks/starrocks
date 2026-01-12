@@ -1,0 +1,272 @@
+-- name: test_iceberg_delete_unpartitioned
+create external catalog iceberg_del_unp_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}" );
+-- result:
+-- !result
+create database iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_delete_unpartitioned/${uuid0}/iceberg_delete_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned (
+    id INT,
+    name STRING,
+    age INT,
+    salary BIGINT
+);
+-- result:
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (1, 'Alice', 25, 50000),
+    (2, 'Bob', 30, 60000),
+    (3, 'Charlie', 35, 70000),
+    (4, 'David', 28, 55000),
+    (5, 'Eve', 32, 65000);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+3	Charlie	35	70000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE id = 3;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (6, 'Frank', 40, 80000),
+    (7, 'Grace', 29, 58000),
+    (8, 'Henry', 33, 68000);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+4	David	28	55000
+5	Eve	32	65000
+6	Frank	40	80000
+7	Grace	29	58000
+8	Henry	33	68000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age > 30 AND salary < 70000;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+4	David	28	55000
+6	Frank	40	80000
+7	Grace	29	58000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (9, NULL, 45, 90000),
+    (10, 'Iris', NULL, 75000);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE name IS NULL OR age IS NULL ORDER BY id;
+-- result:
+9	None	45	90000
+10	Iris	None	75000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE name IS NULL;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE name IS NULL OR age IS NULL ORDER BY id;
+-- result:
+10	Iris	None	75000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age IS NULL;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE name IS NULL OR age IS NULL ORDER BY id;
+-- result:
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (11, 'John', 27, 52000),
+    (12, 'Kate', 31, 62000),
+    (13, 'Liam', 36, 72000),
+    (14, 'Mia', 29, 57000);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+4	David	28	55000
+6	Frank	40	80000
+7	Grace	29	58000
+11	John	27	52000
+12	Kate	31	62000
+13	Liam	36	72000
+14	Mia	29	57000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age > 30 AND salary < 70000;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+4	David	28	55000
+6	Frank	40	80000
+7	Grace	29	58000
+11	John	27	52000
+13	Liam	36	72000
+14	Mia	29	57000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age <= 29 OR salary >= 80000;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+2	Bob	30	60000
+13	Liam	36	72000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (15, 'Nora', 33, 67000),
+    (16, 'Oscar', 26, 53000),
+    (17, 'Paul', 34, 71000);
+-- result:
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age != 31;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (18, 'Quinn', 28, 54000),
+    (19, 'Ryan', 35, 73000),
+    (20, 'Sarah', 30, 62000);
+-- result:
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE id IN (18, 20);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+19	Ryan	35	73000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (21, 'Tom', 25, 48000),
+    (22, 'Uma', 38, 78000),
+    (23, 'Victor', 42, 85000);
+-- result:
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age BETWEEN 30 AND 40;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+21	Tom	25	48000
+23	Victor	42	85000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (24, 'Alice2', 26, 51000),
+    (25, 'Alexander', 33, 69000),
+    (26, 'Amelia', 29, 59000);
+-- result:
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE name LIKE 'A%';
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+21	Tom	25	48000
+23	Victor	42	85000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (27, 'Wendy', 31, 63000);
+-- result:
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE id = 999;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE id = 27;
+-- result:
+27	Wendy	31	63000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (28, 'Xander', 37, 77000),
+    (29, 'Yara', 24, 49000);
+-- result:
+-- !result
+CREATE TABLE iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.temp_ids AS 
+SELECT id FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned WHERE age > 35;
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.temp_ids ORDER BY id;
+-- result:
+23
+28
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned 
+WHERE id IN (SELECT id FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.temp_ids);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+21	Tom	25	48000
+27	Wendy	31	63000
+29	Yara	24	49000
+-- !result
+INSERT INTO iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned VALUES
+    (28, 'Xander', 37, 77000),
+    (30, "Lisa", 39, 50000);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+21	Tom	25	48000
+27	Wendy	31	63000
+28	Xander	37	77000
+29	Yara	24	49000
+30	Lisa	39	50000
+-- !result
+DELETE FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned 
+WHERE EXISTS (SELECT id FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.temp_ids WHERE temp_ids.id = test_non_partitioned.id);
+-- result:
+-- !result
+SELECT * FROM iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned ORDER BY id;
+-- result:
+21	Tom	25	48000
+27	Wendy	31	63000
+29	Yara	24	49000
+30	Lisa	39	50000
+-- !result
+drop table iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.temp_ids force;
+-- result:
+-- !result
+drop table iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0}.test_non_partitioned force;
+-- result:
+-- !result
+drop database iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_del_unp_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_delete_unpartitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

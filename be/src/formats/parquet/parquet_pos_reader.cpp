@@ -20,24 +20,10 @@
 namespace starrocks::parquet {
 
 Status ParquetPosReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
-    if (filter == nullptr) {
-        // No filter, generate positions for all rows in the range
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            // Generate position based on the absolute row position in the file.
-            int64_t pos = i;
-            dst->as_mutable_raw_ptr()->append_datum(Datum(pos));
-        }
-    } else {
-        // Apply filter, only generate positions for selected rows
-        DCHECK_EQ(filter->size(), range.span_size()) << "Filter size must match range size";
-        for (uint64_t i = range.begin(); i < range.end(); ++i) {
-            size_t filter_index = i - range.begin();
-            if ((*filter)[filter_index]) {
-                // Generate position based on the absolute row position in the file.
-                int64_t pos = i;
-                dst->as_mutable_raw_ptr()->append_datum(Datum(pos));
-            }
-        }
+    for (uint64_t i = range.begin(); i < range.end(); ++i) {
+        // Generate position based on the absolute row position in the file.
+        int64_t pos = i;
+        dst->as_mutable_raw_ptr()->append_datum(Datum(pos));
     }
     return Status::OK();
 }
