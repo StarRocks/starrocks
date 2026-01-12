@@ -275,7 +275,7 @@ public:
 
         auto& dst_offsets = dst_map_column->offsets().get_data();
         for (size_t i = 0; i < chunk_size; ++i) {
-            dst_offsets.push_back(dst_offsets.size() + src_map_column->get_map_size(i));
+            dst_offsets.push_back(dst_offsets.back() + src_map_column->get_map_size(i));
         }
 
         dst_map_column->check_or_die();
