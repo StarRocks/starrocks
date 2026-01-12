@@ -254,7 +254,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     }
     RETURN_IF_ERROR(writer->flush_columns());
 
-    // Close reader to ensure IO statistics are updated via _update_stats() before collecting
+    // Close reader to ensure IO statistics are updated via SegmentIterator::_update_stats() before collecting
     reader.close();
 
     CompactionTaskStats temp_stats;
