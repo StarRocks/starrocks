@@ -1277,6 +1277,11 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
     }
 
+    public static boolean isAggregateFunction(String name) {
+        return GlobalStateMgr.getCurrentState().isAggregateFunction(name);
+    }
+
+
     public static Expr analyzeLoadExpr(Expr expr, java.util.function.Function<SlotRef, ColumnRefOperator> slotResolver) {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(expr, ConnectContext.get());
         // Translating expr to scalar in order to do some rewrites
