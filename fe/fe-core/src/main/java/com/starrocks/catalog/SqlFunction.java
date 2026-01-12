@@ -23,15 +23,15 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.type.Type;
 
-public class ViewFunction extends Function {
-    @SerializedName(value = "view")
-    private final String view;
+public class SqlFunction extends Function {
+    @SerializedName(value = "sql")
+    private final String sql;
 
     private Expr analyzeExpr;
 
-    public ViewFunction(FunctionName name, Type[] argTypes, Type retType, String[] argNames, String view) {
+    public SqlFunction(FunctionName name, Type[] argTypes, Type retType, String[] argNames, String sql) {
         super(name, argTypes, argNames, retType, false);
-        this.view = view;
+        this.sql = sql;
     }
 
     public void setAnalyzeExpr(Expr analyzeExpr) {
@@ -42,19 +42,19 @@ public class ViewFunction extends Function {
         return analyzeExpr;
     }
 
-    public String getView() {
-        return view;
+    public String getSql() {
+        return sql;
     }
 
     @Override
     public String getProperties() {
-        return view;
+        return sql;
     }
 
     @Override
     public Function copy() {
-        return new ViewFunction(this.getFunctionName(), this.getArgs(), this.getReturnType(),
-                this.getArgNames(), this.view);
+        return new SqlFunction(this.getFunctionName(), this.getArgs(), this.getReturnType(),
+                this.getArgNames(), this.sql);
     }
 
     @Override
@@ -64,13 +64,13 @@ public class ViewFunction extends Function {
             sb.append("IF NOT EXISTS ");
         }
         sb.append(dbName()).append(".").append(signatureString()).append(" \n")
-                .append(view);
+                .append(sql);
         return sb.toString();
     }
 
     @Override
     public TFunction toThrift() {
-        Preconditions.checkState(false, "view function does not support toThrift");
+        Preconditions.checkState(false, "sql function does not support toThrift");
         return null;
     }
 }

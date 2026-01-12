@@ -159,7 +159,7 @@ public class UDFTest extends PlanTestBase {
     }
 
     @Test
-    public void testViewFunction1() throws Exception {
+    public void testSqlFunction1() throws Exception {
         try {
             String viewDef = "CREATE FUNCTION view_func(x string, y string) RETURNS concat(upper(x), lower(y));";
             Config.enable_udf = true;
@@ -189,7 +189,7 @@ public class UDFTest extends PlanTestBase {
     }
 
     @Test
-    public void testViewFunction2() throws Exception {
+    public void testSqlFunction2() throws Exception {
         try {
             String viewDef = "CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(y));";
             Config.enable_udf = true;
