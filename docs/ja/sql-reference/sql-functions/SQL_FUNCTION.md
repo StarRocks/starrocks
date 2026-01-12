@@ -3,15 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 0.95
 ---
 
-# View Function
+# SQL Function
 
-バージョン 4.1 以降、StarRocks は View Function の作成をサポートし、ユーザーは SQL 式を使用して関数を作成できるようになりました。
+バージョン 4.1 以降、StarRocks は SQL Function の作成をサポートし、ユーザーは SQL 式を使用して関数を作成できるようになりました。
 
-View Function は、SQL 式を再利用可能な関数にカプセル化する軽量な関数定義方法であり、クエリ時に実際の SQL 式に動的に展開されます。
+SQL Function は、SQL 式を再利用可能な関数にカプセル化する軽量な関数定義方法であり、クエリ時に実際の SQL 式に動的に展開されます。
 
 ## 機能概要
 
-View Function の主な特徴：
+SQL Function の主な特徴：
 
 - **動的展開**: クエリ最適化フェーズで関数呼び出しを実際の SQL 式に展開
 - **型安全性**: パラメータ型と戻り値型の明示的な宣言をサポート
@@ -24,7 +24,7 @@ View Function の主な特徴：
 
 ## 構文
 
-### View Function の作成
+### SQL Function の作成
 
 ```SQL
 CREATE [GLOBAL] FUNCTION
@@ -42,13 +42,13 @@ RETURNS expression
 | arg_type           | パラメータ型。StarRocks のすべての基本データ型をサポート                                              |
 | expression         | SQL 式。関数呼び出し時に実際の式に展開される                                                          |
 
-### View Function の削除
+### SQL Function の削除
 
 ```SQL
 DROP FUNCTION [IF EXISTS] function_name(arg_type [, ...])
 ```
 
-### View Function の参照
+### SQL Function の参照
 
 ```SQL
 SHOW [GLOBAL] FUNCTIONS;
@@ -110,7 +110,7 @@ END;
 SELECT classify_temperature(25);  -- 結果: warm
 ```
 
-### 例 5: グローバル View Function
+### 例 5: グローバル SQL Function
 
 ```SQL
 -- すべてのデータベースで参照可能なグローバル関数を作成
@@ -125,7 +125,7 @@ SELECT format_date_display(create_time) from my_table;
 
 ### 1. ネスト使用
 
-View Function はネスト呼び出しをサポート：
+SQL Function はネスト呼び出しをサポート：
 
 ```SQL
 CREATE FUNCTION func_a(x INT, y INT) RETURNS x + y;
@@ -136,7 +136,7 @@ SELECT func_b(3, 4);  -- 結果: 14
 
 ### 2. 型変換
 
-View Function は暗黙的な型変換をサポート：
+SQL Function は暗黙的な型変換をサポート：
 
 ```SQL
 CREATE FUNCTION convert_and_add(a STRING, b INT)
@@ -147,7 +147,7 @@ SELECT convert_and_add('100', 50);  -- 結果: 150
 
 ### 3. 組み込み関数との組み合わせ
 
-View Function は StarRocks 組み込み関数と自由に組み合わせ可能：
+SQL Function は StarRocks 組み込み関数と自由に組み合わせ可能：
 
 ```SQL
 CREATE FUNCTION get_year_month(dt DATETIME)
@@ -193,7 +193,7 @@ RETURNS amount * 0.1 + 5.0;
 
 ## パフォーマンス特性
 
-View Function はクエリ最適化フェーズで実際の SQL 式に展開され、以下のパフォーマンス特性を持つ：
+SQL Function はクエリ最適化フェーズで実際の SQL 式に展開され、以下のパフォーマンス特性を持つ：
 
 1. **関数呼び出しオーバーヘッドゼロ**: 従来の UDF のような関数呼び出しオーバーヘッドがない
 2. **オプティマイザ可視性**: オプティマイザが完全な式を見ることができ、より良い最適化が可能

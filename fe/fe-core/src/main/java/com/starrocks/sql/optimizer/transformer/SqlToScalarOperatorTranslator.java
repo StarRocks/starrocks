@@ -19,8 +19,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.ViewFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -740,8 +740,8 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 
-            if (node.getFn() instanceof ViewFunction) {
-                return visitViewFunctionCall(node, arguments);
+            if (node.getFn() instanceof SqlFunction) {
+                return visitSqlFunctionCall(node, arguments);
             }
 
             CallOperator callOperator = new CallOperator(
@@ -754,17 +754,17 @@ public final class SqlToScalarOperatorTranslator {
             return callOperator;
         }
 
-        public ScalarOperator visitViewFunctionCall(FunctionCallExpr node, List<ScalarOperator> arguments) {
-            ViewFunction viewFunction = (ViewFunction) node.getFn();
-            Expr expr = viewFunction.getAnalyzeExpr();
+        public ScalarOperator visitSqlFunctionCall(FunctionCallExpr node, List<ScalarOperator> arguments) {
+            SqlFunction sqlFunction = (SqlFunction) node.getFn();
+            Expr expr = sqlFunction.getAnalyzeExpr();
             if (expr == null) {
                 throw new StarRocksPlannerException("view function analyze expr is null",
                         ErrorType.INTERNAL_ERROR);
             }
 
             Map<String, ScalarOperator> argMap = Maps.newHashMap();
-            for (int i = 0; i < viewFunction.getArgNames().length; i++) {
-                argMap.put(viewFunction.getArgNames()[i], arguments.get(i));
+            for (int i = 0; i < sqlFunction.getArgNames().length; i++) {
+                argMap.put(sqlFunction.getArgNames()[i], arguments.get(i));
             }
 
             return SqlToScalarOperatorTranslator.translateWithSlotRef(expr, slotRef -> {

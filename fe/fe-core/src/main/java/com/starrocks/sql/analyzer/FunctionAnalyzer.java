@@ -24,8 +24,8 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.ViewFunction;
 import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
 import com.starrocks.catalog.combinator.AggStateMergeCombinator;
@@ -808,13 +808,13 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fn instanceof ViewFunction) {
-            fn = analyzeViewFunction((ViewFunction) fn, node, session);
+        if (fn instanceof SqlFunction) {
+            fn = analyzeSqlFunction((SqlFunction) fn, node, session);
         }
         return fn;
     }
 
-    private static Function analyzeViewFunction(ViewFunction fn, FunctionCallExpr node, ConnectContext context) {
+    private static Function analyzeSqlFunction(SqlFunction fn, FunctionCallExpr node, ConnectContext context) {
         Expr expr;
         if (node.getChildren().size() != fn.getArgNames().length) {
             throw new SemanticException("View function " + fn.getFunctionName() + " expected "
@@ -826,16 +826,16 @@ public class FunctionAnalyzer {
                 argsMap.put(fn.getArgNames()[i], fn.getArgs()[i]);
             }
 
-            expr = SqlParser.parseExpression(fn.getView(), context.getSessionVariable());
+            expr = SqlParser.parseExpression(fn.getSql(), context.getSessionVariable());
             ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
                 if (argsMap.containsKey(slotRef.getColName())) {
                     slotRef.setType(argsMap.get(slotRef.getColName()));
                 }
             });
         } catch (Exception e) {
-            throw new SemanticException("Failed to parse view definition: " + fn.getView());
+            throw new SemanticException("Failed to parse view definition: " + fn.getSql());
         }
-        ViewFunction v = (ViewFunction) fn.copy();
+        SqlFunction v = (SqlFunction) fn.copy();
         v.setAnalyzeExpr(expr);
         v.setRetType(expr.getType());
         return v;

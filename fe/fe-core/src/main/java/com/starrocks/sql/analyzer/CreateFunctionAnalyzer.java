@@ -23,8 +23,8 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.ViewFunction;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -113,7 +113,7 @@ public class CreateFunctionAnalyzer {
         FunctionArgsDef argsDef = stmt.getArgsDef();
 
         String viewSql = AstToSQLBuilder.toSQLWithCredential(expr);
-        Function function = new ViewFunction(functionName, argsDef.getArgTypes(), expr.getType(),
+        Function function = new SqlFunction(functionName, argsDef.getArgTypes(), expr.getType(),
                 argsDef.getArgNames().toArray(new String[0]), viewSql);
         stmt.setFunction(function);
     }
