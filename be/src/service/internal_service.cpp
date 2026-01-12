@@ -490,7 +490,7 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             std::future_status::timeout) {
             st =
                     Status::TimedOut(fmt::format("exec_batch_plan_fragments wait fragment prepare timed out, "
-                                                 "query_id={}, query_timeout={}s, idx={}",
+                                                 "query_id={}, query_timeout={}ms, idx={}",
                                                  print_id(common_request.params.query_id), remaining_ms, i));
         } else {
             st = prepare_futures[i].get();
