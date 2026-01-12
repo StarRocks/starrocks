@@ -52,9 +52,35 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
+
+    // Add compression extension for compressed CSV files.
+    // Note: Parquet and ORC are self-contained formats with compression info in metadata,
+    // so they don't need compression extensions. CSV is plain text and needs extensions
+    // (e.g., .csv.gz) to indicate the content is compressed.
+    std::string file_suffix = boost::to_lower_copy(ctx->format);
+    if (boost::iequals(ctx->format, formats::CSV)) {
+        switch (ctx->compression_type) {
+        case TCompressionType::GZIP:
+            file_suffix += ".gz";
+            break;
+        case TCompressionType::SNAPPY:
+            file_suffix += ".snappy";
+            break;
+        case TCompressionType::ZSTD:
+            file_suffix += ".zst";
+            break;
+        case TCompressionType::LZ4:
+        case TCompressionType::LZ4_FRAME:
+            file_suffix += ".lz4";
+            break;
+        default:
+            // No extension for uncompressed or unsupported types
+            break;
+        }
+    }
+
     auto location_provider = std::make_shared<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
-            boost::to_lower_copy(ctx->format));
+            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id, file_suffix);
 
     std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {

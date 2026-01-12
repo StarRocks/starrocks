@@ -18,7 +18,10 @@
 
 #include "formats/csv/output_stream.h"
 #include "fs/fs.h"
+#include "gen_cpp/segment.pb.h"
 #include "io/async_flush_output_stream.h"
+#include "util/compression/block_compression.h"
+#include "util/raw_container.h"
 
 namespace starrocks::csv {
 
@@ -61,6 +64,64 @@ protected:
 
 private:
     io::AsyncFlushOutputStream* _stream;
+};
+
+// CompressedOutputStream wraps any OutputStream and adds compression.
+// This design follows the decorator pattern, allowing flexible composition:
+//   data -> AsyncOutputStreamFile -> CompressedOutputStream
+// or any other OutputStream implementation.
+//
+// Incremental compression support:
+//   - GZIP, LZ4_FRAME, ZSTD: Support incremental compression via frame concatenation.
+//     Data is compressed and written in chunks (default 64MB) to limit memory usage.
+//     Multiple compressed frames can be concatenated to form a valid file that
+//     standard decompression tools can handle.
+//   - SNAPPY, LZ4 (raw): Do NOT support incremental compression. Creating a
+//     CompressedOutputStream with these types will return an error.
+class CompressedOutputStream final : public OutputStream {
+public:
+    // Default chunk size for incremental compression (64MB).
+    // When the uncompressed buffer reaches this size, it will be compressed
+    // and written as a separate frame to the underlying stream.
+    static constexpr size_t kDefaultChunkSize = 64 * 1024 * 1024;
+
+    // Factory method to create CompressedOutputStream with proper error handling.
+    // Returns error status if compression codec initialization fails.
+    // @param underlying_stream: The stream to write compressed data to (not owned, must outlive this object)
+    // @param compression_type: The compression algorithm to use
+    // @param buff_size: Buffer size for the base OutputStream
+    static StatusOr<std::shared_ptr<CompressedOutputStream>> create(std::shared_ptr<OutputStream> underlying_stream,
+                                                                    CompressionTypePB compression_type,
+                                                                    size_t buff_size);
+
+    ~CompressedOutputStream() override = default;
+
+    Status finalize() override;
+    std::size_t size() override;
+
+protected:
+    Status _sync(const char* data, size_t size) override;
+
+private:
+    // Private constructor - use create() factory method instead
+    CompressedOutputStream(std::shared_ptr<OutputStream> underlying_stream, const BlockCompressionCodec* codec,
+                           CompressionTypePB compression_type, size_t buff_size);
+
+    // Compress and write the current buffer to underlying stream
+    Status _flush_compressed_chunk();
+
+    // Check if the compression type supports incremental compression via frame concatenation.
+    // GZIP, LZ4_FRAME, and ZSTD support this because multiple frames can be concatenated.
+    bool _supports_incremental_compression() const;
+
+    std::shared_ptr<OutputStream> _underlying_stream;
+    const BlockCompressionCodec* _codec;
+    CompressionTypePB _compression_type;
+    // Buffer to accumulate uncompressed data before compression
+    raw::RawVector<uint8_t> _uncompressed_buffer;
+    raw::RawVector<uint8_t> _compress_buffer;
+    // Track the total compressed bytes written to underlying stream
+    size_t _compressed_bytes_written = 0;
 };
 
 } // namespace starrocks::csv
