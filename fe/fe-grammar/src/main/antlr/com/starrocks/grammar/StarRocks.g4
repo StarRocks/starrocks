@@ -318,6 +318,17 @@ statement
     | dropFileStatement
     | showSmallFilesStatement
 
+    // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
+    | showWarehousesStatement
+    | showClustersStatement
+    | showNodesStatement
+    | alterWarehouseStatement
+
     // Set Statement
     | setStatement
     | setUserPropertyStatement
@@ -376,17 +387,6 @@ statement
     | truncatePlanAdvisorStatement
     | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
-
-    // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
-    | setWarehouseStatement
-    | showWarehousesStatement
-    | showClustersStatement
-    | showNodesStatement
-    | alterWarehouseStatement
 
     // CNGroup Statement
     | createCNGroupStatement
