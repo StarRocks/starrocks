@@ -194,8 +194,13 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             if (is_skew_broadcast_join) {
                 // for skew join's broadcast join, we only publish local in/bloom runtime filter, and send key columns to rf coordinator
                 // and rf coordinator will merge key column with shuffle join's bloom filter instance
-                state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(
-                        bloom_filters, key_columns, null_safe, type_descs);
+                if (key_columns.size() != bloom_filters.size()) {
+                    LOG(WARNING) << "key_columns.size() != bloom_filters.size(), key_columns.size="
+                                 << key_columns.size() << ", bloom_filters.size=" << bloom_filters.size();
+                } else {
+                    state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(
+                            bloom_filters, key_columns, null_safe, type_descs);
+                }
             } else {
                 state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             }
