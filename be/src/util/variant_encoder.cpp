@@ -26,9 +26,9 @@
 
 #include "arrow/util/endian.h"
 #include "column/binary_column.h"
-#include "column/datum_convert.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/datum_convert.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
@@ -661,14 +661,12 @@ Status collect_object_keys_from_datum(const Datum& datum, const TypeDescriptor& 
         const auto& fields = datum.get_struct();
         DCHECK_EQ(type.field_names.size(), type.children.size());
         if (fields.size() != type.children.size()) {
-            return Status::InvalidArgument(
-                    fmt::format("Struct field size {} does not match type children size {}", fields.size(),
-                                type.children.size()));
+            return Status::InvalidArgument(fmt::format("Struct field size {} does not match type children size {}",
+                                                       fields.size(), type.children.size()));
         }
         if (type.field_names.size() != fields.size()) {
-            return Status::InvalidArgument(
-                    fmt::format("Struct field names size {} does not match field count {}", type.field_names.size(),
-                                fields.size()));
+            return Status::InvalidArgument(fmt::format("Struct field names size {} does not match field count {}",
+                                                       type.field_names.size(), fields.size()));
         }
         for (size_t i = 0; i < fields.size(); ++i) {
             const std::string& field_name = type.field_names[i];
@@ -689,9 +687,8 @@ Status collect_object_keys_from_datum(const Datum& datum, const TypeDescriptor& 
     }
 }
 
-StatusOr<std::string> encode_datum_to_variant_value(
-        const Datum& datum, const TypeDescriptor& type,
-        const std::unordered_map<std::string, uint32_t>& key_to_id) {
+StatusOr<std::string> encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& type,
+                                                    const std::unordered_map<std::string, uint32_t>& key_to_id) {
     if (datum.is_null()) {
         return encode_null_value();
     }
@@ -826,14 +823,12 @@ StatusOr<std::string> encode_datum_to_variant_value(
         const auto& fields = datum.get_struct();
         DCHECK_EQ(type.field_names.size(), type.children.size());
         if (fields.size() != type.children.size()) {
-            return Status::InvalidArgument(
-                    fmt::format("Struct field size {} does not match type children size {}", fields.size(),
-                                type.children.size()));
+            return Status::InvalidArgument(fmt::format("Struct field size {} does not match type children size {}",
+                                                       fields.size(), type.children.size()));
         }
         if (type.field_names.size() != fields.size()) {
-            return Status::InvalidArgument(
-                    fmt::format("Struct field names size {} does not match field count {}", type.field_names.size(),
-                                fields.size()));
+            return Status::InvalidArgument(fmt::format("Struct field names size {} does not match field count {}",
+                                                       type.field_names.size(), fields.size()));
         }
         std::map<uint32_t, std::string> encoded_fields;
         for (size_t i = 0; i < fields.size(); ++i) {
@@ -848,8 +843,7 @@ StatusOr<std::string> encode_datum_to_variant_value(
         return encode_object_from_fields(encoded_fields);
     }
     default:
-        return Status::NotSupported(
-                fmt::format("Unsupported type {} for variant encoding", type.debug_string()));
+        return Status::NotSupported(fmt::format("Unsupported type {} for variant encoding", type.debug_string()));
     }
 }
 
