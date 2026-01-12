@@ -713,7 +713,7 @@ public class StmtExecutor {
         // set execution id.
         // For statements other than `cache select`, try to use query id as execution id when execute first time.
         UUID uuid = context.getQueryId();
-        if (!sessionVariableBackup.isEnableCacheSelect()) {
+        if (!sessionVariableBackup.isEnableCacheSelect() && uuid != null) {
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
         }
 
@@ -1803,9 +1803,10 @@ public class StmtExecutor {
 
         int queryTimeout = context.getSessionVariable().getQueryTimeoutS();
         int insertTimeout = context.getSessionVariable().getInsertTimeoutS();
+        CancelableAnalyzeTask cancelableTask = null;
         try {
             Runnable originalTask = () -> executeAnalyze(analyzeStmt, analyzeStatus, db, table);
-            CancelableAnalyzeTask cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
+            cancelableTask = new CancelableAnalyzeTask(originalTask, analyzeStatus);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool().execute(cancelableTask);
 
             if (!analyzeStmt.isAsync()) {
@@ -1827,8 +1828,13 @@ public class StmtExecutor {
             LOG.warn("analyze statement failed {}", analyzeStmt.toString(), e);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } finally {
+            // restore the query timeout
             context.getSessionVariable().setQueryTimeoutS(queryTimeout);
             context.getSessionVariable().setInsertTimeoutS(insertTimeout);
+
+            if (!analyzeStmt.isAsync() && cancelableTask != null && !cancelableTask.isDone()) {
+                cancelableTask.cancel(true);
+            }
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
