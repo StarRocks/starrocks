@@ -3,15 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 0.95
 ---
 
-# SQL Function (SQL函数)
+# SQL UDF
 
-自 4.1 版本起，StarRocks 支持创建 SQL Function（视图函数），允许用户使用 SQL 表达式创建函数。
+自 4.1 版本起，StarRocks 支持创建 SQL 自定义函数（UDFs），允许用户使用 SQL 表达式创建函数。
 
-SQL Function 是一种轻量级的函数定义方式，它将一个 SQL 表达式封装为可重用的函数，在查询时动态展开为实际的 SQL 表达式。
+SQL UDF 是一种轻量级的函数定义方式，它将一个 SQL 表达式封装为可重用的函数，在查询时动态展开为实际的 SQL 表达式。
 
 ## 功能概述
 
-SQL Function 的主要特点：
+SQL UDF 的主要特点：
 
 - **动态展开**: 在查询优化阶段将函数调用展开为实际的 SQL 表达式
 - **类型安全**: 支持参数类型和返回类型的显式声明
@@ -24,7 +24,7 @@ SQL Function 的主要特点：
 
 ## 语法
 
-### 创建 SQL Function
+### 创建 SQL UDF
 
 ```SQL
 CREATE [GLOBAL] FUNCTION
@@ -42,13 +42,13 @@ RETURNS expression
 | arg_type           | 参数类型，支持 StarRocks 所有基础数据类型                                                    |
 | expression         | SQL 表达式，函数调用时会被展开为实际的表达式                                                 |
 
-### 删除 SQL Function
+### 删除 SQL UDF
 
 ```SQL
 DROP FUNCTION [IF EXISTS] function_name(arg_type [, ...])
 ```
 
-### 查看 SQL Function
+### 查看 SQL UDF
 
 ```SQL
 SHOW [GLOBAL] FUNCTIONS;
@@ -110,7 +110,7 @@ END;
 SELECT classify_temperature(25);  -- 结果: warm
 ```
 
-### 示例 5: 全局 SQL Function
+### 示例 5: 全局 SQL UDF
 
 ```SQL
 -- 创建全局函数，所有数据库可见
@@ -125,7 +125,7 @@ SELECT format_date_display(create_time) from my_table;
 
 ### 1. 嵌套使用
 
-SQL Function 支持嵌套调用：
+SQL UDF 支持嵌套调用：
 
 ```SQL
 CREATE FUNCTION func_a(x INT, y INT) RETURNS x + y;
@@ -136,7 +136,7 @@ SELECT func_b(3, 4);  -- 结果: 14
 
 ### 2. 类型转换
 
-SQL Function 支持隐式类型转换：
+SQL UDF 支持隐式类型转换：
 
 ```SQL
 CREATE FUNCTION convert_and_add(a STRING, b INT)
@@ -147,7 +147,7 @@ SELECT convert_and_add('100', 50);  -- 结果: 150
 
 ### 3. 与内置函数组合
 
-SQL Function 可以与 StarRocks 内置函数自由组合：
+SQL UDF 可以与 StarRocks 内置函数自由组合：
 
 ```SQL
 CREATE FUNCTION get_year_month(dt DATETIME)
@@ -193,7 +193,7 @@ RETURNS amount * 0.1 + 5.0;
 
 ## 性能特点
 
-SQL Function 在查询优化阶段被展开为实际的 SQL 表达式，具有以下性能特点：
+SQL UDF 在查询优化阶段被展开为实际的 SQL 表达式，具有以下性能特点：
 
 1. **零函数调用开销**: 没有传统 UDF 的函数调用开销
 2. **优化器可见**: 优化器可以看到完整的表达式，进行更好的优化
