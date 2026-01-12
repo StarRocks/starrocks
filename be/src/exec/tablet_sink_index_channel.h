@@ -17,6 +17,7 @@
 #include <memory>
 #include <queue>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -279,12 +280,14 @@ public:
     Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             func(it.second.get());
         }
     }
 
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             if (!it.second->is_incremental()) {
                 func(it.second.get());
@@ -293,6 +296,7 @@ public:
     }
 
     void for_each_incremental_node_channel(const std::function<void(NodeChannel*)>& func) {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
         for (auto& it : _node_channels) {
             if (it.second->is_incremental()) {
                 func(it.second.get());
@@ -302,11 +306,17 @@ public:
 
     void mark_as_failed(const NodeChannel* ch);
 
-    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
+    bool is_failed_channel(const NodeChannel* ch) {
+        std::shared_lock<std::shared_mutex> lock(_failure_state_mutex);
+        return _failed_channels.count(ch->node_id()) != 0;
+    }
 
     bool has_intolerable_failure();
 
-    bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
+    bool has_incremental_node_channel() const {
+        std::shared_lock<std::shared_mutex> lock(_node_channels_mutex);
+        return _has_incremental_node_channel;
+    }
 
     int64_t index_id() const { return _index_id; }
 
@@ -316,10 +326,21 @@ private:
     OlapTableSink* _parent;
     int64_t _index_id;
 
+    // Mutex to protect _node_channels and _has_incremental_node_channel from concurrent access.
+    // Read operations (for_each_*_node_channel, has_incremental_node_channel) acquire shared lock.
+    // Write operation (init) acquires exclusive lock.
+    mutable std::shared_mutex _node_channels_mutex;
     // BeId -> channel
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
     // map be_id to tablet num
     std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
+
+    // Mutex to protect failure state variables (_failed_channels, _has_intolerable_failure,
+    // _write_quorum_type) from concurrent access. These variables are used together in
+    // has_intolerable_failure() to determine if the failure is intolerable.
+    // Read operations (is_failed_channel, has_intolerable_failure) acquire shared lock.
+    // Write operations (mark_as_failed, init for _write_quorum_type) acquire exclusive lock.
+    mutable std::shared_mutex _failure_state_mutex;
     // BeId
     std::set<int64_t> _failed_channels;
 
