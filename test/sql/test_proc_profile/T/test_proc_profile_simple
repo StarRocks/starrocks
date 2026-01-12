@@ -1,4 +1,4 @@
--- name: test_proc_profile_simple
+-- name: test_proc_profile_simple @sequential
 -- Test FE /proc_profile and /proc_profile/file HTTP endpoints
 
 -- Test 1: Check that /proc_profile page is accessible and contains profile information
