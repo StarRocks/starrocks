@@ -19,6 +19,7 @@ import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -35,11 +36,8 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
-<<<<<<< HEAD
 import com.starrocks.persist.EditLog;
-=======
 import com.starrocks.qe.DDLStmtExecutor;
->>>>>>> ea1a872649 ([Enhancement] Add interval support for automated cluster snapshots (#67525))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -49,14 +47,10 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
-<<<<<<< HEAD
+import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.UnitIdentifier;
 import mockit.Delegate;
 import mockit.Expectations;
-=======
-import com.starrocks.sql.ast.UnitIdentifier;
-import com.starrocks.sql.ast.expression.IntervalLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> ea1a872649 ([Enhancement] Add interval support for automated cluster snapshots (#67525))
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

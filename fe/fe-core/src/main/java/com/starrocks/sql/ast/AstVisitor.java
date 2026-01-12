@@ -1245,17 +1245,12 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/AstVisitor.java
     default R visitOptimizeClause(OptimizeClause clause, C context) {
         return visitNode(clause, context);
-=======
-    default R visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement, C context) {
-        return visitDDLStatement(statement, context);
     }
 
-    default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
+    default R visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement, C context) {
         return visitDDLStatement(statement, context);
->>>>>>> ea1a872649 ([Enhancement] Add interval support for automated cluster snapshots (#67525)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/AstVisitor.java
     }
 
     default R visitAddColumnClause(AddColumnClause clause, C context) {

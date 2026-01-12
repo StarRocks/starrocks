@@ -161,13 +161,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public boolean canScheduleNextJob(long lastAutomatedJobStartTimeMs) {
-<<<<<<< HEAD
-        return isAutomatedSnapshotOn() && (System.currentTimeMillis() - lastAutomatedJobStartTimeMs >=
-                                           Config.automated_cluster_snapshot_interval_seconds * 1000L);
-=======
         return isAutomatedSnapshotOn() && (System.currentTimeMillis()
                 - lastAutomatedJobStartTimeMs >= getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L);
->>>>>>> ea1a872649 ([Enhancement] Add interval support for automated cluster snapshots (#67525))
     }
 
     public ClusterSnapshotJob getNextCluterSnapshotJob() {
