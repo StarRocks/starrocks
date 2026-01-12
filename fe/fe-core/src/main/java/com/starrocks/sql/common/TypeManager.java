@@ -431,11 +431,32 @@ public class TypeManager {
         if (from.isNull()) {
             return true;
         }
+        if (from.isVariantType()) {
+            return true;
+        }
         if (from.isScalarType()) {
             PrimitiveType primitive = ((ScalarType) from).getPrimitiveType();
             return primitive != PrimitiveType.HLL && primitive != PrimitiveType.BITMAP &&
                     primitive != PrimitiveType.PERCENTILE && primitive != PrimitiveType.FUNCTION &&
                     primitive != PrimitiveType.VARBINARY;
+        }
+        if (from.isArrayType()) {
+            ArrayType arrayType = (ArrayType) from;
+            return variantCanCastFromType(arrayType.getItemType());
+        }
+        if (from.isMapType()) {
+            MapType mapType = (MapType) from;
+            return canCastTo(mapType.getKeyType(), VarcharType.VARCHAR) &&
+                    variantCanCastFromType(mapType.getValueType());
+        }
+        if (from.isStructType()) {
+            StructType structType = (StructType) from;
+            for (StructField field : structType.getFields()) {
+                if (!variantCanCastFromType(field.getType())) {
+                    return false;
+                }
+            }
+            return true;
         }
         return false;
     }
