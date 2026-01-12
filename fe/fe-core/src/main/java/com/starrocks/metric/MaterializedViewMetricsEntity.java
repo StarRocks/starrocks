@@ -83,8 +83,6 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
     // the current materialized view's partition count, 0 if the materialized view is not partitioned
     public GaugeMetric<Integer> counterPartitionCount;
-    // the materialized view's warehouse name
-    public GaugeMetric<String> mvWarehouseName;
 
     // histogram(ms)
     // record the materialized view's refresh job duration only if it's refreshed successfully.
