@@ -283,6 +283,9 @@ public class FunctionSet {
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
     public static final String GET_VARIANT_STRING = "get_variant_string";
+    public static final String GET_VARIANT_DATE = "get_variant_date";
+    public static final String GET_VARIANT_DATETIME = "get_variant_datetime";
+    public static final String GET_VARIANT_TIME = "get_variant_time";
     // Matching functions:
     public static final String ILIKE = "ilike";
     public static final String LIKE = "like";

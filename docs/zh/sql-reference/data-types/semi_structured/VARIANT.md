@@ -121,6 +121,19 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
+### 将 SQL 类型转换为 VARIANT
+
+您可以将 SQL 值转换为 VARIANT。支持的输入类型包括 BOOLEAN、整数类型、FLOAT/DOUBLE、DECIMAL、STRING/CHAR/VARCHAR、JSON、DATE/DATETIME/TIME。HLL、BITMAP、PERCENTILE、VARBINARY 以及复杂类型（ARRAY、MAP、STRUCT）暂不支持。
+
+```SQL
+SELECT
+    CAST(123 AS VARIANT) AS v_int,
+    CAST(3.14 AS VARIANT) AS v_double,
+    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST('hello' AS VARIANT) AS v_string,
+    CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
+```
+
 ## VARIANT 函数
 
 VARIANT 函数可用于查询和提取 VARIANT 列中的数据。有关详细信息,请参阅各个函数的文档:

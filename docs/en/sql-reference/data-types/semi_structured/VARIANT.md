@@ -121,6 +121,19 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
+### Casting SQL Types to VARIANT
+
+You can cast SQL values to VARIANT. Supported input types include BOOLEAN, integer types, FLOAT/DOUBLE, DECIMAL, STRING/CHAR/VARCHAR, JSON, and DATE/DATETIME/TIME. Types such as HLL, BITMAP, PERCENTILE, VARBINARY, and complex types (ARRAY, MAP, STRUCT) are not supported.
+
+```SQL
+SELECT
+    CAST(123 AS VARIANT) AS v_int,
+    CAST(3.14 AS VARIANT) AS v_double,
+    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST('hello' AS VARIANT) AS v_string,
+    CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
+```
+
 ## VARIANT Functions
 
 VARIANT functions can be used to query and extract data from VARIANT columns. For detailed information, please refer to the individual function documentation:

@@ -14,13 +14,25 @@
 
 #pragma once
 
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "column/column.h"
+#include "column/column_builder.h"
 #include "common/statusor.h"
+#include "runtime/types.h"
 #include "types/variant_value.h"
 #include "util/json.h"
+#include "velocypack/Slice.h"
 
 namespace starrocks {
 
-// Encode a JsonValue into a VariantRowValue using Variant encoding.
-StatusOr<VariantRowValue> encode_json_to_variant(const JsonValue& json);
+class VariantEncoder {
+public:
+    static Status encode_column(const ColumnPtr& column, const TypeDescriptor& type,
+                                ColumnBuilder<TYPE_VARIANT>* builder, bool allow_throw_exception);
+    static StatusOr<VariantRowValue> encode_json_to_variant(const JsonValue& json);
+};
 
 } // namespace starrocks
