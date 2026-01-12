@@ -18,6 +18,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
+>>>>>>> ea1a872649 ([Enhancement] Add interval support for automated cluster snapshots (#67525))
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -617,6 +622,13 @@ public class Analyzer {
         @Override
         public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
                                                                ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement,
+                                                                      ConnectContext context) {
             ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }

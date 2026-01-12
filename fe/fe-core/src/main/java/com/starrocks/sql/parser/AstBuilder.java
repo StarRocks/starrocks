@@ -140,6 +140,11 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
+>>>>>>> ea1a872649 ([Enhancement] Add interval support for automated cluster snapshots (#67525))
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -2739,13 +2744,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.svName != null) {
             svName = getIdentifierName(context.svName);
         }
-        return new AdminSetAutomatedSnapshotOnStmt(svName, createPos(context));
+        IntervalLiteral intervalLiteral = null;
+        if (context.interval() != null) {
+            intervalLiteral = (IntervalLiteral) visit(context.interval());
+        }
+        return new AdminSetAutomatedSnapshotOnStmt(svName, intervalLiteral, createPos(context));
     }
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
             StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
         return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminAlterAutomatedSnapshotIntervalStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminAlterAutomatedSnapshotIntervalStatementContext context) {
+        IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+        return new AdminAlterAutomatedSnapshotIntervalStmt(intervalLiteral, createPos(context));
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
