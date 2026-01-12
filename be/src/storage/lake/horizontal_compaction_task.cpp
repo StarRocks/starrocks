@@ -123,7 +123,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
 
-    // Close reader to ensure IO statistics are updated via _update_stats() before collecting
+    // Close reader to ensure IO statistics are updated via SegmentIterator::_update_stats() before collecting
     reader.close();
 
     _context->stats->collect(reader.stats());
