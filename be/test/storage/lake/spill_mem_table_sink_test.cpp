@@ -32,6 +32,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "util/raw_container.h"

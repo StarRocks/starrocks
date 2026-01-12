@@ -24,8 +24,20 @@ namespace starrocks {
 class RuntimeState;
 class LoadSpillBlockManager;
 class ChunkIterator;
+class LoadChunkSpiller;
+class LoadSpillPipelineMergeTask;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+using LoadSpillPipelineMergeTaskPtr = std::unique_ptr<LoadSpillPipelineMergeTask>;
+
+namespace lake {
+class TabletWriter;
+class TabletInternalParallelMergeTask;
+} // namespace lake
+
+namespace spill {
+class BlockGroup;
+} // namespace spill
 
 // Output stream for spilling data to disk blocks
 // Each stream writes to a specific block group, which is tagged with a slot_idx
@@ -72,6 +84,7 @@ struct SpillBlockInputTasks {
 
 class LoadChunkSpiller {
 public:
+    friend class LoadSpillPipelineMergeIterator;
     LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
     ~LoadChunkSpiller() = default;
 
@@ -82,10 +95,12 @@ public:
     Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                        std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
 
-    // Traverse all load spill block files produced during ingestion, and split the input into multiple input tasks
-    // according to specific constraints.
     StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
                                                                     bool do_sort, bool do_agg);
+
+    StatusOr<LoadSpillPipelineMergeTaskPtr> generate_pipeline_merge_task(size_t target_size,
+                                                                         size_t memory_usage_per_merge, bool do_sort,
+                                                                         bool do_agg, bool final_round);
 
     bool empty();
 
