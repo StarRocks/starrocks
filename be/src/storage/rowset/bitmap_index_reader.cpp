@@ -78,6 +78,8 @@ void BitmapIndexReader::_reset() {
     _typeinfo.reset();
     _dict_column_reader.reset();
     _bitmap_column_reader.reset();
+    _ngram_bitmap_column_reader.reset();
+    _ngram_dict_column_reader.reset();
     _has_null = false;
 }
 

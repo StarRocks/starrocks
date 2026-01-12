@@ -63,7 +63,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
         // It means all the rows are matched.
         bitmap->addRange(0, _segment_rows);
         roaring::Roaring null_map;
-        _bitmap_itr->read_null_bitmap(&null_map);
+        RETURN_IF_ERROR(_bitmap_itr->read_null_bitmap(&null_map));
         *bitmap -= null_map;
         return Status::OK();
     }
