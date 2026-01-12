@@ -188,6 +188,19 @@ public class ReplayFromDumpTestBase {
                         getExplainString(level));
     }
 
+    protected Pair<QueryDumpInfo, String> getPlanFragmentWithAggPushdown(String dumpJsonStr, SessionVariable sessionVariable,
+                                                          TExplainLevel level) throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
+        if (sessionVariable != null) {
+            queryDumpInfo.setSessionVariable(sessionVariable);
+        }
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        queryDumpInfo.getSessionVariable().setEnableInnerJoinToSemi(false);
+        return new Pair<>(queryDumpInfo,
+                UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
+                        getExplainString(level));
+    }
+
     public String getPlanFragment(String fileName, TExplainLevel explainLevel) throws Exception {
         String fileContent = getDumpInfoFromFile(fileName);
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(fileContent);
