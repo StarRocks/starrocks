@@ -92,6 +92,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
     public Optional<String> dbNameOpt = Optional.empty();
     public Optional<String> mvNameOpt = Optional.empty();
+    public Optional<String> warehouseNameOpt = Optional.empty();
 
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
         this.metricRegistry = metricRegistry;
@@ -107,13 +108,16 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(mvId.getDbId());
-        if (db != null) {
-            dbNameOpt = Optional.of(db.getFullName());
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
-            if (table != null) {
-                mvNameOpt = Optional.of(table.getName());
-                return true;
-            }
+        if (db == null) {
+            return false;
+        }
+        this.dbNameOpt = Optional.of(db.getFullName());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+        if (table != null && table.isMaterializedView()) {
+            MaterializedView curMV = (MaterializedView) table;
+            this.mvNameOpt = Optional.of(table.getName());
+            this.warehouseNameOpt = Optional.ofNullable(curMV.getWarehouseName());
+            return true;
         }
         return false;
     }
@@ -311,19 +315,6 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
             }
         };
         metrics.add(counterPartitionCount);
-
-        mvWarehouseName = new GaugeMetric<String>("warehouse_name", MetricUnit.NOUNIT,
-                "the materialized view's warehouse name") {
-            @Override
-            public String getValue() {
-                MaterializedView mv = getMaterializedView();
-                if (mv == null) {
-                    return "";
-                }
-                return mv.getWarehouseName();
-            }
-        };
-        metrics.add(mvWarehouseName);
     }
 
     protected MaterializedView getMaterializedView() {
