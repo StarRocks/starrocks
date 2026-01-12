@@ -109,17 +109,30 @@ public class JDBCScanNode extends ScanNode {
         }
     }
 
-    private boolean isMysql() {
+    private String getJdbcUri() {
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
         // Compatible with jdbc catalog
-        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
-        return jdbcURI.startsWith("jdbc:mysql");
+        return resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
     }
 
     private String getIdentifierSymbol() {
-        //TODO: for other jdbc table we need different objectIdentifier to support reserved key words
-        return isMysql() ? "`" : "";
+        String jdbcUri = getJdbcUri();
+        if (jdbcUri == null) {
+            return "";
+        }
+        if (jdbcUri.startsWith("jdbc:mysql") ||
+                jdbcUri.startsWith("jdbc:mariadb") ||
+                jdbcUri.startsWith("jdbc:clickhouse")) {
+            return "`";
+        }
+        if (jdbcUri.startsWith("jdbc:postgresql") ||
+                jdbcUri.startsWith("jdbc:postgres") ||
+                jdbcUri.startsWith("jdbc:oracle") ||
+                jdbcUri.startsWith("jdbc:sqlserver")) {
+            return "\"";
+        }
+        return "";
     }
 
     private void createJDBCTableFilters() {
