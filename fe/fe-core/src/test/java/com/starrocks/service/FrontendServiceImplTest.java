@@ -1708,7 +1708,7 @@ public class FrontendServiceImplTest {
             TPartitionMeta meta = metaList.get(tabletIdMetaIndex.get(tabletId));
             PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
             Partition partition = olapTable.getPartition(physicalPartition.getParentId());
-            Assertions.assertEquals(physicalPartition.getName(), meta.getPartition_name());
+            Assertions.assertEquals(partition.getName(), meta.getPartition_name());
             Assertions.assertEquals(partitionId, meta.getPartition_id());
             Assertions.assertEquals(partition.getState().name(), meta.getState());
             Assertions.assertEquals(physicalPartition.getVisibleVersion(), meta.getVisible_version());
@@ -1738,7 +1738,7 @@ public class FrontendServiceImplTest {
             TPartitionMeta meta = metaList.get(0);
             PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
             Partition partition = olapTable.getPartition(physicalPartition.getParentId());
-            Assertions.assertEquals(physicalPartition.getName(), meta.getPartition_name());
+            Assertions.assertEquals(partition.getName(), meta.getPartition_name());
             Assertions.assertEquals(partitionId, meta.getPartition_id());
             Assertions.assertEquals(partition.getState().name(), meta.getState());
             Assertions.assertEquals(physicalPartition.getVisibleVersion(), meta.getVisible_version());
