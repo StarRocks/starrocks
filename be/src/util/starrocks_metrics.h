@@ -371,7 +371,6 @@ public:
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
     METRICS_DEFINE_THREAD_POOL(pip_prepare);
-    METRICS_DEFINE_THREAD_POOL(load_spill_block_merge);
     METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
