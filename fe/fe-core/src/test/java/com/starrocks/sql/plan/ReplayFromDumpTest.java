@@ -1095,4 +1095,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
         PlanTestBase.assertContains(plan, "MultiCastDataSinks");
     }
+
+    @Test
+    public void testReorderMissingChildStats() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/reorder_miss_child_stats");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragmentWithAggPushdown(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(replayPair.second, "5:OlapScanNode\n" +
+                "     TABLE: tbl_5");
+    }
 }
