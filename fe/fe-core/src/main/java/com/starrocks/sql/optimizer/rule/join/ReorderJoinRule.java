@@ -56,6 +56,8 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils.ensureStatistics;
+
 public class ReorderJoinRule extends Rule {
     public ReorderJoinRule() {
         super(RuleType.TF_MULTI_JOIN_ORDER, Pattern.create(OperatorType.PATTERN));
@@ -341,8 +343,10 @@ public class ReorderJoinRule extends Rule {
 
             requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
             requireColumns.union(newOutputColumns);
-            OptExpression left = rewrite(optExpression.inputAt(0), (ColumnRefSet) requireColumns.clone());
-            OptExpression right = rewrite(optExpression.inputAt(1), (ColumnRefSet) requireColumns.clone());
+            OptExpression left = rewrite(optExpression.inputAt(0), requireColumns.clone());
+            OptExpression right = rewrite(optExpression.inputAt(1), requireColumns.clone());
+            ensureStatistics(left, optimizerContext);
+            ensureStatistics(right, optimizerContext);
 
             OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
             joinOpt.deriveLogicalPropertyItself();
@@ -431,6 +435,8 @@ public class ReorderJoinRule extends Rule {
 
             OptExpression left = rewrite(optExpression.inputAt(0));
             OptExpression right = rewrite(optExpression.inputAt(1));
+            ensureStatistics(left, optimizerContext);
+            ensureStatistics(right, optimizerContext);
 
             ColumnRefSet outputColumns = new ColumnRefSet();
             if (optExpression.getOp().getProjection() != null) {
