@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AdminAlterAutomatedSnapshotIntervalStmt extends DdlStmt {

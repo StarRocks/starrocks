@@ -23,8 +23,8 @@ import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.IntervalLiteral;
 
 public class ClusterSnapshotAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
