@@ -718,15 +718,13 @@ public:
 
         const InputCppType denom_original = get_scale_factor<InputCppType>(st.scale);
 
-        auto calc_with_double_fallback = [&](InputCppType junior, InputCppType senior, size_t index,
-                                             InputCppType u_numer) -> InputCppType {
+        auto calc_with_double_fallback = [&](InputCppType junior, InputCppType senior, size_t index, double u) -> InputCppType {
             // double fallback computes: a + (u-index)*(b-a), then trunc back to scaled integer
             const auto scale_factor = denom_original;
             double a = 0;
             double b = 0;
             DecimalV3Cast::to_float<InputCppType, double>(junior, scale_factor, &a);
             DecimalV3Cast::to_float<InputCppType, double>(senior, scale_factor, &b);
-            double u = static_cast<double>(u_numer) / static_cast<double>(denom_original);
             double res = a + (u - static_cast<double>(index)) * (b - a);
             // truncate toward zero: scaled = trunc(res * 10^scale)
             double scaled = res * static_cast<double>(scale_factor);
@@ -755,7 +753,8 @@ public:
 
             InputCppType prod{};
             if (UNLIKELY(mul_overflow(delta, frac_numer, &prod))) {
-                return calc_with_double_fallback(junior, senior, index, u_numer);
+                double u = static_cast<double>(u_numer) / static_cast<double>(denom_original);
+                return calc_with_double_fallback(junior, senior, index, u);
             }
 
             InputCppType adj = prod / denom; // truncate toward 0
@@ -785,7 +784,7 @@ public:
                     column->append(items.back());
                     return;
                 }
-                column->append(calc_with_double_fallback(items[index], items[index + 1], index, u_numer));
+                column->append(calc_with_double_fallback(items[index], items[index + 1], index, u));
                 return;
             }
 
@@ -827,7 +826,7 @@ public:
             std::vector<int> ls;
             std::vector<int> mp;
             kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, index, static_cast<int>(k), junior, senior);
-            column->append(calc_with_double_fallback(junior, senior, index, u_numer));
+            column->append(calc_with_double_fallback(junior, senior, index, u));
             return;
         }
 
