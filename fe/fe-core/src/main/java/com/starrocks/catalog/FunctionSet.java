@@ -1596,6 +1596,13 @@ public class FunctionSet {
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
 
+        // PercentileCont for DECIMALV3(value, rate) -> DECIMALV3(value)
+        for (ScalarType decimalType : DecimalType.DECIMAL_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
+                    Lists.newArrayList(decimalType, decimalType), decimalType, VarbinaryType.VARBINARY,
+                    false, false, false));
+        }
+
         for (Type type : SORTABLE_TYPES) {
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_DISC,
                     Lists.newArrayList(type, Type.DOUBLE), type, Type.VARBINARY,
