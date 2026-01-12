@@ -50,12 +50,23 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                                   long refreshIntervalSec,
                                   long maxSize) {
         this.fileIO = fileIO;
+<<<<<<< HEAD
         this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec, maxSize)
                 .build(asyncReloading(new CacheLoader<RemotePathKey, List<RemoteFileDesc>>() {
                     @Override
                     public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
                         List<RemoteFileDesc> res = loadRemoteFiles(key);
                         return res;
+=======
+        long cacheMemSize = Math.round(Runtime.getRuntime().maxMemory() * cacheMemorySizeRatio);
+        this.cache = newCacheBuilder(expireAfterWriteSec, refreshIntervalSec)
+                .executor(executor)
+                .maximumWeight(cacheMemSize)
+                .weigher((RemotePathKey key, List<RemoteFileDesc> value) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!value.isEmpty()) {
+                        size += 1L * SizeEstimator.estimate(value.get(0)) * value.size();
+>>>>>>> 3be384b4bb ([BugFix] Fix the interger overflow issue when populating delta lake checkpoint and json caches (#67700))
                     }
                 }, executor));
     }
