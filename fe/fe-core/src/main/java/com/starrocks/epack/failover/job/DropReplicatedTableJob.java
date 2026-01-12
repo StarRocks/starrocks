@@ -2,14 +2,17 @@
 
 package com.starrocks.epack.failover.job;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,9 +42,10 @@ public class DropReplicatedTableJob extends FailoverGroupJob {
         LOG.info("Droping table {}.{} in failover group {}", localDatabase.getFullName(), localTable.getName(),
                 failoverGroup.getName());
 
-        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                localDatabase.getFullName(), localTable.getName());
-        DropTableStmt dropTableStmt = new DropTableStmt(true, tableName, isDropForce);
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList(
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, localDatabase.getFullName(), localTable.getName()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        DropTableStmt dropTableStmt = new DropTableStmt(true, tableRef, isDropForce);
         try {
             GlobalStateMgr.getServingState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception e) {

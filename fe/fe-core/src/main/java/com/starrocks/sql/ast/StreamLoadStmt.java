@@ -14,19 +14,22 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class StreamLoadStmt extends DmlStmt {
-    private final TableName tblName;
+    private TableRef tableRef;
 
-    public StreamLoadStmt(TableName tableName, NodePosition pos) {
+    public StreamLoadStmt(TableRef tableRef, NodePosition pos) {
         super(pos);
-        this.tblName = tableName;
+        this.tableRef = tableRef;
     }
 
     @Override
-    public TableName getTableName() {
-        return tblName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 }

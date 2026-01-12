@@ -39,7 +39,7 @@ public class ConnectorAlterTableExecutor implements AstVisitorEPack<Void, Connec
 
     public ConnectorAlterTableExecutor(AlterTableStmt stmt, ConnectContext context) {
         this.stmt = stmt;
-        tableName = stmt.getTbl();
+        tableName = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
         actions = new ArrayList<>();
         this.context = context;
     }

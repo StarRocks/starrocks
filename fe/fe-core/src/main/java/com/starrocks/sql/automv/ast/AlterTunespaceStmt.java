@@ -14,10 +14,13 @@
 
 package com.starrocks.sql.automv.ast;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.TableName;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 public class AlterTunespaceStmt extends DmlStmt {
@@ -31,6 +34,22 @@ public class AlterTunespaceStmt extends DmlStmt {
     }
 
     @Override
+    public TableRef getTableRef() {
+        if (tableName == null) {
+            return null;
+        }
+        ImmutableList.Builder<String> parts = ImmutableList.builder();
+        if (tableName.getCatalog() != null) {
+            parts.add(tableName.getCatalog());
+        }
+        if (tableName.getDb() != null) {
+            parts.add(tableName.getDb());
+        }
+        parts.add(tableName.getTbl());
+        QualifiedName qualifiedName = QualifiedName.of(parts.build(), tableName.getPos());
+        return new TableRef(qualifiedName, null, tableName.getPos());
+    }
+
     public TableName getTableName() {
         return tableName;
     }

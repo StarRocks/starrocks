@@ -25,7 +25,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
@@ -51,6 +50,8 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.IntLiteral;
@@ -256,7 +257,9 @@ public class DeleteTest {
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                 new IntLiteral(3));
 
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO),
                 new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), binaryPredicate);
 
         try {
@@ -337,7 +340,9 @@ public class DeleteTest {
             BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "k1"),
                     new IntLiteral(3));
 
-            DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+            DeleteStmt deleteStmt = new DeleteStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                            null, NodePosition.ZERO),
                     new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), binaryPredicate);
 
             try {
@@ -395,7 +400,9 @@ public class DeleteTest {
         // Not supported type
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryType.GT, new SlotRef(null, "v1"),
                 new StringLiteral("[]"));
-        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+        DeleteStmt deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO),
                 new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), binaryPredicate);
 
         Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
@@ -420,7 +427,9 @@ public class DeleteTest {
 
         // Not supported type
         IsNullPredicate isNull = new IsNullPredicate(new SlotRef(null, "v1"), true);
-        deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+        deleteStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO),
                 new PartitionRef(Lists.newArrayList(partitionName), false, NodePosition.ZERO), isNull);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);

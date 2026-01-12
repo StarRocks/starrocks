@@ -20,7 +20,6 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
@@ -57,7 +56,9 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StreamLoadStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
@@ -988,7 +989,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
                 }
-                txnStateItem.setDmlStmt(new StreamLoadStmt(new TableName(dbName, tableName), NodePosition.ZERO));
+                TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList(dbName, tableName)),
+                        null, NodePosition.ZERO);
+                txnStateItem.setDmlStmt(new StreamLoadStmt(tableRef, NodePosition.ZERO));
                 txnStateItem.setTabletCommitInfos(TabletCommitInfo.fromThrift(coord.getCommitInfos()));
                 txnStateItem.setTabletFailInfos(TabletFailInfo.fromThrift(coord.getFailInfos()));
                 txnStateItem.addLoadedRows(numRowsNormal);

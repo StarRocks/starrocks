@@ -29,6 +29,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -45,10 +46,12 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -65,6 +68,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -358,7 +362,7 @@ public class InsertAnalyzer {
 
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
-            session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+            session.getDumpInfo().addTable(insertStmt.getDbName(), table);
         }
 
         // Set table function table used for load
@@ -429,8 +433,8 @@ public class InsertAnalyzer {
             return false;
         }
 
-        String dbName = insertStmt.getTableName().getDb();
-        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getDbName();
+        String catalogName = insertStmt.getCatalogName();
 
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (database == null) {
@@ -581,10 +585,20 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        insertStmt.getTableName().normalization(session);
-        String catalogName = insertStmt.getTableName().getCatalog();
-        String dbName = insertStmt.getTableName().getDb();
-        String tableName = insertStmt.getTableName().getTbl();
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (Strings.isNullOrEmpty(tableRef.getDbName()) || Strings.isNullOrEmpty(tableRef.getCatalogName())) {
+            TableName tableName = TableName.fromTableRef(tableRef);
+            tableName.normalization(session);
+            QualifiedName normalizedName = QualifiedName.of(
+                    Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                    tableRef.getPos());
+            String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+            tableRef = new TableRef(normalizedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
+        }
+        insertStmt.setTableRef(tableRef);
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
@@ -592,7 +606,8 @@ public class InsertAnalyzer {
         if (database == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
+        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -601,7 +616,7 @@ public class InsertAnalyzer {
             throw new SemanticException(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
-                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+                    tableName, tableName);
         }
 
         if (insertStmt.isOverwrite()) {

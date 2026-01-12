@@ -14,25 +14,40 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 public class CancelRefreshMaterializedViewStmt extends DdlStmt {
-    private final TableName mvName;
+    private TableRef tableRef;
     private final boolean force;
 
-    public CancelRefreshMaterializedViewStmt(TableName mvName, boolean force) {
-        this(mvName, force, NodePosition.ZERO);
+    public CancelRefreshMaterializedViewStmt(TableRef tableRef, boolean force) {
+        this(tableRef, force, NodePosition.ZERO);
     }
 
-    public CancelRefreshMaterializedViewStmt(TableName mvName, boolean force, NodePosition pos) {
+    public CancelRefreshMaterializedViewStmt(TableRef tableRef, boolean force, NodePosition pos) {
         super(pos);
-        this.mvName = mvName;
+        this.tableRef = tableRef;
         this.force = force;
     }
 
-    public TableName getMvName() {
-        return mvName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getMvName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public boolean isForce() {

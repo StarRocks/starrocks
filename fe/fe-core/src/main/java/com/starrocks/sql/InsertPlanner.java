@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -451,7 +452,8 @@ public class InsertPlanner {
                 session.getSessionVariable().setPreferComputeNode(false);
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = insertStmt.getTableName();
+                TableRef tableRef = insertStmt.getTableRef();
+                TableName catalogDbTable = TableName.fromTableRef(tableRef);
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
@@ -722,8 +724,11 @@ public class InsertPlanner {
                 ExpressionAnalyzer.analyzeExpression(expr,
                         new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                                 insertStatement.getTargetTable().getBaseSchema().stream()
-                                        .map(col -> new Field(col.getName(),
-                                                col.getType(), insertStatement.getTableName(), null))
+                                        .map(col -> {
+                                            TableRef tableRef = insertStatement.getTableRef();
+                                            TableName tableName = TableName.fromTableRef(tableRef);
+                                            return new Field(col.getName(), col.getType(), tableName, null);
+                                        })
                                         .collect(Collectors.toList()))), session);
 
                 List<SlotRef> slots = new ArrayList<>();

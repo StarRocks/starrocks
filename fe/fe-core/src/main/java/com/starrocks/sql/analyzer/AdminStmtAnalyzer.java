@@ -220,7 +220,7 @@ public class AdminStmtAnalyzer {
 
         @Override
         public Void visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, ConnectContext context) {
-            statement.getTableName().normalization(context);
+            statement.setTableRef(AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context));
             return null;
         }
 

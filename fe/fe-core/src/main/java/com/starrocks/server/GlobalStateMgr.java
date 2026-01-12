@@ -242,6 +242,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.automv.lifecycle.MVLifecycleManager;
 import com.starrocks.sql.automv.qe.RecommendationsTaskManager;
@@ -2695,7 +2696,12 @@ public class GlobalStateMgr {
     }
 
     public void refreshExternalTable(ConnectContext context, RefreshTableStmt stmt) throws DdlException {
-        TableName tableName = stmt.getTableName();
+        TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new DdlException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
         List<String> partitionNames = stmt.getPartitions();
         refreshExternalTable(context, tableName, partitionNames);
         refreshOthersFeTable(tableName, partitionNames, true);

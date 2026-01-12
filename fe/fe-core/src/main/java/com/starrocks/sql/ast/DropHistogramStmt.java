@@ -15,31 +15,46 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 
 public class DropHistogramStmt extends StatementBase {
-    private final TableName tbl;
+    private TableRef tableRef;
     private List<String> columnNames;
     private final List<Expr> columns;
 
     private boolean isExternal = false;
 
-    public DropHistogramStmt(TableName tbl, List<Expr> columns) {
-        this(tbl, columns, NodePosition.ZERO);
+    public DropHistogramStmt(TableRef tableRef, List<Expr> columns) {
+        this(tableRef, columns, NodePosition.ZERO);
     }
 
-    public DropHistogramStmt(TableName tbl, List<Expr> columns, NodePosition pos) {
+    public DropHistogramStmt(TableRef tableRef, List<Expr> columns, NodePosition pos) {
         super(pos);
-        this.tbl = tbl;
+        this.tableRef = tableRef;
         this.columns = columns;
     }
 
-    public TableName getTableName() {
-        return tbl;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<String> getColumnNames() {

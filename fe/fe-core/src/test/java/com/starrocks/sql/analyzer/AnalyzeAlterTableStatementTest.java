@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -25,7 +24,9 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CompactionClause;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
@@ -76,7 +77,9 @@ public class AnalyzeAlterTableStatementTest {
     public void testNoClause() {
         assertThrows(SemanticException.class, () -> {
             List<AlterClause> ops = Lists.newArrayList();
-            AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+            AlterTableStmt alterTableStmt = new AlterTableStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                            null, NodePosition.ZERO), ops);
             AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
         });
     }
@@ -94,7 +97,9 @@ public class AnalyzeAlterTableStatementTest {
             List<AlterClause> ops = Lists.newArrayList();
             NodePosition pos = new NodePosition(1, 23, 1, 48);
             ops.add(new CompactionClause(true, pos));
-            AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+            AlterTableStmt alterTableStmt = new AlterTableStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                            null, NodePosition.ZERO), ops);
             AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
         });
     }

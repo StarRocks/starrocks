@@ -520,7 +520,7 @@ public class HiveMetadata implements ConnectorMetadata {
         Table table = getTable(context, stmt.getDbName(), stmt.getTableName());
         if (table == null) {
             throw new StarRocksConnectorException(
-                    "Failed to load hive table: " + stmt.getTbl().toString());
+                    "Failed to load hive table: " + stmt.getTableName());
         }
         HiveTable hiveTable = (HiveTable) table;
         HiveAlterTableExecutor executor = new HiveAlterTableExecutor(stmt, hiveTable, context, hmsOps);

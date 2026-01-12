@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 /**
@@ -23,17 +22,33 @@ import com.starrocks.sql.parser.NodePosition;
  * 3.SYNC is not supported and ASYNC is not allow changed to SYNC
  */
 public class AlterMaterializedViewStmt extends DdlStmt {
-    private final TableName mvName;
+    private TableRef mvTableRef;
     private AlterTableClause alterTableClause;
 
-    public AlterMaterializedViewStmt(TableName mvName, AlterTableClause alterTableClause, NodePosition pos) {
+    public AlterMaterializedViewStmt(TableRef mvTableRef, AlterTableClause alterTableClause, NodePosition pos) {
         super(pos);
-        this.mvName = mvName;
+        this.mvTableRef = mvTableRef;
         this.alterTableClause = alterTableClause;
     }
 
-    public TableName getMvName() {
-        return mvName;
+    public TableRef getMvTableRef() {
+        return mvTableRef;
+    }
+
+    public void setMvTableRef(TableRef mvTableRef) {
+        this.mvTableRef = mvTableRef;
+    }
+
+    public String getCatalogName() {
+        return mvTableRef == null ? null : mvTableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return mvTableRef == null ? null : mvTableRef.getDbName();
+    }
+
+    public String getMvName() {
+        return mvTableRef == null ? null : mvTableRef.getTableName();
     }
 
     public AlterTableClause getAlterTableClause() {

@@ -20,6 +20,7 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
@@ -82,6 +83,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UserAuthOption;
@@ -534,10 +536,12 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
         StringBuilder sb = new StringBuilder();
 
         sb.append("EXPORT TABLE ");
-        if (stmt.getTblName() == null) {
+        if (stmt.getTableRef() == null) {
             sb.append("non-exist");
         } else {
-            sb.append(stmt.getTblName().toSql());
+            TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
+                    stmt.getTableName(), stmt.getTableRef().getPos());
+            sb.append(tableName.toSql());
         }
 
         if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
@@ -1027,7 +1031,10 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
         } else if (insert.useBlackHoleTableAsTargetTable()) {
             sb.append("blackhole()");
         } else {
-            sb.append(insert.getTableName().toSql());
+            TableRef tableRef = insert.getTableRef();
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            sb.append(tableName.toSql());
         }
         sb.append(" ");
 
@@ -1091,7 +1098,10 @@ public class AST2StringVisitor implements AstVisitorEPack<String, Void> {
     public String visitDeleteStatement(DeleteStmt delete, Void context) {
         StringBuilder sb = new StringBuilder();
         sb.append("DELETE FROM ");
-        sb.append(delete.getTableName().toSql());
+        TableRef tableRef = delete.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        sb.append(tableName.toSql());
 
         if (delete.getWherePredicate() != null) {
             sb.append(" WHERE ");

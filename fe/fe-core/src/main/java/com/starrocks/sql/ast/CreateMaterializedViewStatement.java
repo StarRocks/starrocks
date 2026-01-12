@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.TableName;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -47,7 +46,7 @@ import java.util.Map;
  */
 public class CreateMaterializedViewStatement extends DdlStmt {
 
-    private TableName tableName;
+    private TableRef tableRef;
     private final List<ColWithComment> colWithComments;
     private final List<IndexDef> indexDefs;
     private boolean ifNotExists;
@@ -117,7 +116,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // partition contains transform function.
     private boolean isRefBaseTablePartitionWithTransform = false;
 
-    public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
+    public CreateMaterializedViewStatement(TableRef tableRef, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
                                            String comment,
@@ -132,7 +131,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            String originalDBName,
                                            NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.colWithComments = colWithComments;
         this.indexDefs = indexDefs;
         this.ifNotExists = ifNotExists;
@@ -148,12 +147,24 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.originalDBName = originalDBName;
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public void setTableName(TableName tableName) {
-        this.tableName = tableName;
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTblName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<ColWithComment> getColWithComments() {

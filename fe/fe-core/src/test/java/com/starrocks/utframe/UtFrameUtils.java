@@ -1494,7 +1494,7 @@ public class UtFrameUtils {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
@@ -1506,7 +1506,7 @@ public class UtFrameUtils {
                     }
                 } else if (stmt instanceof DeleteStmt) {
                     DeleteStmt delete = (DeleteStmt) stmt;
-                    TableName tableName = delete.getTableName();
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(delete.getTableRef());
                     Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));

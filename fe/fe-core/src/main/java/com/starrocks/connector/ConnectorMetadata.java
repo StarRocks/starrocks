@@ -20,7 +20,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -302,8 +301,7 @@ public interface ConnectorMetadata {
     }
 
     default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
-        TableName dbTableName = stmt.getTbl();
-        String dbName = dbTableName.getDb();
+        String dbName = stmt.getDbName();
         Database db = getDb(context, dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);

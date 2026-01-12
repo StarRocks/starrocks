@@ -19,7 +19,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.failover.FailoverGroup;
 import com.starrocks.persist.ColumnIdExpr;
@@ -37,9 +36,11 @@ import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
@@ -90,8 +91,9 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
     }
 
     private static CreateTableStmt getCreateTableStmt(Database database, OlapTable table) {
-        TableName tableName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                database.getFullName(), table.getName());
+        QualifiedName qualifiedName = QualifiedName.of(Lists.newArrayList(
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, database.getFullName(), table.getName()));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         List<Column> columns = table.getBaseSchema();
         List<String> keysColumnNames = columns.stream().filter(Column::isKey).map(Column::getName)
                 .collect(Collectors.toList());
@@ -107,7 +109,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
         Map<String, String> properties = getProperties(table);
         List<OrderByElement> orderByElements = getSortKeysColumnNames(table);
 
-        CreateTableStmt createTableStmt = new CreateTableStmt(true, false, tableName, columnDefs, indexDefs,
+        CreateTableStmt createTableStmt = new CreateTableStmt(true, false, tableRef, columnDefs, indexDefs,
                 engine, "utf8", keysDesc, partitionDesc, distributionDesc, properties, null,
                 table.getComment(), null, orderByElements, NodePosition.ZERO);
 

@@ -81,6 +81,8 @@ import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -498,6 +500,16 @@ public class IcebergMetadataTest extends TableTestBase {
         }
     }
 
+    private TableRef createTableRef(TableName tableName) {
+        List<String> parts = Lists.newArrayList();
+        if (tableName.getCatalog() != null) {
+            parts.add(tableName.getCatalog());
+        }
+        parts.add(tableName.getDb());
+        parts.add(tableName.getTbl());
+        return new TableRef(QualifiedName.of(parts), null, NodePosition.ZERO);
+    }
+
     @Test
     public void testNormalCreateDb() throws AlreadyExistsException, DdlException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
@@ -605,8 +617,9 @@ public class IcebergMetadataTest extends TableTestBase {
         };
 
         try {
-            metadata.dropTable(connectContext, new DropTableStmt(false, new TableName(CATALOG_NAME,
-                    "iceberg_db", "table1"), true));
+            metadata.dropTable(connectContext, new DropTableStmt(false,
+                    new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                            "iceberg_db", "table1")), null, NodePosition.ZERO), true));
         } catch (Exception e) {
             Assertions.fail();
         }
@@ -620,8 +633,9 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
         try {
-            metadata.dropTable(connectContext, new DropTableStmt(false, new TableName(CATALOG_NAME,
-                    "iceberg_db", "table1"), true));
+            metadata.dropTable(connectContext, new DropTableStmt(false,
+                    new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                            "iceberg_db", "table1")), null, NodePosition.ZERO), true));
         } catch (Exception e) {
             Assertions.fail();
         }
@@ -1626,7 +1640,7 @@ public class IcebergMetadataTest extends TableTestBase {
         List<AlterClause> clauses = Lists.newArrayList();
         clauses.add(addColumnClause);
         clauses.add(addColumnsClause);
-        AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
+        AlterTableStmt stmt = new AlterTableStmt(createTableRef(tableName), clauses);
         metadata.alterTable(connectContext, stmt);
         clauses.clear();
 
@@ -1634,7 +1648,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ColumnDef c4 = new ColumnDef("col4", new TypeDef(TypeFactory.createType(PrimitiveType.INT)), false);
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
-        AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
+        AlterTableStmt stmtC4 = new AlterTableStmt(createTableRef(tableName), clauses);
         Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(connectContext, stmtC4));
         clauses.clear();
 
@@ -1648,13 +1662,13 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(dropColumnClause);
         clauses.add(columnRenameClause);
         clauses.add(modifyColumnClause);
-        metadata.alterTable(connectContext, new AlterTableStmt(tableName, clauses));
+        metadata.alterTable(connectContext, new AlterTableStmt(createTableRef(tableName), clauses));
 
         // rename table
         clauses.clear();
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
-        metadata.alterTable(connectContext, new AlterTableStmt(tableName, clauses));
+        metadata.alterTable(connectContext, new AlterTableStmt(createTableRef(tableName), clauses));
 
         // modify table properties/comment
         clauses.clear();
@@ -1667,7 +1681,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
         clauses.add(modifyTablePropertiesClause);
         clauses.add(alterTableCommentClause);
-        metadata.alterTable(connectContext, new AlterTableStmt(tableName, clauses));
+        metadata.alterTable(connectContext, new AlterTableStmt(createTableRef(tableName), clauses));
 
         // modify empty properties
         clauses.clear();
@@ -1675,7 +1689,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
         clauses.add(emptyPropertiesClause);
         Assertions.assertThrows(DdlException.class, () -> metadata.alterTable(
-                connectContext, new AlterTableStmt(tableName, clauses)));
+                connectContext, new AlterTableStmt(createTableRef(tableName), clauses)));
 
         // modify unsupported properties
         clauses.clear();
@@ -1685,7 +1699,7 @@ public class IcebergMetadataTest extends TableTestBase {
         ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
         clauses.add(invalidCompressionClause);
         Assertions.assertThrows(DdlException.class,
-                () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses)));
+                () -> metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses)));
 
         // add & drop partition columns
         {
@@ -1694,13 +1708,13 @@ public class IcebergMetadataTest extends TableTestBase {
             AddPartitionColumnClause addPartitionColumnClause =
                     new AddPartitionColumnClause(List.of(partitionSlot), NodePosition.ZERO);
             clauses.add(addPartitionColumnClause);
-            metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
+            metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
 
             clauses.clear();
             DropPartitionColumnClause dropPartitionColumnClause = new DropPartitionColumnClause(List.of(partitionSlot),
                     NodePosition.ZERO);
             clauses.add(dropPartitionColumnClause);
-            metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
+            metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
         }
         // add & drop transformed partition columns
         {
@@ -1725,10 +1739,10 @@ public class IcebergMetadataTest extends TableTestBase {
                 if (badFunctions.contains(fn)) {
                     Assertions.assertThrows(SemanticException.class,
                             () -> metadata.alterTable(new ConnectContext(),
-                                    new AlterTableStmt(tableName, clauses)));
+                                    new AlterTableStmt(createTableRef(tableName), clauses)));
                     continue;
                 } else {
-                    metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
+                    metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
                 }
 
                 clauses.clear();
@@ -1738,9 +1752,9 @@ public class IcebergMetadataTest extends TableTestBase {
                 if (badFunctions.contains(fn)) {
                     Assertions.assertThrows(SemanticException.class,
                             () -> metadata.alterTable(new ConnectContext(),
-                                    new AlterTableStmt(tableName, clauses)));
+                                    new AlterTableStmt(createTableRef(tableName), clauses)));
                 } else {
-                    metadata.alterTable(new ConnectContext(), new AlterTableStmt(tableName, clauses));
+                    metadata.alterTable(new ConnectContext(), new AlterTableStmt(createTableRef(tableName), clauses));
                 }
             }
         }
@@ -2104,8 +2118,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
-                List.of(clause)),
+                createTableRef(tableName), List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
                 HDFS_ENVIRONMENT);
@@ -2119,8 +2132,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
-                List.of(clause)),
+                createTableRef(tableName), List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
                 HDFS_ENVIRONMENT);
@@ -2134,8 +2146,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
-                List.of(clause)),
+                createTableRef(tableName), List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
                 HDFS_ENVIRONMENT);
@@ -2179,8 +2190,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
-                List.of(clause)),
+                createTableRef(tableName), List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
                 HDFS_ENVIRONMENT);

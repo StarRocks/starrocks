@@ -14,22 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
-import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.statistic.MultiColumnStatsMeta;
 
-import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
     public ShowMultiColumnStatsMetaStmt(Predicate predicate, List<OrderByElement> orderByElements,
@@ -38,38 +27,6 @@ public class ShowMultiColumnStatsMetaStmt extends ShowStmt {
         this.predicate = predicate;
         this.limitElement = limitElement;
         this.orderByElements = orderByElements;
-    }
-
-    public static List<String> showMultiColumnStatsMeta(ConnectContext context, MultiColumnStatsMeta meta)
-            throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "", "", "", "", "");
-        long dbId = meta.getDbId();
-        long tableId = meta.getTableId();
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            throw new MetaNotFoundException("No found database: " + dbId);
-        }
-        row.set(0, db.getOriginName());
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
-        if (table == null) {
-            throw new MetaNotFoundException("No found table: " + tableId);
-        }
-        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
-        try {
-            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
-        } catch (AccessDeniedException e) {
-            return null;
-        }
-
-        row.set(1, table.getName());
-        row.set(2, meta.getColumnIds().stream().map(id -> table.getColumnByUniqueId(id).getName()).toList().toString());
-        row.set(3, meta.getAnalyzeType().name());
-        row.set(4, meta.getStatsTypes().stream().map(Enum::name).collect(Collectors.joining(", ")));
-        row.set(5, meta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        row.set(6, meta.getProperties() == null ? "{}" : meta.getProperties().toString());
-
-        return row;
     }
 
     @Override

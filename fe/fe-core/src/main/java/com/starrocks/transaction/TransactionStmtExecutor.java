@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -290,8 +291,9 @@ public class TransactionStmtExecutor {
                 if (dmlStmt instanceof InsertStmt) {
                     Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
 
+                    TableRef tableRef = dmlStmt.getTableRef();
                     Table targetTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(database.getFullName(), dmlStmt.getTableName().getTbl());
+                            .getTable(database.getFullName(), tableRef.getTableName());
                     // collect table-level metrics
                     TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
                     entity.counterInsertLoadFinishedTotal.increase(1L);
