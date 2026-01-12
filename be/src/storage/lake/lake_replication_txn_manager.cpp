@@ -35,16 +35,22 @@ namespace starrocks::lake {
 
 // Helper function to convert S3 full path to starlet URI
 // Only used for S3 storage type (which supports partitioned prefix feature)
-static std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id) {
+std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id) {
     // S3 URI format: s3://bucket/path...
-    // Starlet URI format: staros://shard_id/bucket/path...
-    // We need to replace "s3://" with "staros://shard_id/"
-
+    // Starlet URI format: staros://shard_id/path...
+    // We need to replace "s3://bucket/" with "staros://shard_id/"
     std::string_view path = s3_path;
     if (path.find("s3://") == 0) {
         // Remove "s3://" prefix
-        path.remove_prefix(5); // length of "s3://"
-        // Build starlet URI: staros://shard_id/bucket/path...
+        path.remove_prefix(5);
+        // Find the first "/" after bucket name and skip the bucket part
+        size_t first_slash_pos = path.find('/');
+        if (first_slash_pos != std::string_view::npos) {
+            path.remove_prefix(first_slash_pos + 1);
+        } else {
+            path = std::string_view();
+        }
+        // Build starlet URI: staros://shard_id/path...
         return build_starlet_uri(shard_id, path);
     }
 

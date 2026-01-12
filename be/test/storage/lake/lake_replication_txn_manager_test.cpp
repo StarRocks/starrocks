@@ -375,6 +375,46 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_normal_encrypted) {
     EXPECT_EQ(_src_version, status_or.value()->version());
 }
 
+TEST(LakeReplicationTxnManagerTest, test_convert_s3_path_to_starlet_uri) {
+    // Test case from user: convert S3 path to starlet URI
+    std::string s3_path =
+            "s3://cdp-hangzhou/cdp-hangzhou/5/186d104c-7078-4d21-ae3f-087873046b97/db135540/135542/135541/meta/"
+            "0000000000021178_0000000000000002.meta";
+    int64_t shard_id = 12345;
+
+    std::string expected_uri =
+            "staros://12345/cdp-hangzhou/5/186d104c-7078-4d21-ae3f-087873046b97/db135540/135542/135541/meta/"
+            "0000000000021178_0000000000000002.meta";
+    std::string actual_uri = lake::convert_s3_path_to_starlet_uri(s3_path, shard_id);
+
+    EXPECT_EQ(expected_uri, actual_uri);
+}
+
+TEST(LakeReplicationTxnManagerTest, test_convert_s3_path_to_starlet_uri_edge_cases) {
+    // Test various edge cases
+    int64_t shard_id = 10086;
+
+    // Normal S3 path: s3://bucket/path -> staros://shard_id/path
+    EXPECT_EQ("staros://10086/path/file.txt",
+              lake::convert_s3_path_to_starlet_uri("s3://bucket/path/file.txt", shard_id));
+
+    // S3 path with nested bucket-like structure
+    EXPECT_EQ("staros://10086/folder/file.txt",
+              lake::convert_s3_path_to_starlet_uri("s3://bucket/folder/file.txt", shard_id));
+
+    // S3 path with only bucket, no path after
+    EXPECT_EQ("staros://10086", lake::convert_s3_path_to_starlet_uri("s3://bucket", shard_id));
+
+    // S3 path with bucket and trailing slash
+    EXPECT_EQ("staros://10086", lake::convert_s3_path_to_starlet_uri("s3://bucket/", shard_id));
+
+    // Invalid S3 path (not starting with s3://) - should still convert but log warning
+    EXPECT_EQ("staros://10086/invalid/path", lake::convert_s3_path_to_starlet_uri("invalid/path", shard_id));
+
+    // Empty path after s3://
+    EXPECT_EQ("staros://10086", lake::convert_s3_path_to_starlet_uri("s3://", shard_id));
+}
+
 INSTANTIATE_TEST_SUITE_P(SharedDataReplicationTxnManagerTest, SharedDataReplicationTxnManagerTest,
                          testing::Values(KeysType::DUP_KEYS, KeysType::AGG_KEYS, KeysType::PRIMARY_KEYS));
 

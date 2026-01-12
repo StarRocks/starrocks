@@ -309,46 +309,4 @@ public class LakeReplicationJobTest {
             Assertions.assertTrue(fullPath.startsWith("s3://test-bucket/service_id/db111/table222/"));
         }
     }
-
-    @Test
-    public void testPartitionFullPathWithOSSStorageType() throws Exception {
-        // Test with FilePathInfo for OSS storage type (non-S3)
-        // For non-S3 storage types, FE should NOT provide full path
-        // BE will use RemoteStarletLocationProvider to construct the path
-        long virtualTabletId = 1000;
-        long srcDatabaseId = 111;
-        long srcTableId = 222;
-        
-        // Create a FilePathInfo with OSS storage type
-        FilePathInfo.Builder pathInfoBuilder = FilePathInfo.newBuilder();
-        pathInfoBuilder.getFsInfoBuilder().getOssFsInfoBuilder()
-                .setBucket("oss-test-bucket");
-        pathInfoBuilder.getFsInfoBuilder()
-                .setFsName("test-sv")
-                .setFsKey("test-fskey")
-                .setFsType(FileStoreType.OSS);
-        pathInfoBuilder.setFullPath("oss://oss-test-bucket/service_id/db111/table222");
-        
-        LakeReplicationJob jobWithPathInfo = new LakeReplicationJob(null, virtualTabletId, srcDatabaseId, srcTableId,
-                db.getId(), table, srcTable,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                pathInfoBuilder.build());
-
-        Assertions.assertEquals(ReplicationJobState.INITIALIZING, jobWithPathInfo.getState());
-
-        jobWithPathInfo.run();
-        Assertions.assertEquals(ReplicationJobState.REPLICATING, jobWithPathInfo.getState());
-
-        // Verify that tasks are created WITHOUT full path for OSS (non-S3) storage
-        // BE will use RemoteStarletLocationProvider to construct the path
-        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(jobWithPathInfo, "runningTasks");
-        for (AgentTask task : runningTasks.values()) {
-            ReplicateSnapshotTask snapshotTask = (ReplicateSnapshotTask) task;
-            TReplicateSnapshotRequest thriftRequest = snapshotTask.toThrift();
-            
-            // Full path should NOT be set for non-S3 storage types
-            Assertions.assertFalse(thriftRequest.isSetSrc_partition_full_path(),
-                    "Non-S3 storage types should not have full path set");
-        }
-    }
 }

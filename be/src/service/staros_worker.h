@@ -107,7 +107,8 @@ private:
 
     static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
 
-    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(const ShardInfo& info);
+    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(
+            const ShardInfo& info, const Configuration* initial_conf = nullptr);
 
     static absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
 

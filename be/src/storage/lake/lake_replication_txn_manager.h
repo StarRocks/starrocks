@@ -88,4 +88,8 @@ private:
 #endif
 };
 
+// Helper function to convert S3 full path to starlet URI
+// Only used for S3 storage type (which supports partitioned prefix feature)
+std::string convert_s3_path_to_starlet_uri(std::string_view s3_path, int64_t shard_id);
+
 } // namespace starrocks::lake
