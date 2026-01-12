@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
@@ -29,6 +31,16 @@ namespace starrocks {
     Status::NotSupported(fmt::format("Cannot cast variant({}) to type: {}",             \
                                      VariantUtil::variant_type_to_string(variant_type), \
                                      logical_type_to_string(logical_type)))
+
+inline std::pair<int64_t, int64_t> split_micros_to_seconds(int64_t micros) {
+    int64_t seconds = micros / USECS_PER_SEC;
+    int64_t microseconds = micros % USECS_PER_SEC;
+    if (microseconds < 0) {
+        microseconds += USECS_PER_SEC;
+        --seconds;
+    }
+    return {seconds, microseconds};
+}
 
 Status cast_variant_to_bool(const VariantRowValue& row, ColumnBuilder<TYPE_BOOLEAN>& result);
 
@@ -49,8 +61,9 @@ inline Status cast_variant_to_date(const VariantRowValue& row, const cctz::time_
     }
     case VariantType::TIMESTAMP_TZ: {
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(micros / USECS_PER_SEC, micros % USECS_PER_SEC, zone);
+        tsv.from_unixtime(seconds, microseconds, zone);
         int year, month, day;
         timestamp::to_date(tsv.timestamp(), &year, &month, &day);
         result.append(DateValue::create(year, month, day));
@@ -75,8 +88,9 @@ inline Status cast_variant_to_time(const VariantRowValue& row, const cctz::time_
     }
     case VariantType::TIMESTAMP_TZ: {
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(micros / USECS_PER_SEC, micros % USECS_PER_SEC, zone);
+        tsv.from_unixtime(seconds, microseconds, zone);
         int hour, minute, second, microsecond;
         tsv.to_time(&hour, &minute, &second, &microsecond);
         int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC + microsecond;
@@ -97,15 +111,17 @@ inline Status cast_variant_to_datetime(const VariantRowValue& row, const cctz::t
         return Status::OK();
     case VariantType::TIMESTAMP_NTZ: {
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros_ntz());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unix_second(micros / USECS_PER_SEC, micros % USECS_PER_SEC);
+        tsv.from_unix_second(seconds, microseconds);
         result.append(tsv);
         return Status::OK();
     }
     case VariantType::TIMESTAMP_TZ: {
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(micros / USECS_PER_SEC, micros % USECS_PER_SEC, zone);
+        tsv.from_unixtime(seconds, microseconds, zone);
         result.append(tsv);
         return Status::OK();
     }
