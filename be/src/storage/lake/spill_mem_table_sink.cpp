@@ -94,8 +94,8 @@ Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const S
     std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
         tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
-                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(), schema.get(),
-                i, &quit_flag, get_spiller()->metrics().write_io_timer));
+                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), schema.get(), i, &quit_flag,
+                get_spiller()->metrics().write_io_timer));
     }
     // 4. Submit all tasks to thread pool
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
