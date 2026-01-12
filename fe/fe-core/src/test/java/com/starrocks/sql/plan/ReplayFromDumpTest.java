@@ -1181,18 +1181,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(replayPair.second, "  1:OlapScanNode\n"
                 + "     TABLE: rpt_crm_reach_goal_cust_all_d");
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testMemoGroupRefSelf() throws Exception {
-        String dumpString = getDumpInfoFromFile("query_dump/memo_self_reference");
-        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
-        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
-                TExplainLevel.NORMAL);
-        PlanTestBase.assertContains(replayPair.second, "0:OlapScanNode\n"
-                + "     TABLE: llm_account_scores");
-    }
 
     @Test
     public void testReorderMissingChildStats() throws Exception {
@@ -1203,5 +1191,4 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(replayPair.second, "5:OlapScanNode\n" +
                 "     TABLE: tbl_5");
     }
->>>>>>> e2013ddf0d ([BugFix] Fix NPE in RBO join reorder when child statistics are missing (#67693))
 }
