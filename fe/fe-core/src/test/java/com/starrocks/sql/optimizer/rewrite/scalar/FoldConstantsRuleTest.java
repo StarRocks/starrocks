@@ -210,4 +210,73 @@ public class FoldConstantsRuleTest {
         assertEquals(OB_FALSE, rule.apply(bpo10, null));
 
     }
+
+    @Test
+    public void testNonDeterministicFunctionsNotFolded() {
+        // Test that non-deterministic functions like uuid() and rand() are not folded
+        // even when they have constant children
+        
+        // Test uuid() - should not be folded
+        CallOperator uuidCall = new CallOperator(
+                FunctionSet.UUID, 
+                VarcharType.VARCHAR, 
+                Lists.newArrayList(ConstantOperator.createInt(1)) // unique ID added by translator
+        );
+        
+        Function uuidFn = new Function(new FunctionName(FunctionSet.UUID),
+                new Type[] {IntegerType.INT}, VarcharType.VARCHAR, false);
+        
+        new Expectations(uuidCall) {
+            {
+                uuidCall.getFunction();
+                result = uuidFn;
+            }
+        };
+        
+        ScalarOperator result = rule.apply(uuidCall, new ScalarOperatorRewriteContext());
+        assertEquals(OperatorType.CALL, result.getOpType());
+        assertEquals(uuidCall, result);
+        
+        // Test rand() - should not be folded
+        CallOperator randCall = new CallOperator(
+                FunctionSet.RAND,
+                TypeFactory.createType(PrimitiveType.DOUBLE),
+                Lists.newArrayList(ConstantOperator.createInt(2)) // unique ID added by translator
+        );
+        
+        Function randFn = new Function(new FunctionName(FunctionSet.RAND),
+                new Type[] {IntegerType.INT}, TypeFactory.createType(PrimitiveType.DOUBLE), false);
+        
+        new Expectations(randCall) {
+            {
+                randCall.getFunction();
+                result = randFn;
+            }
+        };
+        
+        ScalarOperator randResult = rule.apply(randCall, new ScalarOperatorRewriteContext());
+        assertEquals(OperatorType.CALL, randResult.getOpType());
+        assertEquals(randCall, randResult);
+        
+        // Test random() - should not be folded
+        CallOperator randomCall = new CallOperator(
+                FunctionSet.RANDOM,
+                TypeFactory.createType(PrimitiveType.DOUBLE),
+                Lists.newArrayList(ConstantOperator.createInt(3)) // unique ID added by translator
+        );
+        
+        Function randomFn = new Function(new FunctionName(FunctionSet.RANDOM),
+                new Type[] {IntegerType.INT}, TypeFactory.createType(PrimitiveType.DOUBLE), false);
+        
+        new Expectations(randomCall) {
+            {
+                randomCall.getFunction();
+                result = randomFn;
+            }
+        };
+        
+        ScalarOperator randomResult = rule.apply(randomCall, new ScalarOperatorRewriteContext());
+        assertEquals(OperatorType.CALL, randomResult.getOpType());
+        assertEquals(randomCall, randomResult);
+    }
 }

@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -330,6 +331,12 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         if (call.isAggregate()) {
+            return call;
+        }
+
+        // Skip non-deterministic functions to avoid infinite rewrite loops
+        // Non-deterministic functions like uuid(), rand() should not be folded
+        if (FunctionSet.nonDeterministicFunctions.contains(call.getFnName())) {
             return call;
         }
 

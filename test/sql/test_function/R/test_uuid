@@ -1,0 +1,19 @@
+-- name: test_uuid
+-- result:
+1
+-- !result
+-- result:
+1
+-- !result
+-- result:
+0
+-- !result
+-- result:
+1
+-- !result
+-- result:
+0
+-- !result
+-- result:
+1	1
+-- !result

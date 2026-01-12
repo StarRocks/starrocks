@@ -1,0 +1,20 @@
+-- name: test_uuid
+-- description: Test uuid() function, especially comparisons that previously caused deadlocks
+
+-- Test basic uuid() call
+select uuid() is not null;
+
+-- Test uuid() != uuid() - this previously caused a deadlock
+select uuid() != uuid();
+
+-- Test uuid() = uuid() 
+select uuid() = uuid();
+
+-- Test uuid() in a more complex expression
+select length(uuid()) > 0;
+
+-- Test uuid() in comparison with itself shouldn't be folded
+select case when uuid() = uuid() then 1 else 0 end;
+
+-- Test multiple uuid() calls in different positions
+select uuid() is not null, uuid() is not null;
