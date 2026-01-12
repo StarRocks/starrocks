@@ -82,8 +82,8 @@ void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
         FragmentContextPtr fragment_ctx_holder = nullptr;
         if (auto* query_ctx = state->query_ctx(); query_ctx != nullptr) {
             fragment_ctx_holder = query_ctx->fragment_mgr()->get(driver->fragment_ctx()->fragment_instance_id());
-            DCHECK(fragment_ctx_holder != nullptr);
         }
+        DCHECK(fragment_ctx_holder != nullptr);
         DriverRawPtr driver_raw = driver.get();
         bool submitted = pipeline_prepare_pool->try_offer(
                 [sync_ctx, driver_raw, fragment_ctx_holder = std::move(fragment_ctx_holder)]() mutable {

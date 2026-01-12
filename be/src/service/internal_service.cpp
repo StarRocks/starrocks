@@ -511,7 +511,11 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     // submit when all prepare tasks successes
     for (int i = 0; i < unique_requests.size(); ++i) {
         auto& fragment_executor = fragment_executors->at(i);
-        Status status = fragment_executor.submit();
+        status = fragment_executor.submit();
+        if (!status.ok()) {
+            query_ctx->cancel(status, true);
+            break;
+        }
     }
 
     status.to_protobuf(response->mutable_status());
