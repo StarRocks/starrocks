@@ -1086,6 +1086,16 @@ public class ExpressionAnalyzer {
             // Handle backward compatibility parameter conversion
             handleBackwardCompatibleParameterConversion(fnName, node);
 
+            // percentile_cont(decimal_value, decimal_rate): auto cast rate to the same DECIMAL type as value
+            // so that BE can rely on identical precision/scale/physical width for the rate argument.
+            if (FunctionSet.PERCENTILE_CONT.equalsIgnoreCase(fnName) && node.getChildren().size() == 2) {
+                Expr valueExpr = node.getChild(0);
+                Expr rateExpr = node.getChild(1);
+                if (valueExpr.getType().isDecimalV3() && rateExpr.getType().isDecimalV3()) {
+                    node.setChild(1, TypeManager.addCastExpr(rateExpr, valueExpr.getType()));
+                }
+            }
+
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);

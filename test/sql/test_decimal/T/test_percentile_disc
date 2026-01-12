@@ -1,0 +1,46 @@
+-- name: test_percentile_disc
+
+DROP TABLE IF EXISTS t_percentile_cont_decimal;
+
+CREATE TABLE t_percentile_cont_decimal (
+    id INT,
+    v DECIMAL64(9,2)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO t_percentile_cont_decimal VALUES
+    (1, 2.00),
+    (2, 3.00),
+    (3, 4.00),
+    (4, 5.00),
+    (5, 6.00);
+
+-- rate is DECIMAL(9,3), FE should auto-cast to DECIMAL(9,2)
+SELECT percentile_cont(v, CAST(0.300 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
+
+-- truncate semantics: [1.00, 1.01], rate=0.50 => 1.005 -> 1.00
+DROP TABLE IF EXISTS t_percentile_cont_decimal_trunc;
+
+CREATE TABLE t_percentile_cont_decimal_trunc (
+    id INT,
+    v DECIMAL64(9,2)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO t_percentile_cont_decimal_trunc VALUES
+    (1, 1.00),
+    (2, 1.01);
+
+SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal_trunc;
+
+-- rate must be constant
+SELECT percentile_cont(v, v) FROM t_percentile_cont_decimal;
+
