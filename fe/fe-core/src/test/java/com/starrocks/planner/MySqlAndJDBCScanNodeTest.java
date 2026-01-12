@@ -98,4 +98,84 @@ public class MySqlAndJDBCScanNodeTest {
                 "(`col` = 'ABC') AND ((`col` NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) " +
                 "OR (`col` = 'ABC'))\n"), nodeString);
     }
+
+    @Test
+    public void testFiltersInPostgreSQLJDBCScanNode() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "postgres");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", "jdbc:postgresql://localhost:5432/testdb");
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "com.postgres.Driver");
+        JDBCTable pgTable = new JDBCTable(1, "order",
+                Collections.singletonList(new Column("user", VarcharType.VARCHAR)), properties);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(pgTable);
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains("TABLE: \"order\""), nodeString);
+        Assertions.assertTrue(nodeString.contains("FROM \"order\""), nodeString);
+    }
+
+    @Test
+    public void testFiltersInPostgresShortURIJDBCScanNode() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "postgres");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", "jdbc:postgres://localhost:5432/testdb");
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "com.postgres.Driver");
+        JDBCTable pgTable = new JDBCTable(1, "order",
+                Collections.singletonList(new Column("user", VarcharType.VARCHAR)), properties);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(pgTable);
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains("TABLE: \"order\""), nodeString);
+        Assertions.assertTrue(nodeString.contains("FROM \"order\""), nodeString);
+    }
+
+    @Test
+    public void testFiltersInOracleJDBCScanNode() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "oracle");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", "jdbc:oracle:thin:@localhost:1521:orcl");
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "oracle.jdbc.driver.OracleDriver");
+        JDBCTable oracleTable = new JDBCTable(1, "select",
+                Collections.singletonList(new Column("group", VarcharType.VARCHAR)), properties);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(oracleTable);
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains("TABLE: \"select\""), nodeString);
+        Assertions.assertTrue(nodeString.contains("FROM \"select\""), nodeString);
+    }
+
+    @Test
+    public void testFiltersInSqlServerJDBCScanNode() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("user", "sa");
+        properties.put("password", "123456");
+        properties.put("jdbc_uri", "jdbc:sqlserver://localhost:1433;databaseName=testdb");
+        properties.put("driver_url", "driver_url");
+        properties.put("checksum", "checksum");
+        properties.put("driver_class", "com.microsoft.sqlserver.jdbc.SQLServerDriver");
+        JDBCTable sqlServerTable = new JDBCTable(1, "table",
+                Collections.singletonList(new Column("index", VarcharType.VARCHAR)), properties);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
+        tupleDesc.setTable(sqlServerTable);
+        JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, sqlServerTable);
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains("TABLE: \"table\""), nodeString);
+        Assertions.assertTrue(nodeString.contains("FROM \"table\""), nodeString);
+    }
 }
