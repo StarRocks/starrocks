@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.combinator.AggStateDesc;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
@@ -1667,7 +1668,7 @@ public abstract class Type implements Cloneable {
                 ScalarType charType = ((ScalarType) this);
                 int charLength = charType.getLength();
                 if (charLength == -1) {
-                    charLength = 64;
+                    charLength = (this.getPrimitiveType() == PrimitiveType.CHAR) ? 255 : 1048576;
                 }
                 // utf8 charset
                 return charLength * 3;
