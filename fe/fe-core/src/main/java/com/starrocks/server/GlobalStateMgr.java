@@ -141,8 +141,7 @@ import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.parser.AstBuilderEPack;
 import com.starrocks.epack.system.LicenseMgr;
 import com.starrocks.epack.system.PortConnectivityCheckerEPack;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
-import com.starrocks.epack.warehouse.WarehouseSlotManager;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -226,7 +225,6 @@ import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
-import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -538,8 +536,9 @@ public class GlobalStateMgr {
     private static GlobalStateMgr RESTORE_STATE = null;
     private static long restoreThreadId = -1;
 
-    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
-    private final BaseSlotManager slotManager;
+    private final ResourceUsageMonitor resourceUsageMonitor = ExtensionManager.getCompoment(ResourceUsageMonitor.class);
+    private final BaseSlotManager slotManager = ExtensionManager.getCompoment(BaseSlotManager.class);
+
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
     private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
@@ -807,7 +806,7 @@ public class GlobalStateMgr {
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.temporaryTableMgr = new TemporaryTableMgr();
-        this.warehouseMgr = new WarehouseManagerEPack();
+        this.warehouseMgr = ExtensionManager.getCompoment(WarehouseManager.class);
         this.historicalNodeMgr = new HistoricalNodeMgr();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
@@ -834,11 +833,9 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
-            this.slotManager = new WarehouseSlotManager(resourceUsageMonitor);
             this.fullVacuumDaemon = new FullVacuumDaemon();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
-            this.slotManager = new SlotManager(resourceUsageMonitor);
         }
 
         this.lockManager = new LockManager();
