@@ -174,7 +174,7 @@ probe_leader()
 {
     local svc=$1
     # find leader under current service and set to FE_LEADER
-    if [[ "$POD_INDEX" -eq 0 ]] ; then
+    if [[ "$POD_INDEX" -eq 0 ]] && [[ "$IS_FE_OBSERVER" == "false" ]]; then
         probe_leader_for_pod0 $svc
     else
         probe_leader_for_podX $svc
