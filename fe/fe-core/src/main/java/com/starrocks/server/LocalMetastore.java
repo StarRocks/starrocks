@@ -120,6 +120,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
@@ -657,14 +658,20 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         String tableName = recoverStmt.getTableName();
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        // Optimistically get table without lock, get the table id for the lock
+        Table shadowTable = getTable(db.getFullName(), tableName);
+        if (shadowTable == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), shadowTable.getId(), LockType.WRITE)) {
+            // check again under lock, make sure it is not changed
             Table table = getTable(db.getFullName(), tableName);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
-
+            if (table.getId() != shadowTable.getId()) {
+                throw new DdlException("Table[" + tableName + "] has been changed. Try again.");
+            }
             if (!table.isOlapOrCloudNativeTable()) {
                 throw new DdlException("table[" + tableName + "] is not OLAP table or LAKE table");
             }
@@ -676,8 +683,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             recycleBin.recoverPartition(db.getId(), olapTable, partitionName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -872,15 +877,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
             throws DdlException {
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            Table table = getTable(db.getFullName(), tableName);
-            CatalogUtils.checkTableExist(db, tableName);
-            CatalogUtils.checkNativeTable(db, table);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
+        // NOTE: no need to do the CatalogUtils.checkTableExist and CatalogUtils.checkNativeTable here,
+        // it will be checked in the following method.
         addPartitions(ctx, db, tableName,
                 addPartitionClause.getResolvedPartitionDescList(),
                 addPartitionClause.isTempPartition(),
@@ -1323,9 +1321,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
         Database db = this.getDb(info.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             Partition partition = info.getPartition();
 
@@ -1376,8 +1372,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -1504,25 +1498,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void replayDropPartition(DropPartitionInfo info) {
         Database db = this.getDb(info.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
     public void replayDropPartitions(DropPartitionsInfo info) {
         Database db = this.getDb(info.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             LOG.info("Begin to unprotect drop partitions. db = " + info.getDbId()
                     + " table = " + info.getTableId()
                     + " partitionNames = " + info.getPartitionNames()
@@ -1546,8 +1534,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     olapTable.dropPartition(dbId, partitionName, isForceDrop);
                 }
             });
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -1558,13 +1544,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void replayRecoverPartition(RecoverInfo info) {
         long dbId = info.getDbId();
         Database db = getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             Table table = getTable(db.getId(), info.getTableId());
             recycleBin.replayRecoverPartition((OlapTable) table, info.getPartitionId());
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -1689,9 +1671,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
         Database db = this.getDb(info.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             if (olapTable == null) {
                 LOG.warn("replay add sub partition failed, table is null, info: {}", info);
@@ -1733,8 +1713,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -2357,9 +2335,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             LOG.warn("replay add replica failed, db is null, info: {}", info);
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
             if (olapTable == null) {
                 LOG.warn("replay add replica failed, table is null, info: {}", info);
@@ -2394,8 +2370,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     info.getLastSuccessVersion(),
                     info.getMinReadableVersion());
             tablet.addReplica(replica);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -2405,9 +2379,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             LOG.warn("replay update replica failed, db is null, info: {}", info);
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
             if (olapTable == null) {
                 LOG.warn("replay update replica failed, table is null, info: {}", info);
@@ -2435,8 +2407,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             replica.updateRowCount(info.getVersion(), info.getMinReadableVersion(), info.getDataSize(), info.getRowCount());
             replica.setBad(false);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -2446,9 +2416,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             LOG.warn("replay delete replica failed, db is null, info: {}", info);
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), info.getTableId(), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
             if (olapTable == null) {
                 LOG.warn("replay delete replica failed, table is null, info: {}", info);
@@ -2470,8 +2438,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 return;
             }
             tablet.deleteReplicaByBackendId(info.getBackendId());
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -2724,15 +2690,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 continue;
             }
 
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
-            try {
-                for (Table table : db.getTables()) {
+            List<Long> tableIds = db.getTables().stream().map(Table::getId).collect(Collectors.toList());
+            for (Long tableId : tableIds) {
+                try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), tableId, LockType.READ)) {
+                    Table table = getTable(db.getId(), tableId);
+                    if (table == null) {
+                        continue;
+                    }
                     if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
-
-                    long tableId = table.getId();
                     OlapTable olapTable = (OlapTable) table;
                     PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -2757,10 +2724,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             storageMediumMap.put(partitionId, dataProperty.getStorageMedium());
                         }
                     } // end for partitions
-                } // end for tables
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
-            }
+                }
+            } // end for tables
         } // end for dbs
 
         // handle data property changed
@@ -2774,6 +2739,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // use try lock to avoid blocking a long time.
             // if block too long, backend report rpc will timeout.
+            // TODO: remove the DB level WRITE lock
             Locker locker = new Locker();
             if (!locker.tryLockDatabase(db.getId(), LockType.WRITE, Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 LOG.warn("try get db {}-{} write lock but failed when checking backend storage medium",
@@ -3546,15 +3512,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String newPartitionName = tableInfo.getNewPartitionName();
 
         Database db = getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), tableId, LockType.WRITE)) {
             OlapTable table = (OlapTable) getTable(db.getId(), tableId);
             Partition partition = table.getPartition(partitionId);
             table.renamePartition(partition.getName(), newPartitionName);
             LOG.info("replay rename partition[{}] to {}", partition.getName(), newPartitionName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -3651,14 +3613,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String colName = columnRenameInfo.getColumnName();
         String newColName = columnRenameInfo.getNewColumnName();
         Database db = getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), tableId, LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), tableId);
             olapTable.renameColumn(colName, newColName);
             LOG.info("replay rename column[{}] to {}", colName, newColName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -4230,12 +4188,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (db == null) {
             throw new DdlException("the DB " + dbName + " is not exist");
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
+        // Optimistically get table by name under no lock.
+        Table shadowTable = db.getTable(tableName);
+        if (shadowTable == null) {
+            throw new DdlException("the DB " + dbName + " table: " + tableName + " doesn't exist");
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), shadowTable.getId(), LockType.READ)) {
             Table table = getTable(db.getFullName(), tableName);
             if (table == null) {
-                throw new DdlException("the DB " + dbName + " table: " + tableName + "isn't  exist");
+                throw new DdlException("the DB " + dbName + " table: " + tableName + " doesn't exist");
+            }
+            if (table.getId() != shadowTable.getId()) {
+                throw new DdlException("the DB " + dbName + " table: " + tableName + " has changed, please retry again");
             }
 
             if (table instanceof OlapTable) {
@@ -4252,8 +4216,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
                 GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
     }
 
@@ -4302,9 +4264,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String comment = info.getComment();
 
         Database db = getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), tableId, LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), tableId);
             if (opCode == OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM) {
                 if (olapTable != null &&
@@ -4379,8 +4339,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         } catch (Exception ex) {
             LOG.warn("The replay log failed and this log was ignored.", ex);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -4719,9 +4677,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void replayTruncateTable(TruncateTableInfo info) {
         Database db = getDb(info.getDbId());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        long tblId = info.getTblId();
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), tblId, LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTblId());
             truncateTableInternal(info.getDbId(), olapTable, info.getPartitions(), info.isEntireTable(), true);
 
@@ -4753,8 +4710,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -4777,39 +4732,50 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // in new version, replica info is saved here.
         // but we need to get replica from db->tbl->partition->...
         List<ReplicaPersistInfo> replicaPersistInfos = backendTabletsInfo.getReplicaPersistInfos();
+        // re-order the replicaPersistInfos by dbId and tableId to reduce lock times
+        Map<Long, Map<Long, List<ReplicaPersistInfo>>> replicaInfoMap = Maps.newHashMap();
         for (ReplicaPersistInfo info : replicaPersistInfos) {
             long dbId = info.getDbId();
-            Database db = getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
-            try {
-                OlapTable tbl = (OlapTable) getTable(db.getId(), info.getTableId());
-                if (tbl == null) {
+            long tableId = info.getTableId();
+            replicaInfoMap
+                    .computeIfAbsent(dbId, k -> Maps.newHashMap())
+                    .computeIfAbsent(tableId, k -> Lists.newArrayList())
+                    .add(info);
+        }
+        for (Map.Entry<Long, Map<Long, List<ReplicaPersistInfo>>> entry : replicaInfoMap.entrySet()) {
+            long dbId = entry.getKey();
+            for (Map.Entry<Long, List<ReplicaPersistInfo>> tableEntry : entry.getValue().entrySet()) {
+                long tableId = tableEntry.getKey();
+                Database db = getDb(dbId);
+                if (db == null) {
                     continue;
                 }
-                Partition partition = tbl.getPartition(info.getPartitionId());
-                if (partition == null) {
-                    continue;
+                try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+                    OlapTable tbl = (OlapTable) getTable(db.getId(), tableId);
+                    if (tbl == null) {
+                        continue;
+                    }
+                    for (ReplicaPersistInfo info : tableEntry.getValue()) {
+                        Partition partition = tbl.getPartition(info.getPartitionId());
+                        if (partition == null) {
+                            continue;
+                        }
+                        MaterializedIndex mindex = partition.getDefaultPhysicalPartition().getIndex(info.getIndexId());
+                        if (mindex == null) {
+                            continue;
+                        }
+                        LocalTablet tablet = (LocalTablet) mindex.getTablet(info.getTabletId());
+                        if (tablet == null) {
+                            continue;
+                        }
+                        Replica replica = tablet.getReplicaById(info.getReplicaId());
+                        if (replica != null) {
+                            replica.setBad(true);
+                            LOG.debug("get replica {} of tablet {} on backend {} to bad when replaying",
+                                    info.getReplicaId(), info.getTabletId(), info.getBackendId());
+                        }
+                    }
                 }
-                MaterializedIndex mindex = partition.getDefaultPhysicalPartition().getIndex(info.getIndexId());
-                if (mindex == null) {
-                    continue;
-                }
-                LocalTablet tablet = (LocalTablet) mindex.getTablet(info.getTabletId());
-                if (tablet == null) {
-                    continue;
-                }
-                Replica replica = tablet.getReplicaById(info.getReplicaId());
-                if (replica != null) {
-                    replica.setBad(true);
-                    LOG.debug("get replica {} of tablet {} on backend {} to bad when replaying",
-                            info.getReplicaId(), info.getTabletId(), info.getBackendId());
-                }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
     }
@@ -4845,14 +4811,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         boolean isStrictRange = clause.isStrictRange();
         boolean useTempPartitionName = clause.useTempPartitionName();
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        Table shadowTable = db.getTable(tableName);
+        if (shadowTable == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), shadowTable.getId(), LockType.WRITE)) {
             Table table = getTable(db.getFullName(), tableName);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
-
+            if (table.getId() != shadowTable.getId()) {
+                throw new DdlException("Table [" + tableName + "] has been modified during replacing partitions, please retry");
+            }
             if (!table.isOlapOrCloudNativeTable()) {
                 throw new DdlException("Table[" + tableName + "] is not OLAP table or LAKE table");
             }
@@ -4880,8 +4850,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
             LOG.info("finished to replace partitions {} with temp partitions {} from table: {}",
                     clause.getPartitionNames(), clause.getTempPartitionNames(), tableName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -4890,9 +4858,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (db == null) {
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
-        try {
+        long tableId = replaceTempPartitionLog.getTblId();
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), tableId, LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), replaceTempPartitionLog.getTblId());
             if (olapTable == null) {
                 return;
@@ -4908,8 +4875,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     replaceTempPartitionLog.useTempPartitionName());
         } catch (DdlException e) {
             LOG.warn("should not happen.", e);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -4978,12 +4943,24 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (database == null) {
             throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
         }
+<<<<<<< HEAD
         Locker locker = new Locker();
         locker.lockDatabase(database.getId(), LockType.WRITE);
         try {
             Table table = getTable(database.getFullName(), stmt.getTableName().getTbl());
+=======
+        Table shadowTable = database.getTable(tableRef.getTableName());
+        if (shadowTable == null) {
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(database.getId(), shadowTable.getId(), LockType.WRITE)) {
+            Table table = getTable(database.getFullName(), tableRef.getTableName());
+>>>>>>> 9a96a01b11 ([Enhancement] Perf:Optimize LocalMetastore locking granularity (#67658))
             if (table == null) {
                 throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
+            }
+            if (table.getId() != shadowTable.getId()) {
+                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
             }
             if (!table.isOlapTableOrMaterializedView()) {
                 throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
@@ -5034,8 +5011,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     new PartitionVersionRecoveryInfo(Lists.newArrayList(partitionVersion), visibleVersionTime));
             LOG.info("Successfully set partition: {} version to {}, table: {}, db: {}",
                     stmt.getPartitionName(), stmt.getVersion(), table.getName(), database.getFullName());
-        } finally {
-            locker.unLockDatabase(database.getId(), LockType.WRITE);
         }
     }
 
@@ -5077,9 +5052,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                     Map<Long, String> origPartitions, boolean isOptimize) {
         OlapTable copiedTbl;
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), olapTable.getId(), LockType.READ)) {
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
                     && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
                 throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
@@ -5089,8 +5062,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 origPartitions.put(id, olapTable.getPartition(id).getName());
             }
             copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return copiedTbl;
     }
