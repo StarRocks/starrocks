@@ -39,17 +39,17 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
 
 ### 查看 Compaction Score
 
-- 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score，通常我们只需要关注 `MaxCS` 字段，如果 `MaxCS` 低于10，代表 Compaction 已经完全；如果 `MaxCS` 大于 100，代表 Compaction Score 比较高；如果 `MaxCS` 大于 500，代表 Compaction Score 非常高，需要人工介入。
+- 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score，通常只需要关注 `MaxCS` 字段，如果 `MaxCS` 低于 10，代表 Compaction 已经完成；如果 `MaxCS` 大于 100，代表 Compaction Score 相对较高；如果 `MaxCS` 大于 500，代表 Compaction Score 非常高，需要人工介入。
 
   ```Plain
-  SHOW PARTITIONS FROM <database_name>.<table_name>
+  SHOW PARTITIONS FROM <table_name>
   SHOW PROC '/dbs/<database_name>/<table_name>/partitions'
   ```
 
   示例：
 
   ```Plain
-  mysql> SHOW PARTITIONS FROM test_db.store_sales;
+  mysql> SHOW PROC '/dbs/load_benchmark/store_sales/partitions';
   +-------------+---------------+----------------+----------------+-------------+--------+--------------+-------+------------------------------+---------+----------+-----------+----------+------------+-------+-------+-------+
   | PartitionId | PartitionName | CompactVersion | VisibleVersion | NextVersion | State  | PartitionKey | Range | DistributionKey              | Buckets | DataSize | RowCount  | CacheTTL | AsyncWrite | AvgCS | P50CS | MaxCS |
   +-------------+---------------+----------------+----------------+-------------+--------+--------------+-------+------------------------------+---------+----------+-----------+----------+------------+-------+-------+-------+
@@ -165,7 +165,7 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
   - `read_remote_count`：子任务从远程存储读取数据的次数。
   - `in_queue_sec`：子任务排队的时间。单位：秒。
 
-### 配置Compaction任务
+### 配置 Compaction 任务
 
 您可以通过以下 FE 和 CN（BE）参数配置 Compaction 任务。
 
@@ -232,7 +232,7 @@ WHERE name = "compact_threads";
 
 > **说明**
 >
-> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速Compaction 任务并减少资源消耗。
+> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
 ##### lake_pk_compaction_max_input_rowsets
 
@@ -245,7 +245,7 @@ WHERE name = "compact_threads";
 
 > **说明**
 >
-> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速Compaction 任务并减少资源消耗。
+> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
 ### 手动触发 Compaction 任务
 
@@ -285,16 +285,17 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 ## 问题排查
 
 ### 慢查询
-如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，你会看到在单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 是一个很大的值，比如几十以上。
+
+如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，查看在单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则表明是由于 Compaction 不及时导致查询慢。
 
 ### 集群最大 Compaction Score 很高
-1. 通过 `admin show frontend config like "%lake_compaction%"` 以及 `select * from information_schema.be_configs where name = "compact_threads"` 检查 Compaction 相关的参数是否在合理区间。
-2. 通过 `show proc '/compactions'` 查看 Compaction 是否卡住：
-&nbsp;&nbsp;* `CommitTime` 一直为 NULL，通过 `be_cloud_native_compactions` 系统表查看 Compaction 卡住原因；
-&nbsp;&nbsp;* `FinishTime` 一直为 NULL，通过 `TxnID` 在 FE 日志中查找 Publish 失败原因；
-3. 通过 `show proc '/compactions'` 查看 Compaction 是否运行缓慢：
-&nbsp;&nbsp;* `sub_task_count` 太大（通过 `show partitions` 查看这个 partition 每个 tablet 的大小），可能是表建的不合理；
-&nbsp;&nbsp;* `read_remote_mb` 太大（占据了整个 compaction 读取数据量的30%以上），可以检查磁盘大小以及通过 `SHOW BACKENDS` 的 DataCacheMetrics 查看缓存 Quota；
-&nbsp;&nbsp;* `write_remote_sec` 太大（占据了整个 compaction 的90%时间以上），可能是 S3 写入太慢，可以通过存算分离监控指标判定，关键词 `single upload latency` 和 `multi upload latency`；
-&nbsp;&nbsp;* `in_queue_sec` 太大（平均每个 tablet 等待超过 60s 以上），可能是参数设置不合理或者其他正在运行的 Compaction 太慢；
 
+1. 通过 `ADMIN SHOW FRONTEND CONFIG LIKE "%lake_compaction%"` 以及 `SELECT * FROM information_schema.be_configs WHERE name = "compact_threads"` 检查 Compaction 相关的参数是否在合理区间。
+2. 通过 `SHOW PROC '/compactions'` 查看 Compaction 是否卡住：
+  - 如果 `CommitTime` 一直为 NULL，通过 `information_schema.be_cloud_native_compactions` 系统视图查看 Compaction 卡住原因；
+  - 如果 `FinishTime` 一直为 NULL，通过 `TxnID` 在 FE 日志中查找 Publish 失败原因；
+3. 通过 `SHOW PROC '/compactions'` 查看 Compaction 是否运行缓慢：
+  - `sub_task_count` 太大（通过 `SHOW PARTITIONS` 查看这个分区每个 tablet 的大小），可能是表建的不合理；
+  - `read_remote_mb` 太大（占据了整个 Compaction 读取数据量的30%以上），可以检查磁盘大小以及通过 `SHOW BACKENDS` 的 DataCacheMetrics 查看缓存 Quota；
+  - `write_remote_sec` 太大（占据了整个 Compaction 的90%时间以上），可能是远端存储写入太慢，可以通过存算分离监控指标判定，关键词 `single upload latency` 和 `multi upload latency`；
+  - `in_queue_sec` 太大（平均每个 Tablet 等待超过 60 秒以上），可能是参数设置不合理或者其他正在运行的 Compaction 太慢。
