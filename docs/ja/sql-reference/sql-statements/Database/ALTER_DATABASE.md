@@ -34,11 +34,18 @@ displayed_sidebar: docs
     ALTER DATABASE <db_name> SET REPLICA QUOTA <quota>;
     ```
 
+4. データベースのストレージボリュームを設定します。
+
+    ```sql
+    ALTER DATABASE <db_name> SET ("storage_volume" = "<new_storage_volume_name>");
+    ```
+
 注意:
 
 ```plain text
 - データベースの名前を変更した後、必要に応じて REVOKE と GRANT コマンドを使用して対応するユーザー権限を変更してください。
 - データベースのデフォルトのデータクォータとデフォルトのレプリカクォータは 2^63-1 です。
+- "storage_volume" プロパティが明示的に指定されていない場合、データベースのデフォルトストレージボリュームは、データベース作成時のデフォルトストレージボリュームになります。
 ```
 
 ## 例
@@ -63,6 +70,12 @@ displayed_sidebar: docs
 
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
+    ```
+
+4. データベースのストレージボリュームを設定します。
+
+    ```SQL
+    ALTER DATABASE example_db SET ("storage_volume" = "aws_s3_storage_volume");
     ```
 
 ## 参考

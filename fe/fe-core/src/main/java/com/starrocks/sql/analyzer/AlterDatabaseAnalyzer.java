@@ -19,11 +19,48 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 
+import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.common.util.Util.normalizeName;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
-public class AlterDbQuotaAnalyzer {
+public class AlterDatabaseAnalyzer {
+
+    public static void analyze(AlterDatabaseSetStmt statement, ConnectContext context) {
+        if (Strings.isNullOrEmpty(statement.getCatalogName())) {
+            if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+            }
+
+            String catalog = context.getCurrentCatalog();
+            catalog = normalizeName(catalog);
+            statement.setCatalogName(catalog);
+        }
+        if (!DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(statement.getCatalogName())) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedOp("alter db properties under external catalog"));
+        }
+    }
+
+    public static void analyze(AlterDatabaseRenameStatement statement, ConnectContext context) {
+        if (Strings.isNullOrEmpty(statement.getCatalogName())) {
+            if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
+            }
+            String catalog = context.getCurrentCatalog();
+            catalog = normalizeName(catalog);
+            statement.setCatalogName(catalog);
+        }
+
+        if (!DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(statement.getCatalogName())) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedOp("rename db under external catalog"));
+        }
+
+        String newName = statement.getNewDbName();
+        FeNameFormat.checkDbName(newName);
+    }
+
     public static void analyze(AlterDatabaseQuotaStmt statement, ConnectContext context) {
         if (Strings.isNullOrEmpty(statement.getCatalogName())) {
             if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
@@ -50,5 +87,5 @@ public class AlterDbQuotaAnalyzer {
             }
         }
     }
-
 }
+

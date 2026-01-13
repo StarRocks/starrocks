@@ -937,6 +937,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     // ------------------------------------------- User Statement ----------------------------------------------------
 
     default R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {

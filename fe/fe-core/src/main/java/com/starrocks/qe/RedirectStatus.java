@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -368,6 +369,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
+        public RedirectStatus visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
 

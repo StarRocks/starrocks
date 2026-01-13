@@ -27,7 +27,7 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 
 **PROPERTIES（选填）**
 
-`storage_volume`: 存算分离集群中，用于存储当前数据库中数据的存储卷。如未指定，则使用默认存储卷。
+`storage_volume`: 存算分离集群中，用于存储当前数据库中数据的存储卷。如未指定，则使用默认存储卷。可以通过 `ALTER DATABASE` 语句修改此属性。
 
 ## 示例
 
@@ -51,3 +51,4 @@ CREATE DATABASE [IF NOT EXISTS] <db_name>
 - [SHOW DATABASES](SHOW_DATABASES.md)
 - [DESC](../table_bucket_part_index/DESCRIBE.md)
 - [DROP DATABASE](DROP_DATABASE.md)
+- [ALTER DATABASE](ALTER_DATABASE.md)
