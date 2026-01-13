@@ -1,34 +1,35 @@
 ---
-description: コンピュートとストレージの分離
 displayed_sidebar: docs
+sidebar_position: 2
+description: Separate compute and storage
 ---
 
-# ストレージとコンピュートの分離
+# ストレージとコンピューティングの分離
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
 
-ストレージとコンピュートを分離したシステムでは、データは Amazon S3、Google Cloud Storage、Azure Blob Storage、MinIO などの S3 互換ストレージといった低コストで信頼性の高いリモートストレージシステムに保存されます。ホットデータはローカルにキャッシュされ、キャッシュがヒットすると、クエリパフォーマンスはストレージとコンピュートが結合されたアーキテクチャと同等になります。コンピュートノード (CN) は、数秒でオンデマンドで追加または削除できます。このアーキテクチャは、ストレージコストを削減し、リソースの分離を確保し、弾力性とスケーラビリティを提供します。
+ストレージとコンピューティングを分離するシステムでは、データは Amazon S3 、 Google Cloud Storage 、 Azure Blob Storage 、および MinIO などの他の S3 互換ストレージのような、低コストで信頼性の高いリモートストレージシステムに保存されます。ホットデータはローカルにキャッシュされ、キャッシュがヒットすると、クエリのパフォーマンスはストレージとコンピューティングが結合されたアーキテクチャと同等になります。コンピューティングノード (CN) は、オンデマンドで数秒以内に追加または削除できます。このアーキテクチャにより、ストレージコストが削減され、より優れたリソース分離が保証され、伸縮性とスケーラビリティが提供されます。
 
-このチュートリアルでは以下をカバーします：
+このチュートリアルでは、以下について説明します。
 
 - Docker コンテナでの StarRocks の実行
-- オブジェクトストレージとして MinIO の使用
-- StarRocks の共有データ用の設定
+- オブジェクトストレージに MinIO を使用する
+- 共有データ用に StarRocks を構成する
 - 2 つの公開データセットのロード
 - SELECT と JOIN を使用したデータの分析
 - 基本的なデータ変換 (ETL の **T**)
 
-使用するデータは、NYC OpenData と NOAA の National Centers for Environmental Information によって提供されています。
+使用されるデータは、NYC OpenData と NOAA の National Centers for Environmental Information によって提供されています。
 
-これらのデータセットは非常に大きいため、このチュートリアルは StarRocks を使った作業に慣れることを目的としているため、過去 120 年分のデータをロードすることはありません。Docker イメージを実行し、このデータを Docker に 4 GB の RAM を割り当てたマシンでロードできます。より大規模でフォールトトレラントなスケーラブルなデプロイメントについては、他のドキュメントを用意しており、後で提供します。
+これらのデータセットはいずれも非常に大きく、このチュートリアルは StarRocks の操作に慣れることを目的としているため、過去 120 年間のデータをロードする予定はありません。Docker イメージを実行し、Docker に割り当てられた 4 GB の RAM を持つマシンにこのデータをロードできます。より大規模なフォールトトレラントでスケーラブルなデプロイメントについては、他のドキュメントを用意しており、後で提供します。
 
-このドキュメントには多くの情報が含まれており、最初にステップバイステップの内容が提示され、最後に技術的な詳細が示されています。これは次の目的を順に果たすためです：
+このドキュメントには多くの情報が含まれており、ステップバイステップのコンテンツが最初に提示され、技術的な詳細は最後に提示されています。これは、次の目的をこの順序で果たすために行われます。
 
-1. 読者が共有データデプロイメントでデータをロードし、そのデータを分析できるようにする。
-2. 共有データデプロイメントの設定詳細を提供する。
+1. 読者が共有データデプロイメントにデータをロードし、そのデータを分析できるようにする。
+2. 共有データデプロイメントの構成の詳細を提供する。
 3. ロード中のデータ変換の基本を説明する。
 
 ---
@@ -39,19 +40,19 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - Docker に割り当てられた 4 GB の RAM
-- Docker に割り当てられた 10 GB の空きディスクスペース
+- Docker に割り当てられた 10 GB の空きディスク容量
 
 ### SQL クライアント
 
-Docker 環境で提供される SQL クライアントを使用するか、システム上のクライアントを使用できます。多くの MySQL 互換クライアントが動作し、このガイドでは DBeaver と MySQL Workbench の設定をカバーしています。
+Docker 環境で提供されている SQL クライアントを使用するか、システム上のクライアントを使用できます。多くの MySQL 互換クライアントが動作し、このガイドでは DBeaver と MySQL Workbench の構成について説明します。
 
 ### curl
 
-`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行して、インストールされているか確認してください。curl がインストールされていない場合は、[こちらから取得してください](https://curl.se/dlwiz/?type=bin)。
+`curl` は、 StarRocks にデータロードジョブを発行したり、データセットをダウンロードしたりするために使用されます。OS プロンプトで `curl` または `curl.exe` を実行して、インストールされているかどうかを確認します。curl がインストールされていない場合は、[こちらから curl を入手してください](https://curl.se/dlwiz/?type=bin)。
 
 ### `/etc/hosts`
 
-このガイドで使用されるインジェスト方法は Stream Load です。Stream Load は FE サービスに接続してインジェストジョブを開始します。FE はジョブをバックエンドノード、つまりこのガイドでは CN に割り当てます。インジェストジョブが CN に接続するためには、CN の名前がオペレーティングシステムに認識されている必要があります。`/etc/hosts` に次の行を追加してください：
+このガイドで使用されている取り込み方法は Stream Load です。Stream Load は FE サービスに接続して、取り込みジョブを開始します。次に、FE はジョブをバックエンドノード (このガイドでは CN) に割り当てます。取り込みジョブが CN に接続するには、CN の名前がオペレーティングシステムで使用可能である必要があります。次の行を `/etc/hosts` に追加します。
 
 ```bash
 127.0.0.1 starrocks-cn
@@ -63,56 +64,56 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ### FE
 
-フロントエンドノードは、メタデータ管理、クライアント接続管理、クエリプランニング、クエリスケジューリングを担当します。各 FE はメモリ内にメタデータの完全なコピーを保存および維持し、FEs 間での無差別なサービスを保証します。
+Frontend ノードは、メタデータ管理、クライアント接続管理、クエリプランニング、およびクエリスケジューリングを担当します。各 FE は、メタデータの完全なコピーをメモリに保存および維持し、FE 間で無差別なサービスを保証します。
 
 ### CN
 
-コンピュートノードは、共有データデプロイメントにおけるクエリプランの実行を担当します。
+Compute Node は、共有データデプロイメントでクエリプランを実行する役割を担います。
 
 ### BE
 
-バックエンドノードは、共有なしデプロイメントにおけるデータストレージとクエリプランの実行を担当します。
+Backend ノードは、データストレージとクエリプランの実行の両方を、共有ナッシングデプロイメントで担当します。
 
 :::note
-このガイドでは BEs を使用しませんが、BEs と CNs の違いを理解するためにこの情報を含めています。
+このガイドでは BE は使用しません。この情報は、BE と CN の違いを理解できるようにするために含まれています。
 :::
 
 ---
 
-## ラボファイルのダウンロード
+## ラボファイルをダウンロードする
 
-ダウンロードするファイルは 3 つあります：
+ダウンロードするファイルは 3 つあります。
 
 - StarRocks と MinIO 環境をデプロイする Docker Compose ファイル
-- ニューヨーク市のクラッシュデータ
-- 気象データ
+- ニューヨーク市の衝突データ
+- 天気データ
 
 このガイドでは、GNU Affero General Public License の下で提供される S3 互換オブジェクトストレージである MinIO を使用します。
 
-### ラボファイルを保存するディレクトリを作成します
+### ラボファイルを保存するディレクトリを作成する
 
 ```bash
 mkdir quickstart
 cd quickstart
 ```
 
-### Docker Compose ファイルをダウンロード
+### Docker Compose ファイルをダウンロードする
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
 ```
 
-### データをダウンロード
+### データをダウンロードする
 
-次の 2 つのデータセットをダウンロードします：
+次の 2 つのデータセットをダウンロードします。
 
-#### ニューヨーク市のクラッシュデータ
+#### ニューヨーク市の衝突データ
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
 ```
 
-#### 気象データ
+#### 天気データ
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
@@ -120,13 +121,13 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ---
 
-## StarRocks と MinIO のデプロイ
+## StarRocks と MinIO をデプロイする
 
 ```bash
 docker compose up --detach --wait --wait-timeout 120
 ```
 
-FE、CN、および MinIO サービスが正常になるまで約 30 秒かかります。`quickstart-minio_mc-1` コンテナは `Waiting` のステータスと終了コードを表示します。終了コードが `0` の場合は成功を示します。
+FE 、 CN 、および MinIO サービスが正常になるまでには、約 30 秒かかるはずです。`quickstart-minio_mc-1` コンテナには `Waiting` のステータスと終了コードが表示されます。終了コード `0` は成功を示します。
 
 ```bash
 [+] Running 4/5
@@ -144,37 +145,37 @@ container quickstart-minio_mc-1 exited (0)
 
 このクイックスタートでは、共有ストレージに MinIO を使用します。
 
-### MinIO の認証情報を確認
+### MinIO の認証情報を確認する
 
-StarRocks で MinIO をオブジェクトストレージとして使用するには、MinIO のアクセスキーが必要です。アクセスキーは Docker サービスの起動時に生成されました。StarRocks が MinIO に接続する方法をよりよく理解するために、キーが存在することを確認してください。
+StarRocks でオブジェクトストレージに MinIO を使用するには、 StarRocks に MinIO アクセスキーが必要です。アクセスキーは、Docker サービスの起動中に生成されました。StarRocks が MinIO に接続する方法をよりよく理解するために、キーが存在することを確認する必要があります。
 
-[http://localhost:9001/access-keys](http://localhost:9001/access-keys) にアクセスします。ユーザー名とパスワードは Docker compose ファイルに指定されており、`miniouser` と `miniopassword` です。1 つのアクセスキーがあることがわかるはずです。キーは `AAAAAAAAAAAAAAAAAAAA` で、MinIO コンソールではシークレットは見えませんが、Docker compose ファイルには `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` と記載されています。
+[http://localhost:9001/access-keys](http://localhost:9001/access-keys) を参照してください。ユーザー名とパスワードは Docker Compose ファイルで指定されており、`miniouser` と `miniopassword` です。アクセスキーが 1 つあることがわかります。キーは `AAAAAAAAAAAAAAAAAAAA` です。MinIO コンソールでシークレットを表示することはできませんが、Docker Compose ファイルにあり、`BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` です。
 
-![View the MinIO access key](../_assets/quick-start/MinIO-view-key.png)
+![MinIO アクセスキーの表示](../_assets/quick-start/MinIO-view-key.png)
 
 :::tip
-MinIO の Web UI にアクセスキーが表示されない場合は、`minio_mc` サービスのログを確認してください：
+MinIO Web UI にアクセスキーが表示されない場合は、`minio_mc` サービスのログを確認してください。
 
 ```bash
 docker compose logs minio_mc
 ```
 
-`minio_mc` ポッドを再実行してみてください：
+`minio_mc` ポッドを再実行してみてください。
 
 ```bash
 docker compose run minio_mc
 ```
 :::
 
-### データ用のバケットを作成
+### データのバケットを作成する
 
-StarRocks でストレージボリュームを作成する際に、データの `LOCATION` を指定します：
+StarRocks でストレージボリュームを作成するときは、データの `LOCATION` を指定します。
 
 ```sh
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` とします。3 つのリストされたオプションのデフォルトを受け入れます。
+[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリュームのバケットを追加します。バケットに `my-starrocks-bucket` という名前を付けます。リストされている 3 つのオプションのデフォルトを受け入れます。
 
 ---
 
@@ -184,11 +185,11 @@ StarRocks でストレージボリュームを作成する際に、データの 
 
 ---
 
-## StarRocks の共有データ用設定
+## 共有データ用の StarRocks 構成
 
-この時点で StarRocks と MinIO が稼働しています。MinIO のアクセスキーは StarRocks と MinIO を接続するために使用されます。
+この時点で、 StarRocks が実行されており、MinIO が実行されています。MinIO アクセスキーは、 StarRocks と Minio を接続するために使用されます。
 
-これは、StarRocks デプロイメントが共有データを使用することを指定する `FE` 設定の一部です。これは Docker Compose がデプロイメントを作成したときに `fe.conf` ファイルに追加されました。
+これは、 StarRocks デプロイメントが共有データを使用することを指定する `FE` 構成の一部です。これは、Docker Compose がデプロイメントを作成したときにファイル `fe.conf` に追加されました。
 
 ```sh
 # enable the shared data run mode
@@ -197,7 +198,7 @@ cloud_native_storage_type = S3
 ```
 
 :::info
-これらの設定を確認するには、`quickstart` ディレクトリからこのコマンドを実行し、ファイルの末尾を確認してください：
+`quickstart` ディレクトリからこのコマンドを実行し、ファイルの末尾を確認することで、これらの設定を確認できます。
 :::
 
 ```sh
@@ -206,11 +207,11 @@ docker compose exec starrocks-fe \
 ```
 :::
 
-### SQL クライアントで StarRocks に接続
+### SQL クライアントで StarRocks に接続する
 
 :::tip
 
-`docker-compose.yml` ファイルを含むディレクトリからこのコマンドを実行してください。
+`docker-compose.yml` ファイルを含むディレクトリからこのコマンドを実行します。
 
 MySQL コマンドラインクライアント以外のクライアントを使用している場合は、今すぐ開いてください。
 :::
@@ -220,7 +221,7 @@ docker compose exec starrocks-fe \
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-#### ストレージボリュームを確認
+#### ストレージボリュームを調べる
 
 ```sql
 SHOW STORAGE VOLUMES;
@@ -234,9 +235,9 @@ SHOW STORAGE VOLUMES;
 Empty set (0.04 sec)
 ```
 
-#### 共有データストレージボリュームを作成
+#### 共有データストレージボリュームを作成する
 
-以前に MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して MionIO バケットにストレージボリュームを作成します。
+以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MionIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -253,7 +254,7 @@ CREATE STORAGE VOLUME s3_volume
      );
 ```
 
-先ほどは空のセットでしたが、今はストレージボリュームがリストされているはずです：
+これで、ストレージボリュームがリストに表示されるはずです。以前は空のセットでした。
 
 ```
 SHOW STORAGE VOLUMES;
@@ -268,16 +269,16 @@ SHOW STORAGE VOLUMES;
 1 row in set (0.02 sec)
 ```
 
-ストレージボリュームの詳細を表示し、まだデフォルトボリュームではないこと、およびバケットを使用するように設定されていることを確認します：
+ストレージボリュームの詳細を表示し、これがまだデフォルトのボリュームではなく、バケットを使用するように構成されていることに注意してください。
 
 ```
 DESC STORAGE VOLUME s3_volume\G
 ```
 
 :::tip
-このドキュメントの一部の SQL および StarRocks ドキュメントの多くの他のドキュメントでは、セミコロンの代わりに `\G` で終わります。`\G` は mysql CLI にクエリ結果を縦に表示させます。
+このドキュメントの一部の SQL 、および StarRocks ドキュメントの他の多くのドキュメントでは、セミコロンの代わりに `\G` が使用されています。`\G` を使用すると、mysql CLI がクエリ結果を垂直方向にレンダリングします。
 
-多くの SQL クライアントは縦書きのフォーマット出力を解釈しないため、`\G` を `;` に置き換える必要があります。
+多くの SQL クライアントは垂直方向のフォーマット出力を解釈しないため、`\G` を `;` に置き換える必要があります。
 :::
 
 ```sh
@@ -294,7 +295,7 @@ IsDefault: false
 1 row in set (0.02 sec)
 ```
 
-## デフォルトストレージボリュームを設定
+## デフォルトのストレージボリュームを設定する
 
 ```
 SET s3_volume AS DEFAULT STORAGE VOLUME;
@@ -317,13 +318,13 @@ IsDefault: true
 1 row in set (0.02 sec)
 ```
 
-## データベースを作成
+## データベースを作成する
 
 ```
 CREATE DATABASE IF NOT EXISTS quickstart;
 ```
 
-データベース `quickstart` がストレージボリューム `s3_volume` を使用していることを確認します：
+データベース `quickstart` がストレージボリューム `s3_volume` を使用していることを確認します。
 
 ```
 SHOW CREATE DATABASE quickstart \G
@@ -339,27 +340,27 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 ---
 
-## テーブルを作成
+## テーブルを作成する
 
 <DDL />
 
 ---
 
-## 2 つのデータセットをロード
+## 2 つのデータセットをロードする
 
-StarRocks にデータをロードする方法は多数あります。このチュートリアルでは、最も簡単な方法として curl と StarRocks Stream Load を使用します。
+StarRocks にデータをロードする方法はたくさんあります。このチュートリアルでは、最も簡単な方法は curl と StarRocks Stream Load を使用することです。
 
 :::tip
 
-これらの curl コマンドは、データセットをダウンロードしたディレクトリから実行してください。
+データセットをダウンロードしたディレクトリからこれらの curl コマンドを実行します。
 
-パスワードを求められます。おそらく MySQL の `root` ユーザーにパスワードを設定していないので、Enter キーを押してください。
+パスワードの入力を求められます。MySQL `root` ユーザーにパスワードを割り当てていない可能性があるため、Enter キーを押してください。
 
 :::
 
-`curl` コマンドは複雑に見えますが、チュートリアルの最後で詳細に説明されています。今は、コマンドを実行してデータを分析するための SQL を実行し、その後でデータロードの詳細を読むことをお勧めします。
+`curl` コマンドは複雑に見えますが、チュートリアルの最後に詳しく説明します。今のところ、コマンドを実行し、いくつかの SQL を実行してデータを分析し、最後にデータロードの詳細について読むことをお勧めします。
 
-### ニューヨーク市の衝突データ - クラッシュ
+### ニューヨーク市の衝突データ - 衝突
 
 ```bash
 curl --location-trusted -u root             \
@@ -373,7 +374,7 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
 ```
 
-上記のコマンドの出力です。最初のハイライトされたセクションは、期待される出力 (OK と 1 行を除くすべての行が挿入されたこと) を示しています。1 行は、正しい列数を含んでいないためフィルタリングされました。
+上記のコマンドの出力は次のとおりです。最初に強調表示されているセクションは、表示されるはずのもの (OK と 1 行を除くすべての行が挿入された) を示しています。1 つの行は、正しい数の列が含まれていないため、除外されました。
 
 ```bash
 Enter host password for user 'root':
@@ -401,9 +402,9 @@ Enter host password for user 'root':
 }%
 ```
 
-エラーが発生した場合、出力にはエラーメッセージを確認するための URL が提供されます。エラーメッセージには、Stream Load ジョブが割り当てられたバックエンドノード (`starrocks-cn`) も含まれています。`/etc/hosts` ファイルに `starrocks-cn` のエントリを追加したため、そこに移動してエラーメッセージを読むことができます。
+エラーが発生した場合、出力にはエラーメッセージを表示するための URL が表示されます。エラーメッセージには、 Stream Load ジョブが割り当てられたバックエンドノード (`starrocks-cn`) も含まれています。`/etc/hosts` ファイルに `starrocks-cn` のエントリを追加したため、それに移動してエラーメッセージを読むことができるはずです。
 
-このチュートリアルの開発中に見られた内容の要約を展開します：
+このチュートリアルを開発中に表示されたコンテンツの概要を展開します。
 
 <details>
 
@@ -418,9 +419,9 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 </details>
 
-### 気象データ
+### 天気データ
 
-クラッシュデータをロードしたのと同様に、気象データセットをロードします。
+衝突データをロードしたのと同じ方法で、天気データセットをロードします。
 
 ```bash
 curl --location-trusted -u root             \
@@ -436,31 +437,31 @@ curl --location-trusted -u root             \
 
 ---
 
-## MinIO にデータが保存されていることを確認
+## データが MinIO に保存されていることを確認する
 
-MinIO を開き、[http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) で `my-starrocks-bucket/` 以下にエントリがあることを確認します。
+MinIO [http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) を開き、`my-starrocks-bucket/` の下にエントリがあることを確認します。
 
 :::tip
-`my-starrocks-bucket/` 以下のフォルダ名は、データをロードしたときに生成されます。`my-starrocks-bucket` の下に 1 つのディレクトリがあり、その下にさらに 2 つのディレクトリがあるはずです。それらのディレクトリには、データ、メタデータ、またはスキーマエントリが含まれています。
+`my-starrocks-bucket/` の下のフォルダ名は、データをロードするときに生成されます。`my-starrocks-bucket/` の下に 1 つのディレクトリが表示され、その下にさらに 2 つのディレクトリが表示されます。これらのディレクトリには、データ、メタデータ、またはスキーマエントリがあります。
 
-![MinIO object browser](../_assets/quick-start/MinIO-data.png)
+![MinIO オブジェクトブラウザ](../_assets/quick-start/MinIO-data.png)
 :::
 
 ---
 
-## 質問に答える
+## いくつかの質問に答える
 
 <SQL />
 
 ---
 
-## StarRocks の共有データ用設定
+## 共有データ用に StarRocks を構成する
 
-StarRocks を共有データで使用する経験を積んだ今、設定を理解することが重要です。
+共有データで StarRocks を使用した経験があるため、構成を理解することが重要です。
 
-### CN 設定
+### CN 構成
 
-ここで使用される CN 設定はデフォルトです。CN は共有データの使用を目的として設計されています。デフォルト設定は以下の通りです。変更を加える必要はありません。
+ここで使用される CN 構成は、CN が共有データで使用するように設計されているため、デフォルトです。デフォルトの構成を以下に示します。変更を加える必要はありません。
 
 ```bash
 sys_log_level = INFO
@@ -473,11 +474,11 @@ brpc_port = 8060
 starlet_port = 9070
 ```
 
-### FE 設定
+### FE 構成
 
-FE 設定はデフォルトとは若干異なります。FE はデータがローカルディスクではなくオブジェクトストレージに保存されることを想定して設定する必要があります。
+FE 構成は、FE が BE ノードのローカルディスクではなく、オブジェクトストレージにデータが保存されることを想定するように構成する必要があるため、デフォルトとはわずかに異なります。
 
-`docker-compose.yml` ファイルは `command` で FE 設定を生成します。
+`docker-compose.yml` ファイルは、`command` で FE 構成を生成します。
 
 ```plaintext
 # enable shared data, set storage type, set endpoint
@@ -486,22 +487,22 @@ cloud_native_storage_type = S3
 ```
 
 :::note
-この設定ファイルには FE のデフォルトエントリは含まれておらず、共有データ設定のみが示されています。
+この構成ファイルには、FE のデフォルトエントリは含まれていません。共有データ構成のみが表示されます。
 :::
 
-デフォルトではない FE 設定：
+デフォルト以外の FE 構成設定:
 
 :::note
-多くの設定パラメータは `s3_` で始まります。このプレフィックスは、すべての Amazon S3 互換ストレージタイプ (例：S3、GCS、MinIO) に使用されます。Azure Blob Storage を使用する場合、プレフィックスは `azure_` です。
+多くの構成パラメータには、`s3_` がプレフィックスとして付いています。このプレフィックスは、すべての Amazon S3 互換ストレージタイプ (例: S3 、 GCS 、および MinIO ) に使用されます。Azure Blob Storage を使用する場合、プレフィックスは `azure_` です。
 :::
 
 #### `run_mode=shared_data`
 
-これは共有データの使用を有効にします。
+これにより、共有データの使用が有効になります。
 
 #### `cloud_native_storage_type=S3`
 
-これは S3 互換ストレージまたは Azure Blob Storage が使用されるかどうかを指定します。MinIO の場合、常に S3 です。
+これにより、 S3 互換ストレージまたは Azure Blob Storage のどちらを使用するかが指定されます。MinIO の場合、これは常に S3 です。
 
 ### `CREATE storage volume` の詳細
 
@@ -522,7 +523,7 @@ CREATE STORAGE VOLUME s3_volume
 
 #### `aws_s3_endpoint=minio:9000`
 
-MinIO のエンドポイントとポート番号。
+ポート番号を含む MinIO エンドポイント。
 
 #### `aws_s3_path=starrocks`
 
@@ -530,54 +531,54 @@ MinIO のエンドポイントとポート番号。
 
 #### `aws_s3_access_key=AAAAAAAAAAAAAAAAAAAA`
 
-MinIO のアクセスキー。
+MinIO アクセスキー。
 
 #### `aws_s3_secret_key=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`
 
-MinIO のアクセスキーシークレット。
+MinIO アクセスキーシークレット。
 
 #### `aws_s3_use_instance_profile=false`
 
-MinIO を使用する場合、アクセスキーが使用されるため、インスタンスプロファイルは使用されません。
+MinIO を使用する場合、アクセスキーが使用されるため、インスタンスプロファイルは MinIO では使用されません。
 
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
 MinIO を使用する場合、このパラメータは常に false に設定されます。
 
-### FQDN モードの設定
+### FQDN モードの構成
 
-FE を起動するコマンドも変更されています。Docker Compose ファイルの FE サービスコマンドには、`--host_type FQDN` オプションが追加されています。`host_type` を `FQDN` に設定することで、Stream Load ジョブは CN ポッドの完全修飾ドメイン名に転送され、IP アドレスではなくなります。これは、IP アドレスが Docker 環境に割り当てられた範囲内にあり、通常はホストマシンから利用できないためです。
+FE を起動するコマンドも変更されます。Docker Compose ファイルの FE サービスコマンドには、オプション `--host_type FQDN` が追加されています。`host_type` を `FQDN` に設定すると、 Stream Load ジョブは IP アドレスではなく、CN ポッドの完全修飾ドメイン名に転送されます。これは、IP アドレスが Docker 環境に割り当てられた範囲にあり、通常はホストマシンから使用できないためです。
 
-ホストネットワークと CN 間のトラフィックを許可するための 3 つの変更：
+次の 3 つの変更により、ホストネットワークと CN 間のトラフィックが可能になります。
 
-- `--host_type` を `FQDN` に設定
-- CN ポート 8040 をホストネットワークに公開
-- `starrocks-cn` を `127.0.0.1` に向ける hosts ファイルへのエントリを追加
+- `--host_type` を `FQDN` に設定する
+- CN ポート 8040 をホストネットワークに公開する
+- `starrocks-cn` のホストファイルに `127.0.0.1` を指すエントリを追加する
 
 ---
 
 ## まとめ
 
-このチュートリアルでは以下を行いました：
+このチュートリアルでは、次のことを行いました。
 
-- Docker で StarRocks と Minio をデプロイ
-- MinIO アクセスキーを作成
-- MinIO を使用する StarRocks ストレージボリュームを設定
-- ニューヨーク市が提供するクラッシュデータと NOAA が提供する気象データをロード
-- SQL JOIN を使用して、視界が悪い状態や凍結した道路での運転が悪い考えであることを分析
+- Docker で StarRocks と Minio をデプロイしました
+- MinIO アクセスキーを作成しました
+- MinIO を使用する StarRocks ストレージボリュームを構成しました
+- ニューヨーク市が提供する衝突データと NOAA が提供する天気データをロードしました
+- SQL JOIN を使用してデータを分析し、視界が悪い場所や氷のような道路での運転は良くないことを発見しました
 
-学ぶべきことはまだあります。Stream Load 中に行われたデータ変換については意図的に詳しく触れていません。curl コマンドのメモにその詳細があります。
+学ぶことはもっとあります。 Stream Load 中に行われたデータ変換を意図的に省略しました。その詳細については、以下の curl コマンドに関するメモに記載されています。
 
-## curl コマンドに関するメモ
+## curl コマンドに関する注意
 
 <Curl />
 
-## 詳細情報
+## より詳しい情報
 
-[StarRocks table design](../table_design/StarRocks_table_design.md)
+[StarRocks テーブル設計](../table_design/StarRocks_table_design.md)
 
 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
-[Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) データセットは、ニューヨーク市によってこれらの [利用規約](https://www.nyc.gov/home/terms-of-use.page) と [プライバシーポリシー](https://www.nyc.gov/home/privacy-policy.page) に基づいて提供されています。
+[自動車衝突事故 - 衝突事故](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) データセットは、ニューヨーク市によって提供されており、これらの [利用規約](https://www.nyc.gov/home/terms-of-use.page) および [プライバシーポリシー](https://www.nyc.gov/home/privacy-policy.page) に準拠しています。
 
-[Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd) (LCD) は、NOAA によってこの [免責事項](https://www.noaa.gov/disclaimer) とこの [プライバシーポリシー](https://www.noaa.gov/protecting-your-privacy) に基づいて提供されています。
+[Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd) (LCD) は、NOAA によって提供されており、この [免責事項](https://www.noaa.gov/disclaimer) およびこの [プライバシーポリシー](https://www.noaa.gov/protecting-your-privacy) が適用されます。
