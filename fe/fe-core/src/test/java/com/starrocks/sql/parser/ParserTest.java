@@ -15,17 +15,14 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-=======
-import com.starrocks.catalog.InternalCatalog;
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699))
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;

@@ -705,18 +705,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-<<<<<<< HEAD
-        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", stmt.getQuota(), stmt.getQuotaType());
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
-
-=======
-        Preconditions.checkArgument(stmt.getQuota() >= 0, "Quota must be non-negative");
         DatabaseInfo dbInfo = DatabaseInfo.newQuotaUpdateInfo(db.getFullName(), stmt.getQuota(), stmt.getQuotaType());
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699))
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            replayAlterDatabaseQuota(dbInfo);
+            replayAlterDatabase(dbInfo);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
@@ -780,7 +774,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     throw new DdlException(String.format("Storage volume %s does not exist", storageVolumeName));
                 }
                 try {
-                    GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo, wal -> {});
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
                 } catch (Throwable e) {
                     if (oldSv != null) {
                         // rollback to its original storage volume
@@ -805,21 +799,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String dbName = dbInfo.getDbName();
         LOG.info("Begin to unprotect alter db info {}", dbName);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-<<<<<<< HEAD
         AlterDatabaseQuotaStmt.QuotaType quotaType = dbInfo.getQuotaType();
         long quota = dbInfo.getQuota();
 
         Preconditions.checkNotNull(db);
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-=======
-        if (db == null) {
-            LOG.warn("Database {} does not exist when replaying alter database operation", dbName);
-            return;
-        }
-        QuotaType quotaType = dbInfo.getQuotaType();
-        long quota = dbInfo.getQuota();
-        if (quotaType == QuotaType.DATA) {
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699))
             db.setDataQuota(quota);
         } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
             db.setReplicaQuota(quota);
@@ -855,12 +839,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (fullNameToDb.get(newFullDbName) != null) {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
-<<<<<<< HEAD
             // 1. rename db
-=======
-
-            DatabaseInfo dbInfo = DatabaseInfo.newRenameInfo(fullDbName, newFullDbName);
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699))
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
@@ -873,8 +852,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             fullNameToDb.remove(fullDbName);
             fullNameToDb.put(newFullDbName, db);
 
-            DatabaseInfo dbInfo =
-                    new DatabaseInfo(fullDbName, newFullDbName, -1L, AlterDatabaseQuotaStmt.QuotaType.NONE);
+            DatabaseInfo dbInfo = DatabaseInfo.newRenameInfo(fullDbName, newFullDbName);
             GlobalStateMgr.getCurrentState().getEditLog().logDatabaseRename(dbInfo);
         } finally {
             unlock();

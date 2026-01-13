@@ -22,13 +22,9 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterDbQuotaAnalyzer.java
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
-=======
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 import static com.starrocks.common.util.Util.normalizeName;
-import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterDatabaseAnalyzer.java
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterDatabaseAnalyzer {
 

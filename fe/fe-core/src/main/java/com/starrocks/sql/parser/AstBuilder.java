@@ -156,11 +156,8 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
-=======
 import com.starrocks.sql.ast.AlterDatabaseSetStmt;
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699))
+import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -739,20 +736,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-<<<<<<< HEAD
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
-=======
-    public ParseNode visitAlterDatabaseSetStatement(
-            com.starrocks.sql.parser.StarRocksParser.AlterDatabaseSetStatementContext context) {
-        String dbName = normalizeName(((Identifier) visit(context.identifier())).getValue());
-        NodePosition pos = createPos(context);
-        Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
-        return new AlterDatabaseSetStmt(dbName, properties, pos);
-    }
-
-    @Override
-    public ParseNode visitCreateDbStatement(com.starrocks.sql.parser.StarRocksParser.CreateDbStatementContext context) {
->>>>>>> 43e8206528 ([Enhancement] Support modifying storage volume for database (#67699))
         String catalogName = "";
         if (context.catalog != null) {
             catalogName = getIdentifierName(context.catalog);
@@ -768,6 +752,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new CreateDbStmt(context.IF() != null, catalogName, dbName.toString(), properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterDatabaseSetStatement(StarRocksParser.AlterDatabaseSetStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        NodePosition pos = createPos(context);
+        Map<String, String> properties = getPropertyList(context.propertyList());
+        return new AlterDatabaseSetStmt(dbName, properties, pos);
     }
 
     @Override
