@@ -56,7 +56,6 @@ std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, Mutable
 // Internal function exposed for testing - applies tablet metadata from replication operations
 // This function is used internally by TxnLogApplier implementations and exposed only for unit testing
 Status apply_tablet_metadata_from_replication(MutableTabletMetadataPtr metadata,
-                                              const TabletMetadataPB& copied_tablet_meta,
-                                              const RepeatedPtrField<RowsetMetadataPB>& old_rowsets);
+                                              const TabletMetadataPB& copied_tablet_meta);
 
 } // namespace starrocks::lake

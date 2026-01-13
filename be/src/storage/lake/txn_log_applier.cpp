@@ -37,8 +37,8 @@ namespace {
 // Apply tablet metadata from replication operation to the target metadata
 // This function handles the common logic for copying tablet metadata in lake replication scenarios
 Status apply_tablet_metadata_from_replication(MutableTabletMetadataPtr metadata,
-                                              const TabletMetadataPB& copied_tablet_meta,
-                                              const RepeatedPtrField<RowsetMetadataPB>& old_rowsets) {
+                                              const TabletMetadataPB& copied_tablet_meta) {
+    auto old_rowsets = std::move(*metadata->mutable_rowsets());
     if (copied_tablet_meta.rowsets_size() > 0) {
         metadata->mutable_rowsets()->Clear();
         metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
@@ -70,7 +70,7 @@ Status apply_tablet_metadata_from_replication(MutableTabletMetadataPtr metadata,
     for (const auto& rowset : metadata->rowsets()) {
         new_rowset_ids.insert(rowset.id());
     }
-    for (auto old_rowset : old_rowsets) {
+    for (const auto& old_rowset : old_rowsets) {
         if (new_rowset_ids.count(old_rowset.id()) == 0) {
             metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
         }
@@ -509,9 +509,8 @@ private:
         } else {
             if (op_replication.has_tablet_metadata()) {
                 // Same logic for pk and non-pk tables
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                RETURN_IF_ERROR(apply_tablet_metadata_from_replication(_metadata, copied_tablet_meta, old_rowsets));
+                RETURN_IF_ERROR(apply_tablet_metadata_from_replication(_metadata, copied_tablet_meta));
                 _tablet.update_mgr()->unload_primary_index(_tablet.id());
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
@@ -933,9 +932,8 @@ private:
         } else {
             if (op_replication.has_tablet_metadata()) {
                 // Same logic for pk and non-pk tables
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                RETURN_IF_ERROR(apply_tablet_metadata_from_replication(_metadata, copied_tablet_meta, old_rowsets));
+                RETURN_IF_ERROR(apply_tablet_metadata_from_replication(_metadata, copied_tablet_meta));
 
                 VLOG(3) << "Apply replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << base_version << ", new_version: " << _new_version

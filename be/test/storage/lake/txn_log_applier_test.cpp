@@ -198,24 +198,23 @@ protected:
         target_meta_->set_id(2000);
         target_meta_->set_version(1);
 
-        // Add old rowsets (some will be kept, some will be moved to compaction_inputs)
-        auto* old_rowset1 = old_rowsets_.Add();
+        // Add old rowsets to target_meta_ (these will be moved to compaction_inputs or kept)
+        auto* old_rowset1 = target_meta_->add_rowsets();
         old_rowset1->set_id(5); // This will be moved to compaction_inputs (not in new rowsets)
 
-        auto* old_rowset2 = old_rowsets_.Add();
+        auto* old_rowset2 = target_meta_->add_rowsets();
         old_rowset2->set_id(10); // This will be kept (exists in new rowsets)
 
-        auto* old_rowset3 = old_rowsets_.Add();
+        auto* old_rowset3 = target_meta_->add_rowsets();
         old_rowset3->set_id(15); // This will be moved to compaction_inputs (not in new rowsets)
     }
 
     MutableTabletMetadataPtr source_meta_;
     MutableTabletMetadataPtr target_meta_;
-    RepeatedPtrField<RowsetMetadataPB> old_rowsets_;
 };
 
 TEST_F(TabletMetadataReplicationTest, BasicMetadataCopy) {
-    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_, old_rowsets_);
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_);
     EXPECT_TRUE(st.ok()) << st.to_string();
 
     // Check rowsets are copied
@@ -242,7 +241,7 @@ TEST_F(TabletMetadataReplicationTest, BasicMetadataCopy) {
 }
 
 TEST_F(TabletMetadataReplicationTest, CompactionInputsHandling) {
-    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_, old_rowsets_);
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_);
     EXPECT_TRUE(st.ok()) << st.to_string();
 
     // Check compaction_inputs: rowsets with id 5 and 15 should be added (10 is kept in new rowsets)
@@ -262,9 +261,7 @@ TEST_F(TabletMetadataReplicationTest, EmptyRowsets) {
     empty_source->set_id(3000);
     empty_source->set_next_rowset_id(200);
 
-    RepeatedPtrField<RowsetMetadataPB> empty_old_rowsets;
-
-    Status st = apply_tablet_metadata_from_replication(target_meta_, *empty_source, empty_old_rowsets);
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *empty_source);
     EXPECT_TRUE(st.ok()) << st.to_string();
 
     // Rowsets should remain unchanged (original rowsets cleared since rowsets_size() == 0)
@@ -274,9 +271,10 @@ TEST_F(TabletMetadataReplicationTest, EmptyRowsets) {
 }
 
 TEST_F(TabletMetadataReplicationTest, NoOldRowsets) {
-    RepeatedPtrField<RowsetMetadataPB> empty_old_rowsets;
+    // Clear target_meta_'s rowsets to simulate no old rowsets
+    target_meta_->mutable_rowsets()->Clear();
 
-    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_, empty_old_rowsets);
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_);
     EXPECT_TRUE(st.ok()) << st.to_string();
 
     // Check rowsets are copied
@@ -299,7 +297,7 @@ TEST_F(TabletMetadataReplicationTest, PartialMetadataCopy) {
     auto* rowset = partial_source->add_rowsets();
     rowset->set_id(30);
 
-    Status st = apply_tablet_metadata_from_replication(target_meta_, *partial_source, old_rowsets_);
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *partial_source);
     EXPECT_TRUE(st.ok()) << st.to_string();
 
     // Check rowset is copied
