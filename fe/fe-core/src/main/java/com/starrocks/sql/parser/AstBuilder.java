@@ -766,7 +766,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.AlterDatabaseSetStatementContext context) {
         String dbName = normalizeName(((Identifier) visit(context.identifier())).getValue());
         NodePosition pos = createPos(context);
-        Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
+        Map<String, String> properties = getCaseInsensitivePropertyList(context.propertyList());
         return new AlterDatabaseSetStmt(dbName, properties, pos);
     }
 

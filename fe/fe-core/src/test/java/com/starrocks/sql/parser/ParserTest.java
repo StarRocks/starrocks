@@ -728,6 +728,16 @@ class ParserTest {
             Assertions.assertEquals("db1", setStmt.getDbName());
             Assertions.assertEquals("sv1", setStmt.getProperties().get("storage_volume"));
         }
+        { // Test case-insensitivity in properties, property name is case-insensitive, property value is case-sensitive
+            String sql = "ALTER DATABASE db1 SET (\"StoRage_Volume\" = \"SV2\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertInstanceOf(AlterDatabaseSetStmt.class, stmt);
+            Analyzer.analyze(stmt, ctx);
+            com.starrocks.sql.ast.AlterDatabaseSetStmt setStmt = (com.starrocks.sql.ast.AlterDatabaseSetStmt) stmt;
+            Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, setStmt.getCatalogName());
+            Assertions.assertEquals("db1", setStmt.getDbName());
+            Assertions.assertEquals("SV2", setStmt.getProperties().get("storage_volume"));
+        }
         {
             ctx.setCurrentCatalog("external_catalog");
             String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
