@@ -3038,6 +3038,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_contains_times(self, query, expect, expected_times: int):
+        """
+        Assert query result contains `expect` exactly `expected_times` times.
+
+        This is useful for validating trace outputs, e.g. making sure a specific optimizer phase
+        runs only once.
+        """
+        res = self.execute_sql(query, True)
+        haystack = str(res["result"])
+        actual_times = haystack.count(str(expect))
+        tools.assert_true(
+            actual_times == int(expected_times),
+            "assert expect {} appears {} times (expected {}), result: {}".format(
+                expect, actual_times, expected_times, res["result"]
+            ),
+        )
+
     def assert_query_error_contains(self, query, *expects):
         """
         assert error message contains expect string
