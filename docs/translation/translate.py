@@ -70,7 +70,8 @@ class StarRocksTranslator:
 
         # 3. Dynamic Prompt Injection
         system_instruction = self.system_template.replace("${source_lang}", source_lang_full).replace("${target_lang}", self.target_lang_full).replace("${dictionary}", self.dictionary_str)
-        human_prompt += f"\n\n### CONTENT TO TRANSLATE ###\n\n{self._read_file(input_file)}"
+        self.human_template += f"\n\n### CONTENT TO TRANSLATE ###\n\n{self._read_file(input_file)}"
+        human_prompt = self.human_template
 
         if self.dry_run:
             print(f"🔍 [DRY RUN] {source_lang_full} -> {self.target_lang_full} | Path: {output_file}")

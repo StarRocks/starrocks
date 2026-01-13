@@ -1,4 +1,3 @@
----
 displayed_sidebar: docs
 sidebar_position: 2
 description: Separate compute and storage
@@ -11,22 +10,22 @@ import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
 
-ストレージとコンピューティングを分離するシステムでは、データは Amazon S3 、 Google Cloud Storage 、 Azure Blob Storage 、および MinIO などの他の S3 互換ストレージのような、低コストで信頼性の高いリモートストレージシステムに保存されます。ホットデータはローカルにキャッシュされ、キャッシュがヒットすると、クエリのパフォーマンスはストレージとコンピューティングが結合されたアーキテクチャと同等になります。コンピューティングノード (CN) は、オンデマンドで数秒以内に追加または削除できます。このアーキテクチャにより、ストレージコストが削減され、より優れたリソース分離が保証され、伸縮性とスケーラビリティが提供されます。
+ストレージとコンピューティングを分離するシステムでは、データは Amazon S3 、Google Cloud Storage、Azure Blob Storage、および MinIO などの他の S3 互換ストレージのような、低コストで信頼性の高いリモートストレージシステムに保存されます。ホットデータはローカルにキャッシュされ、キャッシュがヒットすると、クエリのパフォーマンスはストレージとコンピューティングが結合されたアーキテクチャと同等になります。コンピューティングノード (CN) は、必要に応じて数秒で追加または削除できます。このアーキテクチャにより、ストレージコストが削減され、より優れたリソース分離が保証され、伸縮性とスケーラビリティが提供されます。
 
 このチュートリアルでは、以下について説明します。
 
-- Docker コンテナでの StarRocks の実行
+- StarRocks を Docker コンテナで実行する
 - オブジェクトストレージに MinIO を使用する
 - 共有データ用に StarRocks を構成する
-- 2 つの公開データセットのロード
-- SELECT と JOIN を使用したデータの分析
+- 2 つの公開データセットをロードする
+- SELECT と JOIN でデータを分析する
 - 基本的なデータ変換 (ETL の **T**)
 
 使用されるデータは、NYC OpenData と NOAA の National Centers for Environmental Information によって提供されています。
 
 これらのデータセットはいずれも非常に大きく、このチュートリアルは StarRocks の操作に慣れることを目的としているため、過去 120 年間のデータをロードする予定はありません。Docker イメージを実行し、Docker に割り当てられた 4 GB の RAM を持つマシンにこのデータをロードできます。より大規模なフォールトトレラントでスケーラブルなデプロイメントについては、他のドキュメントを用意しており、後で提供します。
 
-このドキュメントには多くの情報が含まれており、ステップバイステップのコンテンツが最初に提示され、技術的な詳細は最後に提示されています。これは、次の目的をこの順序で果たすために行われます。
+このドキュメントには多くの情報が含まれており、ステップバイステップのコンテンツが最初に、技術的な詳細が最後に示されています。これは、次の目的をこの順序で果たすために行われます。
 
 1. 読者が共有データデプロイメントにデータをロードし、そのデータを分析できるようにする。
 2. 共有データデプロイメントの構成の詳細を提供する。
@@ -48,7 +47,7 @@ Docker 環境で提供されている SQL クライアントを使用するか�
 
 ### curl
 
-`curl` は、 StarRocks にデータロードジョブを発行したり、データセットをダウンロードしたりするために使用されます。OS プロンプトで `curl` または `curl.exe` を実行して、インストールされているかどうかを確認します。curl がインストールされていない場合は、[こちらから curl を入手してください](https://curl.se/dlwiz/?type=bin)。
+`curl` は、データロードジョブを StarRocks に発行したり、データセットをダウンロードしたりするために使用されます。OS プロンプトで `curl` または `curl.exe` を実行して、インストールされているかどうかを確認します。curl がインストールされていない場合は、[こちらから curl を入手してください](https://curl.se/dlwiz/?type=bin)。
 
 ### `/etc/hosts`
 
@@ -64,7 +63,7 @@ Docker 環境で提供されている SQL クライアントを使用するか�
 
 ### FE
 
-Frontend ノードは、メタデータ管理、クライアント接続管理、クエリプランニング、およびクエリスケジューリングを担当します。各 FE は、メタデータの完全なコピーをメモリに保存および維持し、FE 間で無差別なサービスを保証します。
+Frontend ノードは、メタデータ管理、クライアント接続管理、クエリプランニング、およびクエリスケジューリングを担当します。各 FE は、メタデータの完全なコピーをメモリに保存および維持し、FE 間で無差別のサービスを保証します。
 
 ### CN
 
@@ -88,7 +87,7 @@ Backend ノードは、データストレージとクエリプランの実行の
 - ニューヨーク市の衝突データ
 - 天気データ
 
-このガイドでは、GNU Affero General Public License の下で提供される S3 互換オブジェクトストレージである MinIO を使用します。
+このガイドでは、GNU Affero General Public License の下で提供される S3 互換のオブジェクトストレージである MinIO を使用します。
 
 ### ラボファイルを保存するディレクトリを作成する
 
@@ -127,7 +126,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 docker compose up --detach --wait --wait-timeout 120
 ```
 
-FE 、 CN 、および MinIO サービスが正常になるまでには、約 30 秒かかるはずです。`quickstart-minio_mc-1` コンテナには `Waiting` のステータスと終了コードが表示されます。終了コード `0` は成功を示します。
+FE、CN、および MinIO サービスが正常になるまでには、約 30 秒かかります。`quickstart-minio_mc-1` コンテナには `Waiting` のステータスと終了コードが表示されます。終了コード `0` は成功を示します。
 
 ```bash
 [+] Running 4/5
@@ -147,11 +146,11 @@ container quickstart-minio_mc-1 exited (0)
 
 ### MinIO の認証情報を確認する
 
-StarRocks でオブジェクトストレージに MinIO を使用するには、 StarRocks に MinIO アクセスキーが必要です。アクセスキーは、Docker サービスの起動中に生成されました。StarRocks が MinIO に接続する方法をよりよく理解するために、キーが存在することを確認する必要があります。
+StarRocks でオブジェクトストレージに MinIO を使用するには、StarRocks に MinIO アクセスキーが必要です。アクセスキーは、Docker サービスの起動中に生成されました。StarRocks が MinIO に接続する方法をよりよく理解するために、キーが存在することを確認する必要があります。
 
 [http://localhost:9001/access-keys](http://localhost:9001/access-keys) を参照してください。ユーザー名とパスワードは Docker Compose ファイルで指定されており、`miniouser` と `miniopassword` です。アクセスキーが 1 つあることがわかります。キーは `AAAAAAAAAAAAAAAAAAAA` です。MinIO コンソールでシークレットを表示することはできませんが、Docker Compose ファイルにあり、`BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB` です。
 
-![MinIO アクセスキーの表示](../_assets/quick-start/MinIO-view-key.png)
+![MinIO アクセスキーを表示する](../_assets/quick-start/MinIO-view-key.png)
 
 :::tip
 MinIO Web UI にアクセスキーが表示されない場合は、`minio_mc` サービスのログを確認してください。
@@ -187,9 +186,9 @@ StarRocks でストレージボリュームを作成するときは、データ�
 
 ## 共有データ用の StarRocks 構成
 
-この時点で、 StarRocks が実行されており、MinIO が実行されています。MinIO アクセスキーは、 StarRocks と MinIO を接続するために使用されます。
+この時点で、StarRocks が実行されており、MinIO が実行されています。MinIO アクセスキーは、StarRocks と MinIO を接続するために使用されます。
 
-これは、 StarRocks デプロイメントが共有データを使用することを指定する `FE` 構成の一部です。これは、Docker Compose がデプロイメントを作成したときにファイル `fe.conf` に追加されました。
+これは、StarRocks デプロイメントが共有データを使用することを指定する `FE` 構成の部分です。これは、Docker Compose がデプロイメントを作成したときにファイル `fe.conf` に追加されました。
 
 ```sh
 # enable the shared data run mode
@@ -213,7 +212,7 @@ docker compose exec starrocks-fe \
 
 `docker-compose.yml` ファイルを含むディレクトリからこのコマンドを実行します。
 
-MySQL コマンドラインクライアント以外のクライアントを使用している場合は、今すぐ開いてください。
+MySQL Command-Line Client 以外のクライアントを使用している場合は、今すぐ開いてください。
 :::
 
 ```sql
@@ -237,7 +236,7 @@ Empty set (0.04 sec)
 
 #### 共有データストレージボリュームを作成する
 
-以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MinIO バケットにストレージボリュームを作成します。
+先ほど、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MinIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -254,7 +253,7 @@ CREATE STORAGE VOLUME s3_volume
      );
 ```
 
-これで、ストレージボリュームがリストに表示されるはずです。以前は空のセットでした。
+これで、ストレージボリュームがリストされているはずです。以前は空のセットでした。
 
 ```
 SHOW STORAGE VOLUMES;
@@ -276,7 +275,7 @@ DESC STORAGE VOLUME s3_volume\G
 ```
 
 :::tip
-このドキュメントの一部の SQL 、および StarRocks ドキュメントの他の多くのドキュメントでは、セミコロンの代わりに `\G` が使用されています。`\G` を使用すると、mysql CLI がクエリ結果を垂直方向にレンダリングします。
+このドキュメントの一部の SQL、および StarRocks ドキュメントの他の多くのドキュメントでは、セミコロンの代わりに `\G` が使用されています。`\G` を使用すると、mysql CLI がクエリ結果を垂直方向にレンダリングします。
 
 多くの SQL クライアントは垂直方向のフォーマット出力を解釈しないため、`\G` を `;` に置き換える必要があります。
 :::
@@ -358,7 +357,7 @@ StarRocks にデータをロードする方法はたくさんあります。こ�
 
 :::
 
-`curl` コマンドは複雑に見えますが、チュートリアルの最後に詳しく説明します。今のところ、コマンドを実行し、いくつかの SQL を実行してデータを分析し、最後にデータロードの詳細について読むことをお勧めします。
+`curl` コマンドは複雑に見えますが、チュートリアルの最後に詳しく説明されています。今のところ、コマンドを実行し、いくつかの SQL を実行してデータを分析してから、最後にデータロードの詳細について読むことをお勧めします。
 
 ### ニューヨーク市の衝突データ - 衝突
 
@@ -402,7 +401,7 @@ Enter host password for user 'root':
 }%
 ```
 
-エラーが発生した場合、出力にはエラーメッセージを表示するための URL が表示されます。エラーメッセージには、 Stream Load ジョブが割り当てられたバックエンドノード (`starrocks-cn`) も含まれています。`/etc/hosts` ファイルに `starrocks-cn` のエントリを追加したため、それに移動してエラーメッセージを読むことができるはずです。
+エラーが発生した場合、出力にはエラーメッセージを表示するための URL が表示されます。エラーメッセージには、Stream Load ジョブが割り当てられたバックエンドノード (`starrocks-cn`) も含まれています。`/etc/hosts` ファイルに `starrocks-cn` のエントリを追加したため、それに移動してエラーメッセージを読むことができるはずです。
 
 このチュートリアルを開発中に表示されたコンテンツの概要を展開します。
 
@@ -476,7 +475,7 @@ starlet_port = 9070
 
 ### FE 構成
 
-FE 構成は、FE が BE ノードのローカルディスクではなく、オブジェクトストレージにデータが保存されることを想定するように構成する必要があるため、デフォルトとはわずかに異なります。
+FE 構成は、データが BE ノードのローカルディスクではなくオブジェクトストレージに保存されることを FE が想定するように構成する必要があるため、デフォルトとはわずかに異なります。
 
 `docker-compose.yml` ファイルは、`command` で FE 構成を生成します。
 
@@ -493,7 +492,7 @@ cloud_native_storage_type = S3
 デフォルト以外の FE 構成設定:
 
 :::note
-多くの構成パラメータには、`s3_` がプレフィックスとして付いています。このプレフィックスは、すべての Amazon S3 互換ストレージタイプ (例: S3 、 GCS 、および MinIO ) に使用されます。Azure Blob Storage を使用する場合、プレフィックスは `azure_` です。
+多くの構成パラメータには、`s3_` がプレフィックスとして付いています。このプレフィックスは、すべての Amazon S3 互換ストレージタイプ (例: S3、GCS、および MinIO) に使用されます。Azure Blob Storage を使用する場合、プレフィックスは `azure_` です。
 :::
 
 #### `run_mode=shared_data`
@@ -502,7 +501,7 @@ cloud_native_storage_type = S3
 
 #### `cloud_native_storage_type=S3`
 
-これにより、 S3 互換ストレージまたは Azure Blob Storage のどちらを使用するかが指定されます。MinIO の場合、これは常に S3 です。
+これにより、S3 互換ストレージまたは Azure Blob Storage のどちらを使用するかが指定されます。MinIO の場合、これは常に S3 です。
 
 ### `CREATE storage volume` の詳細
 
@@ -547,7 +546,7 @@ MinIO を使用する場合、このパラメータは常に false に設定さ�
 
 ### FQDN モードの構成
 
-FE を起動するコマンドも変更されます。Docker Compose ファイルの FE サービスコマンドには、オプション `--host_type FQDN` が追加されています。`host_type` を `FQDN` に設定すると、 Stream Load ジョブは IP アドレスではなく、CN ポッドの完全修飾ドメイン名に転送されます。これは、IP アドレスが Docker 環境に割り当てられた範囲にあり、通常はホストマシンから使用できないためです。
+FE を起動するコマンドも変更されます。Docker Compose ファイルの FE サービスコマンドには、オプション `--host_type FQDN` が追加されています。`host_type` を `FQDN` に設定すると、Stream Load ジョブは IP アドレスではなく、CN ポッドの完全修飾ドメイン名に転送されます。これは、IP アドレスが Docker 環境に割り当てられた範囲にあり、通常はホストマシンから使用できないためです。
 
 次の 3 つの変更により、ホストネットワークと CN 間のトラフィックが可能になります。
 
@@ -561,15 +560,15 @@ FE を起動するコマンドも変更されます。Docker Compose ファイ�
 
 このチュートリアルでは、次のことを行いました。
 
-- Docker で StarRocks と MinIO をデプロイしました
+- StarRocks と MinIO を Docker にデプロイしました
 - MinIO アクセスキーを作成しました
 - MinIO を使用する StarRocks ストレージボリュームを構成しました
 - ニューヨーク市が提供する衝突データと NOAA が提供する天気データをロードしました
-- SQL JOIN を使用してデータを分析し、視界が悪い場所や氷のような道路での運転は良くないことを発見しました
+- SQL JOIN を使用してデータを分析し、視界が悪い場所や氷のような道路での運転は良くないという結論に達しました
 
-学ぶことはもっとあります。 Stream Load 中に行われたデータ変換を意図的に省略しました。その詳細については、以下の curl コマンドに関するメモに記載されています。
+学ぶことはもっとあります。Stream Load 中に行われたデータ変換については、意図的に簡単に説明しました。その詳細については、以下の curl コマンドに関するメモに記載されています。
 
-## curl コマンドに関する注意
+## curl コマンドに関するメモ
 
 <Curl />
 
@@ -579,6 +578,6 @@ FE を起動するコマンドも変更されます。Docker Compose ファイ�
 
 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
-[自動車衝突事故 - 衝突事故](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) データセットは、ニューヨーク市によって提供されており、これらの [利用規約](https://www.nyc.gov/home/terms-of-use.page) および [プライバシーポリシー](https://www.nyc.gov/home/privacy-policy.page) に準拠しています。
+[自動車衝突 - 衝突](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) データセットは、ニューヨーク市によって提供されており、これらの [利用規約](https://www.nyc.gov/home/terms-of-use.page) および [プライバシーポリシー](https://www.nyc.gov/home/privacy-policy.page) に準拠します。
 
-[Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd) (LCD) は、NOAA によって提供されており、この [免責事項](https://www.noaa.gov/disclaimer) およびこの [プライバシーポリシー](https://www.noaa.gov/protecting-your-privacy) が適用されます。
+[Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) は、NOAA によって提供されており、この [免責事項](https://www.noaa.gov/disclaimer) およびこの [プライバシーポリシー](https://www.noaa.gov/protecting-your-privacy) が適用されます。

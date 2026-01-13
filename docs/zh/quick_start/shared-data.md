@@ -1,32 +1,31 @@
----
 displayed_sidebar: docs
 sidebar_position: 2
 description: Separate compute and storage
 ---
 
-# 存储计算分离
+# 存储和计算分离
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 import Curl from '../_assets/quick-start/_curl.mdx'
 
-在存储计算分离的系统中，数据存储在低成本、高可靠的远程存储系统中，例如 Amazon S3、Google Cloud Storage、Azure Blob Storage 以及其他 S3 兼容的存储（如 MinIO）。热数据缓存在本地，当缓存命中时，查询性能与存储计算耦合架构相当。计算节点 (CN) 可以在数秒内按需添加或删除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
+在存储和计算分离的系统中，数据存储在低成本、高可靠性的远程存储系统中，例如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他 S3 兼容的存储（如 MinIO）。热数据缓存在本地，当缓存命中时，查询性能与存储计算耦合架构相当。计算节点 (CN) 可以根据需要在几秒钟内添加或删除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
 
 本教程包括：
 
 - 在 Docker 容器中运行 StarRocks
-- 使用 MinIO 作为对象存储
-- 配置 StarRocks 以实现共享数据
+- 使用 MinIO 进行对象存储
+- 配置 StarRocks 以进行共享数据
 - 加载两个公共数据集
 - 使用 SELECT 和 JOIN 分析数据
-- 基础数据转换（ETL 中的 **T**）
+- 基本数据转换（ETL 中的 **T**）
 
-所使用的数据由 NYC OpenData 和 NOAA 的美国国家环境信息中心提供。
+所使用的数据由 NYC OpenData 和 NOAA 的国家环境信息中心提供。
 
 这两个数据集都非常大，并且由于本教程旨在帮助您了解如何使用 StarRocks，因此我们不会加载过去 120 年的数据。您可以在分配给 Docker 的 4 GB RAM 的机器上运行 Docker 镜像并加载此数据。对于更大、容错和可扩展的部署，我们有其他文档，稍后会提供。
 
-本文档包含大量信息，并以逐步内容的形式在开头提供，技术细节在结尾提供。这样做是为了按以下顺序实现这些目的：
+本文档包含大量信息，开头是逐步内容，结尾是技术细节。这样做是为了按以下顺序实现这些目的：
 
 1. 允许读者在共享数据部署中加载数据并分析该数据。
 2. 提供共享数据部署的配置详细信息。
@@ -44,7 +43,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### SQL 客户端
 
-您可以使用 Docker 环境中提供的 SQL 客户端，也可以使用系统上的 SQL 客户端。许多 MySQL 兼容的客户端都可以工作，本指南涵盖了 DBeaver 和 MySQL Workbench 的配置。
+您可以使用 Docker 环境中提供的 SQL 客户端，也可以使用系统上的 SQL 客户端。许多 MySQL 兼容的客户端都可以工作，本指南介绍了 DBeaver 和 MySQL Workbench 的配置。
 
 ### curl
 
@@ -52,7 +51,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### `/etc/hosts`
 
-本指南中使用的导入方法是 Stream Load。Stream Load 连接到 FE 服务以启动导入作业。然后，FE 将作业分配给后端节点，即本指南中的 CN。为了使导入作业能够连接到 CN，CN 的名称必须可用于您的操作系统。将此行添加到 `/etc/hosts`：
+本指南中使用的提取方法是 Stream Load。Stream Load 连接到 FE 服务以启动提取作业。然后，FE 将作业分配给后端节点，即本指南中的 CN。为了使提取作业能够连接到 CN，CN 的名称必须可用于您的操作系统。将此行添加到 `/etc/hosts`：
 
 ```bash
 127.0.0.1 starrocks-cn
@@ -64,7 +63,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### FE
 
-Frontend 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护元数据的完整副本，这保证了 FE 之间的无差别服务。
+Frontend 节点负责元数据管理、客户端连接管理、查询规划和查询调度。每个 FE 在其内存中存储和维护元数据的完整副本，这保证了 FE 之间的无差别服务。
 
 ### CN
 
@@ -72,7 +71,7 @@ Compute Nodes 负责在共享数据部署中执行查询计划。
 
 ### BE
 
-Backend 节点负责数据存储和在共享存储部署中执行查询计划。
+Backend 节点负责数据存储和在共享无数据部署中执行查询计划。
 
 :::note
 本指南不使用 BE，此处包含此信息是为了让您了解 BE 和 CN 之间的区别。
@@ -85,7 +84,7 @@ Backend 节点负责数据存储和在共享存储部署中执行查询计划。
 有三个文件要下载：
 
 - 部署 StarRocks 和 MinIO 环境的 Docker Compose 文件
-- 纽约市碰撞数据
+- 纽约市崩溃数据
 - 天气数据
 
 本指南使用 MinIO，它是根据 GNU Affero General Public License 提供的 S3 兼容对象存储。
@@ -107,7 +106,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 下载这两个数据集：
 
-#### 纽约市碰撞数据
+#### 纽约市崩溃数据
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
@@ -154,7 +153,7 @@ container quickstart-minio_mc-1 exited (0)
 ![查看 MinIO 访问密钥](../_assets/quick-start/MinIO-view-key.png)
 
 :::tip
-如果 MinIO Web UI 中未显示任何访问密钥，请检查 `minio_mc` 服务的日志：
+如果在 MinIO Web UI 中没有显示访问密钥，请检查 `minio_mc` 服务的日志：
 
 ```bash
 docker compose logs minio_mc
@@ -237,7 +236,7 @@ Empty set (0.04 sec)
 
 #### 创建一个共享数据存储卷
 
-之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的存储桶，并且您已验证 MinIO 是否具有名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MinIO 存储桶中创建一个存储卷。
+之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的存储桶，并且您验证了 MinIO 是否有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MinIO 存储桶中创建一个存储卷。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -358,9 +357,9 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 :::
 
-`curl` 命令看起来很复杂，但在本教程的末尾会详细解释。现在，我们建议运行命令并运行一些 SQL 来分析数据，然后在最后阅读有关数据加载详细信息的信息。
+`curl` 命令看起来很复杂，但在教程末尾会详细解释。现在，我们建议运行命令并运行一些 SQL 来分析数据，然后在最后阅读有关数据加载详细信息的信息。
 
-### 纽约市碰撞数据 - 碰撞
+### 纽约市碰撞数据 - 崩溃
 
 ```bash
 curl --location-trusted -u root             \
@@ -421,7 +420,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 ### 天气数据
 
-以与加载碰撞数据相同的方式加载天气数据集。
+以与加载崩溃数据相同的方式加载天气数据集。
 
 ```bash
 curl --location-trusted -u root             \
@@ -539,7 +538,7 @@ MinIO 访问密钥密钥。
 
 #### `aws_s3_use_instance_profile=false`
 
-使用 MinIO 时，使用访问密钥，因此 MinIO 不使用实例配置文件。
+使用 MinIO 时，将使用访问密钥，因此实例配置文件不与 MinIO 一起使用。
 
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
@@ -552,7 +551,7 @@ MinIO 访问密钥密钥。
 以下三个更改允许主机网络和 CN 之间的流量：
 
 - 将 `--host_type` 设置为 `FQDN`
-- 将 CN 端口 8040 公开给主机网络
+- 将 CN 端口 8040 暴露给主机网络
 - 向 hosts 文件添加 `starrocks-cn` 的条目，指向 `127.0.0.1`
 
 ---
@@ -564,10 +563,10 @@ MinIO 访问密钥密钥。
 - 在 Docker 中部署了 StarRocks 和 MinIO
 - 创建了一个 MinIO 访问密钥
 - 配置了一个使用 MinIO 的 StarRocks Storage Volume
-- 加载了纽约市提供的碰撞数据和 NOAA 提供的天气数据
-- 使用 SQL JOIN 分析数据，发现低能见度或结冰的街道上行驶不是一个好主意
+- 加载了纽约市提供的崩溃数据和 NOAA 提供的天气数据
+- 使用 SQL JOIN 分析了数据，发现低能见度或冰冷的街道上开车不是一个好主意
 
-还有更多内容需要学习；我们有意忽略了在 Stream Load 期间完成的数据转换。有关详细信息，请参见下面的 curl 命令注释。
+还有更多内容需要学习；我们有意地忽略了在 Stream Load 期间完成的数据转换。有关该内容的详细信息，请参见下面的 curl 命令注释。
 
 ## curl 命令注释
 
@@ -579,6 +578,6 @@ MinIO 访问密钥密钥。
 
 [Stream Load](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)
 
-[机动车辆碰撞 - 碰撞](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，但须遵守这些 [使用条款](https://www.nyc.gov/home/terms-of-use.page) 和 [隐私政策](https://www.nyc.gov/home/privacy-policy.page)。
+[机动车碰撞 - 崩溃](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，但须遵守这些 [使用条款](https://www.nyc.gov/home/terms-of-use.page) 和 [隐私政策](https://www.nyc.gov/home/privacy-policy.page)。
 
 [本地气候数据](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) 由 NOAA 提供，并附带此 [免责声明](https://www.noaa.gov/disclaimer) 和此 [隐私政策](https://www.noaa.gov/protecting-your-privacy)。
