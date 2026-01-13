@@ -15,9 +15,18 @@
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.google.common.collect.Ordering;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+>>>>>>> f00c976190 ([Enhancement] Improve pruning in DP join reorder (#67828))
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -60,11 +69,7 @@ public class JoinReorderDP extends JoinOrder {
 
     private GroupInfo getBestExpr(BitSet joinKeys) {
         if (joinKeys.cardinality() == 1) {
-            int index = 0;
-            while (!joinKeys.get(index)) {
-                index++;
-            }
-
+            int index = joinKeys.nextSetBit(0);
             return groups.get(index);
         }
 
@@ -88,8 +93,30 @@ public class JoinReorderDP extends JoinOrder {
                     continue;
                 }
 
+                double childLowerBound = saturatingAdd(leftGroup.bestExprInfo.cost, rightGroup.bestExprInfo.cost);
+                if (childLowerBound > bestCostSoFar) {
+                    continue;
+                }
+
                 Optional<ExpressionInfo> joinExpr = buildJoinExpr(leftGroup, rightGroup);
-                if (!joinExpr.isPresent())  {
+                if (joinExpr.isEmpty())  {
+                    continue;
+                }
+
+                double joinLowerBound = childLowerBound;
+                LogicalJoinOperator joinOp = joinExpr.get().expr.getOp().cast();
+                if (joinOp.getJoinType().isCrossJoin()) {
+                    long penalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
+                    if (joinOp.getOnPredicate() == null && joinOp.getPredicate() == null) {
+                        double crossRows = saturatingMul(leftGroup.bestExprInfo.rowCount, rightGroup.bestExprInfo.rowCount);
+                        joinLowerBound = saturatingMul(saturatingAdd(joinLowerBound, crossRows), penalty);
+                    } else {
+                        joinLowerBound = saturatingMul(joinLowerBound, penalty);
+                    }
+                } else if (!existsEqOnPredicate(joinExpr.get().expr)) {
+                    joinLowerBound = saturatingMul(joinLowerBound, StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY);
+                }
+                if (joinLowerBound > bestCostSoFar) {
                     continue;
                 }
 
