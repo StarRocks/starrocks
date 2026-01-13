@@ -71,6 +71,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class StatisticsCalculatorTest {
@@ -704,5 +707,51 @@ public class StatisticsCalculatorTest {
             throw new IOException("Couldn't create folders " + root);
         }
         return result;
+    }
+
+    @Test
+    public void testSkipPredicateColumnsCollectionScopeIsNestableAndRestores() {
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        try (var scope1 = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+            Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+            try (var scope2 = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+                Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+            }
+
+            Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+        }
+
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+    }
+
+    @Test
+    public void testSkipPredicateColumnsCollectionScopeDoesNotLeakAcrossThreads() throws Exception {
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<Throwable> err = new AtomicReference<>();
+
+        Thread t = new Thread(() -> {
+            try (var scope = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+                entered.countDown();
+                Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+            } catch (Throwable e) {
+                err.set(e);
+            } finally {
+                done.countDown();
+            }
+        });
+        t.start();
+
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        Assertions.assertTrue(done.await(5, TimeUnit.SECONDS));
+        if (err.get() != null) {
+            throw new AssertionError(err.get());
+        }
     }
 }
