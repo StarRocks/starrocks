@@ -18,10 +18,12 @@ The Kafka connector can seamlessly integrate with Kafka Connect, which allows St
 
 ### Version requirements
 
-| Connector | Kafka                    | StarRocks | Java |
-|-----------|--------------------------|-----------| ---- |
-| 1.0.4     | 3.4                      | 2.5 and later | 8    |
-| 1.0.3     | 3.4                      | 2.5 and later | 8    |
+| Connector | Kafka     | StarRocks     | Java |
+| --------- | --------- | ------------- | ---- |
+| 1.0.6     | 3.4+/4.0+ | 2.5 and later | 8    |
+| 1.0.5     | 3.4       | 2.5 and later | 8    |
+| 1.0.4     | 3.4       | 2.5 and later | 8    |
+| 1.0.3     | 3.4       | 2.5 and later | 8    |
 
 ### Set up Kafka environment
 
@@ -36,11 +38,11 @@ Submit the Kafka connector into Kafka Connect:
 
 - Self-managed Kafka cluster:
 
-  Download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
+  Download [starrocks-connector-for-kafka-x.y.z-with-dependencies.jar](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
 
 - Confluent Cloud:
 
-  Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download and extract [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a ZIP file and upload the ZIP file to Confluent Cloud.
+  Currently, the Kafka connector is not uploaded to Confluent Hub. You need to download [starrocks-connector-for-kafka-x.y.z-with-dependencies.jar](https://github.com/StarRocks/starrocks-connector-for-kafka/releases), package it into a ZIP file and upload the ZIP file to Confluent Cloud.
 
 ### Network configuration
 
@@ -105,7 +107,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
 
 2. Configure and run the Kafka Connect.
 
-   1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running). Note that the following examples use starrocks-kafka-connector version `1.0.3`. If you use a newer version, you need to make corresponding changes.
+   1. Configure the Kafka Connect. In the configuration file **config/connect-standalone.properties** in the **config** directory, configure the following parameters. For more parameters and descriptions, see [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running).
 
         ```yaml
         # The addresses of Kafka brokers. Multiple addresses of Kafka brokers need to be separated by commas (,).
@@ -117,14 +119,14 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # The absolute path of the Kafka connector after extraction. For example:
-        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        # The absolute path of starrocks-connector-for-kafka-x.y.z-with-dependencies.jar.
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
 
    2. Run the Kafka Connect.
 
         ```Bash
-        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
 
 #### Run Kafka Connect in distributed mode
@@ -143,14 +145,14 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # The absolute path of the Kafka connector after extraction. For example:
-        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        # The absolute path of starrocks-connector-for-kafka-x.y.z-with-dependencies.jar.
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
 
     2. Run the Kafka Connect.
 
         ```BASH
-        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
 
 2. Configure and create the Kafka connector. Note that in distributed mode, you need to configure and create the Kafka connector through the REST API. For parameters and descriptions, see [Parameters](#Parameters).
@@ -652,7 +654,7 @@ PROPERTIES (
    ```Bash
    mkdir plugins
    tar -zxvf debezium-debezium-connector-postgresql-2.5.3.zip -C plugins
-   tar -zxvf starrocks-kafka-connector-1.0.3.tar.gz -C plugins
+   mv starrocks-connector-for-kafka-x.y.z-with-dependencies.jar plugins
    ```
 
    This directory is the value of the configuration item `plugin.path` in **config/connect-standalone.properties**.
@@ -725,8 +727,8 @@ PROPERTIES (
    key.converter.schemas.enable=true
    value.converter.schemas.enable=false
 
-   # The absolute path of the starrocks-kafka-connector after extraction. For example:
-   plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+   # The absolute path of starrocks-connector-for-kafka-x.y.z-with-dependencies.jar.
+   plugin.path=/home/kafka-connect/starrocks-kafka-connector
 
    # Parameters that control the flush policy. For more information, see the Usage Note section.
    offset.flush.interval.ms=10000
