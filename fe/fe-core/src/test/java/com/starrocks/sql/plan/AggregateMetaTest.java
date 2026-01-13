@@ -125,7 +125,7 @@ public class AggregateMetaTest extends PlanTestBase {
         String thriftPlan = getThriftPlan(sql);
         assertContains(thriftPlan, "union_node:TUnionNode(tuple_id:0,");
         String descTbl = getDescTbl(sql);
-        assertContains(descTbl, "TSlotDescriptor(id:6, parent:0, " +
+        assertContains(descTbl, "TSlotDescriptor(id:4, parent:0, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))])");
     }
 }

@@ -372,14 +372,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (constantMap.size() == aggregationOperator.getAggregations().size()) {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
-<<<<<<< HEAD
-            LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
-                    List.of(List.of(ConstantOperator.createExampleValueByType(Type.BIGINT))));
-=======
-            ColumnRefOperator dummy = factory.create("dummy", IntegerType.BIGINT, true);
+            ColumnRefOperator dummy = factory.create("dummy", Type.BIGINT, true);
             LogicalValuesOperator row = new LogicalValuesOperator(List.of(dummy),
-                    List.of(List.of(ConstantOperator.createExampleValueByType(IntegerType.BIGINT))));
->>>>>>> 6cf561efc3 ([BugFix] fix type mismatch when rewriting simple agg by stats (#67829))
+                    List.of(List.of(ConstantOperator.createExampleValueByType(Type.BIGINT))));
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
 
