@@ -20,6 +20,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "connector/connector_sink_profile.h"
 #include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
 #include "fs/fs.h"
@@ -64,8 +65,11 @@ public:
 
     void set_status(const Status& status);
 
+    void set_profile(RuntimeProfile* profile);
+
 protected:
     void push_rollback_action(const std::function<void()>& action);
+    void init_profile();
 
     AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
@@ -82,6 +86,8 @@ protected:
 
     std::shared_mutex _mutex;
     Status _status;
+    RuntimeProfile* _profile = nullptr;
+    ConnectorSinkProfile* _sink_profile = nullptr;
 };
 
 struct ConnectorChunkSinkContext {
