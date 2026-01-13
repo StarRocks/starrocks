@@ -69,8 +69,7 @@ class StarRocksTranslator:
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
         # 3. Dynamic Prompt Injection
-        system_instruction = self.system_template.replace("${source_lang}", source_lang_full).replace("${target_lang}", self.target_lang_full)
-        human_prompt = self.human_template.replace("${dictionary}", self.dictionary_str)
+        system_instruction = self.system_template.replace("${source_lang}", source_lang_full).replace("${target_lang}", self.target_lang_full).replace("${dictionary}", self.dictionary_str)
         human_prompt += f"\n\n### CONTENT TO TRANSLATE ###\n\n{self._read_file(input_file)}"
 
         if self.dry_run:
