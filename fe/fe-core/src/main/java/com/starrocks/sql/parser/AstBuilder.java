@@ -156,6 +156,7 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
@@ -751,6 +752,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new CreateDbStmt(context.IF() != null, catalogName, dbName.toString(), properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterDatabaseSetStatement(StarRocksParser.AlterDatabaseSetStatementContext context) {
+        String dbName = ((Identifier) visit(context.identifier())).getValue();
+        NodePosition pos = createPos(context);
+        Map<String, String> properties = getPropertyList(context.propertyList());
+        return new AlterDatabaseSetStmt(dbName, properties, pos);
     }
 
     @Override

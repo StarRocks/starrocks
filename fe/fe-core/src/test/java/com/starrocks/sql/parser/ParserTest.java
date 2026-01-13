@@ -19,6 +19,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -29,7 +30,9 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -700,4 +703,30 @@ class ParserTest {
         }
     }
 
+    @Test
+    void testAlterDatabaseSet() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        {
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertInstanceOf(AlterDatabaseSetStmt.class, stmt);
+            Analyzer.analyze(stmt, ctx);
+            com.starrocks.sql.ast.AlterDatabaseSetStmt setStmt = (com.starrocks.sql.ast.AlterDatabaseSetStmt) stmt;
+            Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, setStmt.getCatalogName());
+            Assertions.assertEquals("db1", setStmt.getDbName());
+            Assertions.assertEquals("sv1", setStmt.getProperties().get("storage_volume"));
+        }
+        {
+            ctx.setCurrentCatalog("external_catalog");
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () -> {
+                Analyzer.analyze(stmt, ctx);
+            });
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Unsupported operation alter db properties under external catalog"),
+                    exception.getMessage());
+        }
+    }
 }

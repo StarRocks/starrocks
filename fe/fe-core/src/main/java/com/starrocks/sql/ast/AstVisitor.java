@@ -150,6 +150,10 @@ public interface AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    default R visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     default R visitCreateDbStatement(CreateDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }

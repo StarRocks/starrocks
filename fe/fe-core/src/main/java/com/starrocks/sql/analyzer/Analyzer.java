@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -534,7 +535,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
-            AlterDbQuotaAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, ConnectContext context) {
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -552,7 +559,7 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
-            AlterDatabaseRenameStatementAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
