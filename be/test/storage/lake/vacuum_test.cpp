@@ -2943,6 +2943,38 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     tablet_metas_v4[601] = *t601_v4;
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
 
+    // enable_file_bundling is false, shared files will not be deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        TabletInfoPB tablet_info1;
+        tablet_info1.set_tablet_id(600);
+        tablet_info1.set_min_version(3);
+        TabletInfoPB tablet_info2;
+        tablet_info2.set_tablet_id(601);
+        tablet_info2.set_min_version(3);
+        request.add_tablet_infos()->CopyFrom(tablet_info1);
+        request.add_tablet_infos()->CopyFrom(tablet_info2);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(grace_timestamp + 1);
+        request.set_min_active_txn_id(12345);
+        // If enable_file_bundling is false, we need to clear the bundle_file_deleter.
+        request.set_enable_file_bundling(false);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(0, response.vacuumed_files());
+        EXPECT_EQ(0, response.vacuumed_file_size());
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"));
+    }
+
     // shared files will be deleted.
     {
         VacuumRequest request;
