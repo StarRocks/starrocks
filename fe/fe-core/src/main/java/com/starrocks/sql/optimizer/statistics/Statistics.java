@@ -20,6 +20,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Collection;
@@ -129,8 +130,11 @@ public class Statistics {
 
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet usedColumns = new ColumnRefSet();
-        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
-            usedColumns.union(entry.getKey().getUsedColumns());
+        for (ColumnRefOperator col : columnStatistics.keySet()) {
+            if (OperatorType.LAMBDA_ARGUMENT.equals(col.getOpType())) {
+                continue;
+            }
+            usedColumns.union(col.getId());
         }
         return usedColumns;
     }
