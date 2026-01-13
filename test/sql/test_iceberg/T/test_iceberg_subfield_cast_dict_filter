@@ -1,0 +1,42 @@
+-- name: test_iceberg_subfield_cast_dict_filter
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_subfield_cast/${uuid0}/warehouse/db >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog iceberg_subfield_${uuid0}
+properties (
+"type" = "iceberg",
+"iceberg.catalog.type" = "hadoop",
+"iceberg.catalog.warehouse" = "oss://${oss_bucket}/test_iceberg_subfield_cast/${uuid0}/warehouse"
+);
+
+use iceberg_subfield_${uuid0}.db;
+
+create table test_table (
+  id int,
+  payload struct<a_array array<DECIMAL(20,0)>, string_column string>
+);
+
+insert into test_table values
+  (1, named_struct('a_array', array<decimal(20, 0)>[cast(1 as decimal(20,0)), cast(2 as decimal(20,0))], 'string_column', 'a')),
+  (2, named_struct('a_array', array<decimal(20, 0)>[cast(3 as decimal(20,0))], 'string_column', 'b'));
+
+with t as (
+  select named_struct(
+           'casted_array',
+           cast(payload.a_array as array<int>),
+           'string_column',
+           payload.string_column
+         ) as test_struct
+  from test_table
+)
+select *
+from t
+where test_struct.string_column = 'a';
+
+drop table test_table force;
+drop database iceberg_subfield_${uuid0}.db;
+
+set catalog default_catalog;
+drop catalog iceberg_subfield_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_subfield_cast/${uuid0}/warehouse >/dev/null || echo "exit 0" >/dev/null
