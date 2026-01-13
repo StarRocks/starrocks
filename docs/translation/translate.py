@@ -53,8 +53,8 @@ class StarRocksTranslator:
         
         # 1. Detect Source Language from path
         source_lang = "en"
-        if "/docs/zh/" in input_file: source_lang = "zh"
-        elif "/docs/ja/" in input_file: source_lang = "ja"
+        if "docs/zh/" in input_file: source_lang = "zh"
+        elif "docs/ja/" in input_file: source_lang = "ja"
         source_lang_full = LANG_MAP.get(source_lang, source_lang)
 
         # 2. Determine Output Path
