@@ -29,8 +29,8 @@
 #include "gutil/casts.h"
 #include "runtime/integer_overflow_arithmetics.h"
 #include "runtime/mem_pool.h"
-#include "util/orlp/pdqsort.h"
 #include "util/decimal_types.h"
+#include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
@@ -530,6 +530,145 @@ static inline Int gcd_non_negative(Int a, Int b) {
 }
 
 template <LogicalType LT>
+static inline RunTimeCppType<LT> percentile_cont_decimal_calc_with_double_fallback(RunTimeCppType<LT> junior,
+                                                                                   RunTimeCppType<LT> senior,
+                                                                                   size_t index, double u,
+                                                                                   RunTimeCppType<LT> denom_original) {
+    using CppType = RunTimeCppType<LT>;
+    const auto scale_factor = denom_original;
+    double a = 0;
+    double b = 0;
+    DecimalV3Cast::to_float<CppType, double>(junior, scale_factor, &a);
+    DecimalV3Cast::to_float<CppType, double>(senior, scale_factor, &b);
+    const double res = a + (u - static_cast<double>(index)) * (b - a);
+    double scaled = res * static_cast<double>(scale_factor);
+    scaled = (scaled < 0) ? std::ceil(scaled) : std::floor(scaled);
+    return static_cast<CppType>(scaled);
+}
+
+template <LogicalType LT>
+static inline RunTimeCppType<LT> percentile_cont_decimal_interpolate(RunTimeCppType<LT> junior,
+                                                                     RunTimeCppType<LT> senior, size_t index,
+                                                                     RunTimeCppType<LT> u_numer,
+                                                                     RunTimeCppType<LT> denom,
+                                                                     RunTimeCppType<LT> denom_original) {
+    using CppType = RunTimeCppType<LT>;
+    if (junior == senior) return junior;
+    if (u_numer == CppType(0)) return junior;
+
+    const CppType frac_numer = u_numer - CppType(index) * denom;
+    if (frac_numer == CppType(0)) return junior;
+
+    CppType delta = senior - junior;
+
+    // one-step reduction: g = gcd(|delta|, denom) == gcd(denom, delta mod denom)
+    CppType r = delta % denom;
+    if (r < CppType(0)) r += denom;
+    CppType g = gcd_non_negative<CppType>(denom, r);
+    if (g != CppType(0) && g != CppType(1)) {
+        delta /= g;
+        denom /= g;
+    }
+
+    CppType prod{};
+    if (UNLIKELY(mul_overflow(delta, frac_numer, &prod))) {
+        const double u = static_cast<double>(u_numer) / static_cast<double>(denom_original);
+        return percentile_cont_decimal_calc_with_double_fallback<LT>(junior, senior, index, u, denom_original);
+    }
+
+    const CppType adj = prod / denom; // truncate toward 0
+    return junior + adj;
+}
+
+template <LogicalType LT>
+static inline void percentile_cont_decimal_finalize_with_double(PercentileDecimalRateState<LT>& st,
+                                                                RunTimeColumnType<LT>* column,
+                                                                RunTimeCppType<LT> denom_original,
+                                                                RunTimeCppType<LT> rate_int, bool items_sorted) {
+    using CppType = RunTimeCppType<LT>;
+
+    if (st.grid.empty()) {
+        auto& items = st.items;
+        if (!items_sorted) {
+            std::sort(items.begin(), items.end());
+        }
+        const size_t rows_num = items.size();
+        if (rows_num == 0) return;
+        if (rows_num == 1 || rate_int == denom_original) {
+            column->append(items.back());
+            return;
+        }
+
+        const double u = (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) /
+                         static_cast<double>(denom_original);
+        const size_t index = static_cast<size_t>(u);
+        if (index >= rows_num - 1) {
+            column->append(items.back());
+            return;
+        }
+        column->append(percentile_cont_decimal_calc_with_double_fallback<LT>(items[index], items[index + 1], index, u,
+                                                                             denom_original));
+        return;
+    }
+
+    // distributed: k-way merge on sorted segments
+    const size_t k = st.grid.size();
+    size_t rows_num = 0;
+    for (size_t i = 0; i < k; i++) {
+        rows_num += st.grid[i].size() - 2;
+    }
+    if (rows_num == 0) return;
+
+    // Fast path for exact endpoints to avoid heavy k-way merge.
+    if (rate_int == CppType(0)) {
+        CppType junior{}, senior{};
+        std::vector<CppType> b;
+        std::vector<int> ls;
+        std::vector<int> mp;
+        kWayMergeSort<LT, CppType, false>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
+        column->append(junior);
+        return;
+    }
+    if (rate_int == denom_original) {
+        CppType junior{}, senior{};
+        std::vector<CppType> b;
+        std::vector<int> ls;
+        std::vector<int> mp;
+        kWayMergeSort<LT, CppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
+        column->append(senior);
+        return;
+    }
+
+    const double u =
+            (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) / static_cast<double>(denom_original);
+    const size_t index = static_cast<size_t>(u);
+    if (index >= rows_num - 1) {
+        CppType junior{}, senior{};
+        std::vector<CppType> b;
+        std::vector<int> ls;
+        std::vector<int> mp;
+        kWayMergeSort<LT, CppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
+        column->append(senior);
+        return;
+    }
+
+    const bool reverse = rows_num > 2 && (rate_int * CppType(2) > denom_original);
+    const size_t goal = reverse ? (rows_num - 2 - index) : index;
+
+    CppType junior{};
+    CppType senior{};
+    std::vector<CppType> b;
+    std::vector<int> ls;
+    std::vector<int> mp;
+    if (reverse) {
+        kWayMergeSort<LT, CppType, true>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
+    } else {
+        kWayMergeSort<LT, CppType, false>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
+    }
+    column->append(percentile_cont_decimal_calc_with_double_fallback<LT>(junior, senior, index, u, denom_original));
+}
+
+template <LogicalType LT>
 class PercentileContDecimalRateAggregateFunction final
         : public AggregateFunctionBatchHelper<PercentileDecimalRateState<LT>,
                                               PercentileContDecimalRateAggregateFunction<LT>> {
@@ -575,7 +714,8 @@ public:
         st.inited = true;
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         this->init_state_if_needed(ctx, columns, state);
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         auto column_data = column.immutable_data();
@@ -717,50 +857,6 @@ public:
         }
 
         const InputCppType denom_original = get_scale_factor<InputCppType>(st.scale);
-
-        auto calc_with_double_fallback = [&](InputCppType junior, InputCppType senior, size_t index, double u) -> InputCppType {
-            // double fallback computes: a + (u-index)*(b-a), then trunc back to scaled integer
-            const auto scale_factor = denom_original;
-            double a = 0;
-            double b = 0;
-            DecimalV3Cast::to_float<InputCppType, double>(junior, scale_factor, &a);
-            DecimalV3Cast::to_float<InputCppType, double>(senior, scale_factor, &b);
-            double res = a + (u - static_cast<double>(index)) * (b - a);
-            // truncate toward zero: scaled = trunc(res * 10^scale)
-            double scaled = res * static_cast<double>(scale_factor);
-            scaled = (scaled < 0) ? std::ceil(scaled) : std::floor(scaled);
-            return static_cast<InputCppType>(scaled);
-        };
-
-        auto interpolate = [&](InputCppType junior, InputCppType senior, size_t index, InputCppType u_numer,
-                               InputCppType denom) -> InputCppType {
-            if (junior == senior) return junior;
-            if (u_numer == InputCppType(0)) return junior;
-
-            const InputCppType frac_numer = u_numer - InputCppType(index) * denom;
-            if (frac_numer == InputCppType(0)) return junior;
-
-            InputCppType delta = senior - junior;
-
-            // one-step reduction: g = gcd(|delta|, denom) == gcd(denom, delta mod denom)
-            InputCppType r = delta % denom;
-            if (r < InputCppType(0)) r += denom;
-            InputCppType g = gcd_non_negative<InputCppType>(denom, r);
-            if (g != InputCppType(0) && g != InputCppType(1)) {
-                delta /= g;
-                denom /= g;
-            }
-
-            InputCppType prod{};
-            if (UNLIKELY(mul_overflow(delta, frac_numer, &prod))) {
-                double u = static_cast<double>(u_numer) / static_cast<double>(denom_original);
-                return calc_with_double_fallback(junior, senior, index, u);
-            }
-
-            InputCppType adj = prod / denom; // truncate toward 0
-            return junior + adj;
-        };
-
         const auto rate_int = st.rate_int;
 
         // group by (single state)
@@ -776,15 +872,7 @@ public:
 
             InputCppType u_numer{};
             if (UNLIKELY(mul_overflow(InputCppType(rows_num - 1), rate_int, &u_numer))) {
-                // fallback: approximate u by double
-                double u = (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) /
-                           static_cast<double>(denom_original);
-                size_t index = static_cast<size_t>(u);
-                if (index >= rows_num - 1) {
-                    column->append(items.back());
-                    return;
-                }
-                column->append(calc_with_double_fallback(items[index], items[index + 1], index, u));
+                percentile_cont_decimal_finalize_with_double<LT>(st, column, denom_original, rate_int, true);
                 return;
             }
 
@@ -794,7 +882,8 @@ public:
                 return;
             }
 
-            InputCppType out = interpolate(items[index], items[index + 1], index, u_numer, denom_original);
+            InputCppType out = percentile_cont_decimal_interpolate<LT>(items[index], items[index + 1], index, u_numer,
+                                                                       denom_original, denom_original);
             column->append(out);
             return;
         }
@@ -807,72 +896,23 @@ public:
         }
         if (rows_num == 0) return;
 
-        // Fast path for exact endpoints to avoid heavy arithmetic (and possible overflow).
-        if (rate_int == InputCppType(0)) {
-            InputCppType junior{}, senior{};
-            std::vector<InputCppType> b;
-            std::vector<int> ls;
-            std::vector<int> mp;
-            kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-            column->append(junior);
-            return;
-        }
-        if (rate_int == denom_original) {
-            InputCppType junior{}, senior{};
-            std::vector<InputCppType> b;
-            std::vector<int> ls;
-            std::vector<int> mp;
-            kWayMergeSort<LT, InputCppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-            column->append(senior);
-            return;
-        }
-
         InputCppType u_numer{};
         if (UNLIKELY(mul_overflow(InputCppType(rows_num - 1), rate_int, &u_numer))) {
-            double u = (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) /
-                       static_cast<double>(denom_original);
-            size_t index = static_cast<size_t>(u);
-            if (index >= rows_num - 1) {
-                InputCppType junior{}, senior{};
-                std::vector<InputCppType> b;
-                std::vector<int> ls;
-                std::vector<int> mp;
-                kWayMergeSort<LT, InputCppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-                column->append(senior);
-                return;
-            }
-            InputCppType junior{}, senior{};
-            std::vector<InputCppType> b;
-            std::vector<int> ls;
-            std::vector<int> mp;
-            kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, index, static_cast<int>(k), junior, senior);
-            column->append(calc_with_double_fallback(junior, senior, index, u));
+            percentile_cont_decimal_finalize_with_double<LT>(st, column, denom_original, rate_int, false);
             return;
         }
 
         size_t index = static_cast<size_t>(u_numer / denom_original);
-        if (index >= rows_num - 1) {
-            InputCppType junior{}, senior{};
-            std::vector<InputCppType> b;
-            std::vector<int> ls;
-            std::vector<int> mp;
-            kWayMergeSort<LT, InputCppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-            column->append(senior);
-            return;
-        }
 
         // choose direction based on rate > 0.5
-        bool reverse = false;
-        if (rows_num > 2) {
-            InputCppType twice_rate{};
-            if (!mul_overflow(rate_int, InputCppType(2), &twice_rate) && twice_rate > denom_original) {
-                reverse = true;
-            }
-        }
+        const bool reverse = rows_num > 2 && (rate_int * InputCppType(2) > denom_original);
 
         // When reverse is enabled, we need the "distance from the end" instead of index.
         // For integer a, ceil(a - u) == a - floor(u). Here a == rows_num - 2, floor(u) == index.
         size_t goal = reverse ? (rows_num - 2 - index) : index;
+        if (rate_int == denom_original) {
+            goal = 0;
+        }
 
         InputCppType junior{};
         InputCppType senior{};
@@ -885,7 +925,8 @@ public:
             kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
         }
 
-        InputCppType out = interpolate(junior, senior, index, u_numer, denom_original);
+        InputCppType out =
+                percentile_cont_decimal_interpolate<LT>(junior, senior, index, u_numer, denom_original, denom_original);
         column->append(out);
     }
 
