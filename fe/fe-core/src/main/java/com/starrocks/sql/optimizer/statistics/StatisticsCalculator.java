@@ -256,10 +256,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
-        if (!shouldSkipPredicateColumnsCollection()) {
-            PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
-                    context.getOptExpression());
-        }
+        PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
+                context.getOptExpression());
 
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
@@ -1199,8 +1197,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
                 rightStatistics.getUsedColumns(), allJoinPredicate);
 
-        PredicateColumnsMgr.getInstance().recordJoinPredicate(eqOnPredicates, optimizerContext.getColumnRefFactory(),
-                context.getOptExpression());
+        if (!shouldSkipPredicateColumnsCollection()) {
+            PredicateColumnsMgr.getInstance().recordJoinPredicate(eqOnPredicates, optimizerContext.getColumnRefFactory(),
+                    context.getOptExpression());
+        }
 
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
@@ -1696,7 +1696,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (bestDrivingStats == null) {
             return statistics;
         }
-        return Statistics.buildFrom(bestDrivingStats).setOutputRowCount(bestRowCount).build();
+        return bestDrivingStats.withOutputRowCount(bestRowCount);
     }
 
     private double getPredicateSelectivity(PredicateOperator predicateOperator, Statistics statistics) {
