@@ -246,7 +246,7 @@ Empty set (0.04 sec)
 
 #### 共有データストレージボリュームを作成する
 
-以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MionIO バケットにストレージボリュームを作成します。
+以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MinIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume

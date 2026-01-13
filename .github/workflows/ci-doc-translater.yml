@@ -47,9 +47,9 @@ jobs:
           FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           pip install -U google-genai pyyaml
-          if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then python translate.py -l ja --files $FILES; fi
-          if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then python translate.py -l zh --files $FILES; fi
-          if [[ "$BODY" == *" [x] **English (en)**"* ]]; then python translate.py -l en --files $FILES; fi
+          if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then docs/translation/python translate.py -l ja --files $FILES; fi
+          if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then docs/translation/python translate.py -l zh --files $FILES; fi
+          if [[ "$BODY" == *" [x] **English (en)**"* ]]; then docs/translation/python translate.py -l en --files $FILES; fi
       - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"

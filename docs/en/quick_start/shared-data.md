@@ -196,7 +196,7 @@ Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bu
 
 ## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and MinIO.
 
 This is the part of the `FE` configuration that specifies that the StarRocks deployment will use shared data. This was added to the file `fe.conf` when Docker Compose created the deployment.
 
@@ -247,7 +247,7 @@ Empty set (0.04 sec)
 
 #### Create a shared-data storage volume
 
-Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MionIO bucket using the access key and secret.
+Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MinIO bucket using the access key and secret.
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -572,7 +572,7 @@ These three changes allow traffic between the host network and the CN:
 
 In this tutorial you:
 
-- Deployed StarRocks and Minio in Docker
+- Deployed StarRocks and MinIO in Docker
 - Created a MinIO access key
 - Configured a StarRocks Storage Volume that uses MinIO
 - Loaded crash data provided by New York City and weather data provided by NOAA

@@ -569,7 +569,7 @@ MinIO 访问密钥密钥。
 
 在本教程中，您：
 
-- 在 Docker 中部署了 StarRocks 和 Minio
+- 在 Docker 中部署了 StarRocks 和 MinIO
 - 创建了一个 MinIO 访问密钥
 - 配置了一个使用 MinIO 的 StarRocks 存储卷
 - 导入了纽约市提供的碰撞数据和 NOAA 提供的天气数据
