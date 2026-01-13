@@ -28,6 +28,7 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "util/monotime.h"
+#include "util/time.h"
 
 namespace starrocks::connector {
 
@@ -60,6 +61,7 @@ void PartitionChunkWriter::commit_file() {
     if (!_file_writer) {
         return;
     }
+    SCOPED_TIMER(_sink_profile ? _sink_profile->commit_file_timer : nullptr);
     auto result = _file_writer->commit();
     _commit_callback(result.set_extra_data(_commit_extra_data));
     _file_writer = nullptr;
@@ -78,6 +80,7 @@ Status BufferPartitionChunkWriter::write(const ChunkPtr& chunk) {
         commit_file();
     }
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    SCOPED_TIMER(_sink_profile ? _sink_profile->write_file_timer : nullptr);
     return _file_writer->write(chunk.get());
 }
 
@@ -200,6 +203,7 @@ bool SpillPartitionChunkWriter::is_finished() {
 }
 
 Status SpillPartitionChunkWriter::merge_blocks() {
+    SCOPED_TIMER(_sink_profile ? _sink_profile->merge_blocks_timer : nullptr);
     _chunk_spill_token->wait();
     auto write_func = [this](Chunk* chunk) { return _flush_chunk(chunk, false); };
     auto flush_func = [this]() {
@@ -217,6 +221,7 @@ Status SpillPartitionChunkWriter::merge_blocks() {
 }
 
 Status SpillPartitionChunkWriter::_sort() {
+    SCOPED_TIMER(_sink_profile ? _sink_profile->sort_timer : nullptr);
     RETURN_IF(!_result_chunk, Status::OK());
 
     auto chunk = _result_chunk->clone_empty_with_schema(0);
@@ -242,7 +247,17 @@ Status SpillPartitionChunkWriter::_spill() {
         RETURN_IF_ERROR(_sort());
     }
 
-    auto callback = [this](const ChunkPtr& chunk, const StatusOr<size_t>& res) {
+    // Record the time when the async spill task is submitted. Note that the
+    // corresponding timer below will measure the duration from this point
+    // until the callback is executed, which includes both the actual spill
+    // work and any queuing or scheduling delays in the thread pool.
+    int64_t spill_start_ns = MonotonicNanos();
+    RuntimeProfile::Counter* spill_timer = _sink_profile ? _sink_profile->spill_chunk_timer : nullptr;
+    auto callback = [this, spill_start_ns, spill_timer](const ChunkPtr& chunk, const StatusOr<size_t>& res) {
+        // Update spill timer with complete async execution time
+        if (spill_timer) {
+            COUNTER_UPDATE(spill_timer, MonotonicNanos() - spill_start_ns);
+        }
         if (!res.ok()) {
             LOG(ERROR) << "fail to spill connector partition chunk sink, write it to remote file directly. msg: "
                        << res.status().message();
@@ -260,6 +275,10 @@ Status SpillPartitionChunkWriter::_spill() {
                                                        std::move(callback));
     RETURN_IF_ERROR(_chunk_spill_token->submit(spill_task));
     _spilling_bytes_usage.fetch_add(_result_chunk->bytes_usage(), std::memory_order_relaxed);
+    if (_sink_profile) {
+        COUNTER_SET(_sink_profile->spilling_bytes_usage_peak, _spilling_bytes_usage.load(std::memory_order_relaxed));
+    }
+
     _chunk_bytes_usage = 0;
     _result_chunk.reset();
     return Status::OK();
@@ -310,6 +329,7 @@ Status SpillPartitionChunkWriter::_write_chunk(Chunk* chunk) {
         commit_file();
     }
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    SCOPED_TIMER(_sink_profile ? _sink_profile->write_file_timer : nullptr);
     RETURN_IF_ERROR(_file_writer->write(chunk));
     return Status::OK();
 }

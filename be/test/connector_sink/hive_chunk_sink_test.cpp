@@ -72,6 +72,7 @@ TEST_F(HiveChunkSinkTest, test_callback) {
                 std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
         auto sink = std::make_unique<HiveChunkSink>(partition_column_names, std::move(partition_column_evaluators),
                                                     std::move(partition_chunk_writer_factory), _runtime_state);
+        sink->init_profile();
         sink->callback_on_commit(CommitResult{
                 .io_status = Status::OK(),
                 .format = formats::PARQUET,

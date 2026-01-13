@@ -74,6 +74,10 @@ void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
         TSinkCommitInfo commit_info;
         commit_info.__set_iceberg_data_file(iceberg_data_file);
         _state->add_sink_commit_info(commit_info);
+
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 

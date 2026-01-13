@@ -41,6 +41,7 @@ Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));
 #endif
+    _connector_chunk_sink->set_profile(_unique_metrics.get());
     RETURN_IF_ERROR(_connector_chunk_sink->init());
     return Status::OK();
 }
