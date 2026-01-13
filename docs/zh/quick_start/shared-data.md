@@ -1,6 +1,7 @@
 ---
-description: 计算与存储分离
 displayed_sidebar: docs
+sidebar_position: 2
+description: Separate compute and storage
 ---
 
 # Separate storage and compute
@@ -12,14 +13,14 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 在存储与计算分离的系统中，数据存储在低成本、可靠的远端存储系统中，如 Amazon S3、Google Cloud Storage、Azure Blob Storage 和其他兼容 S3 的存储如 MinIO。热数据会被本地缓存，当缓存命中时，查询性能可与存储计算耦合架构相媲美。计算节点（CN）可以根据需求在几秒内添加或移除。这种架构降低了存储成本，确保了更好的资源隔离，并提供了弹性和可扩展性。
 
-本教程涵盖：
+本教程包括：
 
 - 在 Docker 容器中运行 StarRocks
 - 使用 MinIO 作为对象存储
 - 配置 StarRocks 以实现共享数据
 - 导入两个公共数据集
 - 使用 SELECT 和 JOIN 分析数据
-- 基本数据转换（ETL 中的 **T**）
+- 基础数据转换（ETL 中的 **T**）
 
 使用的数据由纽约市开放数据和 NOAA 的国家环境信息中心提供。
 
@@ -43,7 +44,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### SQL 客户端
 
-您可以使用 Docker 环境中提供的 SQL 客户端，或使用您系统上的客户端。许多兼容 MySQL 的客户端都可以使用，本指南涵盖了 DBeaver 和 MySQL Workbench 的配置。
+您可以使用 Docker 环境中提供的 SQL 客户端，也可以使用系统上的 SQL 客户端。许多 MySQL 兼容的客户端都可以工作，本指南涵盖了 DBeaver 和 MySQL Workbench 的配置。
 
 ### curl
 
@@ -67,7 +68,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### CN
 
-计算节点负责在共享数据部署中执行查询计划。
+Compute Nodes 负责在共享数据部署中执行查询计划。
 
 ### BE
 
@@ -89,10 +90,10 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ## 下载实验文件
 
-需要下载三个文件：
+有三个文件要下载：
 
 - 部署 StarRocks 和 MinIO 环境的 Docker Compose 文件
-- 纽约市交通事故数据
+- 纽约市碰撞数据
 - 天气数据
 
 本指南使用 MinIO，它是根据 GNU Affero 通用公共许可证提供的兼容 S3 的对象存储。
@@ -114,7 +115,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 下载这两个数据集：
 
-#### 纽约市交通事故数据
+#### 纽约市碰撞数据
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
@@ -134,7 +135,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 docker compose up --detach --wait --wait-timeout 120
 ```
 
-FE、CN 和 MinIO 服务变为健康状态大约需要 30 秒。`quickstart-minio_mc-1` 容器将显示 `Waiting` 状态和一个退出代码。退出代码为 `0` 表示成功。
+FE、CN 和 MinIO 服务大约需要 30 秒才能变为健康状态。`quickstart-minio_mc-1` 容器将显示 `Waiting` 状态以及退出代码。退出代码 `0` 表示成功。
 
 ```bash
 [+] Running 4/5
@@ -150,9 +151,9 @@ container quickstart-minio_mc-1 exited (0)
 
 ## MinIO
 
-本快速入门使用 MinIO 进行共享存储。
+此快速入门使用 MinIO 进行共享存储。
 
-### 验证 MinIO 凭证
+### 验证 MinIO 凭据
 
 要将 MinIO 用作 StarRocks 的对象存储，StarRocks 需要一个 MinIO 访问密钥。访问密钥是在 Docker 服务启动时生成的。为了帮助您更好地理解 StarRocks 如何连接到 MinIO，您应该验证密钥是否存在。
 
@@ -174,7 +175,7 @@ docker compose run minio_mc
 ```
 :::
 
-### 为您的数据创建一个 bucket
+### 为您的数据创建一个存储桶
 
 当您在 StarRocks 中创建一个存储卷时，您将指定数据的 `LOCATION`：
 
@@ -182,7 +183,7 @@ docker compose run minio_mc
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-打开 [http://localhost:9001/buckets](http://localhost:9001/buckets) 并为存储卷添加一个 bucket。将 bucket 命名为 `my-starrocks-bucket`。接受列出的三个选项的默认值。
+打开 [http://localhost:9001/buckets](http://localhost:9001/buckets) 并为存储卷添加一个存储桶。将存储桶命名为 `my-starrocks-bucket`。接受三个列出选项的默认值。
 
 ---
 
@@ -192,11 +193,11 @@ docker compose run minio_mc
 
 ---
 
-## StarRocks 的共享数据配置
+## 用于共享数据的 StarRocks 配置
 
 此时，您已经运行了 StarRocks，并且 MinIO 也在运行。MinIO 访问密钥用于连接 StarRocks 和 MinIO。
 
-这是 `FE` 配置的一部分，指定 StarRocks 部署将使用共享数据。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
+这是 `FE` 配置的一部分，它指定 StarRocks 部署将使用共享数据。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
 
 ```sh
 # enable the shared data run mode
@@ -220,7 +221,7 @@ docker compose exec starrocks-fe \
 
 从包含 `docker-compose.yml` 文件的目录运行此命令。
 
-如果您使用的是 MySQL 命令行客户端以外的客户端，请现在打开它。
+如果您使用的是 MySQL 命令行客户端以外的客户端，请立即打开它。
 :::
 
 ```sql
@@ -235,7 +236,7 @@ SHOW STORAGE VOLUMES;
 ```
 
 :::tip
-应该没有存储卷，您将接下来创建一个。
+应该没有存储卷，您将在下一步创建一个。
 :::
 
 ```sh
@@ -261,7 +262,7 @@ CREATE STORAGE VOLUME s3_volume
      );
 ```
 
-现在您应该看到一个存储卷列出，之前是空集：
+现在您应该看到列出的存储卷，之前它是一个空集：
 
 ```
 SHOW STORAGE VOLUMES;
@@ -325,13 +326,13 @@ IsDefault: true
 1 row in set (0.02 sec)
 ```
 
-## 创建一个数据库
+## 创建数据库
 
 ```
 CREATE DATABASE IF NOT EXISTS quickstart;
 ```
 
-验证数据库 `quickstart` 是否使用存储卷 `s3_volume`：
+验证数据库 `quickstart` 是否正在使用存储卷 `s3_volume`：
 
 ```
 SHOW CREATE DATABASE quickstart \G
@@ -353,9 +354,9 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 ---
 
-## 导入两个数据集
+## 加载两个数据集
 
-有很多方法可以将数据导入 StarRocks。对于本教程，最简单的方法是使用 curl 和 StarRocks Stream Load。
+有很多方法可以将数据加载到 StarRocks 中。对于本教程，最简单的方法是使用 curl 和 StarRocks Stream Load。
 
 :::tip
 
@@ -367,7 +368,7 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 `curl` 命令看起来很复杂，但在教程的最后有详细解释。现在，我们建议运行这些命令并运行一些 SQL 来分析数据，然后在最后阅读有关数据导入的详细信息。
 
-### 纽约市碰撞数据 - 事故
+### 纽约市碰撞数据 - 碰撞
 
 ```bash
 curl --location-trusted -u root             \
@@ -449,7 +450,7 @@ curl --location-trusted -u root             \
 打开 MinIO [http://localhost:9001/browser/my-starrocks-bucket](http://localhost:9001/browser/my-starrocks-bucket) 并验证您在 `my-starrocks-bucket/` 下是否有条目
 
 :::tip
-`my-starrocks-bucket/` 下的文件夹名称是在加载数据时生成的。您应该在 `my-starrocks-bucket` 下看到一个目录，然后在其下看到两个目录。在这些目录中，您会找到数据、元数据或模式条目。
+`my-starrocks-bucket/` 下方的文件夹名称是在您加载数据时生成的。您应该在 `my-starrocks-bucket` 下方看到一个目录，然后在该目录下方看到两个目录。在这些目录中，您将找到数据、元数据或架构条目。
 
 ![MinIO 对象浏览器](../_assets/quick-start/MinIO-data.png)
 :::
@@ -464,7 +465,7 @@ curl --location-trusted -u root             \
 
 ## 配置 StarRocks 以实现共享数据
 
-现在您已经体验了使用 StarRocks 的共享数据，了解配置很重要。
+现在您已经体验了将 StarRocks 与共享数据一起使用，了解配置非常重要。
 
 ### CN 配置
 
@@ -500,7 +501,7 @@ cloud_native_storage_type = S3
 非默认 FE 配置设置：
 
 :::note
-许多配置参数以 `s3_` 为前缀。此前缀用于所有兼容 Amazon S3 的存储类型（例如：S3、GCS 和 MinIO）。使用 Azure Blob Storage 时，前缀为 `azure_`。
+许多配置参数都以 `s3_` 为前缀。此前缀用于所有 Amazon S3 兼容的存储类型（例如：S3、GCS 和 MinIO）。使用 Azure Blob Storage 时，前缀为 `azure_`。
 :::
 
 #### `run_mode=shared_data`
@@ -534,7 +535,7 @@ MinIO 端点，包括端口号。
 
 #### `aws_s3_path=starrocks`
 
-bucket 名称。
+存储桶名称。
 
 #### `aws_s3_access_key=AAAAAAAAAAAAAAAAAAAA`
 
@@ -554,9 +555,9 @@ MinIO 访问密钥密钥。
 
 ### 配置 FQDN 模式
 
-启动 FE 的命令也进行了更改。Docker Compose 文件中的 FE 服务命令添加了选项 `--host_type FQDN`。通过将 `host_type` 设置为 `FQDN`，Stream Load 任务被转发到 CN pod 的完全限定域名，而不是 IP 地址。这是因为 IP 地址在分配给 Docker 环境的范围内，通常无法从主机机器访问。
+启动 FE 的命令也会更改。Docker Compose 文件中的 FE 服务命令添加了选项 `--host_type FQDN`。通过将 `host_type` 设置为 `FQDN`，Stream Load 作业将转发到 CN pod 的完全限定域名，而不是 IP 地址。这样做是因为 IP 地址位于分配给 Docker 环境的范围内，并且通常无法从主机访问。
 
-这三个更改允许主机网络和 CN 之间的流量：
+以下三个更改允许主机网络和 CN 之间的流量：
 
 - 将 `--host_type` 设置为 `FQDN`
 - 将 CN 端口 8040 暴露给主机网络

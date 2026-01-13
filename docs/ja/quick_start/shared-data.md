@@ -1,9 +1,11 @@
 ---
 description: 計算とストレージの分離
 displayed_sidebar: docs
+sidebar_position: 2
+description: Separate compute and storage
 ---
 
-# ストレージとコンピュートの分離
+# ストレージとコンピューティングの分離
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
@@ -15,20 +17,20 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 このチュートリアルでは以下をカバーします:
 
 - Docker コンテナでの StarRocks の実行
-- オブジェクトストレージとして MinIO の使用
-- StarRocks の共有データ用の設定
+- オブジェクトストレージに MinIO を使用する
+- 共有データ用に StarRocks を構成する
 - 2 つの公開データセットのロード
 - SELECT と JOIN を使用したデータの分析
 - 基本的なデータ変換 (ETL の **T**)
 
-使用するデータは、NYC OpenData と NOAA の National Centers for Environmental Information によって提供されています。
+使用されるデータは、NYC OpenData と NOAA の National Centers for Environmental Information によって提供されています。
 
 これらのデータセットは非常に大きいため、このチュートリアルは StarRocks を使用する経験を得ることを目的としており、過去 120 年分のデータをロードすることはありません。Docker イメージを実行し、このデータを Docker に 4 GB の RAM を割り当てたマシンでロードできます。より大規模でフォールトトレラントなスケーラブルなデプロイメントについては、他のドキュメントを用意しており、後で提供します。
 
 このドキュメントには多くの情報が含まれており、最初にステップバイステップの内容が提示され、最後に技術的な詳細が示されています。これは次の目的を順に果たすためです:
 
-1. 読者が共有データデプロイメントでデータをロードし、そのデータを分析できるようにする。
-2. 共有データデプロイメントの設定詳細を提供する。
+1. 読者が共有データデプロイメントにデータをロードし、そのデータを分析できるようにする。
+2. 共有データデプロイメントの構成の詳細を提供する。
 3. ロード中のデータ変換の基本を説明する。
 
 ---
@@ -39,7 +41,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 - [Docker](https://docs.docker.com/engine/install/)
 - Docker に割り当てられた 4 GB の RAM
-- Docker に割り当てられた 10 GB の空きディスクスペース
+- Docker に割り当てられた 10 GB の空きディスク容量
 
 ### SQL クライアント
 
@@ -63,7 +65,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ### FE
 
-フロントエンドノードは、メタデータ管理、クライアント接続管理、クエリプランニング、クエリスケジューリングを担当します。各 FE はメモリ内にメタデータの完全なコピーを保存および維持し、FEs 間での無差別なサービスを保証します。
+Frontend ノードは、メタデータ管理、クライアント接続管理、クエリプランニング、およびクエリスケジューリングを担当します。各 FE は、メタデータの完全なコピーをメモリに保存および維持し、FE 間で無差別なサービスを保証します。
 
 ### CN
 
@@ -74,7 +76,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 バックエンドノードは、共有なしデプロイメントでデータストレージとクエリプランの実行の両方を担当します。
 
 :::note
-このガイドでは BEs を使用しませんが、BEs と CNs の違いを理解するためにこの情報を含めています。
+このガイドでは BE は使用しません。この情報は、BE と CN の違いを理解できるようにするために含まれています。
 :::
 
 ---
@@ -92,8 +94,8 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 ダウンロードするファイルは 3 つあります:
 
 - StarRocks と MinIO 環境をデプロイする Docker Compose ファイル
-- ニューヨーク市のクラッシュデータ
-- 気象データ
+- ニューヨーク市の衝突データ
+- 天気データ
 
 このガイドでは、GNU Affero General Public License の下で提供される S3 互換のオブジェクトストレージである MinIO を使用します。
 
@@ -114,13 +116,13 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 次の 2 つのデータセットをダウンロードします:
 
-#### ニューヨーク市のクラッシュデータ
+#### ニューヨーク市の衝突データ
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
 ```
 
-#### 気象データ
+#### 天気データ
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
@@ -182,7 +184,7 @@ StarRocks でストレージボリュームを作成する際に、データの 
     LOCATIONS = ("s3://my-starrocks-bucket/")
 ```
 
-[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリューム用のバケットを追加します。バケット名は `my-starrocks-bucket` とします。3 つのリストされたオプションのデフォルトを受け入れます。
+[http://localhost:9001/buckets](http://localhost:9001/buckets) を開き、ストレージボリュームのバケットを追加します。バケットに `my-starrocks-bucket` という名前を付けます。リストされている 3 つのオプションのデフォルトを受け入れます。
 
 ---
 
@@ -192,7 +194,7 @@ StarRocks でストレージボリュームを作成する際に、データの 
 
 ---
 
-## StarRocks の共有データ用設定
+## 共有データ用の StarRocks 構成
 
 この時点で StarRocks が稼働しており、MinIO も稼働しています。MinIO アクセスキーは StarRocks と MinIO を接続するために使用されます。
 
@@ -218,7 +220,7 @@ docker compose exec starrocks-fe \
 
 :::tip
 
-`docker-compose.yml` ファイルを含むディレクトリからこのコマンドを実行してください。
+`docker-compose.yml` ファイルを含むディレクトリからこのコマンドを実行します。
 
 MySQL コマンドラインクライアント以外のクライアントを使用している場合は、今すぐ開いてください。
 :::
@@ -244,7 +246,7 @@ Empty set (0.04 sec)
 
 #### 共有データストレージボリュームを作成する
 
-以前に MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して MionIO バケットにストレージボリュームを作成します。
+以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MionIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -355,11 +357,11 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 ## 2 つのデータセットをロードする
 
-StarRocks にデータをロードする方法は多数あります。このチュートリアルでは、最も簡単な方法として curl と StarRocks Stream Load を使用します。
+StarRocks にデータをロードする方法はたくさんあります。このチュートリアルでは、最も簡単な方法は curl と StarRocks Stream Load を使用することです。
 
 :::tip
 
-これらの curl コマンドは、データセットをダウンロードしたディレクトリから実行してください。
+データセットをダウンロードしたディレクトリからこれらの curl コマンドを実行します。
 
 パスワードを求められます。おそらく MySQL の `root` ユーザーにパスワードを設定していないため、Enter を押すだけで大丈夫です。
 
@@ -367,7 +369,7 @@ StarRocks にデータをロードする方法は多数あります。このチ�
 
 `curl` コマンドは複雑に見えますが、チュートリアルの最後で詳細に説明されています。今はコマンドを実行してデータを分析するための SQL を実行し、その後にデータロードの詳細を読むことをお勧めします。
 
-### ニューヨーク市の衝突データ - クラッシュ
+### ニューヨーク市の衝突データ - 衝突
 
 ```bash
 curl --location-trusted -u root             \
@@ -426,7 +428,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 </details>
 
-### 気象データ
+### 天気データ
 
 クラッシュデータをロードしたのと同じ方法で気象データセットをロードします。
 
@@ -456,17 +458,17 @@ MinIO を開き、[http://localhost:9001/browser/my-starrocks-bucket](http://loc
 
 ---
 
-## 質問に答える
+## いくつかの質問に答える
 
 <SQL />
 
 ---
 
-## StarRocks の共有データ用設定
+## 共有データ用に StarRocks を構成する
 
 StarRocks を共有データで使用する経験を得た今、設定を理解することが重要です。
 
-### CN 設定
+### CN 構成
 
 ここで使用される CN 設定はデフォルトです。CN は共有データの使用を目的として設計されています。デフォルトの設定は以下の通りです。変更を加える必要はありません。
 
@@ -481,7 +483,7 @@ brpc_port = 8060
 starlet_port = 9070
 ```
 
-### FE 設定
+### FE 構成
 
 FE 設定はデフォルトとは少し異なります。FE はデータが BE ノードのローカルディスクではなくオブジェクトストレージに保存されることを期待するように設定されている必要があります。
 
@@ -494,7 +496,7 @@ cloud_native_storage_type = S3
 ```
 
 :::note
-この設定ファイルには FE のデフォルトエントリは含まれておらず、共有データ設定のみが示されています。
+この構成ファイルには、FE のデフォルトエントリは含まれていません。共有データ構成のみが表示されます。
 :::
 
 デフォルトではない FE 設定:
@@ -505,7 +507,7 @@ cloud_native_storage_type = S3
 
 #### `run_mode=shared_data`
 
-これは共有データの使用を有効にします。
+これにより、共有データの使用が有効になります。
 
 #### `cloud_native_storage_type=S3`
 
@@ -552,7 +554,7 @@ MinIO を使用する場合、アクセスキーが使用されるため、イ�
 
 MinIO を使用する場合、このパラメータは常に false に設定されます。
 
-### FQDN モードの設定
+### FQDN モードの構成
 
 FE を起動するコマンドも変更されます。Docker Compose ファイルの FE サービスコマンドには、オプション `--host_type FQDN` が追加されています。`host_type` を `FQDN` に設定することで、Stream Load ジョブは CN ポッドの完全修飾ドメイン名に転送されます。これは、IP アドレスが Docker 環境に割り当てられた範囲内にあり、通常はホストマシンから利用できないためです。
 
@@ -576,11 +578,11 @@ FE を起動するコマンドも変更されます。Docker Compose ファイ�
 
 学ぶべきことはまだあります。Stream Load 中に行われたデータ変換については意図的に詳しく触れませんでした。curl コマンドに関するメモでその詳細を確認できます。
 
-## curl コマンドに関するメモ
+## curl コマンドに関する注意
 
 <Curl />
 
-## 詳細情報
+## より詳しい情報
 
 [StarRocks テーブル設計](../table_design/StarRocks_table_design.md)
 
