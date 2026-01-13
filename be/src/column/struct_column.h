@@ -166,11 +166,14 @@ public:
     Column* field_column_raw_ptr(size_t idx) { return _fields[idx].get(); }
     const Column* field_column_raw_ptr(size_t idx) const { return _fields[idx].get(); }
 
-    Column* field_column_raw_ptr(const std::string& field_name) {
-        return _fields[_find_field_idx_by_name(field_name)].get();
+    StatusOr<Column*> field_column_raw_ptr(const std::string& field_name) {
+        ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+        return _fields[idx].get();
     }
-    const Column* field_column_raw_ptr(const std::string& field_name) const {
-        return _fields[_find_field_idx_by_name(field_name)].get();
+
+    StatusOr<const Column*> field_column_raw_ptr(const std::string& field_name) const {
+        ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+        return _fields[idx].get();
     }
 
     const std::vector<std::string>& field_names() const { return _field_names; }

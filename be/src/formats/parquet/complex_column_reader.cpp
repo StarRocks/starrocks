@@ -249,7 +249,8 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (_child_readers[field_name] == nullptr) {
-            auto* child_column = struct_column->field_column_raw_ptr(field_name);
+            ASSIGN_OR_RETURN(auto* child_column, struct_column->field_column_raw_ptr(field_name));
+
             child_column->append_default(real_read);
         }
     }
@@ -328,8 +329,9 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] == nullptr) {
-                auto* dst_field = struct_column_dst->field_column_raw_ptr(field_name);
-                auto* src_field = struct_column_src->field_column_raw_ptr(field_name);
+                ASSIGN_OR_RETURN(auto* dst_field, struct_column_dst->field_column_raw_ptr(field_name));
+                ASSIGN_OR_RETURN(auto* src_field, struct_column_src->field_column_raw_ptr(field_name));
+
                 dst_field->swap_column(*src_field);
             } else {
                 ASSIGN_OR_RETURN(auto dst_field, struct_column_dst->field_column(field_name));
