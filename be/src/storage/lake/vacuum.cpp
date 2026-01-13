@@ -232,6 +232,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
 
             if (rowset.bundle_file_offsets_size() > 0 && bundle_file_deleter != nullptr) {
                 RETURN_IF_ERROR(bundle_file_deleter->delete_file(join_path(base_dir, rowset.segments(i))));
+                LOG(INFO) << "Schedule bundle segment file for deletion: " << join_path(base_dir, rowset.segments(i));
             } else {
                 RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, rowset.segments(i))));
             }
@@ -467,12 +468,18 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             RETURN_IF_ERROR(metafile_deleter.finish());
             (*vacuumed_files) += metafile_deleter.delete_count();
         }
+        if (!bundle_file_deleter.is_empty()) {
+            LOG(INFO) << "Tablet " << tablet_info.tablet_id()
+                      << " has bundle files to vacuum, tablet_vacuumed_version=" << tablet_vacuumed_version;
+        }
         // set partition vacuumed_version to min tablet vacuumed version
         final_vacuum_version = std::min(final_vacuum_version, tablet_vacuumed_version);
         max_vacuum_version = std::max(max_vacuum_version, tablet_vacuumed_version);
     }
     // delete bundle files
     if (max_vacuum_version > 0 && !bundle_file_deleter.is_empty()) {
+        LOG(INFO) << "Start to collect alive bundle files before vacuuming bundle files, max_vacuum_version="
+                  << max_vacuum_version;
         RETURN_IF_ERROR(collect_alive_bundle_files(tablet_mgr, tablet_infos, max_vacuum_version, root_dir,
                                                    &bundle_file_deleter));
         RETURN_IF_ERROR(bundle_file_deleter.finish());

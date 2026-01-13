@@ -98,11 +98,13 @@ public:
 
     Status delete_file(std::string path) override {
         _pending_files[path]++;
+        LOG(INFO) << "Register bundle file for deletion: " << path << " ref count: " << _pending_files[path];
         return Status::OK();
     }
 
     Status delay_delete(std::string path) {
         _delay_delete_files.insert(std::move(path));
+        LOG(INFO) << "Delay delete bundle file: " << path;
         return Status::OK();
     }
 
