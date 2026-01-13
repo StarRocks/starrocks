@@ -1288,7 +1288,7 @@ public class FunctionSet {
                 false, false, false));
 
         for (Type t : SUPPORTED_TYPES) {
-            if (t.isFunctionType()) {
+            if (t.isFunctionType() || t.isVariantType()) {
                 continue;
             }
             if (t.isNull()) {

@@ -28,11 +28,13 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/datum_convert.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "runtime/time_types.h"
 #include "runtime/types.h"
+#include "storage/types.h"
 #include "util/decimal_types.h"
 #include "util/slice.h"
 #include "util/variant.h"
@@ -498,6 +500,67 @@ Status collect_object_keys(const vpack::Slice& slice, std::unordered_set<std::st
     return Status::OK();
 }
 
+StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& slice,
+                                                   const std::unordered_map<std::string, uint32_t>& key_to_id) {
+    try {
+        if (slice.isNone() || slice.isNull()) {
+            return encode_null_value();
+        }
+        if (slice.isBool()) {
+            return encode_boolean(slice.getBool());
+        }
+        if (slice.isInt() || slice.isSmallInt()) {
+            return encode_primitive_number<int64_t>(VariantType::INT64, slice.getIntUnchecked());
+        }
+        if (slice.isUInt()) {
+            uint64_t value = slice.getUIntUnchecked();
+            if (value <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+                return encode_primitive_number<int64_t>(VariantType::INT64, static_cast<int64_t>(value));
+            }
+            return encode_primitive_number<double>(VariantType::DOUBLE, static_cast<double>(value));
+        }
+        if (slice.isDouble()) {
+            return encode_primitive_number<double>(VariantType::DOUBLE, slice.getDouble());
+        }
+        if (slice.isString() || slice.isBinary()) {
+            vpack::ValueLength len;
+            const char* str = slice.getStringUnchecked(len);
+            return encode_string_or_binary(VariantType::STRING, std::string_view(str, len));
+        }
+        if (slice.isArray()) {
+            vpack::ArrayIterator it(slice);
+            std::vector<std::string> elements;
+            elements.reserve(slice.length());
+            for (; it.valid(); it.next()) {
+                ASSIGN_OR_RETURN(std::string element, encode_json_to_variant_value(it.value(), key_to_id));
+                elements.emplace_back(std::move(element));
+            }
+            return encode_array_from_elements(elements);
+        }
+        if (slice.isObject()) {
+            vpack::ObjectIterator it(slice);
+            std::map<uint32_t, std::string> fields;
+            for (; it.valid(); it.next()) {
+                auto current = *it;
+                auto key = current.key.stringView();
+                auto it_key = key_to_id.find(std::string(key.data(), key.size()));
+                if (it_key == key_to_id.end()) {
+                    return Status::VariantError("Variant metadata missing field: " +
+                                                std::string(key.data(), key.size()));
+                }
+                ASSIGN_OR_RETURN(std::string field_value, encode_json_to_variant_value(current.value, key_to_id));
+                fields[it_key->second] = std::move(field_value);
+            }
+            return encode_object_from_fields(fields);
+        }
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
+
+    return Status::NotSupported(
+            fmt::format("Unsupported JSON type {} for variant encoding type", valueTypeName(slice.type())));
+}
+
 constexpr uint8_t kVariantMetadataVersion = 1;
 constexpr uint8_t kVariantMetadataSortedMask = 0b10000;
 constexpr uint8_t kVariantMetadataOffsetSizeShift = 6;
@@ -564,65 +627,224 @@ StatusOr<VariantMetadataBuildResult> build_variant_metadata(const std::unordered
     return result;
 }
 
-StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& slice,
-                                                   const std::unordered_map<std::string, uint32_t>& key_to_id) {
-    try {
-        if (slice.isNone() || slice.isNull()) {
-            return encode_null_value();
-        }
-        if (slice.isBool()) {
-            return encode_boolean(slice.getBool());
-        }
-        if (slice.isInt() || slice.isSmallInt()) {
-            return encode_primitive_number<int64_t>(VariantType::INT64, slice.getIntUnchecked());
-        }
-        if (slice.isUInt()) {
-            uint64_t value = slice.getUIntUnchecked();
-            if (value <= static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
-                return encode_primitive_number<int64_t>(VariantType::INT64, static_cast<int64_t>(value));
-            }
-            return encode_primitive_number<double>(VariantType::DOUBLE, static_cast<double>(value));
-        }
-        if (slice.isDouble()) {
-            return encode_primitive_number<double>(VariantType::DOUBLE, slice.getDouble());
-        }
-        if (slice.isString() || slice.isBinary()) {
-            vpack::ValueLength len;
-            const char* str = slice.getStringUnchecked(len);
-            return encode_string_or_binary(VariantType::STRING, std::string_view(str, len));
-        }
-        if (slice.isArray()) {
-            vpack::ArrayIterator it(slice);
-            std::vector<std::string> elements;
-            elements.reserve(slice.length());
-            for (; it.valid(); it.next()) {
-                ASSIGN_OR_RETURN(std::string element, encode_json_to_variant_value(it.value(), key_to_id));
-                elements.emplace_back(std::move(element));
-            }
-            return encode_array_from_elements(elements);
-        }
-        if (slice.isObject()) {
-            vpack::ObjectIterator it(slice);
-            std::map<uint32_t, std::string> fields;
-            for (; it.valid(); it.next()) {
-                auto current = *it;
-                auto key = current.key.stringView();
-                auto it_key = key_to_id.find(std::string(key.data(), key.size()));
-                if (it_key == key_to_id.end()) {
-                    return Status::VariantError("Variant metadata missing field: " +
-                                                std::string(key.data(), key.size()));
-                }
-                ASSIGN_OR_RETURN(std::string field_value, encode_json_to_variant_value(current.value, key_to_id));
-                fields[it_key->second] = std::move(field_value);
-            }
-            return encode_object_from_fields(fields);
-        }
-    } catch (const vpack::Exception& e) {
-        return fromVPackException(e);
+Status collect_object_keys_from_datum(const Datum& datum, const TypeDescriptor& type,
+                                      std::unordered_set<std::string>* keys) {
+    if (datum.is_null()) {
+        return Status::OK();
     }
 
-    return Status::NotSupported(
-            fmt::format("Unsupported JSON type {} for variant encoding type", valueTypeName(slice.type())));
+    switch (type.type) {
+    case TYPE_ARRAY: {
+        const auto& elements = datum.get_array();
+        const auto& element_type = type.children[0];
+        for (const auto& element : elements) {
+            RETURN_IF_ERROR(collect_object_keys_from_datum(element, element_type, keys));
+        }
+        return Status::OK();
+    }
+    case TYPE_MAP: {
+        const auto& map = datum.get_map();
+        const auto& key_type = type.children[0];
+        const auto& value_type = type.children[1];
+        const TypeInfoPtr key_type_info = get_type_info(key_type);
+        for (const auto& [key, value] : map) {
+            const Datum key_datum(key);
+            if (key_datum.is_null()) {
+                return Status::NotSupported("Map key is null");
+            }
+            keys->insert(datum_to_string(key_type_info.get(), key_datum));
+            RETURN_IF_ERROR(collect_object_keys_from_datum(value, value_type, keys));
+        }
+        return Status::OK();
+    }
+    case TYPE_STRUCT: {
+        const auto& fields = datum.get_struct();
+        DCHECK_EQ(type.field_names.size(), type.children.size());
+        if (fields.size() != type.children.size()) {
+            return Status::InvalidArgument(fmt::format("Struct field size {} does not match type children size {}",
+                                                       fields.size(), type.children.size()));
+        }
+        if (type.field_names.size() != fields.size()) {
+            return Status::InvalidArgument(fmt::format("Struct field names size {} does not match field count {}",
+                                                       type.field_names.size(), fields.size()));
+        }
+        for (size_t i = 0; i < fields.size(); ++i) {
+            const std::string& field_name = type.field_names[i];
+            keys->insert(field_name);
+            RETURN_IF_ERROR(collect_object_keys_from_datum(fields[i], type.children[i], keys));
+        }
+        return Status::OK();
+    }
+    case TYPE_JSON: {
+        const JsonValue* json = datum.get_json();
+        if (json != nullptr && !json->is_null_or_none()) {
+            return collect_object_keys(json->to_vslice(), keys);
+        }
+        return Status::OK();
+    }
+    default:
+        return Status::OK();
+    }
+}
+
+StatusOr<std::string> encode_datum_to_variant_value(const Datum& datum, const TypeDescriptor& type,
+                                                    const std::unordered_map<std::string, uint32_t>& key_to_id) {
+    if (datum.is_null()) {
+        return encode_null_value();
+    }
+
+    switch (type.type) {
+    case TYPE_NULL:
+        return encode_null_value();
+    case TYPE_BOOLEAN:
+        return encode_boolean(datum.get<int8_t>() != 0);
+    case TYPE_TINYINT:
+        return encode_primitive_number<int8_t>(VariantType::INT8, datum.get_int8());
+    case TYPE_SMALLINT:
+        return encode_primitive_number<int16_t>(VariantType::INT16, datum.get_int16());
+    case TYPE_INT:
+        return encode_primitive_number<int32_t>(VariantType::INT32, datum.get_int32());
+    case TYPE_BIGINT:
+        return encode_primitive_number<int64_t>(VariantType::INT64, datum.get_int64());
+    case TYPE_LARGEINT: {
+        uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL16) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        out.push_back(0); // scale
+        append_int128_le(out, datum.get_int128());
+        return out;
+    }
+    case TYPE_FLOAT:
+        return encode_primitive_number<float>(VariantType::FLOAT, datum.get_float());
+    case TYPE_DOUBLE:
+        return encode_primitive_number<double>(VariantType::DOUBLE, datum.get_double());
+    case TYPE_DECIMALV2: {
+        uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL16) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        out.push_back(static_cast<char>(DecimalV2Value::SCALE));
+        append_int128_le(out, datum.get_decimal().value());
+        return out;
+    }
+    case TYPE_DECIMAL32: {
+        if (type.scale < 0 || type.scale > decimal_precision_limit<int32_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid decimal32 scale for variant encoding: {}", type.scale));
+        }
+        uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL4) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        out.push_back(static_cast<char>(type.scale));
+        append_little_endian(&out, datum.get_int32());
+        return out;
+    }
+    case TYPE_DECIMAL64: {
+        if (type.scale < 0 || type.scale > decimal_precision_limit<int64_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid decimal64 scale for variant encoding: {}", type.scale));
+        }
+        uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL8) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        out.push_back(static_cast<char>(type.scale));
+        append_little_endian(&out, datum.get_int64());
+        return out;
+    }
+    case TYPE_DECIMAL128: {
+        if (type.scale < 0 || type.scale > decimal_precision_limit<int128_t>) {
+            return Status::InvalidArgument(
+                    fmt::format("Invalid decimal128 scale for variant encoding: {}", type.scale));
+        }
+        uint8_t header = static_cast<uint8_t>(VariantType::DECIMAL16) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        out.push_back(static_cast<char>(type.scale));
+        append_int128_le(out, datum.get_int128());
+        return out;
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+        return encode_string_value(datum.get_slice());
+    case TYPE_JSON: {
+        const JsonValue* json = datum.get_json();
+        if (json == nullptr || json->is_null_or_none()) {
+            return encode_null_value();
+        }
+        return encode_json_to_variant_value(json->to_vslice(), key_to_id);
+    }
+    case TYPE_DATE: {
+        int32_t days = datum.get_date().to_days_since_unix_epoch();
+        uint8_t header = static_cast<uint8_t>(VariantType::DATE) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        append_little_endian(&out, days);
+        return out;
+    }
+    case TYPE_DATETIME: {
+        int64_t micros = datum.get_timestamp().to_unix_microsecond();
+        uint8_t header = static_cast<uint8_t>(VariantType::TIMESTAMP_NTZ) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        append_little_endian(&out, micros);
+        return out;
+    }
+    case TYPE_TIME: {
+        double seconds = datum.get_double();
+        int64_t micros = static_cast<int64_t>(seconds * USECS_PER_SEC);
+        uint8_t header = static_cast<uint8_t>(VariantType::TIME_NTZ) << VariantValue::kValueHeaderBitShift;
+        std::string out(1, static_cast<char>(header));
+        append_little_endian(&out, micros);
+        return out;
+    }
+    case TYPE_ARRAY: {
+        const auto& elements = datum.get_array();
+        const auto& element_type = type.children[0];
+        std::vector<std::string> encoded_elements;
+        encoded_elements.reserve(elements.size());
+        for (const auto& element : elements) {
+            ASSIGN_OR_RETURN(auto encoded, encode_datum_to_variant_value(element, element_type, key_to_id));
+            encoded_elements.emplace_back(std::move(encoded));
+        }
+        return encode_array_from_elements(encoded_elements);
+    }
+    case TYPE_MAP: {
+        const auto& map = datum.get_map();
+        const auto& key_type = type.children[0];
+        const auto& value_type = type.children[1];
+        const TypeInfoPtr key_type_info = get_type_info(key_type);
+        std::map<uint32_t, std::string> fields;
+        for (const auto& [key, value] : map) {
+            const Datum key_datum(key);
+            if (key_datum.is_null()) {
+                return Status::NotSupported("Map key is null");
+            }
+            std::string key_str = datum_to_string(key_type_info.get(), key_datum);
+            auto it = key_to_id.find(key_str);
+            if (it == key_to_id.end()) {
+                return Status::VariantError("Variant metadata missing field: " + key_str);
+            }
+            ASSIGN_OR_RETURN(auto encoded_value, encode_datum_to_variant_value(value, value_type, key_to_id));
+            fields[it->second] = std::move(encoded_value);
+        }
+        return encode_object_from_fields(fields);
+    }
+    case TYPE_STRUCT: {
+        const auto& fields = datum.get_struct();
+        DCHECK_EQ(type.field_names.size(), type.children.size());
+        if (fields.size() != type.children.size()) {
+            return Status::InvalidArgument(fmt::format("Struct field size {} does not match type children size {}",
+                                                       fields.size(), type.children.size()));
+        }
+        if (type.field_names.size() != fields.size()) {
+            return Status::InvalidArgument(fmt::format("Struct field names size {} does not match field count {}",
+                                                       type.field_names.size(), fields.size()));
+        }
+        std::map<uint32_t, std::string> encoded_fields;
+        for (size_t i = 0; i < fields.size(); ++i) {
+            const std::string& field_name = type.field_names[i];
+            auto it = key_to_id.find(field_name);
+            if (it == key_to_id.end()) {
+                return Status::VariantError("Variant metadata missing field: " + field_name);
+            }
+            ASSIGN_OR_RETURN(auto encoded_value, encode_datum_to_variant_value(fields[i], type.children[i], key_to_id));
+            encoded_fields[it->second] = std::move(encoded_value);
+        }
+        return encode_object_from_fields(encoded_fields);
+    }
+    default:
+        return Status::NotSupported(fmt::format("Unsupported type {} for variant encoding", type.debug_string()));
+    }
 }
 
 StatusOr<VariantRowValue> VariantEncoder::encode_json_to_variant(const JsonValue& json) {
@@ -642,11 +864,73 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
     }
 
     if (type.type == TYPE_ARRAY || type.type == TYPE_MAP || type.type == TYPE_STRUCT) {
-        if (allow_throw_exception) {
-            return Status::NotSupported("CAST to VARIANT from complex type is not supported yet: " +
-                                        type.debug_string());
+        ColumnPtr data_column = column;
+        bool is_const = false;
+
+        if (data_column->is_constant()) {
+            const auto* const_col = down_cast<const ConstColumn*>(data_column.get());
+            if (const_col->only_null()) {
+                builder->append_nulls(static_cast<int>(num_rows));
+                return Status::OK();
+            }
+            data_column = const_col->data_column();
+            is_const = true;
         }
-        builder->append_nulls(static_cast<int>(num_rows));
+
+        const NullableColumn* nullable = nullptr;
+        if (data_column->is_nullable()) {
+            nullable = down_cast<const NullableColumn*>(data_column.get());
+            data_column = nullable->data_column();
+        }
+
+        for (size_t row = 0; row < num_rows; ++row) {
+            const size_t data_row = is_const ? 0 : row;
+            if (nullable && nullable->is_null(data_row)) {
+                builder->append_null();
+                continue;
+            }
+
+            const Datum datum = data_column->get(data_row);
+            std::unordered_set<std::string> keys;
+            Status collect_status = collect_object_keys_from_datum(datum, type, &keys);
+            if (!collect_status.ok()) {
+                if (allow_throw_exception) {
+                    return collect_status;
+                }
+                builder->append_null();
+                continue;
+            }
+
+            auto metadata_result = build_variant_metadata(keys);
+            if (!metadata_result.ok()) {
+                if (allow_throw_exception) {
+                    return metadata_result.status();
+                }
+                builder->append_null();
+                continue;
+            }
+
+            auto value_result = encode_datum_to_variant_value(datum, type, metadata_result.value().key_to_id);
+            if (!value_result.ok()) {
+                if (allow_throw_exception) {
+                    return value_result.status();
+                }
+                builder->append_null();
+                continue;
+            }
+
+            auto variant_result =
+                    VariantRowValue::create(metadata_result.value().metadata, std::string_view(value_result.value()));
+            if (!variant_result.ok()) {
+                if (allow_throw_exception) {
+                    return variant_result.status();
+                }
+                builder->append_null();
+                continue;
+            }
+            builder->append(std::move(variant_result.value()));
+        }
+
         return Status::OK();
     }
 
@@ -655,7 +939,6 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
         builder->append_nulls(static_cast<int>(num_rows));
         return Status::OK();
     }
-    // TODO(mofei): Add ARRAY/MAP/STRUCT support here using encode_column_with_viewer once encoding is ready.
     case TYPE_BOOLEAN: {
         return encode_column_with_viewer<TYPE_BOOLEAN>(
                 column, builder, allow_throw_exception,

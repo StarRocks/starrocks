@@ -496,10 +496,10 @@ public class TypeTest {
         Assertions.assertFalse(TypeManager.canCastTo(FunctionType.FUNCTION, VariantType.VARIANT));
         Assertions.assertFalse(TypeManager.canCastTo(VarbinaryType.VARBINARY, VariantType.VARIANT));
 
-        // non-scalar types cannot cast to VARIANT
-        Assertions.assertFalse(TypeManager.canCastTo(ArrayType.ARRAY_INT, VariantType.VARIANT));
-        Assertions.assertFalse(TypeManager.canCastTo(MapType.MAP_VARCHAR_VARCHAR, VariantType.VARIANT));
-        Assertions.assertFalse(TypeManager.canCastTo(new StructType(Lists.newArrayList(IntegerType.INT)),
+        // non-scalar types can cast to VARIANT if elements/fields are supported
+        Assertions.assertTrue(TypeManager.canCastTo(ArrayType.ARRAY_INT, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(MapType.MAP_VARCHAR_VARCHAR, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(new StructType(Lists.newArrayList(IntegerType.INT)),
                 VariantType.VARIANT));
     }
 }

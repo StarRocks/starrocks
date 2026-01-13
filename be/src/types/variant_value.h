@@ -16,8 +16,11 @@
 
 #include <cctz/time_zone.h>
 
+#include <functional>
+#include <string>
 #include <string_view>
 
+#include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "fmt/format.h"
 #include "util/raw_container.h"
@@ -200,16 +203,134 @@ private:
     VariantValue _value;
 };
 
+inline bool operator==(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    return lhs.get_metadata() == rhs.get_metadata() && lhs.get_value() == rhs.get_value();
+}
+
+inline bool operator!=(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    return !(lhs == rhs);
+}
+
+inline int compare(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    const auto lhs_meta = lhs.get_metadata().raw();
+    const auto rhs_meta = rhs.get_metadata().raw();
+    if (lhs_meta != rhs_meta) {
+        return lhs_meta < rhs_meta ? -1 : 1;
+    }
+    const auto lhs_val = lhs.get_value().raw();
+    const auto rhs_val = rhs.get_value().raw();
+    if (lhs_val == rhs_val) {
+        return 0;
+    }
+    return lhs_val < rhs_val ? -1 : 1;
+}
+
+inline bool operator<(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    return compare(lhs, rhs) < 0;
+}
+
+inline bool operator<=(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    return compare(lhs, rhs) <= 0;
+}
+
+inline bool operator>(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    return compare(lhs, rhs) > 0;
+}
+
+inline bool operator>=(const VariantRowValue& lhs, const VariantRowValue& rhs) {
+    return compare(lhs, rhs) >= 0;
+}
+
 // append json string to the stream
 std::ostream& operator<<(std::ostream& os, const VariantRowValue& json);
 
 } // namespace starrocks
 
 // fmt::format
+namespace fmt {
 template <>
-struct fmt::formatter<starrocks::VariantRowValue> : formatter<std::string> {
+struct formatter<starrocks::VariantRowValue> : formatter<std::string> {
     template <typename FormatContext>
     auto format(const starrocks::VariantRowValue& p, FormatContext& ctx) -> decltype(ctx.out()) {
         return formatter<std::string>::format(p.to_string(), ctx);
     }
-}; // namespace fmt
+};
+} // namespace fmt
+
+namespace std {
+
+inline std::string to_string(const starrocks::VariantRowValue& value) {
+    return value.to_string();
+}
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wunused-value")
+template <>
+struct less<starrocks::VariantRowValue> {
+    bool operator()(const starrocks::VariantRowValue& lhs, const starrocks::VariantRowValue& rhs) const {
+        return starrocks::compare(lhs, rhs) < 0;
+    }
+
+    bool operator()(const starrocks::VariantRowValue* lhs, const starrocks::VariantRowValue* rhs) const {
+        return starrocks::compare(*lhs, *rhs) < 0;
+    }
+};
+
+template <>
+struct less_equal<starrocks::VariantRowValue> {
+    bool operator()(const starrocks::VariantRowValue& lhs, const starrocks::VariantRowValue& rhs) const {
+        return starrocks::compare(lhs, rhs) <= 0;
+    }
+
+    bool operator()(const starrocks::VariantRowValue* lhs, const starrocks::VariantRowValue* rhs) const {
+        return starrocks::compare(*lhs, *rhs) <= 0;
+    }
+};
+
+template <>
+struct greater<starrocks::VariantRowValue> {
+    bool operator()(const starrocks::VariantRowValue& lhs, const starrocks::VariantRowValue& rhs) const {
+        return starrocks::compare(lhs, rhs) > 0;
+    }
+
+    bool operator()(const starrocks::VariantRowValue* lhs, const starrocks::VariantRowValue* rhs) const {
+        return starrocks::compare(*lhs, *rhs) > 0;
+    }
+};
+
+template <>
+struct greater_equal<starrocks::VariantRowValue> {
+    bool operator()(const starrocks::VariantRowValue& lhs, const starrocks::VariantRowValue& rhs) const {
+        return starrocks::compare(lhs, rhs) >= 0;
+    }
+
+    bool operator()(const starrocks::VariantRowValue* lhs, const starrocks::VariantRowValue* rhs) const {
+        return starrocks::compare(*lhs, *rhs) >= 0;
+    }
+};
+
+template <>
+struct equal_to<starrocks::VariantRowValue> {
+    bool operator()(const starrocks::VariantRowValue& lhs, const starrocks::VariantRowValue& rhs) const {
+        return starrocks::compare(lhs, rhs) == 0;
+    }
+
+    bool operator()(const starrocks::VariantRowValue* lhs, const starrocks::VariantRowValue* rhs) const {
+        return starrocks::compare(*lhs, *rhs) == 0;
+    }
+};
+
+template <>
+struct not_equal_to<starrocks::VariantRowValue> {
+    bool operator()(const starrocks::VariantRowValue& lhs, const starrocks::VariantRowValue& rhs) const {
+        return starrocks::compare(lhs, rhs) != 0;
+    }
+
+    bool operator()(const starrocks::VariantRowValue* lhs, const starrocks::VariantRowValue* rhs) const {
+        return starrocks::compare(*lhs, *rhs) != 0;
+    }
+};
+
+DIAGNOSTIC_POP
+
+} // namespace std
