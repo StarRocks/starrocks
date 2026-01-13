@@ -477,10 +477,11 @@ public class InformationSchemaDataSource {
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION
-            partitionMetaInfo.setCompact_version(statistics != null ? statistics.getCompactionVersion().getVersion() : 0);
+            partitionMetaInfo.setCompact_version(statistics != null && statistics.getCompactionVersion() != null ?
+                    statistics.getCompactionVersion().getVersion() : 0);
             DataCacheInfo cacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
             // ENABLE_DATACACHE
-            partitionMetaInfo.setEnable_datacache(cacheInfo.isEnabled());
+            partitionMetaInfo.setEnable_datacache(cacheInfo != null && cacheInfo.isEnabled());
             // AVG_CS
             partitionMetaInfo.setAvg_cs(compactionScore != null ? compactionScore.getAvg() : 0.0);
             // P50_CS

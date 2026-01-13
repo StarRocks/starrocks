@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "lake/filenames.h"
 #include "storage/data_dir.h"

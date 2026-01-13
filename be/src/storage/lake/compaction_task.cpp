@@ -39,6 +39,13 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
         auto metadata = _tablet.metadata();
         if (metadata->enable_persistent_index() &&
             metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
+            // For parallel compaction subtasks, skip SST compaction here.
+            // SST compaction will be executed once after all subtasks complete,
+            // in TabletParallelCompactionManager::get_merged_txn_log.
+            // This avoids multiple subtasks competing to compact the same SST files.
+            if (_context->subtask_id >= 0) {
+                return Status::OK();
+            }
             RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(metadata, txn_log));
             if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
                 size_t total_input_sstable_file_size = 0;
