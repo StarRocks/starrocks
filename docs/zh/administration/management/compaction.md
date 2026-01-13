@@ -39,9 +39,10 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
 
 ### 查看 Compaction Score
 
-- 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score。
+- 您可以通过 SHOW PROC 语句查看特定表中分区的 Compaction Score，通常只需要关注 `MaxCS` 字段，如果 `MaxCS` 低于 10，代表 Compaction 已经完成；如果 `MaxCS` 大于 100，代表 Compaction Score 相对较高；如果 `MaxCS` 大于 500，代表 Compaction Score 非常高，需要人工介入。
 
   ```Plain
+  SHOW PARTITIONS FROM <table_name>
   SHOW PROC '/dbs/<database_name>/<table_name>/partitions'
   ```
 
@@ -79,11 +80,6 @@ Compaction Score 反映了分区的数据文件合并状态。分数越高，表
   +--------------+----------------------------+----------------------------+--------------+-----------------+-----------------+----------------------+--------------+---------------+-----------------+-----------------------------------------+---------+-----------------+----------------+---------------------+-----------------------------+--------------+---------+-----------+------------+------------------+----------+--------+--------+-------------------------------------------------------------------+
   ```
 
-您只需要关注以下两个指标：
-
-- `AvgCS`：分区中所有 Tablet 的平均 Compaction Score。
-- `MaxCS`：分区中所有 Tablet 的最大 Compaction Score。
-
 ### 查看 Compaction 任务
 
 随着新数据导入系统，FE 会持续调度 Compaction 任务到不同的 CN 节点执行。您可以先查看 FE 上 Compaction 任务的总体状态，然后再查看 CN 上每个任务的执行详情。
@@ -100,16 +96,13 @@ SHOW PROC '/compactions';
 
 ```Plain
 mysql> SHOW PROC '/compactions';
-+---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
-| Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                            |
-+---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
-| ssb.lineorder.43026 | 51053 | 2024-09-24 19:15:16 | NULL                | NULL                | NULL  | NULL                                                                                                               |
-| ssb.lineorder.43027 | 51052 | 2024-09-24 19:15:16 | NULL                | NULL                | NULL  | NULL                                                                                                               |
-| ssb.lineorder.43025 | 51047 | 2024-09-24 19:15:15 | NULL                | NULL                | NULL  | NULL                                                                                                               |
-| ssb.lineorder.43026 | 51046 | 2024-09-24 19:15:04 | 2024-09-24 19:15:06 | 2024-09-24 19:15:06 | NULL  | {"sub_task_count":1,"read_local_sec":0,"read_local_mb":31,"read_remote_sec":0,"read_remote_mb":0,"in_queue_sec":0} |
-| ssb.lineorder.43027 | 51045 | 2024-09-24 19:15:04 | 2024-09-24 19:15:06 | 2024-09-24 19:15:06 | NULL  | {"sub_task_count":1,"read_local_sec":0,"read_local_mb":31,"read_remote_sec":0,"read_remote_mb":0,"in_queue_sec":0} |
-| ssb.lineorder.43029 | 51044 | 2024-09-24 19:15:03 | 2024-09-24 19:15:05 | 2024-09-24 19:15:05 | NULL  | {"sub_task_count":1,"read_local_sec":0,"read_local_mb":31,"read_remote_sec":0,"read_remote_mb":0,"in_queue_sec":0} |
-+---------------------+-------+---------------------+---------------------+---------------------+-------+--------------------------------------------------------------------------------------------------------------------+
++---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                                                                                                                              |
++---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18} |
+| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38} |
+| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23} |
++---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
 返回的字段包括：
@@ -117,15 +110,19 @@ mysql> SHOW PROC '/compactions';
 - `Partition`：Compaction 任务所属的分区。
 - `TxnID`：Compaction 任务的事务 ID。
 - `StartTime`：Compaction 任务开始的时间。`NULL` 表示任务尚未启动。
-- `CommitTime`：Compaction 任务提交数据的时间。`NULL` 表示数据尚未 Commit。
+- `CommitTime`：Compaction 任务提交数据的时间。`NULL` 表示数据尚未 Commit，如果 Commit，则必须 Publish 成功。
 - `FinishTime`：Compaction 任务发布数据的时间。`NULL` 表示数据尚未 Publish。
 - `Error`：Compaction 任务的错误信息（如有）。
-- `Profile`：（自 v3.2.12 和 v3.3.4 版本开始支持）Compaction 任务完成后的 Profile。
+- `Profile`：Compaction 任务 Commit 后的 Profile。
   - `sub_task_count`：分区中子任务（等同于 Tablet）的数量。
   - `read_local_sec`：所有子任务从本地缓存读取数据的总耗时。单位：秒。
   - `read_local_mb`：所有子任务从本地缓存读取数据的总大小。单位：MB。
   - `read_remote_sec`：所有子任务从远程存储读取数据的总耗时。单位：秒。
   - `read_remote_mb`：所有子任务从远程存储读取数据的总大小。单位：MB。
+  - `read_segment_count`: 所有子任务读取的总文件数。
+  - `write_segment_count`: 所有子任务新生成的总文件数。
+  - `write_segment_mb`: 所有子任务新生成文件的总大小。单位：MB。
+  - `write_remote_sec`: 所有子任务往远程存储写入数据的总耗时。单位：秒。
   - `in_queue_sec`：所有子任务排队的总时间。单位：秒。
 
 #### 查看 Compaction 任务的执行详情
@@ -168,7 +165,7 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
   - `read_remote_count`：子任务从远程存储读取数据的次数。
   - `in_queue_sec`：子任务排队的时间。单位：秒。
 
-### 配置Compaction任务
+### 配置 Compaction 任务
 
 您可以通过以下 FE 和 CN（BE）参数配置 Compaction 任务。
 
@@ -235,7 +232,7 @@ WHERE name = "compact_threads";
 
 > **说明**
 >
-> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速Compaction 任务并减少资源消耗。
+> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
 ##### lake_pk_compaction_max_input_rowsets
 
@@ -245,6 +242,10 @@ WHERE name = "compact_threads";
 - 是否动态：是
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
+
+> **说明**
+>
+> 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
 ### 手动触发 Compaction 任务
 
@@ -276,8 +277,25 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 由于 Compaction 对查询性能的影响非常重要，建议用户持续关注表和分区的后台数据合并情况。以下是一些最佳实践建议：
 
 - 尽量调高导入的时间间隔（避免间隔 10 秒以内导入的场景），并且增加单次导入的批大小（避免 100 行数据以内的批大小）。
-- 调整计算节点上的 Compaction 工作线程数，以加快任务执行速度。在生产环境中，建议将 `compact_threads` 的值设置为 BE/CN CPU 核心数量的 25%。在集群较空闲时，例如只需执行 Compaction 而无需处理查询时，可以暂时调整为 CPU 数量的 50%，在任务完成后再调回至 25%。
+- 调整计算节点上的 Compaction 工作线程数，以加快任务执行速度。在生产环境中，建议将 `compact_threads` 的值设置为 BE/CN CPU 核心数量的 25%。
 - 运用主要的两个命令 `show proc '/compactions'` 以及 `select * from information_schema.be_cloud_native_compactions;` 查看 Compaction 执行情况。
 - 关注 Compaction Score，建议根据该指标配置告警。StarRocks 提供的 Grafana 监控模板已包含该指标。
 - 监控 Compaction 的资源消耗情况，尤其是内存使用情况。Grafana 监控模板中也包含该项指标。
 
+## 问题排查
+
+### 慢查询
+
+如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，查看在单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则表明是由于 Compaction 不及时导致查询慢。
+
+### 集群最大 Compaction Score 很高
+
+1. 通过 `ADMIN SHOW FRONTEND CONFIG LIKE "%lake_compaction%"` 以及 `SELECT * FROM information_schema.be_configs WHERE name = "compact_threads"` 检查 Compaction 相关的参数是否在合理区间。
+2. 通过 `SHOW PROC '/compactions'` 查看 Compaction 是否卡住：
+  - 如果 `CommitTime` 一直为 NULL，通过 `information_schema.be_cloud_native_compactions` 系统视图查看 Compaction 卡住原因；
+  - 如果 `FinishTime` 一直为 NULL，通过 `TxnID` 在 FE 日志中查找 Publish 失败原因；
+3. 通过 `SHOW PROC '/compactions'` 查看 Compaction 是否运行缓慢：
+  - `sub_task_count` 太大（通过 `SHOW PARTITIONS` 查看这个分区每个 tablet 的大小），可能是表建的不合理；
+  - `read_remote_mb` 太大（占据了整个 Compaction 读取数据量的30%以上），可以检查磁盘大小以及通过 `SHOW BACKENDS` 的 DataCacheMetrics 查看缓存 Quota；
+  - `write_remote_sec` 太大（占据了整个 Compaction 的90%时间以上），可能是远端存储写入太慢，可以通过存算分离监控指标判定，关键词 `single upload latency` 和 `multi upload latency`；
+  - `in_queue_sec` 太大（平均每个 Tablet 等待超过 60 秒以上），可能是参数设置不合理或者其他正在运行的 Compaction 太慢。
