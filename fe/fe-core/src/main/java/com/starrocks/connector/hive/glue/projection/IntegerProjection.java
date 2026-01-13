@@ -149,8 +149,12 @@ public class IntegerProjection implements ColumnProjection {
     @Override
     public List<String> getProjectedValues(Optional<Object> filterValue) {
         if (filterValue.isPresent()) {
+            Object val = filterValue.get();
+            if (val == null) {
+                return Collections.emptyList();
+            }
             // Single value filter
-            long filter = toLong(filterValue.get());
+            long filter = toLong(val);
             if (filter >= leftBound && filter <= rightBound) {
                 // Check if the filter value aligns with the interval
                 if ((filter - leftBound) % interval == 0) {
@@ -160,10 +164,17 @@ public class IntegerProjection implements ColumnProjection {
             return Collections.emptyList();
         }
 
-        // Generate all values in range with safety counter to prevent infinite loops
+        // Generate all values in range with overflow protection
         List<String> result = new ArrayList<>();
-        for (long current = leftBound; current <= rightBound && result.size() < MAX_VALUES; current += interval) {
+        long current = leftBound;
+        while (current <= rightBound && result.size() < MAX_VALUES) {
             result.add(formatValue(current));
+            // Check for overflow before incrementing: if current > Long.MAX_VALUE - interval,
+            // adding interval would overflow, so we must break
+            if (current > Long.MAX_VALUE - interval) {
+                break;
+            }
+            current += interval;
         }
         return result;
     }

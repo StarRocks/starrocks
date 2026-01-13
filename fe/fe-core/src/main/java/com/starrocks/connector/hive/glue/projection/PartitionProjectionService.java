@@ -355,7 +355,7 @@ public class PartitionProjectionService {
                     inputFormat,
                     textFileFormatDesc,
                     partitionLocation,
-                    true  // isSplittable
+                    PartitionProjection.isSplittable(inputFormat)
             );
             result.put(partitionName, partition);
         }

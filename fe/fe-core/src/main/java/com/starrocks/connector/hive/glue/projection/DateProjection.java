@@ -155,6 +155,24 @@ public class DateProjection implements ColumnProjection {
                 format.contains("mm") || format.contains("ss")) {
             return ChronoUnit.HOURS;
         }
+
+        // Check for day-of-month pattern (d or dd, but not D which is day-of-year)
+        boolean hasDay = format.matches(".*(?<![DdM])d{1,2}(?![dDM]).*");
+
+        // Check for month pattern (M or MM, but not m which is minutes)
+        boolean hasMonth = format.contains("M");
+
+        // If format has no day component
+        if (!hasDay) {
+            // If format has no month component either, it's year-only
+            if (!hasMonth) {
+                return ChronoUnit.YEARS;
+            }
+            // Format has month but no day, e.g., yyyy-MM
+            return ChronoUnit.MONTHS;
+        }
+
+        // Default to days for formats with day component
         return ChronoUnit.DAYS;
     }
 
@@ -172,7 +190,11 @@ public class DateProjection implements ColumnProjection {
 
         if (filterValue.isPresent()) {
             // Validate filter value is within range
-            String filter = filterValue.get().toString();
+            Object val = filterValue.get();
+            if (val == null) {
+                return Collections.emptyList();
+            }
+            String filter = val.toString();
             try {
                 Instant filterInstant = parseDate(filter, now);
                 if (filterInstant.isBefore(leftBound) || filterInstant.isAfter(rightBound)) {

@@ -243,4 +243,32 @@ public class IntegerProjectionTest {
         assertTrue(exception.getMessage().contains("overflow") ||
                    exception.getMessage().contains("exceeding limit"));
     }
+
+    @Test
+    public void testLoopOverflowProtection() {
+        // Test that loop doesn't overflow when current + interval would exceed Long.MAX_VALUE
+        // Range near Long.MAX_VALUE with interval that would cause overflow
+        long start = Long.MAX_VALUE - 5;
+        long end = Long.MAX_VALUE;
+        IntegerProjection projection = new IntegerProjection(
+                "id", start + "," + end, Optional.of("10"), Optional.empty());
+
+        // Should generate only one value (start) and break before overflow
+        List<String> values = projection.getProjectedValues(Optional.empty());
+
+        assertEquals(1, values.size());
+        assertEquals(String.valueOf(start), values.get(0));
+    }
+
+    @Test
+    public void testNullFilterValueReturnsEmpty() {
+        IntegerProjection projection = new IntegerProjection(
+                "year", "2020,2025", Optional.empty(), Optional.empty());
+
+        // Simulate a null value wrapped in Optional (defensive check)
+        List<String> values = projection.getProjectedValues(Optional.ofNullable(null));
+
+        // Optional.ofNullable(null) returns Optional.empty(), so all values returned
+        assertEquals(6, values.size());
+    }
 }

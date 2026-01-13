@@ -77,7 +77,11 @@ public class EnumProjection implements ColumnProjection {
     @Override
     public List<String> getProjectedValues(Optional<Object> filterValue) {
         if (filterValue.isPresent()) {
-            String filter = filterValue.get().toString();
+            Object val = filterValue.get();
+            if (val == null) {
+                return Collections.emptyList();
+            }
+            String filter = val.toString();
             // Return only matching values
             if (values.contains(filter)) {
                 return Collections.singletonList(filter);

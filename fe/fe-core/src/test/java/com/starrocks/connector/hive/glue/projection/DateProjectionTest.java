@@ -235,4 +235,58 @@ public class DateProjectionTest {
         assertEquals("2021", values.get(1));
         assertEquals("2024", values.get(4));
     }
+
+    @Test
+    public void testYearOnlyFormatInfersYearsInterval() {
+        // Test that year-only format (yyyy) automatically infers YEARS interval unit
+        // without explicit interval.unit property - this prevents generating duplicate values
+        DateProjection projection = new DateProjection(
+                "year", "2020,2024", "yyyy",
+                Optional.empty(), Optional.empty());
+
+        List<String> values = projection.getProjectedValues(Optional.empty());
+
+        // Should generate 5 unique years, not thousands of duplicate days
+        assertEquals(5, values.size());
+        assertEquals("2020", values.get(0));
+        assertEquals("2021", values.get(1));
+        assertEquals("2022", values.get(2));
+        assertEquals("2023", values.get(3));
+        assertEquals("2024", values.get(4));
+    }
+
+    @Test
+    public void testMonthOnlyFormatInfersMonthsInterval() {
+        // Test that month-only format (yyyy-MM) automatically infers MONTHS interval unit
+        // without explicit interval.unit property - this prevents generating duplicate values
+        DateProjection projection = new DateProjection(
+                "month", "2024-01,2024-06", "yyyy-MM",
+                Optional.empty(), Optional.empty());
+
+        List<String> values = projection.getProjectedValues(Optional.empty());
+
+        // Should generate 6 unique months, not duplicates
+        assertEquals(6, values.size());
+        assertEquals("2024-01", values.get(0));
+        assertEquals("2024-02", values.get(1));
+        assertEquals("2024-03", values.get(2));
+        assertEquals("2024-04", values.get(3));
+        assertEquals("2024-05", values.get(4));
+        assertEquals("2024-06", values.get(5));
+    }
+
+    @Test
+    public void testYearMonthFormatWithoutDayInfersMonths() {
+        // Alternative month format without separator (yyyyMM)
+        DateProjection projection = new DateProjection(
+                "month", "202401,202403", "yyyyMM",
+                Optional.empty(), Optional.empty());
+
+        List<String> values = projection.getProjectedValues(Optional.empty());
+
+        assertEquals(3, values.size());
+        assertEquals("202401", values.get(0));
+        assertEquals("202402", values.get(1));
+        assertEquals("202403", values.get(2));
+    }
 }

@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -254,5 +255,28 @@ public class PartitionProjectionTest {
         Partition partition = partitions.get("region=us/year=2024");
         assertNotNull(partition);
         assertEquals("s3://bucket/data/us/2024/", partition.getFullPath());
+    }
+
+    @Test
+    public void testIsSplittableForKnownFormats() {
+        // Test that known splittable formats return true
+        assertTrue(PartitionProjection.isSplittable(RemoteFileInputFormat.PARQUET));
+        assertTrue(PartitionProjection.isSplittable(RemoteFileInputFormat.ORC));
+        assertTrue(PartitionProjection.isSplittable(RemoteFileInputFormat.TEXTFILE));
+        assertTrue(PartitionProjection.isSplittable(RemoteFileInputFormat.AVRO));
+        assertTrue(PartitionProjection.isSplittable(RemoteFileInputFormat.RCFILE));
+        assertTrue(PartitionProjection.isSplittable(RemoteFileInputFormat.SEQUENCE));
+    }
+
+    @Test
+    public void testIsSplittableForUnknownFormat() {
+        // Test that unknown formats return false
+        assertFalse(PartitionProjection.isSplittable(RemoteFileInputFormat.UNKNOWN));
+    }
+
+    @Test
+    public void testIsSplittableForNullFormat() {
+        // Test that null format returns true (default behavior)
+        assertTrue(PartitionProjection.isSplittable(null));
     }
 }

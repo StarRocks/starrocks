@@ -207,8 +207,9 @@ public class PartitionProjection {
 
     /**
      * Determines if the file format is splittable.
+     * Package-private static method to allow reuse by PartitionProjectionService.
      */
-    private boolean isSplittable(RemoteFileInputFormat format) {
+    static boolean isSplittable(RemoteFileInputFormat format) {
         if (format == null) {
             return true;
         }
