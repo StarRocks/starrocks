@@ -111,17 +111,11 @@ public class PhysicalPartitionTest {
         Assertions.assertTrue(p.equals(p));
         Assertions.assertFalse(p.equals(new Partition(0, 11, "", new MaterializedIndex(), null)));
 
-        PhysicalPartition p2 = new PhysicalPartition(1, 1, new MaterializedIndex());
-        Assertions.assertFalse(p.equals(p2));
-        p2.setBaseIndex(new MaterializedIndex(1));
-
         p.createRollupIndex(new MaterializedIndex(4, IndexState.SHADOW));
         p.deleteMaterializedIndexByMetaId(0);
         p.deleteMaterializedIndexByMetaId(1);
         p.deleteMaterializedIndexByMetaId(2);
         p.deleteMaterializedIndexByMetaId(4);
-
-        Assertions.assertFalse(p.equals(p2));
 
         p.setIdForRestore(3);
         Assertions.assertEquals(3, p.getId());
@@ -161,10 +155,6 @@ public class PhysicalPartitionTest {
         p1.createRollupIndex(new MaterializedIndex(3));
         p2.createRollupIndex(new MaterializedIndex(3));
         Assertions.assertTrue(p1.equals(p2));
-
-        p1.createRollupIndex(new MaterializedIndex(4));
-        p2.createRollupIndex(new MaterializedIndex(5));
-        Assertions.assertFalse(p1.equals(p2));
     }
 
     @Test

@@ -653,10 +653,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return true;
     }
 
-    public int hashCode() {
-        return Objects.hashCode(id, parentId);
-    }
-
     public int getBucketNum() {
         return bucketNum;
     }
@@ -665,6 +661,12 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.bucketNum = bucketNum;
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, parentId);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -674,22 +676,10 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
 
         PhysicalPartition partition = (PhysicalPartition) obj;
-        if (idToVisibleIndex != partition.idToVisibleIndex) {
-            if (idToVisibleIndex.size() != partition.idToVisibleIndex.size()) {
-                return false;
-            }
-            for (Entry<Long, MaterializedIndex> entry : idToVisibleIndex.entrySet()) {
-                long key = entry.getKey();
-                MaterializedIndex index = partition.idToVisibleIndex.get(key);
-                if (index == null || !entry.getValue().equals(index)) {
-                    return false;
-                }
-            }
-        }
-
-        return visibleVersion == partition.visibleVersion;
+        return id == partition.id && parentId == partition.parentId;
     }
 
+    @Override
     public String toString() {
         List<MaterializedIndex> baseIndices = Lists.newArrayList();
         List<MaterializedIndex> rollupIndices = Lists.newArrayList();
@@ -739,6 +729,7 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return buffer.toString();
     }
 
+    @Override
     public void gsonPostProcess() throws IOException {
         if (dataVersion == 0) {
             dataVersion = visibleVersion;
