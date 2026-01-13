@@ -34,6 +34,51 @@ namespace starrocks::lake {
 
 namespace {
 
+// Apply tablet metadata from replication operation to the target metadata
+// This function handles the common logic for copying tablet metadata in lake replication scenarios
+Status apply_tablet_metadata_from_replication(MutableTabletMetadataPtr metadata,
+                                              const TabletMetadataPB& copied_tablet_meta,
+                                              const RepeatedPtrField<RowsetMetadataPB>& old_rowsets) {
+    if (copied_tablet_meta.rowsets_size() > 0) {
+        metadata->mutable_rowsets()->Clear();
+        metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
+    }
+
+    if (copied_tablet_meta.has_dcg_meta()) {
+        metadata->mutable_dcg_meta()->Clear();
+        metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
+    }
+
+    if (copied_tablet_meta.has_sstable_meta()) {
+        metadata->mutable_sstable_meta()->Clear();
+        metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
+    }
+
+    if (copied_tablet_meta.has_delvec_meta()) {
+        metadata->mutable_delvec_meta()->Clear();
+        metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
+    }
+
+    metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
+    metadata->set_cumulative_point(0);
+
+    // In lake replication scenario, we need to carefully handle compaction_inputs.
+    // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+    // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+    // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+    std::unordered_set<uint32_t> new_rowset_ids;
+    for (const auto& rowset : metadata->rowsets()) {
+        new_rowset_ids.insert(rowset.id());
+    }
+    for (auto old_rowset : old_rowsets) {
+        if (new_rowset_ids.count(old_rowset.id()) == 0) {
+            metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+        }
+    }
+
+    return Status::OK();
+}
+
 Status apply_alter_meta_log(TabletMetadataPB* metadata, const TxnLogPB_OpAlterMetadata& op_alter_metas,
                             TabletManager* tablet_mgr) {
     for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
@@ -465,45 +510,8 @@ private:
             if (op_replication.has_tablet_metadata()) {
                 // Same logic for pk and non-pk tables
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                if (copied_tablet_meta.rowsets_size() > 0) {
-                    _metadata->mutable_rowsets()->Clear();
-                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
-                }
-
-                if (copied_tablet_meta.has_dcg_meta()) {
-                    _metadata->mutable_dcg_meta()->Clear();
-                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
-                }
-
-                if (copied_tablet_meta.has_sstable_meta()) {
-                    _metadata->mutable_sstable_meta()->Clear();
-                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
-                }
-
-                if (copied_tablet_meta.has_delvec_meta()) {
-                    _metadata->mutable_delvec_meta()->Clear();
-                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
-                }
-
-                _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                _metadata->set_cumulative_point(0);
-
-                // In lake replication scenario, we need to carefully handle compaction_inputs.
-                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
-                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
-                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
-                std::unordered_set<uint32_t> new_rowset_ids;
-                for (const auto& rowset : _metadata->rowsets()) {
-                    new_rowset_ids.insert(rowset.id());
-                }
-                for (auto& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
-                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
-                    }
-                }
-
+                RETURN_IF_ERROR(apply_tablet_metadata_from_replication(_metadata, copied_tablet_meta, old_rowsets));
                 _tablet.update_mgr()->unload_primary_index(_tablet.id());
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
@@ -926,44 +934,8 @@ private:
             if (op_replication.has_tablet_metadata()) {
                 // Same logic for pk and non-pk tables
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                if (copied_tablet_meta.rowsets_size() > 0) {
-                    _metadata->mutable_rowsets()->Clear();
-                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
-                }
-
-                if (copied_tablet_meta.has_dcg_meta()) {
-                    _metadata->mutable_dcg_meta()->Clear();
-                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
-                }
-
-                if (copied_tablet_meta.has_sstable_meta()) {
-                    _metadata->mutable_sstable_meta()->Clear();
-                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
-                }
-
-                if (copied_tablet_meta.has_delvec_meta()) {
-                    _metadata->mutable_delvec_meta()->Clear();
-                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
-                }
-
-                _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                _metadata->set_cumulative_point(0);
-
-                // In lake replication scenario, we need to carefully handle compaction_inputs.
-                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
-                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
-                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
-                std::unordered_set<uint32_t> new_rowset_ids;
-                for (const auto& rowset : _metadata->rowsets()) {
-                    new_rowset_ids.insert(rowset.id());
-                }
-                for (auto& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
-                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
-                    }
-                }
+                RETURN_IF_ERROR(apply_tablet_metadata_from_replication(_metadata, copied_tablet_meta, old_rowsets));
 
                 VLOG(3) << "Apply replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << base_version << ", new_version: " << _new_version

@@ -162,5 +162,161 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
     EXPECT_EQ(0, meta->rowsets_size());
 }
 
+// Test for apply_tablet_metadata_from_replication function
+class TabletMetadataReplicationTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // Create source tablet metadata
+        source_meta_ = std::make_shared<TabletMetadata>();
+        source_meta_->set_id(1000);
+        source_meta_->set_version(5);
+        source_meta_->set_next_rowset_id(100);
+        source_meta_->set_cumulative_point(2);
+
+        // Add some rowsets to source
+        auto* rowset1 = source_meta_->add_rowsets();
+        rowset1->set_id(10);
+        rowset1->set_num_rows(100);
+
+        auto* rowset2 = source_meta_->add_rowsets();
+        rowset2->set_id(20);
+        rowset2->set_num_rows(200);
+
+        // Add dcg_meta
+        source_meta_->mutable_dcg_meta()->set_dcgs("test_dcg_data");
+
+        // Add sstable_meta
+        auto* sstable = source_meta_->mutable_sstable_meta()->add_sstables();
+        sstable->set_filename("test.sst");
+        sstable->set_filesize(1024);
+
+        // Add delvec_meta
+        source_meta_->mutable_delvec_meta()->set_version(1);
+
+        // Create target metadata with some old rowsets
+        target_meta_ = std::make_shared<TabletMetadata>();
+        target_meta_->set_id(2000);
+        target_meta_->set_version(1);
+
+        // Add old rowsets (some will be kept, some will be moved to compaction_inputs)
+        auto* old_rowset1 = old_rowsets_.Add();
+        old_rowset1->set_id(5); // This will be moved to compaction_inputs (not in new rowsets)
+
+        auto* old_rowset2 = old_rowsets_.Add();
+        old_rowset2->set_id(10); // This will be kept (exists in new rowsets)
+
+        auto* old_rowset3 = old_rowsets_.Add();
+        old_rowset3->set_id(15); // This will be moved to compaction_inputs (not in new rowsets)
+    }
+
+    MutableTabletMetadataPtr source_meta_;
+    MutableTabletMetadataPtr target_meta_;
+    RepeatedPtrField<RowsetMetadataPB> old_rowsets_;
+};
+
+TEST_F(TabletMetadataReplicationTest, BasicMetadataCopy) {
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_, old_rowsets_);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    // Check rowsets are copied
+    EXPECT_EQ(2, target_meta_->rowsets_size());
+    EXPECT_EQ(10u, target_meta_->rowsets(0).id());
+    EXPECT_EQ(20u, target_meta_->rowsets(1).id());
+
+    // Check metadata fields are copied
+    EXPECT_EQ(100u, target_meta_->next_rowset_id());
+    EXPECT_EQ(0u, target_meta_->cumulative_point());
+
+    // Check dcg_meta is copied
+    EXPECT_TRUE(target_meta_->has_dcg_meta());
+    EXPECT_EQ("test_dcg_data", target_meta_->dcg_meta().dcgs());
+
+    // Check sstable_meta is copied
+    EXPECT_TRUE(target_meta_->has_sstable_meta());
+    EXPECT_EQ(1, target_meta_->sstable_meta().sstables_size());
+    EXPECT_EQ("test.sst", target_meta_->sstable_meta().sstables(0).filename());
+
+    // Check delvec_meta is copied
+    EXPECT_TRUE(target_meta_->has_delvec_meta());
+    EXPECT_EQ(1, target_meta_->delvec_meta().version());
+}
+
+TEST_F(TabletMetadataReplicationTest, CompactionInputsHandling) {
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_, old_rowsets_);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    // Check compaction_inputs: rowsets with id 5 and 15 should be added (10 is kept in new rowsets)
+    EXPECT_EQ(2, target_meta_->compaction_inputs_size());
+    std::unordered_set<uint32_t> compaction_input_ids;
+    for (const auto& rowset : target_meta_->compaction_inputs()) {
+        compaction_input_ids.insert(rowset.id());
+    }
+    EXPECT_TRUE(compaction_input_ids.count(5));
+    EXPECT_TRUE(compaction_input_ids.count(15));
+    EXPECT_FALSE(compaction_input_ids.count(10));
+}
+
+TEST_F(TabletMetadataReplicationTest, EmptyRowsets) {
+    // Create source metadata with no rowsets
+    auto empty_source = std::make_shared<TabletMetadata>();
+    empty_source->set_id(3000);
+    empty_source->set_next_rowset_id(200);
+
+    RepeatedPtrField<RowsetMetadataPB> empty_old_rowsets;
+
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *empty_source, empty_old_rowsets);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    // Rowsets should remain unchanged (original rowsets cleared since rowsets_size() == 0)
+    EXPECT_EQ(0, target_meta_->rowsets_size());
+    EXPECT_EQ(200u, target_meta_->next_rowset_id());
+    EXPECT_EQ(0, target_meta_->compaction_inputs_size());
+}
+
+TEST_F(TabletMetadataReplicationTest, NoOldRowsets) {
+    RepeatedPtrField<RowsetMetadataPB> empty_old_rowsets;
+
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *source_meta_, empty_old_rowsets);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    // Check rowsets are copied
+    EXPECT_EQ(2, target_meta_->rowsets_size());
+
+    // No old rowsets, so compaction_inputs should be empty
+    EXPECT_EQ(0, target_meta_->compaction_inputs_size());
+}
+
+TEST_F(TabletMetadataReplicationTest, PartialMetadataCopy) {
+    // Create source with only some metadata types
+    auto partial_source = std::make_shared<TabletMetadata>();
+    partial_source->set_id(4000);
+    partial_source->set_next_rowset_id(300);
+
+    // Add only dcg_meta, no other metadata types
+    partial_source->mutable_dcg_meta()->set_dcgs("partial_dcg");
+
+    // Add one rowset
+    auto* rowset = partial_source->add_rowsets();
+    rowset->set_id(30);
+
+    Status st = apply_tablet_metadata_from_replication(target_meta_, *partial_source, old_rowsets_);
+    EXPECT_TRUE(st.ok()) << st.to_string();
+
+    // Check rowset is copied
+    EXPECT_EQ(1, target_meta_->rowsets_size());
+    EXPECT_EQ(30u, target_meta_->rowsets(0).id());
+
+    // Check dcg_meta is copied
+    EXPECT_TRUE(target_meta_->has_dcg_meta());
+    EXPECT_EQ("partial_dcg", target_meta_->dcg_meta().dcgs());
+
+    // Check other metadata types are not set (should be empty)
+    EXPECT_FALSE(target_meta_->has_sstable_meta());
+    EXPECT_FALSE(target_meta_->has_delvec_meta());
+
+    // Check compaction_inputs still works
+    EXPECT_EQ(2, target_meta_->compaction_inputs_size());
+}
+
 } // namespace lake
 } // namespace starrocks
