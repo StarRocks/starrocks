@@ -471,7 +471,12 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
             return Status::InvalidArgument(err_msg);
         }
 
-        RETURN_IF_ERROR_WITH_WARN(p_scanner->open(), "open file scanner failed: ");
+        auto st = p_scanner->open();
+        // Opening a scanner on an empty file may return EOF, but the file schema is still available, such as ORC file
+        if (!st.ok() && !st.is_end_of_file()) {
+            LOG(WARNING) << "open file scanner failed: " << st;
+            return st;
+        }
 
         DeferOp defer([&p_scanner] { p_scanner->close(); });
 
