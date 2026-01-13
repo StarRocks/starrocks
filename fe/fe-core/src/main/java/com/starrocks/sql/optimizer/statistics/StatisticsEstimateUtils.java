@@ -72,10 +72,15 @@ public class StatisticsEstimateUtils {
                 statistics.isTableRowCountMayInaccurate()) {
             return statistics;
         }
+        double distinctValues = Math.max(1, rowCount);
+        boolean needAdjustDistinctValues = statistics.getColumnStatistics().values().stream()
+                .anyMatch(cs -> cs.getDistinctValuesCount() > distinctValues);
+        if (!needAdjustDistinctValues) {
+            return statistics.withOutputRowCount(rowCount);
+        }
+
         Statistics.Builder builder = Statistics.buildFrom(statistics);
         builder.setOutputRowCount(rowCount);
-        // use row count to adjust column statistics distinct values
-        double distinctValues = Math.max(1, rowCount);
         statistics.getColumnStatistics().forEach((column, columnStatistic) -> {
             if (columnStatistic.getDistinctValuesCount() > distinctValues) {
                 builder.addColumnStatistic(column,

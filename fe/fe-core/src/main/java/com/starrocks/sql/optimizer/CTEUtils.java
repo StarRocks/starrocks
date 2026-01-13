@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.BitSet;
@@ -125,7 +124,7 @@ public class CTEUtils {
                         .anyMatch(ColumnStatistic::isUnknown)) {
             // Can't evaluated the effect of CTE if don't know statistic,
             // Mark output rows is zero, will choose inline when CTEContext check output rows
-            expr.setStatistics(Statistics.buildFrom(expressionContext.getStatistics()).setOutputRowCount(0).build());
+            expr.setStatistics(expressionContext.getStatistics().withOutputRowCount(0));
         } else {
             expr.setStatistics(expressionContext.getStatistics());
         }
