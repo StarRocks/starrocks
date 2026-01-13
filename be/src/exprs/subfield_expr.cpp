@@ -87,7 +87,7 @@ public:
         if (subfields != nullptr) {
             subfields->push_back(_used_subfield_names);
         }
-        return 1 + Expr::get_subfields(subfields);
+        return 1;
     }
 
 private:
