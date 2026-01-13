@@ -992,11 +992,6 @@ public class ExpressionAnalyzer {
                 castType = cast.getTargetTypeDef().getType();
             }
             Type fromType = cast.getChild(0).getType();
-            if (castType.isVariantType() &&
-                    (fromType.isArrayType() || fromType.isMapType() || fromType.isStructType())) {
-                throw new SemanticException("CAST to VARIANT from " + fromType.toSql() + " is not supported yet",
-                        cast.getPos());
-            }
             if (!TypeManager.canCastTo(fromType, castType)) {
                 throw new SemanticException("Invalid type cast from " + fromType.toSql() + " to "
                         + castType.toSql() + " in sql `" +
