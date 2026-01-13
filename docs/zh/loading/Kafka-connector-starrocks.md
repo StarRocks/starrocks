@@ -18,12 +18,12 @@ StarRocks 提供 Apache Kafka® 连接器 (StarRocks Connector for Apache Kafka�
 
 ### 版本要求
 
-| Connector | Kafka | StarRocks | Java |
-|-----------|-------|-----------| ---- |
-| 1.0.6     | 3.4+/4.0+   | 2.5 及以上   | 8    |
-| 1.0.5     | 3.4   | 2.5 及以上   | 8    |
-| 1.0.4     | 3.4   | 2.5 及以上   | 8    |
-| 1.0.3     | 3.4   | 2.5 及以上   | 8    |
+| Connector | Kafka     | StarRocks | Java |
+| --------- | --------- | --------- | ---- |
+| 1.0.6     | 3.4+/4.0+ | 2.5 及以上 | 8    |
+| 1.0.5     | 3.4       | 2.5 及以上 | 8    |
+| 1.0.4     | 3.4       | 2.5 及以上 | 8    |
+| 1.0.3     | 3.4       | 2.5 及以上 | 8    |
 
 ### 准备 Kafka 环境
 
@@ -119,7 +119,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径，例如：
+        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径。
         plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
 
@@ -143,7 +143,7 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar所在的绝对路径，例如：
+        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径。
         plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
   
@@ -620,7 +620,7 @@ PROPERTIES (
    key.converter.schemas.enable=true
    value.converter.schemas.enable=false
 
-   # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径。示例：
+   # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar 所在的绝对路径。
    plugin.path=/home/kafka-connect/starrocks-kafka-connector
 
    # 控制 Flush 策略的参数。更多信息，请参阅使用说明部分。
