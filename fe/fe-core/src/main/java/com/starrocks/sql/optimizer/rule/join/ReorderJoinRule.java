@@ -253,8 +253,10 @@ public class ReorderJoinRule extends Rule {
                         (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }
-
-                if (multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
+                int atomSize = multiJoinNode.getAtoms().size();
+                // Hard cap DP join reorder to avoid pathological cases.
+                // DP enumerates bipartitions (exponential); also the subset enumeration uses a long mask.
+                if (atomSize <= 62 && atomSize <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
                     // 10 table join reorder takes more than 100ms,
                     // so the join reorder using dp is currently controlled below 10.
