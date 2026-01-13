@@ -126,6 +126,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
+import com.starrocks.sql.util.Util;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -786,15 +787,8 @@ public class QueryOptimizer extends Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
-<<<<<<< HEAD
-            if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
-=======
             boolean hasAgg = Util.getStream(tree).anyMatch(op -> op instanceof LogicalAggregationOperator);
             if (hasAgg && context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
-                if (pushDistinctBelowWindowFlag) {
-                    deriveLogicalProperty(tree);
-                }
->>>>>>> 1f31ab952a ([Enhancement] Skip agg pushdown work when no aggregation exists (#67603))
                 // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
                 // For example, do not push down a not very efficient aggregator below a very small broadcast join.
                 scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
