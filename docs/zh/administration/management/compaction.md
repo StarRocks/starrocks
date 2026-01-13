@@ -121,7 +121,7 @@ mysql> SHOW PROC '/compactions';
   - `read_remote_mb`：所有子任务从远程存储读取数据的总大小。单位：MB。
   - `read_segment_count`: 所有子任务读取的总文件数。
   - `write_segment_count`: 所有子任务新生成的总文件数。
-  - `write_segment_mb`: 所有子任务新生成的总文件数大小。单位：MB。
+  - `write_segment_mb`: 所有子任务新生成文件的总大小。单位：MB。
   - `write_remote_sec`: 所有子任务往远程存储写入数据的总耗时。单位：秒。
   - `in_queue_sec`：所有子任务排队的总时间。单位：秒。
 
