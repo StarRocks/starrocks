@@ -53,7 +53,8 @@ public class SecurityPolicyRewriteRule {
             return null;
         }
 
-        List<Column> validColumns = columns.stream().filter(c -> !c.getType().isUnknown()).collect(Collectors.toList());
+        List<Column> validColumns = columns.stream().filter(c -> !c.getType().isUnknown()).
+                filter(Column::isVisible).collect(Collectors.toList());
         Map<String, Expr> maskingExprMap = Authorizer.getColumnMaskingPolicy(context, tableName, validColumns);
         Expr rowAccessExpr = Authorizer.getRowAccessPolicy(context, tableName);
         if ((maskingExprMap == null || maskingExprMap.isEmpty()) && rowAccessExpr == null) {
