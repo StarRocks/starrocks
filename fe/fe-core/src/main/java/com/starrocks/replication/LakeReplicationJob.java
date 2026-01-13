@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.storagevolume.StorageVolume;
@@ -31,7 +32,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.TestOnly;
 
-public class LakeReplicationJob extends ReplicationJob {
+import java.io.IOException;
+
+public class LakeReplicationJob extends ReplicationJob implements GsonPreProcessable {
     private static final Logger LOG = LogManager.getLogger(LakeReplicationJob.class);
 
     @SerializedName(value = "virtualTabletId")
@@ -44,7 +47,12 @@ public class LakeReplicationJob extends ReplicationJob {
     protected long srcTableId;
 
     // Source table's FilePathInfo for calculating partition paths with partitioned prefix support
-    private transient FilePathInfo srcTableFilePathInfo;
+    // FilePathInfo is a protobuf object, which cannot be directly serialized by Gson.
+    // We serialize it as byte array and restore it in gsonPostProcess.
+    private FilePathInfo srcTableFilePathInfo;
+
+    @SerializedName(value = "srcTableFilePathInfoBytes")
+    private byte[] srcTableFilePathInfoBytes;
 
     @TestOnly
     public LakeReplicationJob(String jobId, long virtualTabletId, long srcDatabaseId, long srcTableId, long databaseId,
@@ -212,5 +220,22 @@ public class LakeReplicationJob extends ReplicationJob {
             }
         }
         return count;
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        // Convert FilePathInfo (protobuf) to byte array for serialization
+        if (srcTableFilePathInfo != null) {
+            srcTableFilePathInfoBytes = srcTableFilePathInfo.toByteArray();
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        super.gsonPostProcess();
+        // Restore FilePathInfo from byte array after deserialization
+        if (srcTableFilePathInfoBytes != null) {
+            srcTableFilePathInfo = FilePathInfo.parseFrom(srcTableFilePathInfoBytes);
+        }
     }
 }
