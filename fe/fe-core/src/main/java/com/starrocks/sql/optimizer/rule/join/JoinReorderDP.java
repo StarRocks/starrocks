@@ -26,11 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.IntStream;
-
-import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static com.google.common.collect.Sets.powerSet;
 
 public class JoinReorderDP extends JoinOrder {
     public JoinReorderDP(OptimizerContext context) {
@@ -114,32 +109,34 @@ public class JoinReorderDP extends JoinOrder {
         return bestPlan;
     }
 
-    private List<BitSet> generatePartitions(BitSet totalNodes) {
-        Set<Integer> numbers = IntStream.range(0, totalNodes.cardinality()).boxed().collect(toImmutableSet());
-        Set<Set<Integer>> sets = powerSet(numbers).stream()
-                .filter(subSet -> subSet.size() > 0)
-                .filter(subSet -> subSet.size() < numbers.size())
-                .collect(toImmutableSet());
+    public static List<BitSet> generatePartitions(BitSet totalNodes) {
+        int first = totalNodes.nextSetBit(0);
+        if (first < 0 || totalNodes.cardinality() <= 1) {
+            return List.of();
+        }
 
-        List<Integer> l = bitSet2Array(totalNodes);
-        List<BitSet> partitions = new ArrayList<>();
-        for (Set<Integer> s : sets) {
-            BitSet b = new BitSet();
-            for (Integer i : s) {
-                b.set(l.get(i));
+        int card = totalNodes.cardinality();
+        int[] rest = new int[card - 1];
+        int n = 0;
+        for (int b = totalNodes.nextSetBit(first + 1); b >= 0; b = totalNodes.nextSetBit(b + 1)) {
+            rest[n++] = b;
+        }
+        if (n == 0) {
+            return List.of();
+        }
+
+        long count = (1L << n) - 1;
+        List<BitSet> partitions = count <= Integer.MAX_VALUE ? new ArrayList<>((int) count) : new ArrayList<>();
+        for (long mask = count - 1; mask >= 0; mask--) {
+            BitSet p = new BitSet();
+            p.set(first);
+            for (int i = 0; i < n; i++) {
+                if ((mask & (1L << i)) != 0) {
+                    p.set(rest[i]);
+                }
             }
-            partitions.add(b);
+            partitions.add(p);
         }
         return partitions;
-    }
-
-    List<Integer> bitSet2Array(BitSet bitSet) {
-        List<Integer> l = Lists.newArrayList();
-        for (int i = 0; i < bitSet.size(); ++i) {
-            if (bitSet.get(i)) {
-                l.add(i);
-            }
-        }
-        return l;
     }
 }
