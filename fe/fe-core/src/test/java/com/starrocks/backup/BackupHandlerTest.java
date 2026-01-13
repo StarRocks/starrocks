@@ -48,7 +48,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -56,8 +55,6 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.metric.WarehouseMetricMgr;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -90,13 +87,13 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
@@ -112,18 +109,35 @@ import java.util.Map;
 import java.util.Set;
 
 public class BackupHandlerTest {
-
     private BackupHandler handler;
 
     private Database db;
-
-    private long idGen = 0;
 
     private File rootDir;
 
     private String tmpPath = "./tmp" + System.currentTimeMillis();
 
-    private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
+    private String brokerName = "broker";
+
+    @BeforeEach
+    public void setup() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void done() throws Exception {
+        if (rootDir != null) {
+            try {
+                Files.walk(Paths.get(Config.tmp_dir),
+                                FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                        .forEach(File::delete);
+            } catch (IOException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+        }
+        UtFrameUtils.tearDownForPersisTest();
+    }
 
     private void initMetrics() {
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", Metric.MetricUnit.REQUESTS,
@@ -132,7 +146,7 @@ public class BackupHandlerTest {
                 "current unfinished restore job");
     }
 
-    private void setUpMocker(GlobalStateMgr globalStateMgr, BrokerMgr brokerMgr, EditLog editLog) {
+    private void setUpMocker() {
         Config.tmp_dir = tmpPath;
         rootDir = new File(Config.tmp_dir);
         rootDir.mkdirs();
@@ -145,50 +159,12 @@ public class BackupHandlerTest {
             e.printStackTrace();
             Assertions.fail();
         }
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getBrokerMgr();
-                minTimes = 0;
-                result = brokerMgr;
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = idGen++;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-
-                globalStateMgr.getTabletInvertedIndex();
-                minTimes = 0;
-                result = invertedIndex;
-            }
-        };
     }
 
-    @AfterEach
-    public void done() {
-        if (rootDir != null) {
-            try {
-                Files.walk(Paths.get(Config.tmp_dir),
-                                FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                        .forEach(File::delete);
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }
-    }
 
     @Test
-    public void testInit(@Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
-        setUpMocker(globalStateMgr, brokerMgr, editLog);
-        BackupHandler handler = new BackupHandler(globalStateMgr);
+    public void testInit() {
+        BackupHandler handler = new BackupHandler(GlobalStateMgr.getCurrentState());
         handler.runAfterCatalogReady();
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
@@ -196,45 +172,8 @@ public class BackupHandlerTest {
     }
 
     @Test
-    public void testCreateAndDropRepository(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
-        new MockUp<WarehouseMetricMgr>() {
-            @Mock
-            public static void increaseUnfinishedBackupJobs(Long warehouseId, Long delta) {
-                return;
-            }
-
-            @Mock
-            public static void increaseUnfinishedRestoreJobs(Long warehouseId, Long delta) {
-                return;
-            }
-        };
-
-        setUpMocker(globalStateMgr, brokerMgr, editLog);
-        new Expectations() {
-            {
-                editLog.logCreateRepository((Repository) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logCreateRepository(Repository repo) {
-
-                    }
-                };
-
-                editLog.logDropRepository(anyString);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logDropRepository(String repoName) {
-
-                    }
-                };
-
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = db;
-            }
-        };
-
+    public void testCreateAndDropRepository(@Mocked BrokerMgr brokerMgr) throws Exception {
+        setUpMocker();
         new MockUp<Repository>() {
             @Mock
             public Status initRepository() {
@@ -282,30 +221,6 @@ public class BackupHandlerTest {
             }
         };
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getBrokerMgr();
-                minTimes = 0;
-                result = brokerMgr;
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = idGen++;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-
-                globalStateMgr.getTabletInvertedIndex();
-                minTimes = 0;
-                result = invertedIndex;
-            }
-        };
-
         new MockUp<LocalMetastore>() {
             Database database = CatalogMocker.mockDb();
 
@@ -320,9 +235,10 @@ public class BackupHandlerTest {
             }
         };
 
+        GlobalStateMgr.getCurrentState().getNodeMgr().setBrokerMgr(brokerMgr);
         // add repo
-        BackupHandler handler = new BackupHandler(globalStateMgr);
-        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
+        BackupHandler handler = new BackupHandler(GlobalStateMgr.getCurrentState());
+        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", brokerName, "bos://location",
                 Maps.newHashMap());
         try {
             handler.createRepository(stmt);
@@ -462,18 +378,6 @@ public class BackupHandlerTest {
         request.setTask_status(new TStatus(TStatusCode.OK));
         handler.handleDirMoveTask(dirMoveTask, request);
 
-        new MockUp<ConnectContext>() {
-            @Mock
-            GlobalStateMgr getGlobalStateMgr() {
-                return globalStateMgr;
-            }
-        };
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            BackupHandler getBackupHandler() {
-                return handler;
-            }
-        };
         // cancel restore
         handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
 
@@ -571,21 +475,13 @@ public class BackupHandlerTest {
         newBackupMeta.setCatalogs(Lists.newArrayList(catalog));
         handler.checkAndFilterRestoreCatalogsInBackupMeta(restoreStmt3, newBackupMeta);
 
+        GlobalStateMgr.getCurrentState().setBackupHandler(handler);
         // drop repo
-        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
-        new Expectations() {
-            {
-                globalStateMgr.getDdlStmtExecutor();
-                result = ddlStmtExecutor;
-            }
-        };
         DDLStmtExecutor.execute(new DropRepositoryStmt("repo"), new ConnectContext());
     }
 
     @Test
     public void testExpired() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
-
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         handler = new BackupHandler(globalStateMgr);
         Assertions.assertEquals(0, handler.dbIdToBackupOrRestoreJob.size());
@@ -629,13 +525,10 @@ public class BackupHandlerTest {
         Assertions.assertNotNull(handler.getJob(1));
         Assertions.assertNotNull(handler.getJob(2));
         Assertions.assertNull(handler.getJob(3));
-
-        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testSaveLoadJsonFormatImage() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         handler = new BackupHandler(globalStateMgr);
         BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
@@ -649,38 +542,11 @@ public class BackupHandlerTest {
         reader.close();
 
         Assertions.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
-
-        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
-    public void testCreateDbInRestore(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) throws Exception {
-        setUpMocker(globalStateMgr, brokerMgr, editLog);
-
-        new Expectations() {
-            {
-                editLog.logCreateRepository((Repository) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logCreateRepository(Repository repo) {
-
-                    }
-                };
-
-                editLog.logDropRepository(anyString);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logDropRepository(String repoName) {
-
-                    }
-                };
-
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = db;
-            }
-        };
+    public void testCreateDbInRestore(@Mocked BrokerMgr brokerMgr) throws Exception {
+        setUpMocker();
 
         new MockUp<Repository>() {
             @Mock
@@ -721,38 +587,6 @@ public class BackupHandlerTest {
             }
         };
 
-        new Expectations() {
-            {
-                brokerMgr.containsBroker(anyString);
-                minTimes = 0;
-                result = true;
-            }
-        };
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getBrokerMgr();
-                minTimes = 0;
-                result = brokerMgr;
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = idGen++;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-
-                globalStateMgr.getTabletInvertedIndex();
-                minTimes = 0;
-                result = invertedIndex;
-            }
-        };
-
         new MockUp<LocalMetastore>() {
             Database database = CatalogMocker.mockDb();
 
@@ -774,8 +608,18 @@ public class BackupHandlerTest {
             }
         };
 
-        BackupHandler handler = new BackupHandler(globalStateMgr);
-        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
+        new Expectations() {
+            {
+                brokerMgr.containsBroker(anyString);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().getNodeMgr().setBrokerMgr(brokerMgr);
+
+        BackupHandler handler = new BackupHandler(GlobalStateMgr.getCurrentState());
+        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", brokerName, "bos://location",
                 Maps.newHashMap());
         try {
             handler.createRepository(stmt);
@@ -855,7 +699,7 @@ public class BackupHandlerTest {
 
     @Test
     public void testCreateRepositoryNeedEncrypt() {
-        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", "broker", "bos://location",
+        CreateRepositoryStmt stmt = new CreateRepositoryStmt(false, "repo", brokerName, "bos://location",
                 Maps.newHashMap());
         Assertions.assertEquals(true, AuditEncryptionChecker.needEncrypt(stmt));
     }

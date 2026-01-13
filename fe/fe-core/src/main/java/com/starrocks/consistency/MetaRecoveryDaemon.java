@@ -178,10 +178,8 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
         PartitionVersionRecoveryInfo recoveryInfo =
                 new PartitionVersionRecoveryInfo(partitionsToRecover, System.currentTimeMillis());
 
-        recoverPartitionVersion(recoveryInfo);
-
         GlobalStateMgr.getCurrentState().getEditLog()
-                .logRecoverPartitionVersion(new PartitionVersionRecoveryInfo(partitionsToRecover, System.currentTimeMillis()));
+                .logRecoverPartitionVersion(recoveryInfo, wal -> recoverPartitionVersion(recoveryInfo));
     }
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {

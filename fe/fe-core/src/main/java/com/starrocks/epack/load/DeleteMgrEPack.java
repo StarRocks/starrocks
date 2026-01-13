@@ -28,9 +28,12 @@ public class DeleteMgrEPack extends DeleteMgr {
             lock.writeLock().unlock();
         }
 
-        updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), deleteInfo.getDbId(),
-                deleteInfo.getTableId());
-        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo, wal -> {
+            updateTableDeleteInfo(
+                    GlobalStateMgr.getCurrentState(),
+                    deleteInfo.getDbId(),
+                    deleteInfo.getTableId());
+        });
         return true;
     }
 }

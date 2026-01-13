@@ -33,11 +33,13 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
@@ -48,6 +50,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -433,5 +436,114 @@ public class SchemaChangeHandlerEditLogTest {
         olapTable.setTableProperty(new TableProperty(new HashMap<>()));
         return olapTable;
     }
-}
 
+    @Test
+    public void testProcessModifyColumnCommentNormalCase() throws Exception {
+        // 1. Get table
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        // Get column to modify
+        Column column = table.getColumn("v1");
+        Assertions.assertNotNull(column);
+        String newComment = "new comment for v1";
+
+        // 2. Create ModifyColumnCommentClause
+        com.starrocks.sql.ast.ModifyColumnCommentClause clause = 
+                new com.starrocks.sql.ast.ModifyColumnCommentClause("v1", newComment, NodePosition.ZERO);
+
+        // 3. Prepare index schema map
+        Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
+        long baseIndexId = table.getBaseIndexMetaId();
+        LinkedList<Column> baseSchema = new LinkedList<>(table.getBaseSchema());
+        indexSchemaMap.put(baseIndexId, baseSchema);
+
+        // 4. Execute processModifyColumnComment
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.processModifyColumnComment(clause, db, table, indexSchemaMap);
+
+        // 5. Verify master state
+        table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+        Column updatedColumn = table.getColumn("v1");
+        Assertions.assertNotNull(updatedColumn);
+        Assertions.assertEquals(newComment, updatedColumn.getComment());
+
+        // 6. Test follower replay
+        ModifyColumnCommentLog replayInfo = (ModifyColumnCommentLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_MODIFY_COLUMN_COMMENT);
+
+        // Verify replay info
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertEquals("v1", replayInfo.getColumnName());
+        Assertions.assertEquals(newComment, replayInfo.getComment());
+
+        // Create follower metastore and the same id objects, then replay into it
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        // Create table with same ID
+        OlapTable followerTable = createHashOlapTable(TABLE_ID, TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerTable);
+
+        // Replay the operation
+        followerMetastore.replayModifyColumnComment(OperationType.OP_MODIFY_COLUMN_COMMENT, replayInfo);
+
+        // 7. Verify follower state
+        OlapTable replayedTable = (OlapTable) followerDb.getTable(TABLE_ID);
+        Assertions.assertNotNull(replayedTable);
+        Column replayedColumn = replayedTable.getColumn("v1");
+        Assertions.assertNotNull(replayedColumn);
+        Assertions.assertEquals(newComment, replayedColumn.getComment());
+    }
+
+    @Test
+    public void testProcessModifyColumnCommentEditLogException() throws Exception {
+        // 1. Get table
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        // Get column to modify
+        Column column = table.getColumn("v1");
+        Assertions.assertNotNull(column);
+        String originalComment = column.getComment();
+        String newComment = "new comment for v1";
+
+        // 2. Create ModifyColumnCommentClause
+        com.starrocks.sql.ast.ModifyColumnCommentClause clause = 
+                new com.starrocks.sql.ast.ModifyColumnCommentClause("v1", newComment, NodePosition.ZERO);
+
+        // 3. Prepare index schema map
+        Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
+        long baseIndexId = table.getBaseIndexMetaId();
+        LinkedList<Column> baseSchema = new LinkedList<>(table.getBaseSchema());
+        indexSchemaMap.put(baseIndexId, baseSchema);
+
+        // 4. Mock EditLog.logModifyColumnComment to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logModifyColumnComment(any(ModifyColumnCommentLog.class), any());
+
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 5. Execute processModifyColumnComment and expect exception
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            handler.processModifyColumnComment(clause, db, table, indexSchemaMap);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+
+        // 6. Verify column comment remains unchanged after exception
+        OlapTable unchangedTable = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(unchangedTable);
+        Column unchangedColumn = unchangedTable.getColumn("v1");
+        Assertions.assertNotNull(unchangedColumn);
+        Assertions.assertEquals(originalComment, unchangedColumn.getComment());
+    }
+}

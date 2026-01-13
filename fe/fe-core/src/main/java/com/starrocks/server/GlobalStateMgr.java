@@ -348,7 +348,7 @@ public class GlobalStateMgr {
     private final MaterializedViewMgr materializedViewMgr;
 
     private final ConsistencyChecker consistencyChecker;
-    private final BackupHandler backupHandler;
+    private BackupHandler backupHandler;
     private final PublishVersionDaemon publishVersionDaemon;
     private final DeleteMgr deleteMgr;
     private final DatabaseQuotaRefresher updateDbUsedDataQuotaDaemon;
@@ -3062,5 +3062,9 @@ public class GlobalStateMgr {
 
     public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {
         this.routineLoadMgr = routineLoadMgr;
+    }
+
+    public void setBackupHandler(BackupHandler backupHandler) {
+        this.backupHandler = backupHandler;
     }
 }

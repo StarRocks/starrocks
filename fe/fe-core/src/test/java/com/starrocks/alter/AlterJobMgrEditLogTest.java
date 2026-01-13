@@ -152,5 +152,136 @@ public class AlterJobMgrEditLogTest {
         Assertions.assertNotNull(exception);
         Assertions.assertFalse(testView.isSecurity());
     }
+
+    @Test
+    public void testAlterViewNormalCase() throws Exception {
+        // 1. Prepare test data - create a database and view
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        Assertions.assertNotNull(db);
+
+        // Create a simple view
+        List<Column> columns = new ArrayList<>();
+        Column col1 = new Column("c1", com.starrocks.type.IntegerType.INT);
+        columns.add(col1);
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        db.registerTableUnlocked(view);
+
+        Table table = localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(table);
+        Assertions.assertTrue(table.isView());
+        View testView = (View) table;
+        String originalViewDef = testView.getInlineViewDef();
+        Assertions.assertEquals("SELECT 1 as c1", originalViewDef);
+
+        // 2. Prepare AlterViewInfo with new view definition
+        String newViewDef = "SELECT 2 as c1";
+        List<Column> newColumns = new ArrayList<>();
+        Column newCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
+        newColumns.add(newCol1);
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment");
+
+        // 3. Execute alterView operation (master side)
+        alterJobMgr.alterView(alterViewInfo);
+
+        // 4. Verify master state
+        View updatedView = (View) localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(updatedView);
+        Assertions.assertEquals(newViewDef, updatedView.getInlineViewDef());
+        Assertions.assertEquals("test comment", updatedView.getComment());
+        Assertions.assertEquals(newColumns.size(), updatedView.getFullSchema().size());
+        Assertions.assertEquals(newColumns.get(0).getName(), updatedView.getFullSchema().get(0).getName());
+
+        // 5. Test follower replay functionality
+        AlterViewInfo replayInfo = (AlterViewInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MODIFY_VIEW_DEF);
+
+        // Verify replay info
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(view.getId(), replayInfo.getTableId());
+        Assertions.assertEquals(newViewDef, replayInfo.getInlineViewDef());
+        Assertions.assertEquals("test comment", replayInfo.getComment());
+        Assertions.assertEquals(newColumns.size(), replayInfo.getNewFullSchema().size());
+
+        // Create follower metastore and the same id objects, then replay into it
+        MockedLocalMetaStore followerMetastore = new MockedLocalMetaStore(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "test_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        // Create view with same ID
+        List<Column> followerColumns = new ArrayList<>();
+        Column followerCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
+        followerColumns.add(followerCol1);
+        View followerView = new View(view.getId(), "test_view", followerColumns);
+        followerView.setInlineViewDefWithSqlMode(originalViewDef, 0L);
+        followerDb.registerTableUnlocked(followerView);
+
+        // Create follower AlterJobMgr
+        AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler(),
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().getMaterializedViewHandler(),
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler());
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+
+        followerAlterJobMgr.replayAlterView(replayInfo);
+
+        // 6. Verify follower state
+        View replayedView = (View) followerDb.getTable(view.getId());
+        Assertions.assertNotNull(replayedView);
+        Assertions.assertEquals(newViewDef, replayedView.getInlineViewDef());
+        Assertions.assertEquals("test comment", replayedView.getComment());
+        Assertions.assertEquals(newColumns.size(), replayedView.getFullSchema().size());
+        Assertions.assertEquals(newColumns.get(0).getName(), replayedView.getFullSchema().get(0).getName());
+    }
+
+    @Test
+    public void testAlterViewEditLogException() throws Exception {
+        // 1. Prepare test data - create a database and view
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        Assertions.assertNotNull(db);
+
+        // Create a simple view
+        List<Column> columns = new ArrayList<>();
+        Column col1 = new Column("c1", com.starrocks.type.IntegerType.INT);
+        columns.add(col1);
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        db.registerTableUnlocked(view);
+
+        Table table = localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(table);
+        View testView = (View) table;
+        String originalViewDef = testView.getInlineViewDef();
+
+        // 2. Prepare AlterViewInfo
+        String newViewDef = "SELECT 2 as c1";
+        List<Column> newColumns = new ArrayList<>();
+        Column newCol1 = new Column("c1", com.starrocks.type.IntegerType.INT);
+        newColumns.add(newCol1);
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment");
+
+        // 3. Mock EditLog.logModifyViewDef to throw exception
+        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+            .when(spyEditLog).logModifyViewDef(any(AlterViewInfo.class), any());
+
+        // Temporarily set spy EditLog
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 4. Execute alterView operation and expect exception
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            alterJobMgr.alterView(alterViewInfo);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+
+        // 5. Verify view definition remains unchanged after exception
+        View unchangedView = (View) localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(unchangedView);
+        Assertions.assertEquals(originalViewDef, unchangedView.getInlineViewDef());
+    }
 }
 

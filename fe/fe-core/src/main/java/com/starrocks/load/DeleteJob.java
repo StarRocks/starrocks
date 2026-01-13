@@ -120,10 +120,12 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         if (!txnOperated) {
             return;
         }
-        setState(DeleteState.FINISHED);
-        GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
-        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo, wal -> {
+            setState(DeleteState.FINISHED);
+            GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        });
     }
 
     @Override

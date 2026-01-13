@@ -1364,7 +1364,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
     }
 
-    private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
+    protected void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
         if (Config.tablet_sched_always_force_decommission_replica) {
             force = true;
@@ -1404,14 +1404,6 @@ public class TabletScheduler extends FrontendDaemon {
             }
         }
 
-        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
-        // delete this replica from globalStateMgr.
-        // it will also delete replica from tablet inverted index.
-        if (!tabletCtx.deleteReplica(replica)) {
-            LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
-                    replica.getBackendId(), replicaInfos);
-        }
-
         if (force) {
             // send the replica deletion task.
             // also this may not be necessary, but delete it will make things simpler.
@@ -1420,9 +1412,6 @@ public class TabletScheduler extends FrontendDaemon {
             // process.
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
-        // NOTE: TabletScheduler is specific for LocalTablet, LakeTablet will never go here.
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
-                .markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
 
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),
@@ -1431,8 +1420,19 @@ public class TabletScheduler extends FrontendDaemon {
                 tabletCtx.getIndexId(),
                 tabletCtx.getTabletId(),
                 replica.getBackendId());
+        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
+        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info, wal -> {
+            // delete this replica from globalStateMgr.
+            // it will also delete replica from tablet inverted index.
+            if (!tabletCtx.deleteReplica(replica)) {
+                LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
+                        replica.getBackendId(), replicaInfos);
+            }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
+            // NOTE: TabletScheduler is specific for LocalTablet, LakeTablet will never go here.
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                    .markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
+        });
 
         LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {} replicas: {}",
                 tabletCtx.getTabletId(), replica.getBackendId(), reason, force, replicaInfos);
