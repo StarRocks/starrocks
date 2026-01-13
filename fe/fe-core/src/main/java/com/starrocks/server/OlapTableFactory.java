@@ -410,6 +410,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Only default compaction strategy is allowed for non-pk table.");
                 }
                 table.setCompactionStrategy(compactionStrategy);
+
+                // analyze lake_compaction_max_parallel property
+                try {
+                    int lakeCompactionMaxParallel = PropertyAnalyzer.analyzeLakeCompactionMaxParallel(properties);
+                    table.setLakeCompactionMaxParallel(lakeCompactionMaxParallel);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
             }
 
             try {

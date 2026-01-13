@@ -1,0 +1,1032 @@
+-- name: test_parallel_compaction_pk_table @cloud @sequential
+create database test_parallel_compaction_pk_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_pk_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_parallel_2` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "2"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_2' and TABLE_SCHEMA='test_parallel_compaction_pk_${uuid0}';
+-- result:
+11495
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO pk_parallel_2 VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+-- result:
+-- !result
+INSERT INTO pk_parallel_2 VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+-- result:
+-- !result
+INSERT INTO pk_parallel_2 VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+INSERT INTO pk_parallel_2 VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+-- result:
+-- !result
+INSERT INTO pk_parallel_2 VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+-- result:
+5
+-- !result
+SELECT COUNT(*) FROM pk_parallel_2;
+-- result:
+10
+-- !result
+SELECT * FROM pk_parallel_2 ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE pk_parallel_2 COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM pk_parallel_2;
+-- result:
+10
+-- !result
+SELECT * FROM pk_parallel_2 ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_pk_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_pk_high_parallel @cloud @sequential
+create database test_parallel_compaction_pk_high_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_pk_high_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_parallel_5` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "5"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_5' and TABLE_SCHEMA='test_parallel_compaction_pk_high_${uuid0}';
+-- result:
+11453
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (11, 11, 'k', 1100), (12, 12, 'l', 1200);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (13, 13, 'm', 1300), (14, 14, 'n', 1400);
+-- result:
+-- !result
+INSERT INTO pk_parallel_5 VALUES (15, 15, 'o', 1500), (16, 16, 'p', 1600);
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+-- result:
+8
+-- !result
+SELECT COUNT(*) FROM pk_parallel_5;
+-- result:
+16
+-- !result
+SELECT * FROM pk_parallel_5 ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+11	11	k	1100
+12	12	l	1200
+13	13	m	1300
+14	14	n	1400
+15	15	o	1500
+16	16	p	1600
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE pk_parallel_5 COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+-- result:
+4
+-- !result
+SELECT COUNT(*) FROM pk_parallel_5;
+-- result:
+16
+-- !result
+SELECT * FROM pk_parallel_5 ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+11	11	k	1100
+12	12	l	1200
+13	13	m	1300
+14	14	n	1400
+15	15	o	1500
+16	16	p	1600
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_pk_high_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_dup_table @cloud @sequential
+create database test_parallel_compaction_dup_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_dup_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `dup_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "3"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='dup_parallel' and TABLE_SCHEMA='test_parallel_compaction_dup_${uuid0}';
+-- result:
+11406
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO dup_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+-- result:
+-- !result
+INSERT INTO dup_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+-- result:
+-- !result
+INSERT INTO dup_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+INSERT INTO dup_parallel VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+-- result:
+-- !result
+INSERT INTO dup_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+-- result:
+5
+-- !result
+SELECT COUNT(*) FROM dup_parallel;
+-- result:
+10
+-- !result
+SELECT * FROM dup_parallel ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE dup_parallel COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM dup_parallel;
+-- result:
+10
+-- !result
+SELECT * FROM dup_parallel ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_dup_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_agg_table @cloud @sequential
+create database test_parallel_compaction_agg_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_agg_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `agg_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` BIGINT SUM,
+    `v2` BIGINT MAX
+)
+AGGREGATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "3"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='agg_parallel' and TABLE_SCHEMA='test_parallel_compaction_agg_${uuid0}';
+-- result:
+11354
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO agg_parallel VALUES (1, 1, 100, 100), (2, 2, 200, 200);
+-- result:
+-- !result
+INSERT INTO agg_parallel VALUES (3, 3, 300, 300), (4, 4, 400, 400);
+-- result:
+-- !result
+INSERT INTO agg_parallel VALUES (1, 1, 50, 150), (2, 2, 100, 250);
+-- result:
+-- !result
+INSERT INTO agg_parallel VALUES (5, 5, 500, 500), (6, 6, 600, 600);
+-- result:
+-- !result
+INSERT INTO agg_parallel VALUES (3, 3, 200, 400), (4, 4, 300, 500);
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+-- result:
+5
+-- !result
+SELECT COUNT(*) FROM agg_parallel;
+-- result:
+6
+-- !result
+SELECT * FROM agg_parallel ORDER BY k1, k2;
+-- result:
+1	1	150	150
+2	2	300	250
+3	3	500	400
+4	4	700	500
+5	5	500	500
+6	6	600	600
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE agg_parallel COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM agg_parallel;
+-- result:
+6
+-- !result
+SELECT * FROM agg_parallel ORDER BY k1, k2;
+-- result:
+1	1	150	150
+2	2	300	250
+3	3	500	400
+4	4	700	500
+5	5	500	500
+6	6	600	600
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_agg_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_unique_table @cloud @sequential
+create database test_parallel_compaction_uniq_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_uniq_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `uniq_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+UNIQUE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "4"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='uniq_parallel' and TABLE_SCHEMA='test_parallel_compaction_uniq_${uuid0}';
+-- result:
+11547
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO uniq_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+-- result:
+-- !result
+INSERT INTO uniq_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+-- result:
+-- !result
+INSERT INTO uniq_parallel VALUES (1, 1, 'a_updated', 150), (2, 2, 'b_updated', 250);
+-- result:
+-- !result
+INSERT INTO uniq_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+INSERT INTO uniq_parallel VALUES (3, 3, 'c_updated', 350), (7, 7, 'g', 700);
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+-- result:
+5
+-- !result
+SELECT COUNT(*) FROM uniq_parallel;
+-- result:
+7
+-- !result
+SELECT * FROM uniq_parallel ORDER BY k1, k2;
+-- result:
+1	1	a_updated	150
+2	2	b_updated	250
+3	3	c_updated	350
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE uniq_parallel COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM uniq_parallel;
+-- result:
+7
+-- !result
+SELECT * FROM uniq_parallel ORDER BY k1, k2;
+-- result:
+1	1	a_updated	150
+2	2	b_updated	250
+3	3	c_updated	350
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_uniq_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_disabled @cloud @sequential
+create database test_parallel_compaction_disabled_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_disabled_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_no_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "0"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_no_parallel' and TABLE_SCHEMA='test_parallel_compaction_disabled_${uuid0}';
+-- result:
+11388
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO pk_no_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+-- result:
+-- !result
+INSERT INTO pk_no_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+-- result:
+-- !result
+INSERT INTO pk_no_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM pk_no_parallel;
+-- result:
+6
+-- !result
+SELECT * FROM pk_no_parallel ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE pk_no_parallel COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM pk_no_parallel;
+-- result:
+6
+-- !result
+SELECT * FROM pk_no_parallel ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+-- !result
+DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_alter_property @cloud @sequential
+create database test_parallel_compaction_alter_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_alter_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_alter_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "2"
+);
+-- result:
+-- !result
+SHOW CREATE TABLE pk_alter_parallel;
+-- result:
+pk_alter_parallel	CREATE TABLE `pk_alter_parallel` (
+  `k1` bigint(20) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` varchar(100) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "5");
+-- result:
+-- !result
+SHOW CREATE TABLE pk_alter_parallel;
+-- result:
+pk_alter_parallel	CREATE TABLE `pk_alter_parallel` (
+  `k1` bigint(20) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` varchar(100) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "0");
+-- result:
+-- !result
+SHOW CREATE TABLE pk_alter_parallel;
+-- result:
+pk_alter_parallel	CREATE TABLE `pk_alter_parallel` (
+  `k1` bigint(20) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` varchar(100) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "3");
+-- result:
+-- !result
+SHOW CREATE TABLE pk_alter_parallel;
+-- result:
+pk_alter_parallel	CREATE TABLE `pk_alter_parallel` (
+  `k1` bigint(20) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` varchar(100) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+DROP DATABASE test_parallel_compaction_alter_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_pk_with_updates @cloud @sequential
+create database test_parallel_compaction_pk_upd_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_pk_upd_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_with_updates` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "3"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_with_updates' and TABLE_SCHEMA='test_parallel_compaction_pk_upd_${uuid0}';
+-- result:
+11523
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO pk_with_updates VALUES (1, 1, 'a', 100), (2, 2, 'b', 200), (3, 3, 'c', 300);
+-- result:
+-- !result
+INSERT INTO pk_with_updates VALUES (4, 4, 'd', 400), (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+UPDATE pk_with_updates SET v1 = 'a_v2', v2 = 110 WHERE k1 = 1;
+-- result:
+-- !result
+UPDATE pk_with_updates SET v1 = 'b_v2', v2 = 220 WHERE k1 = 2;
+-- result:
+-- !result
+DELETE FROM pk_with_updates WHERE k1 = 3;
+-- result:
+-- !result
+INSERT INTO pk_with_updates VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+-- result:
+-- !result
+UPDATE pk_with_updates SET v1 = 'd_v2', v2 = 440 WHERE k1 = 4;
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+-- result:
+7
+-- !result
+SELECT COUNT(*) FROM pk_with_updates;
+-- result:
+7
+-- !result
+SELECT * FROM pk_with_updates ORDER BY k1, k2;
+-- result:
+1	1	a_v2	110
+2	2	b_v2	220
+4	4	d_v2	440
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE pk_with_updates COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+-- result:
+4
+-- !result
+SELECT COUNT(*) FROM pk_with_updates;
+-- result:
+7
+-- !result
+SELECT * FROM pk_with_updates ORDER BY k1, k2;
+-- result:
+1	1	a_v2	110
+2	2	b_v2	220
+4	4	d_v2	440
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_pk_upd_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_pk_large_data @cloud @sequential
+create database test_parallel_compaction_pk_large_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_pk_large_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_large_data` (
+    `k1` BIGINT NOT NULL,
+    `v1` VARCHAR(1000),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "4"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_large_data' and TABLE_SCHEMA='test_parallel_compaction_pk_large_${uuid0}';
+-- result:
+11473
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('x', 100), generate_series * 10 FROM TABLE(generate_series(1, 1000));
+-- result:
+-- !result
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('y', 100), generate_series * 10 FROM TABLE(generate_series(1001, 2000));
+-- result:
+-- !result
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('z', 100), generate_series * 10 FROM TABLE(generate_series(2001, 3000));
+-- result:
+-- !result
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('w', 100), generate_series * 10 FROM TABLE(generate_series(3001, 4000));
+-- result:
+-- !result
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('v', 100), generate_series * 10 FROM TABLE(generate_series(4001, 5000));
+-- result:
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+-- result:
+5
+-- !result
+SELECT COUNT(*) FROM pk_large_data;
+-- result:
+5000
+-- !result
+SELECT MIN(k1), MAX(k1) FROM pk_large_data;
+-- result:
+1	5000
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE pk_large_data COMPACT;
+-- result:
+-- !result
+SELECT sleep(60);
+-- result:
+1
+-- !result
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+-- result:
+3
+-- !result
+SELECT COUNT(*) FROM pk_large_data;
+-- result:
+5000
+-- !result
+SELECT MIN(k1), MAX(k1) FROM pk_large_data;
+-- result:
+1	5000
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_pk_large_${uuid0} FORCE;
+-- result:
+-- !result
+-- name: test_parallel_compaction_multiple_buckets @cloud @sequential
+create database test_parallel_compaction_buckets_${uuid0};
+-- result:
+-- !result
+use test_parallel_compaction_buckets_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `pk_multi_buckets` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+    "lake_compaction_max_parallel" = "2"
+);
+-- result:
+-- !result
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_multi_buckets' and TABLE_SCHEMA='test_parallel_compaction_buckets_${uuid0}';
+-- result:
+11423
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+-- result:
+-- !result
+INSERT INTO pk_multi_buckets VALUES (1, 1, 'a', 100), (2, 2, 'b', 200), (3, 3, 'c', 300);
+-- result:
+-- !result
+INSERT INTO pk_multi_buckets VALUES (4, 4, 'd', 400), (5, 5, 'e', 500), (6, 6, 'f', 600);
+-- result:
+-- !result
+INSERT INTO pk_multi_buckets VALUES (7, 7, 'g', 700), (8, 8, 'h', 800), (9, 9, 'i', 900);
+-- result:
+-- !result
+INSERT INTO pk_multi_buckets VALUES (10, 10, 'j', 1000), (11, 11, 'k', 1100), (12, 12, 'l', 1200);
+-- result:
+-- !result
+INSERT INTO pk_multi_buckets VALUES (13, 13, 'm', 1300), (14, 14, 'n', 1400), (15, 15, 'o', 1500);
+-- result:
+-- !result
+SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+-- result:
+10
+-- !result
+SELECT COUNT(*) FROM pk_multi_buckets;
+-- result:
+15
+-- !result
+SELECT * FROM pk_multi_buckets ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+11	11	k	1100
+12	12	l	1200
+13	13	m	1300
+14	14	n	1400
+15	15	o	1500
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
+[UC]ALTER TABLE pk_multi_buckets COMPACT;
+-- result:
+-- !result
+SELECT sleep(30);
+-- result:
+1
+-- !result
+SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+-- result:
+8
+-- !result
+SELECT COUNT(*) FROM pk_multi_buckets;
+-- result:
+15
+-- !result
+SELECT * FROM pk_multi_buckets ORDER BY k1, k2;
+-- result:
+1	1	a	100
+2	2	b	200
+3	3	c	300
+4	4	d	400
+5	5	e	500
+6	6	f	600
+7	7	g	700
+8	8	h	800
+9	9	i	900
+10	10	j	1000
+11	11	k	1100
+12	12	l	1200
+13	13	m	1300
+14	14	n	1400
+15	15	o	1500
+-- !result
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+-- result:
+-- !result
+DROP DATABASE test_parallel_compaction_buckets_${uuid0} FORCE;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+-- result:
+-- !result
