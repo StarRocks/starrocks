@@ -4943,24 +4943,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (database == null) {
             throw ErrorReportException.report(ErrorCode.ERR_BAD_DB_ERROR, stmt.getTableName().getDb());
         }
-<<<<<<< HEAD
-        Locker locker = new Locker();
-        locker.lockDatabase(database.getId(), LockType.WRITE);
-        try {
-            Table table = getTable(database.getFullName(), stmt.getTableName().getTbl());
-=======
-        Table shadowTable = database.getTable(tableRef.getTableName());
+
+        String tblName = stmt.getTableName().getTbl();
+        Table shadowTable = database.getTable(tblName);
         if (shadowTable == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
+            throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
         }
         try (AutoCloseableLock ignore = new AutoCloseableLock(database.getId(), shadowTable.getId(), LockType.WRITE)) {
-            Table table = getTable(database.getFullName(), tableRef.getTableName());
->>>>>>> 9a96a01b11 ([Enhancement] Perf:Optimize LocalMetastore locking granularity (#67658))
+            Table table = getTable(database.getFullName(), tblName);
             if (table == null) {
                 throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getTableName().getTbl());
             }
             if (table.getId() != shadowTable.getId()) {
-                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
+                throw ErrorReportException.report(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
             }
             if (!table.isOlapTableOrMaterializedView()) {
                 throw ErrorReportException.report(ErrorCode.ERR_NOT_OLAP_TABLE, stmt.getTableName().getTbl());
