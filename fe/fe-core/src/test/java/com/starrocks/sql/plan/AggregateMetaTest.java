@@ -109,5 +109,23 @@ public class AggregateMetaTest extends PlanTestBase {
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         1");
+        starRocksAssert.withTable("CREATE TABLE `t_bug` (\n" +
+                "  `k1` varchar(65533) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"compression\" = \"LZ4\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        sql = "SELECT COUNT(), hex(1) FROM t_bug";
+        String thriftPlan = getThriftPlan(sql);
+        assertContains(thriftPlan, "union_node:TUnionNode(tuple_id:0,");
+        String descTbl = getDescTbl(sql);
+        assertContains(descTbl, "TSlotDescriptor(id:4, parent:0, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))])");
     }
 }
