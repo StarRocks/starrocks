@@ -187,7 +187,7 @@ StarRocks でストレージボリュームを作成するときは、データ�
 
 ## 共有データ用の StarRocks 構成
 
-この時点で、 StarRocks が実行されており、MinIO が実行されています。MinIO アクセスキーは、 StarRocks と Minio を接続するために使用されます。
+この時点で、 StarRocks が実行されており、MinIO が実行されています。MinIO アクセスキーは、 StarRocks と MinIO を接続するために使用されます。
 
 これは、 StarRocks デプロイメントが共有データを使用することを指定する `FE` 構成の一部です。これは、Docker Compose がデプロイメントを作成したときにファイル `fe.conf` に追加されました。
 
@@ -237,7 +237,7 @@ Empty set (0.04 sec)
 
 #### 共有データストレージボリュームを作成する
 
-以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MionIO バケットにストレージボリュームを作成します。
+以前に、MinIO に `my-starrocks-volume` という名前のバケットを作成し、MinIO に `AAAAAAAAAAAAAAAAAAAA` という名前のアクセスキーがあることを確認しました。次の SQL は、アクセスキーとシークレットを使用して、MinIO バケットにストレージボリュームを作成します。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -561,7 +561,7 @@ FE を起動するコマンドも変更されます。Docker Compose ファイ�
 
 このチュートリアルでは、次のことを行いました。
 
-- Docker で StarRocks と Minio をデプロイしました
+- Docker で StarRocks と MinIO をデプロイしました
 - MinIO アクセスキーを作成しました
 - MinIO を使用する StarRocks ストレージボリュームを構成しました
 - ニューヨーク市が提供する衝突データと NOAA が提供する天気データをロードしました

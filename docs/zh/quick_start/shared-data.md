@@ -187,7 +187,7 @@ docker compose run minio_mc
 
 ## 用于共享数据的 StarRocks 配置
 
-此时，您已经运行了 StarRocks，并且已经运行了 MinIO。MinIO 访问密钥用于连接 StarRocks 和 Minio。
+此时，您已经运行了 StarRocks，并且已经运行了 MinIO。MinIO 访问密钥用于连接 StarRocks 和 MinIO。
 
 这是 `FE` 配置的一部分，它指定 StarRocks 部署将使用共享数据。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
 
@@ -237,7 +237,7 @@ Empty set (0.04 sec)
 
 #### 创建一个共享数据存储卷
 
-之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的存储桶，并且您已验证 MinIO 是否具有名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MionIO 存储桶中创建一个存储卷。
+之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的存储桶，并且您已验证 MinIO 是否具有名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将使用访问密钥和密钥在 MinIO 存储桶中创建一个存储卷。
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -561,7 +561,7 @@ MinIO 访问密钥密钥。
 
 在本教程中，您：
 
-- 在 Docker 中部署了 StarRocks 和 Minio
+- 在 Docker 中部署了 StarRocks 和 MinIO
 - 创建了一个 MinIO 访问密钥
 - 配置了一个使用 MinIO 的 StarRocks Storage Volume
 - 加载了纽约市提供的碰撞数据和 NOAA 提供的天气数据
