@@ -15,7 +15,10 @@
 package com.starrocks.connector.iceberg.io;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.hadoop.HadoopConfigurable;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.util.SerializableSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -59,4 +62,97 @@ public class IcebergCachingFileIOTest {
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testNewFileWithException() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Map<String, String> icebergProperties = new HashMap<>();
+        String key = ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT;
+        icebergProperties.put(key, "sas_token");
+        cachingFileIO.initialize(icebergProperties);
+
+        String path = "file:/tmp/non_existent_file.json";
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingFileIO.newInputFile(path);
+        });
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingFileIO.newOutputFile(path);
+        });
+    }
+
+    @Test
+    public void testBuildAzureConfFromProperties() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        String key = ADLS_SAS_TOKEN + "account." + ADLS_ENDPOINT;
+        String sasToken = "sas_token";
+        properties.put(key, sasToken);
+        String path = "abfss://container@account.dfs.core.windows.net/path/1/2";
+
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Configuration configuration = cachingFileIO.buildConfFromProperties(properties, path);
+
+        String authType = configuration.get("fs.azure.account.auth.type.account." + ADLS_ENDPOINT);
+        Assertions.assertEquals("SAS", authType);
+        String token = configuration.get("fs.azure.sas.fixed.token.account." + ADLS_ENDPOINT);
+        Assertions.assertEquals(sasToken, token);
+
+        properties = new HashMap<>();
+        key = ADLS_SAS_TOKEN + "account." + BLOB_ENDPOINT;
+        sasToken = "blob_sas_token";
+        properties.put(key, sasToken);
+        path = "wasbs://container@account.blob.core.windows.net/path/1/2";
+
+        cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        configuration = cachingFileIO.buildConfFromProperties(properties, path);
+
+        token = configuration.get("fs.azure.sas.container.account." + BLOB_ENDPOINT);
+        Assertions.assertEquals(sasToken, token);
+    }
+
+    @Test
+    public void testBuildGCSConfFromProperties() throws StarRocksException {
+        Map<String, String> properties = new HashMap<>();
+        String accessToken = "access_token";
+        properties.put(GCS_ACCESS_TOKEN, accessToken);
+        String path = "gs://iceberg_gcp/iceberg_catalog/path/1/2";
+
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        cachingFileIO.setConf(new Configuration());
+        Configuration configuration = cachingFileIO.buildConfFromProperties(properties, path);
+        String token = configuration.get("fs.gs.temporary.access.token");
+        Assertions.assertEquals(accessToken, token);
+        Assertions.assertEquals(ACCESS_TOKEN_PROVIDER_IMPL,
+                configuration.get("fs.gs.auth.access.token.provider.impl"));
+    }
+
+    @Test
+    void testWrappedIOConfigurationPropagation() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        Map<String, String> properties = new HashMap<>();
+        properties.put("iceberg.catalog.type", "hive");
+        cachingFileIO.initialize(properties);
+
+        Configuration conf = new Configuration();
+        conf.set("test.key", "test.value");
+        cachingFileIO.setConf(conf);
+
+        FileIO wrappedIO = cachingFileIO.getWrappedIO();
+        Assertions.assertTrue(wrappedIO instanceof HadoopConfigurable);
+
+        HadoopConfigurable hadoopConfigurable = (HadoopConfigurable) wrappedIO;
+        Assertions.assertDoesNotThrow(() -> {
+            hadoopConfigurable.serializeConfWith(confToSerialize -> {
+                Assertions.assertNotNull(confToSerialize);
+                return (SerializableSupplier<Configuration>) () -> confToSerialize;
+            });
+        });
+    }
+
+>>>>>>> b6e4cfa62b ([BugFix] Fix NPE in Iceberg metadata table query due to missing Configuration propagation (#67151))
 }
