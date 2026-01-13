@@ -33,11 +33,38 @@ ConnectorChunkSink::ConnectorChunkSink(std::vector<std::string> partition_column
           _support_null_partition(support_null_partition) {}
 
 Status ConnectorChunkSink::init() {
+    init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
     _op_mem_mgr->init(&_partition_chunk_writers, _io_poller,
                       [this](const CommitResult& r) { this->callback_on_commit(r); });
     return Status::OK();
+}
+
+void ConnectorChunkSink::init_profile() {
+    if (_profile == nullptr) {
+        _profile = _state->obj_pool()->add(new RuntimeProfile("ConnectorChunkSink"));
+    }
+
+    std::string partition_names = fmt::format("{}", fmt::join(_partition_column_names, ","));
+    _profile->add_info_string("PartitionColumns", partition_names);
+
+    _sink_profile = _state->obj_pool()->add(new connector::ConnectorSinkProfile());
+    _sink_profile->runtime_profile = _profile;
+    _sink_profile->partition_writer_counter = ADD_COUNTER(_profile, "PartitionWriters", TUnit::UNIT);
+    _sink_profile->write_file_counter = ADD_COUNTER(_profile, "WriteFiles", TUnit::UNIT);
+    _sink_profile->write_file_record_counter = ADD_COUNTER(_profile, "WriteFileRecords", TUnit::UNIT);
+    _sink_profile->write_file_bytes = ADD_COUNTER(_profile, "WriteFileBytes", TUnit::BYTES);
+
+    // Timer metrics
+    _sink_profile->write_file_timer = ADD_TIMER(_profile, "WriteFileTime");
+    _sink_profile->commit_file_timer = ADD_TIMER(_profile, "CommitFileTime");
+    _sink_profile->sort_timer = ADD_TIMER(_profile, "SortTime");
+    _sink_profile->spill_chunk_timer = ADD_TIMER(_profile, "SpillChunkTime");
+    _sink_profile->merge_blocks_timer = ADD_TIMER(_profile, "MergeBlocksTime");
+
+    // Memory usage peak metrics
+    _sink_profile->spilling_bytes_usage_peak = ADD_PEAK_COUNTER(_profile, "SpillingBytesUsagePeak", TUnit::BYTES);
 }
 
 Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
@@ -58,6 +85,7 @@ Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
         writer->set_commit_callback(commit_callback);
         writer->set_error_handler(error_handler);
         writer->set_io_poller(_io_poller);
+        writer->set_sink_profile(_sink_profile);
         auto st = writer->init();
         if (!st.ok()) {
             set_status(st);
@@ -65,6 +93,7 @@ Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
         }
         // save the writer to the map, so errors from subsequent write() can be correctly handled.
         _partition_chunk_writers[partition_key] = writer;
+        COUNTER_UPDATE(_sink_profile->partition_writer_counter, 1);
         RETURN_IF_ERROR(writer->write(chunk));
     }
     return Status::OK();
@@ -128,6 +157,15 @@ bool ConnectorChunkSink::is_finished() {
         }
     }
     return true;
+}
+
+void ConnectorChunkSink::set_profile(RuntimeProfile* profile) {
+    if (_profile != nullptr) {
+        LOG(WARNING) << "ConnectorChunkSink profile is set duplicated, query_id: " << print_id(_state->query_id())
+                     << ", fragment_instance_id: " << print_id(_state->fragment_instance_id());
+        return;
+    }
+    _profile = profile;
 }
 
 } // namespace starrocks::connector
