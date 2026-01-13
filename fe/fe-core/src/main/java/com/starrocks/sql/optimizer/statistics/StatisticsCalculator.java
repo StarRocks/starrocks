@@ -187,6 +187,37 @@ import static java.lang.Math.pow;
 public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContext> {
     private static final Logger LOG = LogManager.getLogger(StatisticsCalculator.class);
 
+    private static final ThreadLocal<Integer> SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
+    public static final class SkipPredicateColumnsCollectionScope implements AutoCloseable {
+        private SkipPredicateColumnsCollectionScope() {
+        }
+
+        @Override
+        public void close() {
+            int v = SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() - 1;
+            if (v <= 0) {
+                SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.remove();
+            } else {
+                SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.set(v);
+            }
+        }
+    }
+
+    public static SkipPredicateColumnsCollectionScope skipPredicateColumnsCollectionScope() {
+        SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.set(SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() + 1);
+        return new SkipPredicateColumnsCollectionScope();
+    }
+
+    private static boolean shouldSkipPredicateColumnsCollection() {
+        return SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() > 0;
+    }
+
+    public static boolean isInSkipPredicateColumnsCollectionScope() {
+        return shouldSkipPredicateColumnsCollection();
+    }
+
     private final ExpressionContext expressionContext;
     private final ColumnRefFactory columnRefFactory;
     private final OptimizerContext optimizerContext;
@@ -225,8 +256,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
-        PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
-                context.getOptExpression());
+        if (!shouldSkipPredicateColumnsCollection()) {
+            PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
+                    context.getOptExpression());
+        }
 
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
