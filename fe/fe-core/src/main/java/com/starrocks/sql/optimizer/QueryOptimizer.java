@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
@@ -785,7 +786,15 @@ public class QueryOptimizer extends Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
+<<<<<<< HEAD
             if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+=======
+            boolean hasAgg = Util.getStream(tree).anyMatch(op -> op instanceof LogicalAggregationOperator);
+            if (hasAgg && context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+                if (pushDistinctBelowWindowFlag) {
+                    deriveLogicalProperty(tree);
+                }
+>>>>>>> 1f31ab952a ([Enhancement] Skip agg pushdown work when no aggregation exists (#67603))
                 // Reorder joins before applying PushDownAggregateRule to better decide where to push down aggregator.
                 // For example, do not push down a not very efficient aggregator below a very small broadcast join.
                 scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
@@ -799,11 +808,13 @@ public class QueryOptimizer extends Optimizer {
                 Utils.calculateStatistics(tree, context);
             }
 
-            PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
-            rule.getRewriter().collectRewriteContext(tree);
-            if (rule.getRewriter().isNeedRewrite()) {
-                pushAggFlag = true;
-                tree = rule.rewrite(tree, rootTaskContext);
+            if (hasAgg) {
+                PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
+                rule.getRewriter().collectRewriteContext(tree);
+                if (rule.getRewriter().isNeedRewrite()) {
+                    pushAggFlag = true;
+                    tree = rule.rewrite(tree, rootTaskContext);
+                }
             }
         }
 
