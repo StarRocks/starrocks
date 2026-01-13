@@ -30,8 +30,13 @@ class StarRocksTranslator:
         self.dictionary_str = self._load_dict_as_string(dict_path)
 
     def _read_file(self, path: str) -> str:
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Config file not found: {path}") from e
+        except OSError as e:
+            raise RuntimeError(f"Error reading config file '{path}': {e}") from e
 
     def _load_dict_as_string(self, path: str) -> str:
         if not os.path.exists(path): return ""
