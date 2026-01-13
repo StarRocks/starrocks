@@ -732,8 +732,13 @@ alterMaterializedViewStatement
         refreshSchemeDesc |
         tableRenameClause |
         modifyPropertiesClause |
-        swapTableClause )
+        swapTableClause |
+        addMVColumnClause )
     | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
+    ;
+
+addMVColumnClause
+    : ADD COLUMN columnName=identifier AS aggregateExpression=expression (COMMENT string)?
     ;
 
 refreshMaterializedViewStatement

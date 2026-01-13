@@ -2894,4 +2894,56 @@ public class AlterTest {
             }
         }
     }
+
+    public static void alterMVAddColumn(String sql, boolean expectedException) throws Exception {
+        try {
+            AlterMaterializedViewStmt alterTableStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            if (expectedException) {
+                Assertions.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assertions.fail();
+            }
+        }
+    }
+
+    @Test
+    public void testAddMVColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    v1 int \n" +
+                        ")\n" +
+                        "DUPLICATE KEY(`k1`)" +
+                        "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")\n" +
+                        "AS SELECT k1, sum(v1) from base_tbl1 group by k1;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "tbl1");
+
+        // mv1
+        MaterializedView mv1 = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "mv1");
+
+//        String stmt = "alter table test.tbl1 add column k2 int";
+//        alterTableWithNewParser(stmt, false);
+//        waitSchemaChangeJobDone(false, tbl);
+
+        String stmt = "alter materialized view mv1 add column count_k1 as count(k1)";
+        alterMVAddColumn(stmt, false);
+        waitSchemaChangeJobDone(false, tbl);
+
+        Assertions.assertEquals(mv1.getColumns().size(), 3);
+    }
 }

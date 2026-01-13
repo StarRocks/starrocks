@@ -2574,6 +2574,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         fixRelationship();
     }
 
+    public synchronized void resetDefinedQueryParseNode() {
+        this.defineQueryParseNode = null;
+    }
+
     /**
      * `defineQueryParseNode` is safe for multi threads since it is only initialized when mv becomes to active.
      */

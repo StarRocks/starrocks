@@ -37,6 +37,7 @@ package com.starrocks.alter;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
+import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -97,6 +98,7 @@ public enum AlterOpType {
         if (alterClause instanceof AddColumnClause ||
                 alterClause instanceof AddColumnsClause ||
                 alterClause instanceof AddFieldClause ||
+                alterClause instanceof AddMVColumnClause ||
                 alterClause instanceof CreateIndexClause ||
                 alterClause instanceof DropColumnClause ||
                 alterClause instanceof DropFieldClause ||

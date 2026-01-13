@@ -38,6 +38,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -54,10 +55,13 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.KeysType;
@@ -65,17 +69,24 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -83,6 +94,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
@@ -642,6 +654,95 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         return null;
     }
 
+    @Override
+    public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
+        MaterializedView materializedView = (MaterializedView) table;
+        String columnName = clause.getColumnName();
+        
+        // Check if column already exists
+        if (materializedView.getColumn(columnName) != null) {
+            throw new SemanticException("Column '{}' already exists in materialized view", columnName);
+        }
+        
+        // Validate aggregate expression - it should contain aggregate functions
+        ParseNode astParseNode = materializedView.getDefineQueryParseNode();
+        // chck mv's parse node is a simple QueryStatement
+        if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
+            throw new SemanticException("Materialized view definition is invalid");
+        }
+        QueryStatement queryStatement = (QueryStatement) astParseNode;
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+
+
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, materializedView.getId(), LockType.WRITE)) {
+            throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
+        }
+        try {
+            // Step 1: Determine the column type from the aggregate expression
+            Expr addColumnExpr = clause.getAggregateExpression();
+            boolean isAggregateFunction = false;
+            if (addColumnExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr funcExpr = (FunctionCallExpr) addColumnExpr;
+                String funcName = funcExpr.getFunctionName();
+                isAggregateFunction = ExprUtils.isAggregateFunction(funcName);
+            }
+            List<Expr> newOutputCols = Lists.newArrayList(selectRelation.getOutputExpression());
+            newOutputCols.add(addColumnExpr);
+            if (isAggregateFunction) {
+                selectRelation.getAggregate().add((FunctionCallExpr) addColumnExpr);
+            }
+            selectRelation.setOutputExpr(newOutputCols);
+            SelectList selectList = selectRelation.getSelectList();
+            List<SelectListItem> selectListItems = selectList.getItems();
+            selectListItems.add(new SelectListItem(addColumnExpr, columnName));
+
+            // analyze this ast
+            ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
+            Analyzer.analyze(queryStatement, connectContext);
+
+            Column newColumn = createMVColumn(columnName, addColumnExpr, clause.getComment());
+            clause.setColumnDef(newColumn.toColumnDef(materializedView));
+
+            SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            AddColumnsClause addColumnsClause = clause.toAddColumnsClause();
+            schemaChangeHandler.process(Lists.newArrayList(addColumnsClause), db, (OlapTable) table);
+
+            // renew materialized view's defined query
+            String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
+                    .setEnableDigest(false)).visit(astParseNode);
+
+            materializedView.setViewDefineSql(newDefinedSql);
+            materializedView.setSimpleDefineSql(newDefinedSql);
+            materializedView.setOriginalViewDefineSql(newDefinedSql);
+            materializedView.resetDefinedQueryParseNode();
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(materializedView);
+
+
+            String exprSql = ExprToSql.toSql(addColumnExpr);
+            // Log the schema change operation for audit purposes
+            LOG.info("Logged schema change for materialized view '{}': added column '{}' with expression '{}'",
+                    materializedView.getName(), columnName, exprSql);
+            return null;
+        } catch (StarRocksException e) {
+            throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
+        } catch (DmlException e) {
+            throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
+        }
+    }
+    
+    /**
+     * Create a Column object for the materialized view based on the aggregate expression
+     */
+    private Column createMVColumn(String columnName, Expr aggregateExpr, String comment) {
+        // Determine the column type from the aggregate expression
+        Type columnType = aggregateExpr.getType();
+        Column column = new Column(columnName, columnType, true,  comment != null ? comment : "");
+        return column;
+    }
+    
     @Override
     public Void visitRefreshSchemeClause(RefreshSchemeClause refreshSchemeDesc, ConnectContext context) {
         try {

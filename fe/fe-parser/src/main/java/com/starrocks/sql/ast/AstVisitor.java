@@ -863,6 +863,10 @@ public interface AstVisitor<R, C> {
         return visitAlterTableColumnClause(clause, context);
     }
 
+    default R visitAddMVColumnClause(AddMVColumnClause clause, C context) {
+        return visitAlterTableColumnClause(clause, context);
+    }
+
     default R visitAddFieldClause(AddFieldClause clause, C context) {
         return visitAlterTableColumnClause(clause, context);
     }
