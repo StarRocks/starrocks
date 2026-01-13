@@ -372,7 +372,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (constantMap.size() == aggregationOperator.getAggregations().size()) {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
-            LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
+            ColumnRefOperator dummy = factory.create("dummy", Type.BIGINT, true);
+            LogicalValuesOperator row = new LogicalValuesOperator(List.of(dummy),
                     List.of(List.of(ConstantOperator.createExampleValueByType(Type.BIGINT))));
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }
