@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Ordering;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -35,6 +36,17 @@ import static com.google.common.collect.Sets.powerSet;
 public class JoinReorderDP extends JoinOrder {
     public JoinReorderDP(OptimizerContext context) {
         super(context);
+    }
+
+    @Override
+    protected void calculateStatistics(OptExpression expr) {
+        if (StatisticsCalculator.isInSkipPredicateColumnsCollectionScope()) {
+            super.calculateStatistics(expr);
+            return;
+        }
+        try (var ignore = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+            super.calculateStatistics(expr);
+        }
     }
 
     private final Map<BitSet, GroupInfo> bestPlanMemo = new HashMap<>();
