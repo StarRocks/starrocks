@@ -1181,11 +1181,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics rightStatistics = context.getChildStatistics(1);
         // construct cross join statistics
         Statistics.Builder crossBuilder = Statistics.builder();
-        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0),
+        addColumnStatisticsFromOtherStatisticByRefs(crossBuilder, leftStatistics, context.getChildOutputColumns(0),
                 preserveJoinHistogram);
-        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1),
+        addColumnStatisticsFromOtherStatisticByRefs(crossBuilder, rightStatistics, context.getChildOutputColumns(1),
                 preserveJoinHistogram);
-
         // Add multi-column statistics from both sides (they are independent after cross join)
         crossBuilder.addMultiColumnStatistics(leftStatistics.getMultiColumnCombinedStats());
         crossBuilder.addMultiColumnStatistics(rightStatistics.getMultiColumnCombinedStats());
@@ -1338,6 +1337,27 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
+    }
+
+    private void addColumnStatisticsFromOtherStatisticByRefs(Statistics.Builder builder, Statistics statistics,
+                                                             ColumnRefSet hintRefs, boolean withHist) {
+        if (statistics == null || hintRefs == null) {
+            return;
+        }
+        Map<ColumnRefOperator, ColumnStatistic> src = statistics.getColumnStatistics();
+        for (int id : hintRefs.getColumnIds()) {
+            ColumnRefOperator col = columnRefFactory.getColumnRef(id);
+            ColumnStatistic v = src.get(col);
+            if (v == null) {
+                continue;
+            }
+            if (withHist) {
+                builder.addColumnStatistic(col, v);
+            } else {
+                builder.addColumnStatistic(col, v.getHistogram() == null ? v :
+                        ColumnStatistic.buildFrom(v).setHistogram(null).build());
+            }
+        }
     }
 
     private Statistics buildStatisticsForUKFKJoin(JoinOperator joinType, UKFKConstraints constraints,
