@@ -247,7 +247,7 @@ WHERE name = "compact_threads";
 
 > **NOTE**
 >
-> In production, it is recommended to set `max_cumulative_compaction_num_singleton_deltas` to `100` to accelerate the compaction tasks and reduce their resource consumption.
+> In production, it is recommended to set `max_cumulative_compaction_num_singleton_deltas` to `100` to accelerate the Compaction tasks and reduce their resource consumption.
 
 ### Manually trigger compaction tasks
 
@@ -287,15 +287,17 @@ Since Compaction is crucial for query performance, it is recommended to regularl
 ## Troubleshooting
 
 ### Slow queries
-If slow queries are caused by untimely compaction, you will see in the SQL Profile that `SegmentsReadCount` divided by `TabletCount` within a single Fragment is a large value, such as tens or more.
+
+To identify slow queries caused by untimely Compaction, you can check, in the SQL Profile, the value of `SegmentsReadCount` divided by `TabletCount` within a single Fragment. If it is an large value, such as tens or more, untimely Compaction may be the cause of the slow query.
 
 ### High Max Compaction Score in the cluster
-1. Check whether the compaction-related parameters are within reasonable ranges using `admin show frontend config like "%lake_compaction%"` and `select * from information_schema.be_configs where name = "compact_threads"`.
-2. Check if compaction is stuck using `show proc '/compactions'`:
-   * If `CommitTime` remains NULL, check the `be_cloud_native_compactions` system table for the reason why compaction is stuck.
-   * If `FinishTime` remains NULL, search for the publish failure reason in the leader FE log using `TxnID`.
-3. Check if compaction is running slowly using `show proc '/compactions'`:
-   * If `sub_task_count` is too large (check the size of each tablet in this partition using `show partitions`), the table may not be created properly.
-   * If `read_remote_mb` is too large (more than 30% of the total read data), check the disk size on the machine and also check the cache quota through `SHOW BACKENDS` for field DataCacheMetrics.
-   * If `write_remote_sec` is too large (more than 90% of the total compaction time), S3 write may be too slow. This can be verified through shared-data grafana metrics with keywords `single upload latency` and `multi upload latency`.
-   * If `in_queue_sec` is too large (average waiting time per tablet exceeds 60 seconds), the parameter settings may be unreasonable or other running compactions are too slow.
+
+1. Check whether the Compaction-related parameters are within reasonable ranges using `ADMIN SHOW FRONTEND CONFIG LIKE "%lake_compaction%"` and `SELECT * FROM information_schema.be_configs WHERE name = "compact_threads"`.
+2. Check if Compaction is stuck using `SHOW PROC '/compactions'`:
+   - If `CommitTime` remains NULL, check the system view `information_schema.be_cloud_native_compactions` for the reason why Compaction is stuck.
+   - If `FinishTime` remains NULL, search for the Publish failure reason in the Leader FE log using `TxnID`.
+3. Check if compaction is running slowly using `SHOW PROC '/compactions'`:
+   - If `sub_task_count` is too large (check the size of each tablet in this partition using `SHOW PARTITIONS`), the table may be created improperly.
+   - If `read_remote_mb` is too large (more than 30% of the total read data), check the server disk size and also check the cache quota through `SHOW BACKENDS` for field `DataCacheMetrics`.
+   - If `write_remote_sec` is too large (more than 90% of the total Compaction time), write to the remote storage may be too slow. This can be verified by checking the shared-data-specific monitoring metrics with keywords `single upload latency` and `multi upload latency`.
+   - If `in_queue_sec` is too large (average waiting time per tablet exceeds 60 seconds), the parameter settings may be unreasonable or other running Compactions are too slow.
