@@ -523,7 +523,12 @@ public abstract class JoinOrder {
     }
 
     private boolean contains(BitSet left, BitSet right) {
-        return right.stream().allMatch(left::get);
+        for (int b = right.nextSetBit(0); b >= 0; b = right.nextSetBit(b + 1)) {
+            if (!left.get(b)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean existsEqOnPredicate(OptExpression optExpression) {

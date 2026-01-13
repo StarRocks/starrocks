@@ -14,14 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Ordering;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 
 import java.util.ArrayList;
 import java.util.BitSet;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,13 +69,12 @@ public class JoinReorderDP extends JoinOrder {
 
         GroupInfo bestPlan = bestPlanMemo.get(joinKeys);
         if (bestPlan == null) {
-            Ordering<ExpressionInfo> resultComparator = Ordering.from(Comparator.comparing(ExpressionInfo::getCost));
-
-            List<ExpressionInfo> results = new ArrayList<>();
+            double bestCostSoFar = Double.MAX_VALUE;
+            ExpressionInfo bestExprInfo = null;
             List<BitSet> partitions = generatePartitions(joinKeys);
             for (BitSet partition : partitions) {
                 GroupInfo leftGroup = getBestExpr(partition);
-                if (!results.isEmpty() && leftGroup.bestExprInfo.cost > resultComparator.min(results).cost) {
+                if (bestExprInfo != null && leftGroup.bestExprInfo.cost > bestCostSoFar) {
                     continue;
                 }
 
@@ -84,7 +82,7 @@ public class JoinReorderDP extends JoinOrder {
                 otherPartition.andNot(partition);
 
                 GroupInfo rightGroup = getBestExpr(otherPartition);
-                if (!results.isEmpty() && rightGroup.bestExprInfo.cost > resultComparator.min(results).cost) {
+                if (bestExprInfo != null && rightGroup.bestExprInfo.cost > bestCostSoFar) {
                     continue;
                 }
 
@@ -96,16 +94,19 @@ public class JoinReorderDP extends JoinOrder {
                 joinExpr.get().expr.deriveLogicalPropertyItself();
                 calculateStatistics(joinExpr.get().expr);
                 computeCost(joinExpr.get());
-                results.add(joinExpr.get());
+                if (joinExpr.get().cost < bestCostSoFar) {
+                    bestCostSoFar = joinExpr.get().cost;
+                    bestExprInfo = joinExpr.get();
+                }
             }
-            ExpressionInfo minCostPlan = resultComparator.min(results);
+            Preconditions.checkState(bestExprInfo != null);
 
             BitSet atoms = new BitSet();
-            atoms.or(minCostPlan.leftChildExpr.atoms);
-            atoms.or(minCostPlan.rightChildExpr.atoms);
+            atoms.or(bestExprInfo.leftChildExpr.atoms);
+            atoms.or(bestExprInfo.rightChildExpr.atoms);
             GroupInfo g = new GroupInfo(atoms);
-            g.bestExprInfo = minCostPlan;
-            g.lowestExprCost = minCostPlan.cost;
+            g.bestExprInfo = bestExprInfo;
+            g.lowestExprCost = bestExprInfo.cost;
 
             bestPlanMemo.put(joinKeys, g);
             return g;
