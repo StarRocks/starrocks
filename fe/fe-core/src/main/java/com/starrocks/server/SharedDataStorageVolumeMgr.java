@@ -154,6 +154,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
             }
+            // remove existing bind if exists
+            unbindDbToStorageVolume(dbId);
+
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
             dbs.add(dbId);
             storageVolumeToDbs.put(svId, dbs);

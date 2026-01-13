@@ -194,7 +194,7 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_DB_V2: {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.data();
-                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbInfo);
+                    globalStateMgr.getLocalMetastore().replayAlterDatabase(dbInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {
