@@ -7,7 +7,7 @@ from google.genai import types
 
 client = genai.Client()
 MODEL_NAME = "gemini-2.0-flash" 
-CONFIG_BASE_PATH = "./configs"
+CONFIG_BASE_PATH = "./docs/translation/configs"
 
 class StarRocksTranslator:
     def __init__(self, target_lang: str, dry_run: bool = False):
