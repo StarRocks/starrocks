@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -23,6 +22,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -41,16 +41,47 @@ public class Statistics {
 
     private final Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats;
 
+    private static double clampOutputRowCount(double outputRowCount) {
+        // Due to the influence of the default filter coefficient,
+        // the number of calculated rows may be less than 1.
+        // The minimum value of rowCount is set to 1, and values less than 1 are meaningless.
+        if (outputRowCount < 1D) {
+            return 1D;
+        } else {
+            return Math.min(outputRowCount, StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT);
+        }
+    }
+
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
-        this.columnStatistics = builder.columnStatistics;
+        this.columnStatistics = Collections.unmodifiableMap(builder.columnStatistics);
         this.tableRowCountMayInaccurate = builder.tableRowCountMayInaccurate;
-        this.shadowColumns = builder.shadowColumns;
-        this.multiColumnCombinedStats = builder.multiColumnCombinedStats;
+        this.shadowColumns = Collections.unmodifiableCollection(builder.shadowColumns);
+        this.multiColumnCombinedStats = Collections.unmodifiableMap(builder.multiColumnCombinedStats);
+    }
+
+    private Statistics(double outputRowCount,
+                       Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                       boolean tableRowCountMayInaccurate,
+                       Collection<ColumnRefOperator> shadowColumns,
+                       Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
+        this.outputRowCount = outputRowCount;
+        this.columnStatistics = Collections.unmodifiableMap(columnStatistics);
+        this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
+        this.shadowColumns = Collections.unmodifiableCollection(shadowColumns);
+        this.multiColumnCombinedStats = Collections.unmodifiableMap(multiColumnCombinedStats);
     }
 
     public double getOutputRowCount() {
         return outputRowCount;
+    }
+
+    public Statistics withOutputRowCount(double newOutputRowCount) {
+        double clamped = clampOutputRowCount(newOutputRowCount);
+        if (Double.compare(this.outputRowCount, clamped) == 0) {
+            return this;
+        }
+        return new Statistics(clamped, columnStatistics, tableRowCountMayInaccurate, shadowColumns, multiColumnCombinedStats);
     }
 
     public double getOutputSize(ColumnRefSet outputColumns) {
@@ -109,18 +140,12 @@ public class Statistics {
         return columnStatistics;
     }
 
-    public Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> getMultiColumnCombinedStats() {
-        return multiColumnCombinedStats;
+    public Collection<ColumnRefOperator> getShadowColumns() {
+        return shadowColumns;
     }
 
-    public Map<ColumnRefOperator, ColumnStatistic> getOutputColumnsStatistics(ColumnRefSet outputColumns) {
-        Map<ColumnRefOperator, ColumnStatistic> outputColumnsStatistics = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
-            if (outputColumns.contains(entry.getKey().getId())) {
-                outputColumnsStatistics.put(entry.getKey(), entry.getValue());
-            }
-        }
-        return outputColumnsStatistics;
+    public Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> getMultiColumnCombinedStats() {
+        return multiColumnCombinedStats;
     }
 
     public boolean isTableRowCountMayInaccurate() {
@@ -219,36 +244,23 @@ public class Statistics {
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
-                        boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns) {
-            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, shadowColumns, new HashMap<>());
-        }
-
-        private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                         boolean tableRowCountMayInaccurate, Collection<ColumnRefOperator> shadowColumns,
                         Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> multiColumnCombinedStats) {
             this.outputRowCount = outputRowCount;
             this.columnStatistics = new HashMap<>(columnStatistics);
             this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             this.shadowColumns = shadowColumns;
-            this.multiColumnCombinedStats = new HashMap<>(multiColumnCombinedStats);
+            this.multiColumnCombinedStats = (multiColumnCombinedStats == null || multiColumnCombinedStats.isEmpty()) ?
+                    new HashMap<>() : new HashMap<>(multiColumnCombinedStats);
         }
 
         private Builder(double outputRowCount, Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
                         boolean tableRowCountMayInaccurate) {
-            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList());
+            this(outputRowCount, columnStatistics, tableRowCountMayInaccurate, Lists.newArrayList(), new HashMap<>());
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
-            // Due to the influence of the default filter coefficient,
-            // the number of calculated rows may be less than 1.
-            // The minimum value of rowCount is set to 1, and values less than 1 are meaningless.
-            if (outputRowCount < 1D) {
-                this.outputRowCount = 1D;
-            } else if (outputRowCount > StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT) {
-                this.outputRowCount = StatisticsEstimateCoefficient.MAXIMUM_ROW_COUNT;
-            } else {
-                this.outputRowCount = outputRowCount;
-            }
+            this.outputRowCount = clampOutputRowCount(outputRowCount);
             return this;
         }
 

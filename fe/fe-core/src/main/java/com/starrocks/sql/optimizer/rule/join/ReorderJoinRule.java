@@ -42,14 +42,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -370,16 +368,18 @@ public class ReorderJoinRule extends Rule {
                 optExpression.setStatistics(expressionContext.getStatistics());
             }
             Preconditions.checkState(optExpression.getStatistics() != null);
-            Statistics newStats = Statistics.buildFrom(optExpression.getStatistics()).build();
-            Iterator<Map.Entry<ColumnRefOperator, ColumnStatistic>>
-                    iterator = newStats.getColumnStatistics().entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<ColumnRefOperator, ColumnStatistic> columnStatistic = iterator.next();
-                if (!newCols.contains(columnStatistic.getKey())) {
-                    iterator.remove();
+            Statistics oldStats = optExpression.getStatistics();
+            Statistics.Builder newStatsBuilder = Statistics.builder()
+                    .setOutputRowCount(oldStats.getOutputRowCount())
+                    .setTableRowCountMayInaccurate(oldStats.isTableRowCountMayInaccurate())
+                    .setShadowColumns(oldStats.getShadowColumns())
+                    .addMultiColumnStatistics(oldStats.getMultiColumnCombinedStats());
+            oldStats.getColumnStatistics().forEach((col, stat) -> {
+                if (newCols.contains(col)) {
+                    newStatsBuilder.addColumnStatistic(col, stat);
                 }
-            }
-
+            });
+            Statistics newStats = newStatsBuilder.build();
             Operator.Builder builder = OperatorBuilderFactory.build(operator);
             Operator newOp = builder.withOperator(operator)
                     .setProjection(new Projection(newOutputProjections))

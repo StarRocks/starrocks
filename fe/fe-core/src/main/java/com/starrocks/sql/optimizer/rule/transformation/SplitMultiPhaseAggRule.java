@@ -366,7 +366,7 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
                 for (ColumnStatistic columnStatistic : partitionByColumnStatistics) {
                     rowCount *= columnStatistic.getDistinctValuesCount();
                 }
-                statistics = Statistics.buildFrom(inputStatistics).setOutputRowCount(rowCount).build();
+                statistics = inputStatistics.withOutputRowCount(rowCount);
             }
             double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(partitionByColumns, statistics,
                     Maps.newHashMap());
