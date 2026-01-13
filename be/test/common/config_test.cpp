@@ -532,4 +532,142 @@ TEST_F(ConfigTest, test_alias04) {
     EXPECT_EQ(8080, cfg_int32);
 }
 
+TEST_F(ConfigTest, test_mstrings_init_and_list) {
+    CONF_mStrings(cfg_mstrings, "a,b,c");
+
+    ASSERT_TRUE(config::init(nullptr));
+
+    // Verify default value parsed correctly
+    std::vector<std::string> val = cfg_mstrings;
+    EXPECT_THAT(val, ElementsAre("a", "b", "c"));
+
+    // Verify list_configs shows correct type and value
+    auto configs = config::list_configs();
+    for (const auto& c : configs) {
+        if (c.name == "cfg_mstrings") {
+            EXPECT_EQ("list<string>", c.type);
+            EXPECT_EQ("a,b,c", c.value);
+            EXPECT_TRUE(c.valmutable);
+        }
+    }
+}
+
+TEST_F(ConfigTest, test_mstrings_set_and_rollback) {
+    CONF_mStrings(cfg_mstrings_rw, "x,y");
+
+    ASSERT_TRUE(config::init(nullptr));
+
+    // Verify default
+    std::vector<std::string> val = cfg_mstrings_rw;
+    EXPECT_THAT(val, ElementsAre("x", "y"));
+
+    // set_config with new value
+    ASSERT_TRUE(config::set_config("cfg_mstrings_rw", "s1,s2,s3").ok());
+    val = cfg_mstrings_rw;
+    EXPECT_THAT(val, ElementsAre("s1", "s2", "s3"));
+
+    // rollback to previous value
+    ASSERT_TRUE(config::rollback_config("cfg_mstrings_rw").ok());
+    val = cfg_mstrings_rw;
+    EXPECT_THAT(val, ElementsAre("x", "y"));
+
+    // set again and verify
+    ASSERT_TRUE(config::set_config("cfg_mstrings_rw", "only_one").ok());
+    val = cfg_mstrings_rw;
+    EXPECT_THAT(val, ElementsAre("only_one"));
+}
+
+TEST_F(ConfigTest, test_mstrings_strtox_parsing) {
+    CONF_mStrings(cfg_mstrings_parse, "");
+
+    ASSERT_TRUE(config::init(nullptr));
+
+    // Empty default → empty vector
+    std::vector<std::string> val = cfg_mstrings_parse;
+    EXPECT_TRUE(val.empty());
+
+    // Normal comma-separated
+    ASSERT_TRUE(config::set_config("cfg_mstrings_parse", "a,b,c").ok());
+    val = cfg_mstrings_parse;
+    EXPECT_THAT(val, ElementsAre("a", "b", "c"));
+
+    // Leading/trailing spaces stripped
+    ASSERT_TRUE(config::set_config("cfg_mstrings_parse", " s1 , s2 , s3 ").ok());
+    val = cfg_mstrings_parse;
+    EXPECT_THAT(val, ElementsAre("s1", "s2", "s3"));
+
+    // Empty parts skipped (leading comma, trailing comma, double comma)
+    ASSERT_TRUE(config::set_config("cfg_mstrings_parse", ",a,,b,").ok());
+    val = cfg_mstrings_parse;
+    EXPECT_THAT(val, ElementsAre("a", "b"));
+
+    // Single value
+    ASSERT_TRUE(config::set_config("cfg_mstrings_parse", "single").ok());
+    val = cfg_mstrings_parse;
+    EXPECT_THAT(val, ElementsAre("single"));
+
+    // All-empty input → empty vector
+    ASSERT_TRUE(config::set_config("cfg_mstrings_parse", ",,").ok());
+    val = cfg_mstrings_parse;
+    EXPECT_TRUE(val.empty());
+
+    // Empty string input → empty vector
+    ASSERT_TRUE(config::set_config("cfg_mstrings_parse", "").ok());
+    val = cfg_mstrings_parse;
+    EXPECT_TRUE(val.empty());
+}
+
+TEST_F(ConfigTest, test_mstrings_fmt_formatter) {
+    CONF_mStrings(cfg_fmt_mstrings, "mod1,mod2,mod3");
+
+    ASSERT_TRUE(config::init(nullptr));
+
+    // Multiple elements: should produce comma-separated string
+    std::string result = fmt::format("{}", cfg_fmt_mstrings);
+    EXPECT_EQ("mod1,mod2,mod3", result);
+
+    // Single element
+    ASSERT_TRUE(config::set_config("cfg_fmt_mstrings", "single").ok());
+    result = fmt::format("{}", cfg_fmt_mstrings);
+    EXPECT_EQ("single", result);
+
+    // Empty
+    ASSERT_TRUE(config::set_config("cfg_fmt_mstrings", "").ok());
+    result = fmt::format("{}", cfg_fmt_mstrings);
+    EXPECT_EQ("", result);
+}
+
+TEST_F(ConfigTest, test_read_write_mutable_strings_concurrently) {
+    CONF_mStrings(cfg_test_mstrings_conc, "default_val");
+
+    ASSERT_TRUE(config::init(nullptr));
+
+    std::vector<std::string> init_val = cfg_test_mstrings_conc;
+    EXPECT_THAT(init_val, ElementsAre("default_val"));
+
+    std::vector<std::thread> threads;
+    threads.reserve(5);
+    for (int i = 0; i < 5; i++) {
+        threads.emplace_back([&, id = i]() {
+            if (id < 2) { // writer
+                for (int j = 0; j < 200; j++) {
+                    std::string csv = std::to_string(id) + "_" + std::to_string(j);
+                    auto st = set_config("cfg_test_mstrings_conc", csv);
+                    ASSERT_TRUE(st.ok()) << st;
+                }
+            } else { // reader
+                for (int j = 0; j < 1000; j++) {
+                    std::vector<std::string> val = cfg_test_mstrings_conc;
+                    // Should never crash or produce corrupted data
+                    // Value should be either default or a valid single-element vector
+                    ASSERT_LE(val.size(), 1u);
+                }
+            }
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+}
+
 } // namespace starrocks

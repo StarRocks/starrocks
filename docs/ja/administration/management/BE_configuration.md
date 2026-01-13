@@ -102,8 +102,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - デフォルト: 10
 - タイプ: Int
 - 単位: -
-- 可変: いいえ
-- 説明: 印刷するログのレベル。この設定項目は、コード内で VLOG で開始されたログの出力を制御するために使用されます。
+- 可変: はい
+- 説明: 印刷するログのレベル。この設定項目は、コード内で VLOG で開始されたログの出力を制御するために使用されます。このパラメータを動的に更新すると、`sys_log_verbose_modules` で指定されたモジュールの VLOG ログレベルが同時に更新されます。
 - 導入バージョン: -
 
 ##### sys_log_verbose_modules
@@ -111,8 +111,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - デフォルト: 
 - タイプ: Strings
 - 単位: -
-- 可変: いいえ
-- 説明: 印刷するログのモジュール。たとえば、この設定項目を OLAP に設定すると、StarRocks は OLAP モジュールのログのみを印刷します。有効な値は BE の名前空間であり、`starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream`、`starrocks::workgroup` などがあります。
+- 可変: はい
+- 説明: VLOGログを出力するファイル名（拡張子なし）またはファイル名ワイルドカードを設定します。複数のファイル名をカンマで区切って指定できます。たとえば、この設定項目を `storage_engine,tablet_manager` に設定すると、StarRocks はこれらの特定ファイルのVLOGログのみを出力します。`*` のようなワイルドカードを使用して、すべてのファイルのVLOGログを出力することもできます。VLOGログの出力レベルは `sys_log_verbose_level` パラメータで制御されます。
 - 導入バージョン: -
 
 ### サーバー

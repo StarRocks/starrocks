@@ -44,6 +44,7 @@ bool strtox(const std::string& valstr, int64_t& retval);
 bool strtox(const std::string& valstr, double& retval);
 bool strtox(const std::string& valstr, std::string& retval);
 bool strtox(const std::string& valstr, MutableString& retval);
+bool strtox(const std::string& valstr, MutableStrings& retval);
 
 class Field {
 public:
@@ -209,6 +210,7 @@ private:
 #undef CONF_mInt64
 #undef CONF_mDouble
 #undef CONF_mString
+#undef CONF_mStrings
 
 // NOTE: alias configs must be defined after the true config, otherwise there will be a compile error
 #define CONF_Alias(name, alias) DEFINE_ALIAS(name, alias)
@@ -232,5 +234,6 @@ private:
 #define CONF_mInt64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, true, "int64")
 #define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true, "double")
 #define CONF_mString(name, defaultstr) DEFINE_FIELD(MutableString, name, defaultstr, true, "string")
+#define CONF_mStrings(name, defaultstr) DEFINE_FIELD(MutableStrings, name, defaultstr, true, "list<string>")
 
 } // namespace starrocks::config

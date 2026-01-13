@@ -130,8 +130,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Default: 10
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description: The level of the logs to be printed. This configuration item is used to control the output of logs initiated with VLOG in codes.
+- Is mutable: Yes
+- Description: The level of the logs to be printed. This configuration item is used to control the output of logs initiated with VLOG in codes. When this parameter is dynamically updated, the VLOG level for the modules specified by `sys_log_verbose_modules` will be updated accordingly.
 - Introduced in: -
 
 ##### sys_log_verbose_modules
@@ -139,8 +139,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Default: 
 - Type: Strings
 - Unit: -
-- Is mutable: No
-- Description: The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::debug`, `starrocks::fs`, `starrocks::io`, `starrocks::lake`, `starrocks::pipeline`, `starrocks::query_cache`, `starrocks::stream`, and `starrocks::workgroup`.
+- Is mutable: Yes
+- Description: The file names (without extension) or file name wildcards for which VLOG logs should be printed. You can specify multiple file names separated by commas. For example, if you set this configuration item to `storage_engine,tablet_manager`, StarRocks only prints VLOG logs for those specific files. You can also use wildcards like `*` to print VLOG logs for all files. The VLOG log level is controlled by the `sys_log_verbose_level` parameter.
 - Introduced in: -
 
 ### Server

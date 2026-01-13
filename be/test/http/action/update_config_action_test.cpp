@@ -120,4 +120,30 @@ TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
     ASSERT_EQ(1, thread_pool->max_threads());
 }
 
+TEST_F(UpdateConfigActionTest, test_update_sys_log_verbose_modules) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    ASSERT_OK(action.update_config("sys_log_verbose_modules", "storage_engine,tablet_manager"));
+
+    std::vector<std::string> modules = config::sys_log_verbose_modules;
+    ASSERT_EQ(2, modules.size());
+    EXPECT_EQ("storage_engine", modules[0]);
+    EXPECT_EQ("tablet_manager", modules[1]);
+
+    // Update to empty
+    ASSERT_OK(action.update_config("sys_log_verbose_modules", ""));
+}
+
+TEST_F(UpdateConfigActionTest, test_update_sys_log_verbose_level) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto original_level = static_cast<int32_t>(config::sys_log_verbose_level);
+
+    ASSERT_OK(action.update_config("sys_log_verbose_level", "5"));
+    EXPECT_EQ(5, static_cast<int32_t>(config::sys_log_verbose_level));
+
+    // Restore original level
+    ASSERT_OK(action.update_config("sys_log_verbose_level", std::to_string(original_level)));
+}
+
 } // namespace starrocks

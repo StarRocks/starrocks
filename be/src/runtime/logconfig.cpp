@@ -60,6 +60,11 @@ static bool logging_initialized = false;
 
 static std::mutex logging_mutex;
 
+// Store previously configured verbose modules for cleanup
+static std::vector<std::string> s_previous_verbose_modules;
+static std::mutex s_verbose_modules_mutex;
+static constexpr int32_t kMinVlogLevel = 0;
+
 static bool iequals(const std::string& a, const std::string& b) {
     size_t sz = a.size();
     if (b.size() != sz) {
@@ -420,13 +425,19 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     // Set verbose modules.
     FLAGS_v = -1;
-    std::vector<std::string>& verbose_modules = config::sys_log_verbose_modules;
+    std::vector<std::string> verbose_modules = config::sys_log_verbose_modules;
     int32_t vlog_level = config::sys_log_verbose_level;
+    if (vlog_level < kMinVlogLevel) {
+        vlog_level = kMinVlogLevel;
+        config::sys_log_verbose_level = vlog_level;
+    }
     for (auto& verbose_module : verbose_modules) {
         if (verbose_module.size() != 0) {
             google::SetVLOGLevel(verbose_module.c_str(), vlog_level);
         }
     }
+    // Initialize s_previous_verbose_modules so update_verbose_modules can clean up properly
+    s_previous_verbose_modules = verbose_modules;
 
     google::InitGoogleLogging(basename);
 
@@ -480,6 +491,42 @@ void update_logging() {
     } else {
         LOG(WARNING) << "update sys_log_level failed, need to be INFO, WARNING, ERROR, FATAL";
     }
+}
+
+void update_verbose_modules() {
+    std::lock_guard<std::mutex> lock(s_verbose_modules_mutex);
+
+    // Clear previous verbose module settings first
+    for (const auto& prev_module : s_previous_verbose_modules) {
+        if (!prev_module.empty()) {
+            google::SetVLOGLevel(prev_module.c_str(), 0);
+        }
+    }
+
+    // Get new verbose module settings (use value copy for thread safety)
+    std::vector<std::string> verbose_modules = config::sys_log_verbose_modules;
+    int32_t vlog_level = config::sys_log_verbose_level;
+
+    // Clamp vlog_level: must not be negative
+    if (vlog_level < kMinVlogLevel) {
+        LOG(WARNING) << "sys_log_verbose_level " << vlog_level << " is below minimum " << kMinVlogLevel
+                     << ", clamping to " << kMinVlogLevel;
+        vlog_level = kMinVlogLevel;
+        config::sys_log_verbose_level = vlog_level;
+    }
+
+    // Apply new verbose module settings
+    for (const auto& verbose_module : verbose_modules) {
+        if (!verbose_module.empty()) {
+            google::SetVLOGLevel(verbose_module.c_str(), vlog_level);
+        }
+    }
+
+    // Save current modules for future cleanup
+    s_previous_verbose_modules = verbose_modules;
+
+    LOG(INFO) << "Updated sys_log_verbose_modules, " << verbose_modules.size()
+              << " file patterns configured with verbose level " << vlog_level;
 }
 
 } // namespace starrocks

@@ -97,6 +97,53 @@ inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
     return os << s.value();
 }
 
+// A wrapper on std::vector<std::string>, it's safe to read/write MutableStrings concurrently.
+class MutableStrings {
+public:
+    MutableStrings() = default;
+    ~MutableStrings() = default;
+
+    // Disallow copy and move, because no usage now.
+    MutableStrings(const MutableStrings&) = delete;
+    void operator=(const MutableStrings&) = delete;
+    MutableStrings(MutableStrings&&) = delete;
+    void operator=(MutableStrings&&) = delete;
+
+    std::vector<std::string> value() const;
+
+    operator std::vector<std::string>() const { return value(); }
+
+    MutableStrings& operator=(std::vector<std::string> v);
+
+private:
+    static bool update_value(std::vector<std::string>& bg, std::vector<std::string> new_value) {
+        bg = std::move(new_value);
+        return true;
+    }
+
+    mutable butil::DoublyBufferedData<std::vector<std::string>> _data;
+};
+
+inline std::vector<std::string> MutableStrings::value() const {
+    butil::DoublyBufferedData<std::vector<std::string>>::ScopedPtr ptr;
+    _data.Read(&ptr);
+    return *ptr;
+}
+
+inline MutableStrings& MutableStrings::operator=(std::vector<std::string> v) {
+    _data.Modify(update_value, std::move(v));
+    return *this;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const MutableStrings& s) {
+    auto v = s.value();
+    for (size_t i = 0; i < v.size(); i++) {
+        if (i > 0) os << ",";
+        os << v[i];
+    }
+    return os;
+}
+
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
 // NOTE: alias configs must be defined after the true config, otherwise there will be a compile error
@@ -120,6 +167,7 @@ inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
 #define CONF_mInt64(name, defaultstr) DECLARE_FIELD(int64_t, name)
 #define CONF_mDouble(name, defaultstr) DECLARE_FIELD(double, name)
 #define CONF_mString(name, defaultstr) DECLARE_FIELD(MutableString, name)
+#define CONF_mStrings(name, defaultstr) DECLARE_FIELD(MutableStrings, name)
 
 // Initialize configurations from a config file.
 bool init(const char* filename);
@@ -142,5 +190,18 @@ template <>
 struct fmt::formatter<starrocks::config::MutableString> : formatter<std::string> {
     auto format(const starrocks::config::MutableString& s, format_context& ctx) const {
         return formatter<std::string>::format(s.value(), ctx);
+    }
+};
+
+template <>
+struct fmt::formatter<starrocks::config::MutableStrings> : formatter<std::string> {
+    auto format(const starrocks::config::MutableStrings& s, format_context& ctx) const {
+        auto v = s.value();
+        std::string result;
+        for (size_t i = 0; i < v.size(); i++) {
+            if (i > 0) result += ",";
+            result += v[i];
+        }
+        return formatter<std::string>::format(result, ctx);
     }
 };

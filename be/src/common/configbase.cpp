@@ -121,6 +121,20 @@ bool strtox(const std::string& valstr, MutableString& retval) {
     return true;
 }
 
+bool strtox(const std::string& valstr, MutableStrings& retval) {
+    std::vector<std::string> tmp;
+    std::vector<std::string> parts = strings::Split(valstr, ",");
+    for (auto& part : parts) {
+        StripWhiteSpace(&part);
+        if (part.empty()) {
+            continue;
+        }
+        tmp.emplace_back(std::move(part));
+    }
+    retval = std::move(tmp);
+    return true;
+}
+
 inline bool parse_key_value_pairs(std::istream& input) {
     std::string line;
     std::string key;
