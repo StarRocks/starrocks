@@ -758,7 +758,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitAlterDatabaseSetStatement(StarRocksParser.AlterDatabaseSetStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
         NodePosition pos = createPos(context);
-        Map<String, String> properties = getPropertyList(context.propertyList());
+        Map<String, String> properties = new HashMap<>();
+        if (context.propertyList() != null) {
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
         return new AlterDatabaseSetStmt(dbName, properties, pos);
     }
 
