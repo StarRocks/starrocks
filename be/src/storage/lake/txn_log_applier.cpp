@@ -295,6 +295,18 @@ public:
     }
 
     Status finish() override {
+        // For lake pk replication transactions, we don't need to handle primary index or delvec operations.
+        // This is because the tablet metadata is directly copied from the source cluster's table
+        if (_is_lake_replication) {
+            _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
+            _metadata->set_version(_new_version);
+            _has_finalized = true;
+            if (_skip_write_tablet_metadata) {
+                return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            }
+            return _tablet.put_metadata(_metadata);
+        }
+
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
@@ -575,6 +587,9 @@ private:
 
                 _tablet.update_mgr()->unload_primary_index(_tablet.id());
 
+                // Mark this as a lake replication transaction
+                _is_lake_replication = true;
+
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
                         << ", txn_id: " << txn_meta.txn_id() << ", metadata id: " << _metadata->id()
@@ -631,6 +646,8 @@ private:
     // True when finalize meta file success.
     bool _has_finalized = false;
     bool _rebuild_pindex = false;
+    // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
+    bool _is_lake_replication = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
