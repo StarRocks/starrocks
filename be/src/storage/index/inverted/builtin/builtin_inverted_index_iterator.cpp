@@ -116,15 +116,11 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     }
 
     roaring::Roaring filtered_key_words;
-    rowid_t dictionary_size = _bitmap_itr->bitmap_nums();
-    if (_bitmap_itr->has_null_bitmap()) {
-        dictionary_size -= 1;
-    }
-    filtered_key_words.addRange(0, dictionary_size);
+    filtered_key_words.addRange(0, _bitmap_itr->num_dictionaries());
 
     std::vector<std::pair<Slice, std::vector<size_t>>> keywords;
 
-    _stats->gin_dict_count = _bitmap_itr->bitmap_nums();
+    _stats->gin_dict_count = _bitmap_itr->num_dictionaries();
     _stats->gin_ngram_dict_count = _bitmap_itr->ngram_bitmap_nums();
 
     {
@@ -177,7 +173,7 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
                 return Status::OK();
             }
         }
-        _stats->gin_ngram_dict_filtered = _bitmap_itr->bitmap_nums() - filtered_key_words.cardinality();
+        _stats->gin_ngram_dict_filtered = _bitmap_itr->num_dictionaries() - filtered_key_words.cardinality();
     }
 
     Buffer<rowid_t> hit_rowids;

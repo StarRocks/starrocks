@@ -144,6 +144,8 @@ public:
 
     bool has_null_bitmap() const { return _has_null; }
 
+    rowid_t num_dictionaries() const;
+
     Status seek_dict_by_ngram(const void* value, roaring::Roaring* roaring) const;
 
     StatusOr<Buffer<rowid_t>> filter_dict_by_predicate(const roaring::Roaring* rowids,

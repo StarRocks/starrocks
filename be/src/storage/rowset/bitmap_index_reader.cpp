@@ -122,10 +122,17 @@ Status BitmapIndexReader::new_iterator(const IndexReadOptions& opts, BitmapIndex
     return Status::OK();
 }
 
+rowid_t BitmapIndexIterator::num_dictionaries() const {
+    if (_has_null) {
+        return _num_bitmap - 1;
+    }
+    return _num_bitmap;
+}
+
 Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roaring* roaring) const {
     if (_reader->gram_num() <= 0) {
         // _num_bitmap means how many dicts exist. should return all dicts here.
-        roaring->addRange(0, _num_bitmap);
+        roaring->addRange(0, num_dictionaries());
         return Status::OK();
     }
 
@@ -144,11 +151,7 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
 
     if (slice_gram_num < gram_num) {
         // _num_bitmap means how many dicts exist. should return all dicts here.
-        rowid_t num_dictionary = _num_bitmap;
-        if (_has_null) {
-            num_dictionary -= 1;
-        }
-        roaring->addRange(0, num_dictionary);
+        roaring->addRange(0, num_dictionaries());
         return Status::OK();
     }
 
