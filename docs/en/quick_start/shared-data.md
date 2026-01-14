@@ -80,6 +80,14 @@ This guide does not use BEs, this information is included here so that you under
 
 ---
 
+## Edit your hosts file
+
+The ingest method used in this guide is Stream Load. Stream Load connects to the FE service to start the ingest job. The FE then assigns the job to a backend node—the CN in this guide. In order for the ingest job to connect to the CN, the name of the CN must be available to your operating system. Add this line to `/etc/hosts`:
+
+```bash
+127.0.0.1 starrocks-cn
+```
+
 ## Download the lab files
 
 There are three files to download:
