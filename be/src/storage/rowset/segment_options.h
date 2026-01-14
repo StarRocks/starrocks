@@ -14,41 +14,36 @@
 
 #pragma once
 
-#include <optional>
-#include <unordered_map>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <unordered_set>
 #include <vector>
 
-#include "column/column_access_path.h"
-#include "column/datum.h"
-#include "fs/fs.h"
 #include "runtime/global_dict/types.h"
-#include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
+#include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/record_predicate/record_predicate.h"
 #include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
-#include "storage/tablet_schema.h"
 
 namespace starrocks {
-class Condition;
-struct OlapReaderStatistics;
+class ColumnAccessPath;
+class DeltaColumnGroupLoader;
+class DelvecLoader;
+class ObjectPool;
+class RecordPredicate;
 class RuntimeProfile;
 class TabletSchema;
-class DeltaColumnGroupLoader;
-} // namespace starrocks
-
-namespace starrocks {
-
-class ColumnAccessPath;
-class ColumnPredicate;
-struct RowidRangeOption;
-using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
+class Status;
+struct OlapReaderStatistics;
 struct ShortKeyRangeOption;
-using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 struct VectorSearchOption;
+
+using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 class SegmentReadOptions {
@@ -67,7 +62,7 @@ public:
 
     DisjunctivePredicates delete_predicates;
 
-    RecordPredicateSPtr record_predicate;
+    std::shared_ptr<RecordPredicate> record_predicate;
 
     // used for updatable tablet to get delvec
     std::shared_ptr<DelvecLoader> delvec_loader;
@@ -105,11 +100,11 @@ public:
 
     const std::atomic<bool>* is_cancelled = nullptr;
 
-    std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+    std::vector<std::unique_ptr<ColumnAccessPath>>* column_access_paths = nullptr;
 
     RowsetId rowsetid;
 
-    TabletSchemaCSPtr tablet_schema = nullptr;
+    std::shared_ptr<const TabletSchema> tablet_schema = nullptr;
 
     bool asc_hint = true;
 
