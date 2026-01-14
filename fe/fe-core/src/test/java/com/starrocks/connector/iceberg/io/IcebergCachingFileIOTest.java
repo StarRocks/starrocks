@@ -15,7 +15,10 @@
 package com.starrocks.connector.iceberg.io;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.hadoop.HadoopConfigurable;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.util.SerializableSupplier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -58,5 +61,28 @@ public class IcebergCachingFileIOTest {
         long cacheIOInputFileSize = cachingFileIOInputFile.getLength();
         Assertions.assertEquals(cacheIOInputFileSize, 39);
         cachingFileIO.deleteFile(path);
+    }
+
+    @Test
+    void testWrappedIOConfigurationPropagation() {
+        IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO();
+        Map<String, String> properties = new HashMap<>();
+        properties.put("iceberg.catalog.type", "hive");
+        cachingFileIO.initialize(properties);
+
+        Configuration conf = new Configuration();
+        conf.set("test.key", "test.value");
+        cachingFileIO.setConf(conf);
+
+        FileIO wrappedIO = cachingFileIO.getWrappedIO();
+        Assertions.assertTrue(wrappedIO instanceof HadoopConfigurable);
+
+        HadoopConfigurable hadoopConfigurable = (HadoopConfigurable) wrappedIO;
+        Assertions.assertDoesNotThrow(() -> {
+            hadoopConfigurable.serializeConfWith(confToSerialize -> {
+                Assertions.assertNotNull(confToSerialize);
+                return (SerializableSupplier<Configuration>) () -> confToSerialize;
+            });
+        });
     }
 }

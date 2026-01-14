@@ -105,7 +105,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public static final long DISK_CACHE_EXPIRATION_SECONDS = Config.iceberg_metadata_disk_cache_expiration_seconds;
 
     private transient ContentCache fileContentCache;
-    private FileIO wrappedIO;
+    private ResolvingFileIO wrappedIO;
     private SerializableSupplier<Configuration> conf;
     private static final Pattern HADOOP_CATALOG_METADATA_JSON_PATTERN =
             Pattern.compile("^v\\d+(\\.gz)?\\.metadata\\.json(\\.gz)?$");
@@ -113,9 +113,12 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public void initialize(Map<String, String> properties) {
         ResolvingFileIO resolvingFileIO = new ResolvingFileIO();
-        resolvingFileIO.setConf(conf.get());
         wrappedIO = resolvingFileIO;
         wrappedIO.initialize(properties);
+
+        if (conf != null) {
+            wrappedIO.setConf(conf.get());
+        }
 
         if (ENABLE_DISK_CACHE) {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
@@ -146,6 +149,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public void setConf(Configuration conf) {
         this.conf = new SerializableConfiguration(conf)::get;
+        if (wrappedIO != null) {
+            wrappedIO.setConf(conf);
+        }
     }
 
     @Override
