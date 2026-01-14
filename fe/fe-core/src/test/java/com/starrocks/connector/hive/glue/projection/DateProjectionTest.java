@@ -112,6 +112,21 @@ public class DateProjectionTest {
     }
 
     @Test
+    public void testGetProjectedValuesWithNowFilterReturnsFormattedDate() {
+        // Test that 'NOW' filter returns formatted date, not literal 'NOW'
+        DateProjection projection = new DateProjection(
+                "dt", "2020-01-01,2030-12-31", "yyyy-MM-dd",
+                Optional.empty(), Optional.empty());
+
+        List<String> values = projection.getProjectedValues(Optional.of("NOW"));
+
+        assertEquals(1, values.size());
+        // Should return formatted date like '2024-01-15', not 'NOW'
+        assertFalse(values.get(0).contains("NOW"));
+        assertTrue(values.get(0).matches("\\d{4}-\\d{2}-\\d{2}"));
+    }
+
+    @Test
     public void testGetColumnType() {
         DateProjection projection = new DateProjection(
                 "dt", "2024-01-01,2024-01-31", "yyyy-MM-dd",

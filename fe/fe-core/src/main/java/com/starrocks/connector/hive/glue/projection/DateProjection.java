@@ -204,7 +204,8 @@ public class DateProjection implements ColumnProjection {
                     // Filter value is outside the range - return empty list
                     return Collections.emptyList();
                 }
-                return Collections.singletonList(filter);
+                // Return formatted date, not raw filter (e.g., 'NOW' -> '2024-01-15')
+                return Collections.singletonList(formatInstant(filterInstant));
             } catch (IllegalArgumentException e) {
                 // Invalid date format - return empty list
                 return Collections.emptyList();
