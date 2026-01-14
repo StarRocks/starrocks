@@ -146,7 +146,7 @@ This project is used by the following companies. Learn more about their use case
 - [iQiyi](https://medium.com/starrocks-engineering/real-time-analytics-at-scale-why-we-use-starrocks-0aa3c859cbeb)
 - [Naver](https://starrocks.medium.com/how-join-changed-how-we-approach-data-infra-at-naver-3a5bb1dac49f)
 - [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
-- [PalySimple Games](https://medium.com/@sukkhjot/querying-billions-of-user-events-in-seconds-our-journey-with-starrocks-ecc29ac6c756)
+- [PlaySimple Games](https://medium.com/@sukkhjot/querying-billions-of-user-events-in-seconds-our-journey-with-starrocks-ecc29ac6c756)
 - [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
 - [Splitmetrics](https://celerdata.com/blog/how-splitmetrics-replaced-postgresql-with-starrocks-for-customer-facing-analytics)
 - [Tencent(Games)](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
