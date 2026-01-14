@@ -202,11 +202,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_MULTI_COLUMN_STATS_META = 10019;
 
-<<<<<<< HEAD
-=======
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_FLAT_JSON_CONFIG = 10020;
-
     // statistic meta batch remove 10032 ~ 10034
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_BASIC_STATS_META_BATCH = 10032;
@@ -216,8 +211,6 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH = 10034;
-
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
 
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
