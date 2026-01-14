@@ -138,7 +138,7 @@ jobs:
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -172,7 +172,7 @@ jobs:
           report_paths: "test/*.xml"
 
       - name: Upload log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: SQL-Tester Log (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }})
