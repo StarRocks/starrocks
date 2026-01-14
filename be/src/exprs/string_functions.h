@@ -70,12 +70,8 @@ struct StringFunctionsState {
     DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     bool use_hyperscan = false;
-<<<<<<< HEAD
-=======
     bool use_hyperscan_vec = false;
-    std::optional<std::string> opt_const_rpl{};
-    bool global_mode = true;
->>>>>>> e3825d20bc ([BugFix] Fix regexp_replace hyperscan_vec processing multiple rows incorrectly (#67380))
+
     int size_of_pattern = -1;
 
     // a pointer to the generated database that responsible for parsed expression.
