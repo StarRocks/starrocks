@@ -190,7 +190,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.mysql.jdbc.Driver");
         JDBCTable mysqlTable = new JDBCTable(1, "test_table",
-                Collections.singletonList(new Column("col1", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("col1", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
@@ -212,7 +212,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "org.postgresql.Driver");
         JDBCTable pgTable = new JDBCTable(1, "public.users",
-                Collections.singletonList(new Column("id", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("id", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
@@ -234,7 +234,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.mysql.jdbc.Driver");
         JDBCTable mysqlTable = new JDBCTable(1, "`test_table`",
-                Collections.singletonList(new Column("col1", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("col1", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mysqlTable);
@@ -256,7 +256,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "org.mariadb.jdbc.Driver");
         JDBCTable mariadbTable = new JDBCTable(1, "test_table",
-                Collections.singletonList(new Column("col1", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("col1", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mariadbTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, mariadbTable);
@@ -276,7 +276,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "ru.yandex.clickhouse.ClickHouseDriver");
         JDBCTable clickhouseTable = new JDBCTable(1, "events",
-                Collections.singletonList(new Column("event_id", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("event_id", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(clickhouseTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, clickhouseTable);
@@ -296,22 +296,22 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "org.postgresql.Driver");
         List<Column> columns = Lists.newArrayList(
-                new Column("id", VarcharType.VARCHAR),
-                new Column("name", VarcharType.VARCHAR),
-                new Column("age", VarcharType.VARCHAR)
+                new Column("id", Type.VARCHAR),
+                new Column("name", Type.VARCHAR),
+                new Column("age", Type.VARCHAR)
         );
         JDBCTable pgTable = new JDBCTable(1, "users", columns, properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
-        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "id", VarcharType.VARCHAR, true);
+        SlotDescriptor slot1 = new SlotDescriptor(new SlotId(1), "id", Type.VARCHAR, true);
         slot1.setColumn(columns.get(0));
         slot1.setIsMaterialized(true);
         tupleDesc.addSlot(slot1);
-        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "name", VarcharType.VARCHAR, true);
+        SlotDescriptor slot2 = new SlotDescriptor(new SlotId(2), "name", Type.VARCHAR, true);
         slot2.setColumn(columns.get(1));
         slot2.setIsMaterialized(true);
         tupleDesc.addSlot(slot2);
-        SlotDescriptor slot3 = new SlotDescriptor(new SlotId(3), "age", VarcharType.VARCHAR, true);
+        SlotDescriptor slot3 = new SlotDescriptor(new SlotId(3), "age", Type.VARCHAR, true);
         slot3.setColumn(columns.get(2));
         slot3.setIsMaterialized(true);
         tupleDesc.addSlot(slot3);
@@ -334,12 +334,12 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.mysql.jdbc.Driver");
         List<Column> columns = Lists.newArrayList(
-                new Column("`select`", VarcharType.VARCHAR)
+                new Column("`select`", Type.VARCHAR)
         );
         JDBCTable mysqlTable = new JDBCTable(1, "test_table", columns, properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
-        SlotDescriptor slot = new SlotDescriptor(new SlotId(1), "`select`", VarcharType.VARCHAR, true);
+        SlotDescriptor slot = new SlotDescriptor(new SlotId(1), "`select`", Type.VARCHAR, true);
         slot.setColumn(columns.get(0));
         slot.setIsMaterialized(true);
         tupleDesc.addSlot(slot);
@@ -363,7 +363,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "com.mysql.jdbc.Driver");
         JDBCTable mysqlTable = new JDBCTable(1, "test_table",
-                Collections.singletonList(new Column("col1", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("col1", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(mysqlTable);
         // Don't add any materialized slots to simulate count(*)
@@ -386,7 +386,7 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("checksum", "checksum");
         properties.put("driver_class", "org.postgresql.Driver");
         JDBCTable pgTable = new JDBCTable(1, "mydb.public.users",
-                Collections.singletonList(new Column("id", VarcharType.VARCHAR)), properties);
+                Collections.singletonList(new Column("id", Type.VARCHAR)), properties);
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(pgTable);
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, pgTable);
