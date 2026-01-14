@@ -83,7 +83,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -335,7 +334,7 @@ public class AnalyzeStmtTest {
 
         AnalyzeMgr analyzeMgr = getConnectContext().getGlobalStateMgr().getAnalyzeMgr();
         analyzeMgr.dropBasicStatsMetaAndData(getConnectContext(),
-                Set.of(tbl.getId(), tb2.getId(), structA.getId(), upperTbl.getId()));
+                List.of(tbl.getId(), tb2.getId(), structA.getId(), upperTbl.getId()));
 
 
         BasicStatsMeta meta1 = new BasicStatsMeta(db.getId(), tbl.getId(), null,

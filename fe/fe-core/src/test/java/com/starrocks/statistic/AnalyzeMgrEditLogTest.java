@@ -866,8 +866,7 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertNotNull(masterAnalyzeMgr.getTableBasicStatsMeta(testTableId));
 
         // 2. Execute dropBasicStatsMetaAndData operation
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -925,8 +924,7 @@ public class AnalyzeMgrEditLogTest {
         };
 
         // 4. Execute dropBasicStatsMetaAndData operation and expect exception
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -952,8 +950,7 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertEquals(1, masterAnalyzeMgr.getHistogramStatsMetaMap().size());
 
         // 2. Execute dropHistogramStatsMetaAndData operation
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -1000,8 +997,7 @@ public class AnalyzeMgrEditLogTest {
         };
 
         // 4. Execute dropHistogramStatsMetaAndData operation and expect exception
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -1032,8 +1028,7 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertEquals(1, masterAnalyzeMgr.getMultiColumnStatsMetaMap().size());
 
         // 2. Execute dropMultiColumnStatsMetaAndData operation
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -1083,8 +1078,7 @@ public class AnalyzeMgrEditLogTest {
         };
 
         // 4. Execute dropMultiColumnStatsMetaAndData operation and expect exception
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();

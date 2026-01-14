@@ -53,7 +53,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -525,14 +524,24 @@ public class AnalyzeMgr implements Writable {
 
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
+        if (tableIdHasDeleted.isEmpty()) {
+            return;
+        }
+
+        int exprLimit = Config.expr_children_limit / 2;
+        List<Long> batchTableIds = tableIdHasDeleted.stream()
+                .distinct()
+                .limit(exprLimit)
+                .collect(Collectors.toList());
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         try (var guard = statsConnectCtx.bindScope()) {
             statsConnectCtx.setStatisticsConnection(true);
+            statsConnectCtx.getSessionVariable().setExprChildrenLimit(batchTableIds.size() * 3);
 
-            dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
-            dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
-            dropMultiColumnStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+            dropBasicStatsMetaAndData(statsConnectCtx, batchTableIds);
+            dropHistogramStatsMetaAndData(statsConnectCtx, batchTableIds);
+            dropMultiColumnStatsMetaAndData(statsConnectCtx, batchTableIds);
         }
     }
 
@@ -732,71 +741,94 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
+    public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         try (var guard = statsConnectCtx.bindScope()) {
-            for (Long tableId : tableIdHasDeleted) {
-                BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
-                if (basicStatsMeta == null) {
-                    continue;
-                }
-                // Both types of tables need to be deleted, because there may have been a switch of
-                // collecting statistics types, leaving some discarded statistics data.
-                statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.SAMPLE);
-                statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.FULL);
+            if (tableIds == null || tableIds.isEmpty()) {
+                return;
+            }
+            List<Long> distinctTableIds = tableIds.stream().distinct().collect(Collectors.toList());
+            List<BasicStatsMeta> metasToRemove = distinctTableIds.stream()
+                    .map(basicStatsMetaMap::get)
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toList());
+            if (metasToRemove.isEmpty()) {
+                return;
+            }
 
-                statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, tableId);
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(
-                        basicStatsMetaMap.get(tableId), wal -> basicStatsMetaMap.remove(tableId));
+            // Both types of tables need to be deleted, because there may have been a switch of
+            // collecting statistics types, leaving some discarded statistics data.
+            boolean sampleOk = statisticExecutor.dropTableStatistics(statsConnectCtx, distinctTableIds,
+                    StatsConstants.AnalyzeType.SAMPLE);
+            boolean fullOk = statisticExecutor.dropTableStatistics(statsConnectCtx, distinctTableIds,
+                    StatsConstants.AnalyzeType.FULL);
+            if (sampleOk && fullOk) {
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMetaBatch(metasToRemove, wal -> {
+                    for (BasicStatsMeta meta : metasToRemove) {
+                        basicStatsMetaMap.remove(meta.getTableId());
+                    }
+                });
             }
         }
     }
 
-    public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
-        Map<Long, List<String>> expireHistogram = new HashMap<>();
-        for (Pair<Long, String> entry : histogramStatsMetaMap.keySet()) {
-            if (tableIdHasDeleted.contains(entry.first)) {
-                if (expireHistogram.containsKey(entry.first)) {
-                    expireHistogram.get(entry.first).add(entry.second);
-                } else {
-                    expireHistogram.put(entry.first, Lists.newArrayList(entry.second));
-                }
-            }
+    public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return;
+        }
+        List<Long> distinctTableIds = tableIds.stream().distinct().collect(Collectors.toList());
+        Set<Long> tableIdSet = new HashSet<>(distinctTableIds);
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        boolean ok = statisticExecutor.dropHistogramByTableIds(statsConnectCtx, distinctTableIds);
+        if (!ok) {
+            return;
         }
 
-        for (Map.Entry<Long, List<String>> histogramItem : expireHistogram.entrySet()) {
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropHistogram(statsConnectCtx, histogramItem.getKey(), histogramItem.getValue());
-
-            for (String histogramColumn : histogramItem.getValue()) {
-                Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey),
-                                wal -> histogramStatsMetaMap.remove(histogramKey));
+        List<Pair<Long, String>> keysToRemove = new ArrayList<>();
+        List<HistogramStatsMeta> metasToRemove = new ArrayList<>();
+        for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry : histogramStatsMetaMap.entrySet()) {
+            if (tableIdSet.contains(entry.getKey().first)) {
+                keysToRemove.add(entry.getKey());
+                metasToRemove.add(entry.getValue());
             }
         }
+        if (metasToRemove.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMetaBatch(metasToRemove, wal -> {
+            for (Pair<Long, String> key : keysToRemove) {
+                histogramStatsMetaMap.remove(key);
+            }
+        });
     }
 
-    public void dropMultiColumnStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
+    public void dropMultiColumnStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return;
+        }
+        List<Long> distinctTableIds = tableIds.stream().distinct().collect(Collectors.toList());
+        Set<Long> tableIdSet = new HashSet<>(distinctTableIds);
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        boolean ok = statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, distinctTableIds);
+        if (!ok) {
+            return;
+        }
+
         List<MultiColumnStatsKey> keysToRemove = new ArrayList<>();
-
+        List<MultiColumnStatsMeta> metasToRemove = new ArrayList<>();
         for (Map.Entry<MultiColumnStatsKey, MultiColumnStatsMeta> entry : multiColumnStatsMetaMap.entrySet()) {
             MultiColumnStatsKey key = entry.getKey();
-            MultiColumnStatsMeta value = entry.getValue();
-
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-
-            if (tableIdHasDeleted.contains(key.tableId)) {
-                statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, key.tableId);
+            if (tableIdSet.contains(key.tableId)) {
                 keysToRemove.add(key);
+                metasToRemove.add(entry.getValue());
             }
         }
-
-        keysToRemove.forEach(key -> {
-            MultiColumnStatsMeta value = multiColumnStatsMetaMap.get(key);
-            if (value != null) {
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logRemoveMultiColumnStatsMeta(value, wal -> multiColumnStatsMetaMap.remove(key));
+        if (metasToRemove.isEmpty()) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMetaBatch(metasToRemove, wal -> {
+            for (MultiColumnStatsKey key : keysToRemove) {
+                multiColumnStatsMetaMap.remove(key);
             }
         });
     }
