@@ -212,7 +212,7 @@ docker compose exec starrocks-fe \
 
 从包含 `docker-compose.yml` 文件的目录运行此命令。
 
-如果您使用的是 MySQL 命令行客户端以外的客户端，请立即打开它。
+如果您使用的是 MySQL 命令行客户端以外的客户端，请现在打开它。
 :::
 
 ```sql
