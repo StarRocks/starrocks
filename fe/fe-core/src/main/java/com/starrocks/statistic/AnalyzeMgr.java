@@ -750,11 +750,10 @@ public class AnalyzeMgr implements Writable {
             boolean fullOk = statisticExecutor.dropTableStatistics(statsConnectCtx, distinctTableIds,
                     StatsConstants.AnalyzeType.FULL);
             if (sampleOk && fullOk) {
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMetaBatch(metasToRemove, wal -> {
-                    for (BasicStatsMeta meta : metasToRemove) {
-                        basicStatsMetaMap.remove(meta.getTableId());
-                    }
-                });
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMetaBatch(metasToRemove);
+                for (BasicStatsMeta meta : metasToRemove) {
+                    basicStatsMetaMap.remove(meta.getTableId());
+                }
             }
         }
     }
@@ -782,11 +781,10 @@ public class AnalyzeMgr implements Writable {
         if (metasToRemove.isEmpty()) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMetaBatch(metasToRemove, wal -> {
-            for (Pair<Long, String> key : keysToRemove) {
-                histogramStatsMetaMap.remove(key);
-            }
-        });
+        GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMetaBatch(metasToRemove);
+        for (Pair<Long, String> key : keysToRemove) {
+            histogramStatsMetaMap.remove(key);
+        }
     }
 
     public void dropMultiColumnStatsMetaAndData(ConnectContext statsConnectCtx, List<Long> tableIds) {
@@ -813,11 +811,10 @@ public class AnalyzeMgr implements Writable {
         if (metasToRemove.isEmpty()) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMetaBatch(metasToRemove, wal -> {
-            for (MultiColumnStatsKey key : keysToRemove) {
-                multiColumnStatsMetaMap.remove(key);
-            }
-        });
+        GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMetaBatch(metasToRemove);
+        for (MultiColumnStatsKey key : keysToRemove) {
+            multiColumnStatsMetaMap.remove(key);
+        }
     }
 
     public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {

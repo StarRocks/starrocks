@@ -1975,67 +1975,36 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_BASIC_STATS_META, meta);
     }
 
-<<<<<<< HEAD
+    public void logRemoveBasicStatsMetaBatch(List<BasicStatsMeta> metas) {
+        logEdit(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas));
+    }
+
     public void logAddHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
-=======
-    public void logRemoveBasicStatsMetaBatch(List<BasicStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas), walApplier);
-    }
-
-    public void logRemoveBasicStatsMetaBatch(List<BasicStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas), walApplier);
-    }
-
-    public void logAddHistogramStatsMeta(HistogramStatsMeta meta, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta, walApplier);
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
     }
 
     public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
     }
 
-<<<<<<< HEAD
+    public void logRemoveHistogramStatsMetaBatch(List<HistogramStatsMeta> metas) {
+        logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH, new BatchRemoveHistogramStatsMetaLog(metas));
+    }
+
     public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
         logEdit(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta);
-=======
-    public void logRemoveHistogramStatsMetaBatch(List<HistogramStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH,
-                new BatchRemoveHistogramStatsMetaLog(metas), walApplier);
-    }
-
-    public void logRemoveHistogramStatsMetaBatch(List<HistogramStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH,
-                new BatchRemoveHistogramStatsMetaLog(metas), walApplier);
-    }
-
-    public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta, walApplier);
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
     }
 
     public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta);
     }
 
-<<<<<<< HEAD
+    public void logRemoveMultiColumnStatsMetaBatch(List<MultiColumnStatsMeta> metas) {
+        logEdit(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH, new BatchRemoveMultiColumnStatsMetaLog(metas));
+    }
+
     public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
         logEdit(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
-=======
-    public void logRemoveMultiColumnStatsMetaBatch(List<MultiColumnStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH,
-                new BatchRemoveMultiColumnStatsMetaLog(metas), walApplier);
-    }
-
-    public void logRemoveMultiColumnStatsMetaBatch(List<MultiColumnStatsMeta> metas, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH,
-                new BatchRemoveMultiColumnStatsMetaLog(metas), walApplier);
-    }
-
-    public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta, walApplier);
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
     }
 
     public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
