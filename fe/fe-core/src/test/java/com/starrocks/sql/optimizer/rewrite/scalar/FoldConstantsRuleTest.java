@@ -170,6 +170,12 @@ public class FoldConstantsRuleTest {
         assertEquals(ConstantOperator.createInt(123), rule.apply(cast9, null));
         CastOperator cast10 = new CastOperator(IntegerType.INT, ConstantOperator.createChar("123.4"));
         assertEquals(ConstantOperator.createInt(123), rule.apply(cast10, null));
+        CastOperator cast11 = new CastOperator(IntegerType.INT, ConstantOperator.createChar("123"));
+        assertEquals(ConstantOperator.createInt(123), rule.apply(cast11, null));
+        CastOperator cast12 = new CastOperator(IntegerType.INT, ConstantOperator.createChar("123.4 "));
+        assertEquals(ConstantOperator.createInt(123), rule.apply(cast12, null));
+        CastOperator cast13 = new CastOperator(IntegerType.INT, ConstantOperator.createChar("-45.6"));
+        assertEquals(ConstantOperator.createInt(-45), rule.apply(cast13, null));
     }
 
     @Test
