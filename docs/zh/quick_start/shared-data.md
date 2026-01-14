@@ -563,7 +563,7 @@ MinIO 访问密钥密钥。
 - 在 Docker 中部署了 StarRocks 和 MinIO
 - 创建了一个 MinIO 访问密钥
 - 配置了一个使用 MinIO 的 StarRocks Storage Volume
-- 加载了纽约市提供的崩溃数据和 NOAA 提供的天气数据
+- 导入了纽约市提供的事故数据和 NOAA 提供的天气数据
 - 使用 SQL JOIN 分析了数据，发现低能见度或冰冷的街道上开车不是一个好主意
 
 还有更多内容需要学习；我们有意地忽略了在 Stream Load 期间完成的数据转换。有关该内容的详细信息，请参见下面的 curl 命令注释。
