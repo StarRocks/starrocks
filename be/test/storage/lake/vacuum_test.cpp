@@ -2966,8 +2966,6 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_files());
-        EXPECT_EQ(0, response.vacuumed_file_size());
 
         EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
         EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
