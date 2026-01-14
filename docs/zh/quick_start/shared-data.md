@@ -473,7 +473,7 @@ curl --location-trusted -u root             \
 ```bash
 sys_log_level = INFO
 
-# ports for admin, web, heartbeat service
+# Admin、Web、心跳服务的端口
 be_port = 9060
 be_http_port = 8040
 heartbeat_service_port = 9050
