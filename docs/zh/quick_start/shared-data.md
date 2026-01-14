@@ -359,7 +359,7 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 `curl` 命令看起来很复杂，但在教程末尾会详细解释。现在，我们建议运行命令并运行一些 SQL 来分析数据，然后在最后阅读有关数据加载详细信息的信息。
 
-### 纽约市碰撞数据 - 崩溃
+### 纽约市碰撞数据 - 事故
 
 ```bash
 curl --location-trusted -u root             \
