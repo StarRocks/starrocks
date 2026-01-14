@@ -368,7 +368,7 @@ alter table t_wrong_access_path_after_column_rename rename column JOB_NAME_NEW t
 -- !result
 select * from t_wrong_access_path_after_column_rename;
 -- result:
-1	2	["aa","bb"]	null
+1	2	["aa","bb"]	None
 -- !result
 select JOB_NAME_OLD from t_wrong_access_path_after_column_rename where JOB_NAME is NULL;
 -- result:
