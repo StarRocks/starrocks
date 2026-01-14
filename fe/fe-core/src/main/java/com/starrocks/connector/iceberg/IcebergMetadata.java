@@ -27,6 +27,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -162,6 +163,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -219,17 +221,29 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final ConnectorProperties properties;
     private final IcebergProcedureRegistry procedureRegistry;
 
+    // Commit queue manager for serializing Iceberg commits to avoid optimistic locking conflicts
+    private final IcebergCommitQueueManager commitQueueManager;
+
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
                            IcebergCatalogProperties catalogProperties) {
         this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
-                catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry());
+                catalogProperties, new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(),
+                null);
     }
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
                            IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
                            IcebergProcedureRegistry procedureRegistry) {
+        this(catalogName, hdfsEnvironment, icebergCatalog, jobPlanningExecutor, refreshOtherFeExecutor,
+                catalogProperties, properties, procedureRegistry, null);
+    }
+
+    public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
+                           ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor,
+                           IcebergCatalogProperties catalogProperties, ConnectorProperties properties,
+                           IcebergProcedureRegistry procedureRegistry, IcebergCommitQueueManager commitQueueManager) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
@@ -238,6 +252,28 @@ public class IcebergMetadata implements ConnectorMetadata {
         this.catalogProperties = catalogProperties;
         this.properties = properties;
         this.procedureRegistry = procedureRegistry;
+
+        // Use the shared commit queue manager from IcebergConnector if provided,
+        // otherwise create a new one (for backwards compatibility and testing)
+        if (commitQueueManager != null) {
+            this.commitQueueManager = commitQueueManager;
+            LOG.info("IcebergMetadata using shared commit queue manager for catalog {}", catalogName);
+        } else {
+            // Initialize commit queue manager with a supplier that reads the latest FE configuration
+            // This allows runtime config changes (enable_iceberg_commit_queue, iceberg_commit_queue_timeout_seconds)
+            // to take effect immediately without FE restart.
+            this.commitQueueManager = new IcebergCommitQueueManager(() -> {
+                IcebergCommitQueueManager.Config queueConfig = new IcebergCommitQueueManager.Config(
+                        Config.enable_iceberg_commit_queue,
+                        Config.iceberg_commit_queue_timeout_seconds,
+                        Config.iceberg_commit_queue_max_size
+                );
+                return queueConfig;
+            });
+            LOG.info("Iceberg commit queue initialized for catalog {}: enabled={}, timeoutSeconds={}, maxSize={}",
+                    catalogName, Config.enable_iceberg_commit_queue,
+                    Config.iceberg_commit_queue_timeout_seconds, Config.iceberg_commit_queue_max_size);
+        }
     }
 
     @Override
@@ -1305,33 +1341,56 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
-        boolean isOverwrite = false;
-        boolean isRewrite = false;
+        // Normalize db name and table name to lower case for commit queue key
+        // because some catalogs are case-insensitive (e.g., Hive, Glue)
+        //
+        // The normalizing for all catalogs is safe because:
+        // 1. The commit queue only serializes commits, it doesn't affect table identity
+        // 2. In the rare case where two tables differ only by case (e.g., "db.Table" vs "db.TABLE"),
+        //    sharing the same commit queue executor is harmless - commits are still serialized
+        // 3. It prevents bugs from inconsistent casing in user code (e.g., finishSink("DB") vs finishSink("db"))
+        String queueDbName = dbName.toLowerCase(Locale.ROOT);
+        String queueTableName = tableName.toLowerCase(Locale.ROOT);
+
+        final boolean isOverwrite;
+        final boolean isRewrite;
         if (!commitInfos.isEmpty()) {
             TSinkCommitInfo sinkCommitInfo = commitInfos.get(0);
             if (sinkCommitInfo.isSetIs_overwrite()) {
                 isOverwrite = sinkCommitInfo.is_overwrite;
+                isRewrite = false;
             } else if (sinkCommitInfo.isSetIs_rewrite()) {
+                isOverwrite = false;
                 isRewrite = sinkCommitInfo.is_rewrite;
+            } else {
+                isOverwrite = false;
+                isRewrite = false;
             }
+        } else {
+            isOverwrite = false;
+            isRewrite = false;
         }
 
-        List<TIcebergDataFile> dataFiles = commitInfos.stream()
+        final List<TIcebergDataFile> dataFiles = commitInfos.stream()
                 .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
 
-        IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
-        org.apache.iceberg.Table nativeTbl = table.getNativeTable();
-        Transaction transaction = nativeTbl.newTransaction();
+        // Use commit queue to serialize commits to the same table and avoid optimistic locking conflicts
+        commitQueueManager.submitCommitAndRethrow(catalogName, queueDbName, queueTableName, () -> {
+            IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
+            org.apache.iceberg.Table nativeTbl = table.getNativeTable();
+            Transaction transaction = nativeTbl.newTransaction();
 
-        // Check if this is a delete operation (any file is marked as POSITION_DELETES)
-        boolean isDeleteOperation = dataFiles.stream().anyMatch(dataFile ->
-                dataFile.isSetFile_content() &&
-                        (dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES));
-        if (isDeleteOperation) {
-            commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra);
-        } else {
-            commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra, dbName, tableName);
-        }
+            // Check if this is a delete operation (any file is marked as POSITION_DELETES)
+            boolean isDeleteOperation = dataFiles.stream().anyMatch(dataFile ->
+                    dataFile.isSetFile_content() &&
+                            (dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES));
+            if (isDeleteOperation) {
+                commitDeleteOperation(transaction, nativeTbl, dataFiles, branch, dbName, tableName, extra);
+            } else {
+                commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra,
+                        dbName, tableName);
+            }
+        });
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
@@ -1754,4 +1813,3 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 }
-
