@@ -15,7 +15,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 本教程包括：
 
 - 在 Docker 容器中运行 StarRocks
-- 使用 MinIO 进行对象存储
+- 使用 MinIO 作为对象存储
 - 配置 StarRocks 以支持存算分离
 - 加载两个公共数据集
 - 使用 SELECT 和 JOIN 分析数据
