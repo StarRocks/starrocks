@@ -561,6 +561,7 @@ public class QueryOptimizer extends Optimizer {
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
 
+        // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES because it introduces filter expressions
         if (sessionVariable.isEnableSplitWindowSkewToUnion()) {
             Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
             scheduler.rewriteOnce(tree, rootTaskContext, SplitWindowSkewToUnionRule.getInstance());

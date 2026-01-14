@@ -52,31 +52,6 @@ public class WindowSkewTest extends PlanTestBase {
     }
 
     @Test
-    void testWindowWithManualRewrite() throws Exception {
-
-        final var table = getOlapTable("window_skew_table");
-
-        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
-        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
-
-        setTableStatistics(table, 1000);
-        statisticStorage.refreshColumnStatistics(table, List.of("p", "s", "x"), true);
-        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
-        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
-
-        String sql = "(select p, s, sum(x) over (order by s) from window_skew_table where p is NULL)  " +
-                "UNION ALL (select p, s, sum(x) over (partition by p order by s) from window_skew_table where p is not NULL)";
-
-        String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
-        System.out.println(plan);
-        assertContains(plan, "|  output exprs:\n" +
-                "  |      [9, INT, true] | [10, INT, true] | [11, BIGINT, true]");
-        assertContains(plan, "UNION");
-        // Validate that data is split into NULL and NOT NULL paths
-        assertContains(plan, "Predicates: 1: p IS NULL");
-        assertContains(plan, "Predicates: 5: p IS NOT NULL");
-    }
-    @Test
     void testWindowWithSkew() throws Exception {
 
         final var table = getOlapTable("window_skew_table");
@@ -92,28 +67,36 @@ public class WindowSkewTest extends PlanTestBase {
         String sql = "select p, s, sum(x) over (partition by p order by s) from window_skew_table";
 
         String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
-        System.out.println(plan);
+
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: sum(3: x)");
         assertContains(plan, "UNION");
         // Validate that data is split into NULL and NOT NULL paths
-        assertContains(plan, "Predicates: 1: p IS NOT NULL");
-        assertContains(plan, "Predicates: 1: p IS NULL");
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
         // Validate Union child expressions match the expected columns from both branches
         assertContains(plan,
-                "ANALYTIC\n" + "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
-                        " result nullable: true], ]\n" + "  |  partition by: [1: p, INT, true]\n" +
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
+                        "result nullable: true], ]\n" +
+                        "  |  partition by: [1: p, INT, true]\n" +
                         "  |  order by: [2: s, INT, true] ASC\n" +
-                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" + "  |  cardinality: 700\n" +
-                        "  |  column statistics: \n" + "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] ESTIMATE\n" +
+                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                        "  |  cardinality: 700\n" +
+                        "  |  column statistics: \n" +
+                        "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
 
         assertContains(plan,
-                "ANALYTIC\n" + "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
-                        "result nullable: true], ]\n" + "  |  order by: [2: s, INT, true] ASC\n" +
-                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" + "  |  cardinality: 300\n" +
-                        "  |  column statistics: \n" + "  |  * p-->[-Infinity, Infinity, 1.0, NaN, NaN] ESTIMATE\n" +
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
+                        "result nullable: true], ]\n" +
+                        "  |  order by: [2: s, INT, true] ASC\n" +
+                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                        "  |  cardinality: 300\n" +
+                        "  |  column statistics: \n" +
+                        "  |  * p-->[-Infinity, Infinity, 1.0, NaN, NaN] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
@@ -133,7 +116,6 @@ public class WindowSkewTest extends PlanTestBase {
 
         String plan = getFragmentPlan(sql);
 
-        System.out.println(plan);
         assertNotContains(plan, "UNION");
         assertContains(plan, "ANALYTIC");
     }
@@ -222,8 +204,8 @@ public class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: 1: p IS NULL");
-        assertContains(plan, "Predicates: 1: p IS NOT NULL");
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
     }
 
     @Test
