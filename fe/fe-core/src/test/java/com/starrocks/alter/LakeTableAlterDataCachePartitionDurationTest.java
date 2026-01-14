@@ -145,8 +145,9 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         }
         table.addPartition(partition);
 
-        table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN, keysType);
-        table.setBaseIndexMetaId(index.getId());
+        table.setIndexMeta(index.getMetaId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
+                keysType);
+        table.setBaseIndexMetaId(index.getMetaId());
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();

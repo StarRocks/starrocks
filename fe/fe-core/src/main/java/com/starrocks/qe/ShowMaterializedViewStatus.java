@@ -814,10 +814,10 @@ public class ShowMaterializedViewStatus {
         try {
             return ShowMaterializedViewStatus.of(dbName, olapTable, mvMeta);
         } catch (Exception e) {
-            final long mvId = mvMeta.getIndexMetaId();
-            LOG.warn("get sync mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
-                    mvId, dbName, olapTable.getIndexNameByMetaId(mvId), e.getMessage());
-            return new ShowMaterializedViewStatus(mvId, dbName, olapTable.getIndexNameByMetaId(mvId));
+            final long indexMetaId = mvMeta.getIndexMetaId();
+            LOG.warn("get sync mv status failed, mv meta Id: {}, dbName: {}, mvName: {}, error: {}",
+                    indexMetaId, dbName, olapTable.getIndexNameByMetaId(indexMetaId), e.getMessage());
+            return new ShowMaterializedViewStatus(indexMetaId, dbName, olapTable.getIndexNameByMetaId(indexMetaId));
         }
     }
 

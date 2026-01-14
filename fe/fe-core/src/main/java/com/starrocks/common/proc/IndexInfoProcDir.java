@@ -85,16 +85,16 @@ public class IndexInfoProcDir implements ProcDirInterface {
                 // indices order
                 List<Long> indices = Lists.newArrayList();
                 indices.add(olapTable.getBaseIndexMetaId());
-                indices.addAll(olapTable.getIndexIdListExceptBaseIndex());
+                indices.addAll(olapTable.getIndexMetaIdListExceptBaseIndex());
 
-                for (long indexId : indices) {
-                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaIdToMeta().get(indexId);
+                for (long indexMetaId : indices) {
+                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
 
                     String type = olapTable.getKeysType().name();
                     StringBuilder builder = new StringBuilder();
                     builder.append(type).append("(");
                     List<String> columnNames = Lists.newArrayList();
-                    List<Column> columns = olapTable.getSchemaByIndexMetaId(indexId);
+                    List<Column> columns = olapTable.getSchemaByIndexMetaId(indexMetaId);
                     for (Column column : columns) {
                         if (column.isKey()) {
                             columnNames.add(column.getName());
@@ -102,8 +102,8 @@ public class IndexInfoProcDir implements ProcDirInterface {
                     }
                     builder.append(Joiner.on(", ").join(columnNames)).append(")");
 
-                    result.addRow(Lists.newArrayList(String.valueOf(indexId),
-                            olapTable.getIndexNameByMetaId(indexId),
+                    result.addRow(Lists.newArrayList(String.valueOf(indexMetaId),
+                            olapTable.getIndexNameByMetaId(indexMetaId),
                             String.valueOf(indexMeta.getSchemaVersion()),
                             String.valueOf(indexMeta.getSchemaHash()),
                             String.valueOf(indexMeta.getShortKeyColumnCount()),
@@ -126,15 +126,15 @@ public class IndexInfoProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String idxIdStr) throws AnalysisException {
+    public ProcNodeInterface lookup(String idxMetaIdStr) throws AnalysisException {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
 
-        long idxId;
+        long idxMetaId;
         try {
-            idxId = Long.valueOf(idxIdStr);
+            idxMetaId = Long.valueOf(idxMetaIdStr);
         } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid index id format: " + idxIdStr);
+            throw new AnalysisException("Invalid index meta id format: " + idxMetaIdStr);
         }
 
         Locker locker = new Locker();
@@ -144,9 +144,9 @@ public class IndexInfoProcDir implements ProcDirInterface {
             Set<String> bfColumns = null;
             if (table.getType() == TableType.OLAP) {
                 OlapTable olapTable = (OlapTable) table;
-                schema = olapTable.getSchemaByIndexMetaId(idxId);
+                schema = olapTable.getSchemaByIndexMetaId(idxMetaId);
                 if (schema == null) {
-                    throw new AnalysisException("Index " + idxId + " does not exist");
+                    throw new AnalysisException("Index meta " + idxMetaId + " does not exist");
                 }
                 bfColumns = olapTable.getBfColumnNames();
             } else {

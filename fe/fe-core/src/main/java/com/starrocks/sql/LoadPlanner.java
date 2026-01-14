@@ -339,7 +339,7 @@ public class LoadPlanner {
                 fragments.add(scanFragment);
 
                 // Exchange node
-                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexMetaId());
+                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexMetaId(olapDestTable.getBaseIndexMetaId());
                 List<Expr> partitionExprs = Lists.newArrayList();
                 keyColumns.forEach(column -> {
                     partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
@@ -610,7 +610,7 @@ public class LoadPlanner {
         }
 
         if (KeysType.AGG_KEYS.equals(olapDestTable.getKeysType())) {
-            for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexIdToSchema().entrySet()) {
+            for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexMetaIdToSchema().entrySet()) {
                 List<Column> schema = entry.getValue();
                 for (Column column : schema) {
                     if (column.getAggregationType() == AggregateType.REPLACE

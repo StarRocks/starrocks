@@ -218,7 +218,7 @@ public class LakeTableHelper {
             List<Column> indexMetaSchema = indexMeta.getSchema();
             // check and restore column unique id for each schema
             if (restoreColumnUniqueId(indexMetaSchema)) {
-                LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
+                LOG.info("Column unique ids in table {} with index meta {} have been restored, columns size: {}",
                         table.getName(), indexMeta.getIndexMetaId(), indexMetaSchema.size());
             }
         }

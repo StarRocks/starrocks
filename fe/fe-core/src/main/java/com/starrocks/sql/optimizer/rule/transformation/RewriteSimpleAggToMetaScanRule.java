@@ -174,7 +174,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
                 .setSelectPartitionNames(selectedPartitionNames)
-                .setSelectedIndexId(scanOperator.getSelectedIndexId())
+                .setSelectedIndexId(scanOperator.getSelectedIndexMetaId())
                 .setHintsTabletIds(scanOperator.getHintsTabletIds())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToColumns(aggColumnIdToColumns).build();
@@ -229,7 +229,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
-        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
+        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
         boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(

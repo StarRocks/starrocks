@@ -145,11 +145,11 @@ public class OlapDeleteJob extends DeleteJob {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : physicalPartition
                                 .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                        long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
+                        long indexMetaId = index.getMetaId();
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexMetaId);
 
                         List<TColumn> columnsDesc = new ArrayList<>();
-                        for (Column column : olapTable.getSchemaByIndexMetaId(indexId)) {
+                        for (Column column : olapTable.getSchemaByIndexMetaId(indexMetaId)) {
                             columnsDesc.add(column.toThrift());
                         }
 
@@ -167,7 +167,7 @@ public class OlapDeleteJob extends DeleteJob {
                                 // create push task for each replica
                                 PushTask pushTask = new PushTask(null,
                                             replica.getBackendId(), db.getId(), olapTable.getId(),
-                                            physicalPartition.getId(), indexId,
+                                            physicalPartition.getId(), index.getId(),
                                             tabletId, replicaId, schemaHash,
                                             -1, 0,
                                             -1, type, conditions,

@@ -96,7 +96,7 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
 
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
-            int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
+            int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
             List<Tablet> tablets = index.getTablets();
 
             long visibleVersion = partition.getVisibleVersion();

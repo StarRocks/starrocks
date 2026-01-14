@@ -291,7 +291,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
     private static Map<String, String> getProperties(OlapTable table) {
         Map<String, String> properties = table.getProperties();
         // add schema_version
-        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
+        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
         properties.put(PropertyAnalyzer.PROPERTIES_SCHEMA_VERSION, String.valueOf(baseIndexMeta.getSchemaVersion()));
         // labels.location is not supported now
         properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
@@ -302,7 +302,7 @@ public class CreateReplicatedTableJob extends FailoverGroupJob {
 
     private static List<OrderByElement> getSortKeysColumnNames(OlapTable table) {
         List<OrderByElement> orderByElements = null;
-        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
+        MaterializedIndexMeta baseIndexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
         if (baseIndexMeta.getSortKeyIdxes() != null) {
             orderByElements = Lists.newArrayListWithCapacity(baseIndexMeta.getSortKeyIdxes().size());
             for (Integer i : baseIndexMeta.getSortKeyIdxes()) {

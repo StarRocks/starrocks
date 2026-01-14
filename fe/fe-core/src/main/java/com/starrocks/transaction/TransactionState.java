@@ -874,6 +874,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         Set<Long> indexIds = loadedTblIndexes.computeIfAbsent(table.getId(), k -> Sets.newHashSet());
         // always equal the index ids
         indexIds.clear();
+        // TODO(wyb): fix indexIds with partition
         indexIds.addAll(table.getIndexMetaIdToMeta().keySet());
     }
 

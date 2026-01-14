@@ -236,12 +236,12 @@ public class RestoreHandler {
 
                 for (MaterializedIndex targetIndex :
                         targetPhysicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    long targetIndexId = targetIndex.getId();
-                    MaterializedIndexMeta targetIndexMeta = tableForRestore.getIndexMetaByIndexId(targetIndexId);
+                    long targetIndexMetaId = targetIndex.getMetaId();
+                    MaterializedIndexMeta targetIndexMeta = tableForRestore.getIndexMetaByMetaId(targetIndexMetaId);
                     if (targetIndexMeta == null) {
                         throw new StarRocksException(String.format(
-                                "Metadata for index '%d' missing in restored table '%s'",
-                                targetIndexId, tableForRestore.getName()));
+                                "Metadata for index meta '%d' missing in restored table '%s'",
+                                targetIndexMetaId, tableForRestore.getName()));
                     }
                     long targetSchemaId = targetIndexMeta.getSchemaId();
 

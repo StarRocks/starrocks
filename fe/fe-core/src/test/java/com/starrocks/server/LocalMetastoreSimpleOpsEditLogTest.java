@@ -714,7 +714,7 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         Assertions.assertNotNull(replayInfo);
         Assertions.assertEquals(DB_ID, replayInfo.getDbId());
         Assertions.assertEquals(TABLE_ID, replayInfo.getTableId());
-        Assertions.assertEquals(rollupIndexId, replayInfo.getIndexId());
+        Assertions.assertEquals(rollupIndexId, replayInfo.getIndexMetaId());
         Assertions.assertEquals(newRollupName, replayInfo.getNewRollupName());
 
         // Create follower metastore and the same id objects, then replay

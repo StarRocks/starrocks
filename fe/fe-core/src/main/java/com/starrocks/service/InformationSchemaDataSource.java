@@ -315,7 +315,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
-        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
+        MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
         if (index.getSortKeyIdxes() == null) {
             tableConfigInfo.setSort_key(pkSb);
         } else {

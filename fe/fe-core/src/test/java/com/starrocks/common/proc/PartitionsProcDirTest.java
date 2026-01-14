@@ -50,8 +50,8 @@ public class PartitionsProcDirTest {
         listPartition.setDataCacheInfo(partitionId, dataCache);
         LakeTable cloudNativeTable = new LakeTable(1024L, "cloud_native_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
-        Map<String, Long> indexNameToId = cloudNativeTable.getIndexNameToMetaId();
-        indexNameToId.put("index1", index.getId());
+        Map<String, Long> indexNameToMetaId = cloudNativeTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
         cloudNativeTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
 
         db.registerTableUnlocked(cloudNativeTable);
@@ -81,8 +81,8 @@ public class PartitionsProcDirTest {
         OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
         index.setBalanceStat(BalanceStat.BALANCED_STAT);
-        Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
-        indexNameToId.put("index1", index.getId());
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
         olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
 
         db.registerTableUnlocked(olapTable);

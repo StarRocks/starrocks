@@ -221,7 +221,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -242,7 +242,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(11, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -262,7 +262,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -274,7 +274,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(dropKeyColStmt, connectContext));
 
-        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
+        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexMetaIdToSchema());
 
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
@@ -290,7 +290,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -330,7 +330,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -348,7 +348,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -388,7 +388,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(7, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -406,7 +406,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -423,7 +423,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         // origin columns
         Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
         Map<Long, Long> indexToNewSchemaId = new HashMap<>();
-        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexIdToSchema().entrySet()) {
+        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexMetaIdToSchema().entrySet()) {
             indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
             indexToNewSchemaId.put(entry.getKey(), globalStateMgr.getNextId());
         }

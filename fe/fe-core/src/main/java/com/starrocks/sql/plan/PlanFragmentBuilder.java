@@ -609,7 +609,7 @@ public class PlanFragmentBuilder {
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
-            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByMetaId(node.getSelectedIndexMetaId());
             if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
@@ -937,7 +937,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
-                    node.getSelectedIndexId(), context.getConnectContext().getCurrentComputeResource());
+                    node.getSelectedIndexMetaId(), context.getConnectContext().getCurrentComputeResource());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
@@ -953,7 +953,7 @@ public class PlanFragmentBuilder {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
                         node.getSelectedTabletId(),
                         node.getHintsReplicaId());
-                long selectedIndexId = node.getSelectedIndexId();
+                long selectedIndexMetaId = node.getSelectedIndexMetaId();
                 long totalTabletsNum = 0;
                 // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
                 // we can remove code when refactor tablet select
@@ -986,7 +986,7 @@ public class PlanFragmentBuilder {
                         selectedNonEmptyPartitionIds.add(partitionId);
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
-                        final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexId);
+                        final MaterializedIndex selectedIndex = physicalPartition.getIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
                         List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
                         for (int i = 0; i < allTabletIds.size(); i++) {

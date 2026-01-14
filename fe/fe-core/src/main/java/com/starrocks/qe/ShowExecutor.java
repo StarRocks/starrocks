@@ -399,9 +399,9 @@ public class ShowExecutor {
                     } else if (table.isOlapOrCloudNativeTable()) {
                         OlapTable olapTable = (OlapTable) table;
                         List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
-                        long baseIdx = olapTable.getBaseIndexMetaId();
+                        long baseIdxMetaId = olapTable.getBaseIndexMetaId();
                         for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
-                            if (baseIdx == mvMeta.getIndexMetaId()) {
+                            if (baseIdxMetaId == mvMeta.getIndexMetaId()) {
                                 continue;
                             }
                             if (matcher != null && !matcher.match(olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId()))) {
@@ -1644,12 +1644,12 @@ public class ShowExecutor {
                     Map<String, Long> indexNames = olapTable.getIndexNameToMetaId();
                     Map<String, Long> sortedIndexNames = new TreeMap<>(indexNames);
 
-                    for (Long indexId : sortedIndexNames.values()) {
+                    for (Long indexMetaId : sortedIndexNames.values()) {
                         long indexSize = 0;
                         long indexReplicaCount = 0;
                         long indexRowCount = 0;
                         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                            MaterializedIndex mIndex = partition.getIndex(indexId);
+                            MaterializedIndex mIndex = partition.getIndex(indexMetaId);
                             indexSize += mIndex.getDataSize();
                             indexReplicaCount += mIndex.getReplicaCount();
                             indexRowCount += mIndex.getRowCount();
@@ -1662,12 +1662,12 @@ public class ShowExecutor {
                         List<String> row = null;
                         if (i == 0) {
                             row = Arrays.asList(tableName,
-                                    olapTable.getIndexNameByMetaId(indexId),
+                                    olapTable.getIndexNameByMetaId(indexMetaId),
                                     readableSize, String.valueOf(indexReplicaCount),
                                     String.valueOf(indexRowCount));
                         } else {
                             row = Arrays.asList("",
-                                    olapTable.getIndexNameByMetaId(indexId),
+                                    olapTable.getIndexNameByMetaId(indexMetaId),
                                     readableSize, String.valueOf(indexReplicaCount),
                                     String.valueOf(indexRowCount));
                         }
@@ -1832,7 +1832,7 @@ public class ShowExecutor {
                             isSync = false;
                             break;
                         }
-                        indexName = olapTable.getIndexNameByMetaId(indexId);
+                        indexName = olapTable.getIndexNameByMetaId(index.getMetaId());
 
                         if (table.isCloudNativeTableOrMaterializedView()) {
                             break;
@@ -1925,14 +1925,13 @@ public class ShowExecutor {
                     }
                     List<List<Comparable>> tabletInfos = new ArrayList<>();
                     String indexName = statement.getIndexName();
-                    long indexId = -1;
+                    Long indexMetaId = -1L;
                     if (indexName != null) {
-                        Long id = olapTable.getIndexMetaIdByName(indexName);
-                        if (id == null) {
+                        indexMetaId = olapTable.getIndexMetaIdByName(indexName);
+                        if (indexMetaId == null) {
                             // invalid indexName
                             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, statement.getIndexName());
                         }
-                        indexId = id;
                     }
                     for (Partition partition : partitions) {
                         if (stop) {
@@ -1940,7 +1939,7 @@ public class ShowExecutor {
                         }
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
-                                if (indexId > -1 && index.getId() != indexId) {
+                                if (indexMetaId > -1 && index.getMetaId() != indexMetaId) {
                                     continue;
                                 }
                                 if (olapTable.isCloudNativeTableOrMaterializedView()) {

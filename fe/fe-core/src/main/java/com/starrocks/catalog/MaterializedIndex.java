@@ -227,6 +227,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return id;
     }
 
+    // TODO(wyb): fix meta id
+    public long getMetaId() {
+        return id;
+    }
+
     public void setState(IndexState state) {
         this.state = state;
     }

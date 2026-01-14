@@ -113,3 +113,4 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
         }
     }
 }
+

@@ -142,7 +142,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
                 DISTRIBUTED BY HASH(c0) BUCKETS 2
                 PROPERTIES('cloud_native_fast_schema_evolution_v2'='%s');""", isFastSchemaEvolutionV2());
         LakeTable table = createTable(connectContext, createSql);
-        long oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
 
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t0 ADD COLUMN c1 BIGINT", true);
@@ -152,18 +152,18 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
-            Assertions.assertTrue(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
-        oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t0 DROP COLUMN c1", true);
             List<Column> columns = table.getBaseSchema();
             Assertions.assertEquals(1, columns.size());
             Assertions.assertEquals("c0", columns.get(0).getName());
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
-            Assertions.assertTrue(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
-        oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t0 ADD COLUMN c1 BIGINT", true);
             List<Column> columns = table.getBaseSchema();
@@ -172,7 +172,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(2, columns.get(1).getUniqueId());
-            Assertions.assertTrue(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
     }
 
@@ -198,7 +198,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         Assertions.assertEquals(table.getIndexNameByMetaId(table.getBaseIndexMetaId()), info.get(4));
         Assertions.assertEquals(table.getBaseIndexMetaId(), info.get(5));
         Assertions.assertEquals(table.getBaseIndexMetaId(), info.get(6));
-        Assertions.assertEquals(String.format("%d:0", table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaVersion()),
+        Assertions.assertEquals(String.format("%d:0", table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaVersion()),
                 info.get(7));
         Assertions.assertEquals(job.getTransactionId().get(), info.get(8));
         Assertions.assertEquals(job.getJobState().name(), info.get(9));
@@ -218,7 +218,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
                 ORDER BY(c1)
                 PROPERTIES('cloud_native_fast_schema_evolution_v2'='%s');""", isFastSchemaEvolutionV2());
         LakeTable table = createTable(connectContext, createSql);
-        long oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
 
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_test_sort_key ADD COLUMN c2 BIGINT", true);
@@ -230,9 +230,9 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
             Assertions.assertEquals("c2", columns.get(2).getName());
             Assertions.assertEquals(2, columns.get(2).getUniqueId());
-            Assertions.assertTrue(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
-        oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_test_sort_key DROP COLUMN c2", true);
             List<Column> columns = table.getBaseSchema();
@@ -241,7 +241,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c1", columns.get(1).getName());
             Assertions.assertEquals(1, columns.get(1).getUniqueId());
-            Assertions.assertTrue(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
     }
 
@@ -257,7 +257,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
                 ORDER BY(c2)
                 PROPERTIES('cloud_native_fast_schema_evolution_v2'='%s');""", isFastSchemaEvolutionV2());
         LakeTable table = createTable(connectContext, createSql);
-        long oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
 
         {
             executeAlterAndWaitFinish(table, "ALTER TABLE t_test_sort_key_index_changed DROP COLUMN c1", true);
@@ -267,7 +267,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
             Assertions.assertEquals(0, columns.get(0).getUniqueId());
             Assertions.assertEquals("c2", columns.get(1).getName());
             Assertions.assertEquals(2, columns.get(1).getUniqueId());
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
             Assertions.assertTrue(indexMeta.getSchemaId() > oldSchemaId);
             Assertions.assertEquals(Arrays.asList(1), indexMeta.getSortKeyIdxes());
             Assertions.assertEquals(Arrays.asList(2), indexMeta.getSortKeyUniqueIds());
@@ -287,7 +287,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
                 DISTRIBUTED BY HASH(c0) BUCKETS 1
                 PROPERTIES('cloud_native_fast_schema_evolution_v2'='%s');""", isFastSchemaEvolutionV2());
         LakeTable table = createTable(connectContext, createSql);
-        long oldSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId();
+        long oldSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
 
         // zonemap index can be reused
         {
@@ -307,7 +307,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
             columnInfos.add(Pair.create("c3", DateType.DATETIME));
             columnInfos.add(Pair.create("c4", TypeFactory.createVarcharType(20)));
             Assertions.assertTrue(isSchemaTypeMatches(db, table, columnInfos));
-            Assertions.assertTrue(table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
+            Assertions.assertTrue(table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() > oldSchemaId);
         }
 
         // zonemap index can not be reused
@@ -337,8 +337,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            long baseIndexId = table.getBaseIndexMetaId();
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
             List<Column> schema = indexMeta.getSchema();
             List<Column> shortKeyCols = new ArrayList<>();
             List<Integer> sortKeyIdxes = indexMeta.getSortKeyIdxes();
@@ -383,8 +382,8 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            long baseIndexId = table.getBaseIndexMetaId();
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(baseIndexId);
+            long baseIndexMetaId = table.getBaseIndexMetaId();
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
             List<Column> schema = indexMeta.getSchema();
             if (schema.size() != columnInfos.size()) {
                 return false;
@@ -662,8 +661,8 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
                 TransactionState.TxnSourceType.BE, "127.0.0.1");
 
-        long baseIndexId = table.getBaseIndexMetaId();
-        MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta preAlterIndexMeta1 = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
         long runningTxn1 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
@@ -676,9 +675,9 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         OlapTableHistorySchema historySchema1 = getHistorySchema(job1);
         Assertions.assertNotNull(historySchema1);
         Assertions.assertTrue(historySchema1.getHistoryTxnIdThreshold() > runningTxn1);
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta1, historySchema1);
+        assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta1, historySchema1);
 
-        MaterializedIndexMeta preAlterIndexMeta2 = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        MaterializedIndexMeta preAlterIndexMeta2 = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
         long runningTxn2 = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
@@ -692,7 +691,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         OlapTableHistorySchema historySchema2 = getHistorySchema(job2);
         Assertions.assertNotNull(historySchema2);
         Assertions.assertTrue(historySchema2.getHistoryTxnIdThreshold() > runningTxn2);
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta2, historySchema2);
+        assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta2, historySchema2);
 
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         job1.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
@@ -707,7 +706,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         schemaChangeHandler.runAfterCatalogReady();
         Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
         Assertions.assertTrue(historySchema2.isExpired());
-        Assertions.assertNull(historySchema2.getSchemaByIndexId(baseIndexId).orElse(null));
+        Assertions.assertNull(historySchema2.getSchemaByIndexMetaId(baseIndexMetaId).orElse(null));
         Assertions.assertNull(historySchema2.getSchemaBySchemaId(preAlterIndexMeta2.getSchemaId()).orElse(null));
         job2.setFinishedTimeMs(System.currentTimeMillis() / 1000 - Config.alter_table_timeout_second - 100);
         schemaChangeHandler.runAfterCatalogReady();
@@ -734,8 +733,8 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(imageWriter);
         GlobalStateMgr.getCurrentState().getAlterJobMgr().save(imageWriter);
 
-        long baseIndexId = table.getBaseIndexMetaId();
-        MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByIndexId(baseIndexId).shallowCopy();
+        long baseMetaIndexId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByMetaId(baseMetaIndexId).shallowCopy();
 
         String alterSql = """
                         ALTER TABLE test_replay 
@@ -754,7 +753,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         Assertions.assertTrue(isSchemaTypeMatches(db, table, columnInfos));
         OlapTableHistorySchema historySchema = getHistorySchema(job);
         Assertions.assertNotNull(historySchema);
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta, historySchema);
+        assertHistorySchemaMatches(table, baseMetaIndexId, preAlterIndexMeta, historySchema);
 
         LocalMetastore restoredMetastore =
                 new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
@@ -771,8 +770,9 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         Assertions.assertNotNull(restoredDb, "Restored database not found");
         LakeTable restoredTable = (LakeTable) restoredMetastore.getTable(DB_NAME, table.getName());
         Assertions.assertNotNull(restoredTable, "Restored table not found");
-        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexId, preAlterIndexMeta),
-                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexId, restoredTable.getIndexMetaByIndexId(baseIndexId)));
+        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseMetaIndexId, preAlterIndexMeta),
+                SchemaInfo.fromMaterializedIndex(restoredTable, baseMetaIndexId,
+                        restoredTable.getIndexMetaByMetaId(baseMetaIndexId)));
 
         SchemaChangeHandler restoredHandler = restoredAlterJobMgr.getSchemaChangeHandler();
         LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -804,14 +804,16 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         columnInfos.add(Pair.create("c3", DateType.DATETIME));
         columnInfos.add(Pair.create("c4", TypeFactory.createVarcharType(20)));
         Assertions.assertTrue(isSchemaTypeMatches(restoredDb, restoredTable, columnInfos));
-        Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexId, table.getIndexMetaByIndexId(baseIndexId)),
-                SchemaInfo.fromMaterializedIndex(restoredTable, baseIndexId, restoredTable.getIndexMetaByIndexId(baseIndexId)));
+        Assertions.assertEquals(
+                SchemaInfo.fromMaterializedIndex(table, baseMetaIndexId, table.getIndexMetaByMetaId(baseMetaIndexId)),
+                SchemaInfo.fromMaterializedIndex(restoredTable, baseMetaIndexId,
+                        restoredTable.getIndexMetaByMetaId(baseMetaIndexId)));
         AlterJobV2 restoredJob = restoredHandler.getAlterJobsV2().get(job.getJobId());
         Assertions.assertNotNull(restoredJob);
         OlapTableHistorySchema restoredHistorySchema = getHistorySchema(restoredJob);
         Assertions.assertNotNull(restoredHistorySchema);
         Assertions.assertEquals(historySchema.getHistoryTxnIdThreshold(), restoredHistorySchema.getHistoryTxnIdThreshold());
-        assertHistorySchemaMatches(table, baseIndexId, preAlterIndexMeta, restoredHistorySchema);
+        assertHistorySchemaMatches(table, baseMetaIndexId, preAlterIndexMeta, restoredHistorySchema);
     }
 
     private OlapTableHistorySchema getHistorySchema(AlterJobV2 alterJob) {
@@ -824,11 +826,11 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         }
     }
 
-    protected void assertHistorySchemaMatches(LakeTable table, long indexId, MaterializedIndexMeta originMeta,
+    protected void assertHistorySchemaMatches(LakeTable table, long indexMetaId, MaterializedIndexMeta originMeta,
                                             OlapTableHistorySchema historySchema) {
-        SchemaInfo originSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, originMeta);
+        SchemaInfo originSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, originMeta);
         Assertions.assertNotNull(historySchema);
-        Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaByIndexId(indexId).orElse(null));
+        Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaByIndexMetaId(indexMetaId).orElse(null));
         Assertions.assertEquals(originSchemaInfo, historySchema.getSchemaBySchemaId(originMeta.getSchemaId()).orElse(null));
     }
 }

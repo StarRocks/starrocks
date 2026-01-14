@@ -73,7 +73,7 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
     /** Selected materialized index to scan. */
     protected static class SelectedMaterializedIndex {
 
-        final long indexId;
+        final long indexMetaId;
         final long schemaId;
 
         /**
@@ -88,26 +88,26 @@ public abstract class AbstractOlapTableScanNode extends ScanNode {
          */
         private final Optional<SchemaInfo> cachedSchema;
 
-        private SelectedMaterializedIndex(long indexId, long schemaId, @Nullable SchemaInfo cachedSchema) {
-            this.indexId = indexId;
+        private SelectedMaterializedIndex(long indexMetaId, long schemaId, @Nullable SchemaInfo cachedSchema) {
+            this.indexMetaId = indexMetaId;
             this.schemaId = schemaId;
             this.cachedSchema = Optional.ofNullable(cachedSchema);
         }
 
-        static SelectedMaterializedIndex build(OlapTable olapTable, long selectedIndexId) {
-            long indexId = selectedIndexId == -1 ? olapTable.getBaseIndexMetaId() : selectedIndexId;
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+        static SelectedMaterializedIndex build(OlapTable olapTable, long selectedIndexMetaId) {
+            long indexMetaId = selectedIndexMetaId == -1 ? olapTable.getBaseIndexMetaId() : selectedIndexMetaId;
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
             if (indexMeta == null) {
                 throw new RuntimeException(String.format(
-                        "can't find index, table name: %s, table id: %s, index id: %s",
-                        olapTable.getName(), olapTable.getId(), indexId));
+                        "can't find index, table name: %s, table id: %s, index meta id: %s",
+                        olapTable.getName(), olapTable.getId(), indexMetaId));
             }
             long schemaId = indexMeta.getSchemaId();
             SchemaInfo schema = null;
             if (olapTable.isCloudNativeTableOrMaterializedView()) {
-                schema = SchemaInfo.fromMaterializedIndex(olapTable, indexId, indexMeta);
+                schema = SchemaInfo.fromMaterializedIndex(olapTable, indexMetaId, indexMeta);
             }
-            return new SelectedMaterializedIndex(indexId, schemaId, schema);
+            return new SelectedMaterializedIndex(indexMetaId, schemaId, schema);
         }
     }
 }

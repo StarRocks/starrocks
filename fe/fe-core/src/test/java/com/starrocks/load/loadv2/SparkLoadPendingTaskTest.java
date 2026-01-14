@@ -139,7 +139,7 @@ public class SparkLoadPendingTaskTest {
                 result = table;
                 table.getPartitions();
                 result = partitions;
-                table.getIndexIdToSchema();
+                table.getIndexMetaIdToSchema();
                 result = indexIdToSchema;
                 table.getDefaultDistributionInfo();
                 result = distributionInfo;
@@ -302,7 +302,7 @@ public class SparkLoadPendingTaskTest {
                 result = table;
                 table.getPartitions();
                 result = partitions;
-                table.getIndexIdToSchema();
+                table.getIndexMetaIdToSchema();
                 result = indexIdToSchema;
                 table.getDefaultDistributionInfo();
                 result = distributionInfo;

@@ -300,8 +300,8 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return false;
         }
 
-        MaterializedIndexMeta localBaseIndexMeta = localTable.getIndexMetaByIndexId(localTable.getBaseIndexMetaId());
-        MaterializedIndexMeta remoteBaseIndexMeta = remoteTable.getIndexMetaByIndexId(remoteTable.getBaseIndexMetaId());
+        MaterializedIndexMeta localBaseIndexMeta = localTable.getIndexMetaByMetaId(localTable.getBaseIndexMetaId());
+        MaterializedIndexMeta remoteBaseIndexMeta = remoteTable.getIndexMetaByMetaId(remoteTable.getBaseIndexMetaId());
         if (localBaseIndexMeta.getSchemaVersion() != remoteBaseIndexMeta.getSchemaVersion()) {
             LOG.warn("Local table {}.{} has different schema version {} with remote table schema version {}",
                     localDatabase.getFullName(), localTable.getName(),

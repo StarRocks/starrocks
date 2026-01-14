@@ -69,8 +69,8 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
         for (PhysicalOlapScanOperator scan : scans) {
             // default false
             scan.setPreAggregation(false);
-            long selectedIndex = scan.getSelectedIndexId();
-            MaterializedIndexMeta meta = ((OlapTable) scan.getTable()).getIndexMetaByIndexId(selectedIndex);
+            long selectedIndexMetaId = scan.getSelectedIndexMetaId();
+            MaterializedIndexMeta meta = ((OlapTable) scan.getTable()).getIndexMetaByMetaId(selectedIndexMetaId);
             if (!meta.getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
@@ -146,9 +146,9 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
             // default false
             scan.setPreAggregation(false);
 
-            long selectedIndex = scan.getSelectedIndexId();
+            long selectedIndexMetaId = scan.getSelectedIndexMetaId();
             OlapTable olapTable = ((OlapTable) scan.getTable());
-            MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(selectedIndex);
+            MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByMetaId(selectedIndexMetaId);
             if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
