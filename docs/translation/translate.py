@@ -2,7 +2,6 @@ import os
 import yaml
 import argparse
 import re
-import time
 from google import genai
 from google.genai import types
 
@@ -39,7 +38,8 @@ class StarRocksTranslator:
             raise RuntimeError(f"Error reading config file '{path}': {e}") from e
 
     def _load_dict_as_string(self, path: str) -> str:
-        if not os.path.exists(path): return ""
+        if not os.path.exists(path):
+            return ""
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
             return "\n".join([f"{k}: {v}" for k, v in data.items()]) if data else ""
@@ -49,7 +49,9 @@ class StarRocksTranslator:
         return len(re.findall(tag_pattern, original)) == len(re.findall(tag_pattern, translated))
 
     def translate_file(self, input_file: str):
-        if not os.path.exists(input_file): return
+        if not os.path.exists(input_file):
+            print(f"Warning: Input file not found, skipping: {input_file}")
+            return
         
         # 1. Detect Source Language from path
         source_lang = "en"

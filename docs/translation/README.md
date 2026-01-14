@@ -59,8 +59,8 @@ python docs/translation/translate.py -l ja \
 
 ## Important Notes
 
-- Output Paths: The script automatically maps paths. `docs/en/item.md` translated to `zh` will automatically be saved to `docs/zh/item.md`.
-- Safety Skip: If the target file already exists and has been modified more recently than the source file, the script will skip it to protect manual edits.
-- Terminology: Translations are guided by dictionaries in `docs/translation/configs/language_dicts/`. Update these YAML files to fix recurring translation errors.
-- MDX Tags: The script validates that the number of `<`Components `/>` matches the original. Check the console output for "Validation warnings."
+- **Output Paths:** The script automatically maps paths. `docs/en/item.md` translated to `zh` will automatically be saved to `docs/zh/item.md`.
+- **Safety Skip:** If the target file already exists and has been modified more recently than the source file, the script will skip it to protect manual edits.
+- **Terminology:** Translations are guided by dictionaries in `docs/translation/configs/language_dicts/`. Update these YAML files to fix recurring translation errors.
+- **MDX Tags:** The script validates that the number of `<`Components `/>` matches the original. Check the console output for "Validation warnings."
 
