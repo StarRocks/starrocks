@@ -15,6 +15,7 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
@@ -334,7 +335,11 @@ public class MysqlCodec {
                 ScalarType charType = ((ScalarType) type);
                 int charLength = charType.getLength();
                 if (charLength == -1) {
-                    charLength = (type.getPrimitiveType() == PrimitiveType.CHAR) ? 255 : 1048576 ;
+                    if (GlobalVariable.isEnableLargeStringMetadataLength()) {
+                        charLength = (type.getPrimitiveType() == PrimitiveType.CHAR) ? 255 : 1048576;
+                    } else {
+                        charLength = 64;
+                    }
                 }
                 // utf8 charset
                 return charLength * 3;

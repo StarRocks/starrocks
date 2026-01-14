@@ -6,4 +6,6 @@ displayed_sidebar: docs
 
 import DocCardList from '@theme/DocCardList';
 
+> 提示：如果 BI 工具依赖返回结果集元数据中的字符串最大长度，而该长度小于真实值导致返回空值，可将全局变量 `enable_large_string_metadata_length` 置为 `true`，让字符串列在元数据中返回 1 MB 长度。
+
 <DocCardList />
