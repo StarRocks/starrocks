@@ -325,7 +325,6 @@ inline Status DeltaWriterImpl::flush_async() {
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
-<<<<<<< HEAD
         st = _flush_token->submit(std::move(_mem_table), false, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
             if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
                 if (seg) {
@@ -340,29 +339,6 @@ inline Status DeltaWriterImpl::flush_async() {
                         << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
             }
         });
-        _mem_table.reset(nullptr);
-        _last_write_ts = 0;
-=======
-        st = _flush_token->submit(
-                std::move(_mem_table), _eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
-                    if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
-                        if (seg) {
-                            _tablet_manager->add_in_writing_data_size(_tablet_id, seg->data_size());
-                        } else if (flush_data_size > 0) {
-                            // When enable load spill, seg is nullptr, so we need to use flush_data_size
-                            _tablet_manager->add_in_writing_data_size(_tablet_id, flush_data_size);
-                        }
-                        if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
-                            _is_immutable.store(true, std::memory_order_relaxed);
-                        }
-                        VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
-                                << " _immutable_tablet_size=" << _immutable_tablet_size
-                                << ", flush data size=" << (seg ? seg->data_size() : flush_data_size)
-                                << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
-                                << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
-                    }
-                });
->>>>>>> 49118301b9 ([BugFix] Fix be crash due to memtable finalize failed (#67787))
     }
     return st;
 }
