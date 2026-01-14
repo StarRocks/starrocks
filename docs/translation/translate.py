@@ -66,8 +66,8 @@ class StarRocksTranslator:
         output_file = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
         
         # Skip if target exists and is newer (protects manual edits)
-        if os.path.exists(output_file) and os.path.getmtime(output_file) > os.path.getmtime(abs_input):
-            print(f"⏩ Skipping {output_file}: Target is newer than source.")
+        if os.path.exists(output_file) and os.path.getmtime(output_file) >= os.path.getmtime(abs_input):
+            print(f"⏩ Skipping {output_file}: Target is newer than, or same as, the source.")
             return
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
