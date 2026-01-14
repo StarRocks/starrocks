@@ -118,6 +118,22 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         ctx.cleanup();
     }
 
+    /**
+     * Determines if the connection should be terminated.
+     * <p>
+     * Termination logic:
+     * <ul>
+     *   <li>Returns {@code true} if the terminated flag is already set (client disconnected)</li>
+     *   <li>Returns {@code false} if no statement has been executed yet (executor is null)</li>
+     *   <li>During graceful exit (leader transfer), returns {@code true} only if the last executed
+     *       statement is NOT a pre-query SQL. Pre-query SQLs (like {@code select @@query_timeout},
+     *       {@code set query_timeout=xxx}, {@code select connection_id()}) are initialization queries
+     *       sent by JDBC drivers and should not cause connection termination to avoid breaking
+     *       client connections during leadership transitions.</li>
+     * </ul>
+     *
+     * @return {@code true} if the connection should be terminated, {@code false} otherwise
+     */
     private boolean isTerminated() {
         if (terminated) {
             return true;
