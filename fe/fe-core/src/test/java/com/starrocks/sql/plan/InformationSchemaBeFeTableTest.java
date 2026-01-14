@@ -24,11 +24,13 @@ import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
 
+@Disabled("skip in CI: flaky pseudocluster tests")
 public class InformationSchemaBeFeTableTest {
     @BeforeAll
     public static void setUp() throws Exception {

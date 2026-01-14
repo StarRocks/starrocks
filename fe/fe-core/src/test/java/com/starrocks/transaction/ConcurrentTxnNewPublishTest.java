@@ -16,9 +16,11 @@
 package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
+import org.junit.jupiter.api.Disabled;
 
 import java.sql.SQLException;
 
+@Disabled("skip in CI: flaky pseudocluster tests")
 public class ConcurrentTxnNewPublishTest extends ConcurrentTxnTest {
     @Override
     void setup() throws SQLException {

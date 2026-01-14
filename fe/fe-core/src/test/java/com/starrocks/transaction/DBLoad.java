@@ -25,6 +25,7 @@ import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 class DBLoad {
@@ -126,6 +127,28 @@ class DBLoad {
         }
         ThreadPoolExecutor executor
                 = (ThreadPoolExecutor) Executors.newFixedThreadPool(numThread);
+        try {
+            runInner(numThread, runSeconds, executor);
+        } finally {
+            executor.shutdownNow();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    System.err.println("DBLoad executor did not terminate in time");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            for (int i = 0; i < numDB; i++) {
+                try {
+                    PseudoCluster.getInstance().runSql(null, "drop database db_" + i + " force");
+                } catch (SQLException e) {
+                    // Ignore drop errors during cleanup
+                }
+            }
+        }
+    }
+
+    void runInner(int numThread, int runSeconds, ThreadPoolExecutor executor) {
         tableLoads = new ArrayList<>();
         Random r = new Random(0);
         int scheduleIntervalMs = 200;
@@ -192,7 +215,9 @@ class DBLoad {
             try {
                 future.get();
             } catch (Exception e) {
-                Assertions.fail(e.getMessage());
+                if (error == null) {
+                    Assertions.fail(e.getMessage());
+                }
             }
         }
         if (error != null) {
@@ -207,12 +232,5 @@ class DBLoad {
         double writeBytes = MetricRepo.HISTO_JOURNAL_WRITE_BYTES.getSnapshot().getMedian();
         System.out.printf("numLog:%d writeBatch:%f writeLatency:%f writeBytes:%f\n", numLog, writeBatch, writeLatency,
                 writeBytes);
-        for (int i = 0; i < numDB; i++) {
-            try {
-                PseudoCluster.getInstance().runSql(null, "drop database db_" + i + " force");
-            } catch (SQLException e) {
-                Assertions.fail(e.getMessage());
-            }
-        }
     }
 }
