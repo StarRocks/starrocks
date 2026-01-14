@@ -45,7 +45,9 @@ class StarRocksTranslator:
             return "\n".join([f"{k}: {v}" for k, v in data.items()]) if data else ""
 
     def validate_mdx(self, original: str, translated: str) -> bool:
-        tag_pattern = r'<[a-zA-Z0-9/.\s]+>'
+        # Match MDX/JSX-style tags, including attributes, hyphen/underscore in names,
+        # and optional self-closing slash with or without preceding whitespace.
+        tag_pattern = r'<\s*/?\s*[A-Za-z_][A-Za-z0-9_.-]*\b[^<>]*?/?>'
         return len(re.findall(tag_pattern, original)) == len(re.findall(tag_pattern, translated))
 
     def translate_file(self, input_file: str):
