@@ -1114,9 +1114,9 @@ TEST_F(PartitionChunkWriterTest, test_connector_sink_profile_metrics) {
         // Write some chunks
         for (size_t i = 0; i < 3; ++i) {
             ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
-            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + std::to_string(i)));
-            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + std::to_string(i)));
-            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + std::to_string(i)));
+            chunk->get_column_by_index(0)->append_datum(Slice("ccc" + std::to_string(i)));
+            chunk->get_column_by_index(0)->append_datum(Slice("bbb" + std::to_string(i)));
+            chunk->get_column_by_index(0)->append_datum(Slice("aaa" + std::to_string(i)));
 
             auto ret = partition_writer->write(chunk);
             EXPECT_OK(ret);
