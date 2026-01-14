@@ -595,67 +595,6 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
-    public void testCustomFileIOImplementation(@Mocked RESTSessionCatalog restCatalog) {
-        // Test that custom io-impl is properly set in catalog properties
-        String customIOImpl = "org.apache.iceberg.gcp.gcs.GCSFileIO";
-        Map<String, String> properties = new HashMap<>();
-        properties.put("iceberg.catalog.io-impl", customIOImpl);
-
-        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
-                "test_catalog", new Configuration(), properties);
-
-        // Verify custom io-impl was set in the internal properties
-        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
-        assertEquals(customIOImpl, restCatalogProperties.get("io-impl"),
-                "Custom io-impl should be set for Iceberg catalog");
-    }
-
-    @Test
-    public void testDefaultFileIOImplementation(@Mocked RESTSessionCatalog restCatalog) {
-        // Test that default IcebergCachingFileIO is used when io-impl is not specified
-        Map<String, String> properties = new HashMap<>();
-
-        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
-                "test_catalog", new Configuration(), properties);
-
-        // Verify default IcebergCachingFileIO was set
-        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
-        assertEquals("com.starrocks.connector.iceberg.io.IcebergCachingFileIO",
-                restCatalogProperties.get("io-impl"),
-                "Default IcebergCachingFileIO should be used when io-impl is not specified");
-    }
-
-    @Test
-    public void testMetricsReportingDisabled(@Mocked RESTSessionCatalog restCatalog) {
-        // Test that metrics reporting can be disabled via rest.metrics.reporting-enabled property
-        Map<String, String> properties = new HashMap<>();
-        properties.put("iceberg.catalog.rest.metrics.reporting-enabled", "false");
-
-        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
-                "test_catalog", new Configuration(), properties);
-
-        // Verify metrics reporter is NOT set when metrics reporting is disabled
-        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
-        Assertions.assertNull(restCatalogProperties.get("metrics-reporter-impl"),
-                "Metrics reporter should not be set when metrics reporting is disabled");
-    }
-
-    @Test
-    public void testMetricsReportingEnabled(@Mocked RESTSessionCatalog restCatalog) {
-        // Test that metrics reporting is enabled by default
-        Map<String, String> properties = new HashMap<>();
-
-        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
-                "test_catalog", new Configuration(), properties);
-
-        // Verify metrics reporter is set when metrics reporting is enabled (default)
-        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
-        assertEquals("com.starrocks.connector.iceberg.cost.IcebergMetricsReporter",
-                restCatalogProperties.get("metrics-reporter-impl"),
-                "Metrics reporter should be set when metrics reporting is enabled");
-    }
-
-    @Test
     public void testGoogleSecurityConfiguration(@Mocked RESTSessionCatalog restCatalog) {
         // Test Google security configuration (Iceberg 1.10+ Google AuthManager)
         Map<String, String> properties = new HashMap<>();

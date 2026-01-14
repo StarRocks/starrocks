@@ -82,11 +82,6 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     public static final String USER_AGENT = "header.User-Agent";
     public static final String KEY_VIEW_ENDPOINTS_ENABLED = "rest.view-endpoints-enabled";
 
-    // FileIO configuration
-    public static final String KEY_IO_IMPL = "io-impl";
-    // Metrics reporting configuration
-    public static final String KEY_METRICS_REPORTING_ENABLED = "rest.metrics.reporting-enabled";
-
     // Google AuthManager properties (Iceberg 1.10+)
     public static final String REST_AUTH_TYPE = "rest.auth.type";
     public static final String AUTH_TYPE_GOOGLE = "google";
@@ -114,23 +109,8 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             }
         });
 
-        // Configure FileIO implementation
-        // Allow users to specify custom io-impl (e.g., org.apache.iceberg.gcp.gcs.GCSFileIO)
-        // Default to IcebergCachingFileIO for caching benefits
-        String ioImpl = restCatalogProperties.get(KEY_IO_IMPL);
-        if (Strings.isNullOrEmpty(ioImpl)) {
-            restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
-        } else {
-            restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, ioImpl);
-        }
-
-        // Configure metrics reporting
-        // Allow users to enable/disable metrics reporting via rest.metrics.reporting-enabled
-        boolean metricsReportingEnabled = PropertyUtil.propertyAsBoolean(
-                restCatalogProperties, KEY_METRICS_REPORTING_ENABLED, true);
-        if (metricsReportingEnabled) {
-            restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
-        }
+        restCatalogProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
+        restCatalogProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
 
         boolean enableVendedCredentials =
                 Boolean.parseBoolean(restCatalogProperties.getOrDefault(KEY_VENDED_CREDENTIALS_ENABLED, "true"));
