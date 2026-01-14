@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
+        version: ["4.1", "4.1", "4.0", "3.5", "3.4"]
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
