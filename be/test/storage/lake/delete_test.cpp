@@ -116,7 +116,7 @@ public:
             txn_log1->set_tablet_id(_tablet_metadata->id());
             txn_log1->set_txn_id(txn_id1);
             auto op_write1 = txn_log1->mutable_op_write();
-            for (const auto& f : writer->segments()) {
+            for (const auto& f : writer->files()) {
                 op_write1->mutable_rowset()->add_segments(f.path);
             }
             op_write1->mutable_rowset()->set_num_rows(writer->num_rows());
@@ -131,7 +131,7 @@ public:
             rowset->set_id(1);
             rowset->set_num_rows(chunk.num_rows());
             auto* segs = rowset->mutable_segments();
-            for (const auto& file : writer->segments()) {
+            for (const auto& file : writer->files()) {
                 segs->Add()->assign(file.path);
             }
         }
@@ -159,7 +159,7 @@ public:
             txn_log2->set_tablet_id(_tablet_metadata->id());
             txn_log2->set_txn_id(txn_id2);
             auto op_write2 = txn_log2->mutable_op_write();
-            for (const auto& f : writer->segments()) {
+            for (const auto& f : writer->files()) {
                 op_write2->mutable_rowset()->add_segments(f.path);
             }
             op_write2->mutable_rowset()->set_num_rows(writer->num_rows());
@@ -174,7 +174,7 @@ public:
             rowset->set_id(2);
             rowset->set_num_rows(chunk2.num_rows());
             auto* segs = rowset->mutable_segments();
-            for (const auto& file : writer->segments()) {
+            for (const auto& file : writer->files()) {
                 segs->Add()->assign(file.path);
             }
         }
