@@ -92,7 +92,7 @@ Compute Node 负责在存算分离部署中执行查询计划。
 有三个文件要下载：
 
 - 部署 StarRocks 和 MinIO 环境的 Docker Compose 文件
-- 纽约市崩溃数据
+- 纽约市交通事故数据
 - 天气数据
 
 本指南使用 MinIO，它是根据 GNU Affero 通用公共许可证提供的兼容 S3 的对象存储。
