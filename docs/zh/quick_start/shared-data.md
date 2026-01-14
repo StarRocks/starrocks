@@ -51,7 +51,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### `/etc/hosts`
 
-本指南中使用的提取方法是 Stream Load。Stream Load 连接到 FE 服务以启动提取作业。然后，FE 将作业分配给后端节点，即本指南中的 CN。为了使提取作业能够连接到 CN，CN 的名称必须可用于您的操作系统。将此行添加到 `/etc/hosts`：
+本指南中使用的提取方法是 Stream Load。Stream Load 连接到 FE 服务以启动导入作业。然后，FE 将作业分配给后端节点，即本指南中的 CN。为了使提取作业能够连接到 CN，CN 的名称必须可用于您的操作系统。将此行添加到 `/etc/hosts`：
 
 ```bash
 127.0.0.1 starrocks-cn
