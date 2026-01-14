@@ -15,7 +15,7 @@ Some rules to remember:
 Here is the translation dictionary for domain specific words. Always translate the words in the dictionary as specified.
 
 ```yaml
-{dictionary}
+${dictionary}
 ```
 
 ## Formatting Rules
