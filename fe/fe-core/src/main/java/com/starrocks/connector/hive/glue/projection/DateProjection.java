@@ -156,24 +156,27 @@ public class DateProjection implements ColumnProjection {
             return ChronoUnit.HOURS;
         }
 
-        // Check for day-of-month pattern (d or dd, but not D which is day-of-year)
-        boolean hasDay = format.matches(".*(?<![DdM])d{1,2}(?![dDM]).*");
+        // Check for day patterns: 'd' is day-of-month (1-31), 'D' is day-of-year (1-366)
+        // Both require daily iteration
+        boolean hasDayOfMonth = format.contains("d");
+        boolean hasDayOfYear = format.contains("D");
+        boolean hasDay = hasDayOfMonth || hasDayOfYear;
 
         // Check for month pattern (M or MM, but not m which is minutes)
         boolean hasMonth = format.contains("M");
 
-        // If format has no day component
-        if (!hasDay) {
-            // If format has no month component either, it's year-only
-            if (!hasMonth) {
-                return ChronoUnit.YEARS;
-            }
-            // Format has month but no day, e.g., yyyy-MM
+        // If format has any day component (day-of-month or day-of-year), use DAYS
+        if (hasDay) {
+            return ChronoUnit.DAYS;
+        }
+
+        // If format has month but no day, e.g., yyyy-MM
+        if (hasMonth) {
             return ChronoUnit.MONTHS;
         }
 
-        // Default to days for formats with day component
-        return ChronoUnit.DAYS;
+        // Year-only format, e.g., yyyy
+        return ChronoUnit.YEARS;
     }
 
     @Override

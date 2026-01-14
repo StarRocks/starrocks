@@ -261,14 +261,28 @@ public class IntegerProjectionTest {
     }
 
     @Test
-    public void testNullFilterValueReturnsEmpty() {
+    public void testEmptyOptionalReturnsAllValues() {
         IntegerProjection projection = new IntegerProjection(
                 "year", "2020,2025", Optional.empty(), Optional.empty());
 
-        // Simulate a null value wrapped in Optional (defensive check)
+        // Optional.ofNullable(null) returns Optional.empty(), meaning no filter applied
         List<String> values = projection.getProjectedValues(Optional.ofNullable(null));
 
-        // Optional.ofNullable(null) returns Optional.empty(), so all values returned
+        // No filter means all values are returned
         assertEquals(6, values.size());
+    }
+
+    @Test
+    public void testInvalidFilterValueReturnsEmpty() {
+        IntegerProjection projection = new IntegerProjection(
+                "year", "2020,2025", Optional.empty(), Optional.empty());
+
+        // Invalid non-numeric string should return empty list (consistent with DateProjection)
+        List<String> values = projection.getProjectedValues(Optional.of("invalid"));
+        assertTrue(values.isEmpty());
+
+        // Another invalid format
+        values = projection.getProjectedValues(Optional.of("abc123"));
+        assertTrue(values.isEmpty());
     }
 }

@@ -289,4 +289,41 @@ public class DateProjectionTest {
         assertEquals("202402", values.get(1));
         assertEquals("202403", values.get(2));
     }
+
+    @Test
+    public void testCompactDateFormatInfersDays() {
+        // Compact date format without separators (yyyyMMdd) should infer DAYS
+        DateProjection projection = new DateProjection(
+                "dt", "20240101,20240105", "yyyyMMdd",
+                Optional.empty(), Optional.empty());
+
+        List<String> values = projection.getProjectedValues(Optional.empty());
+
+        // Should generate 5 daily values, not 1 monthly value
+        assertEquals(5, values.size());
+        assertEquals("20240101", values.get(0));
+        assertEquals("20240102", values.get(1));
+        assertEquals("20240103", values.get(2));
+        assertEquals("20240104", values.get(3));
+        assertEquals("20240105", values.get(4));
+    }
+
+    @Test
+    public void testDayOfYearFormatInfersDays() {
+        // Day-of-year format (yyyyDDD) should infer DAYS, not YEARS
+        // D = day-of-year (1-366), different from d = day-of-month (1-31)
+        DateProjection projection = new DateProjection(
+                "dt", "2024001,2024005", "yyyyDDD",
+                Optional.empty(), Optional.empty());
+
+        List<String> values = projection.getProjectedValues(Optional.empty());
+
+        // Should generate 5 daily values
+        assertEquals(5, values.size());
+        assertEquals("2024001", values.get(0));
+        assertEquals("2024002", values.get(1));
+        assertEquals("2024003", values.get(2));
+        assertEquals("2024004", values.get(3));
+        assertEquals("2024005", values.get(4));
+    }
 }

@@ -154,7 +154,13 @@ public class IntegerProjection implements ColumnProjection {
                 return Collections.emptyList();
             }
             // Single value filter
-            long filter = toLong(val);
+            long filter;
+            try {
+                filter = toLong(val);
+            } catch (NumberFormatException e) {
+                // Invalid number format - return empty list (consistent with DateProjection)
+                return Collections.emptyList();
+            }
             if (filter >= leftBound && filter <= rightBound) {
                 // Check if the filter value aligns with the interval
                 if ((filter - leftBound) % interval == 0) {

@@ -46,6 +46,9 @@ import java.util.regex.Pattern;
  */
 public class PartitionProjectionService {
 
+    // Pre-compiled pattern for template variable expansion (e.g., ${column_name})
+    private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\$\\{([^}]+)\\}");
+
     /**
      * Checks if partition projection is enabled for the given table.
      *
@@ -411,9 +414,8 @@ public class PartitionProjectionService {
             lowercaseKeyMap.put(entry.getKey().toLowerCase(), entry.getValue());
         }
 
-        // Use regex to replace template variables case-insensitively
-        Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
-        Matcher matcher = pattern.matcher(template);
+        // Use pre-compiled pattern to replace template variables case-insensitively
+        Matcher matcher = TEMPLATE_PATTERN.matcher(template);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
             String columnName = matcher.group(1);
