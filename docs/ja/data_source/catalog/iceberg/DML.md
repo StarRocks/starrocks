@@ -117,4 +117,44 @@ Iceberg テーブルにロードされるクエリストートメントの結果
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## TRUNCATE
+
+Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。
+
+### 構文
+
+```SQL
+TRUNCATE TABLE <table_name>
+```
+
+### パラメーター
+
+- `table_name`: データを削除する Iceberg テーブルの名前。次の形式が使用できます：
+  - 完全修飾名：`catalog_name.database_name.table_name`
+  - データベース修飾名（catalog 設定後）：`database_name.table_name`
+  - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
+
+### 例
+
+#### 例 1: 完全修飾名を使用してテーブルを truncate
+
+```SQL
+TRUNCATE TABLE iceberg_catalog.my_db.my_table;
+```
+
+#### 例 2: catalog 設定後にテーブルを truncate
+
+```SQL
+SET CATALOG iceberg_catalog;
+TRUNCATE TABLE my_db.my_table;
+```
+
+#### 例 3: catalog とデータベースの設定後にテーブルを truncate
+
+```SQL
+SET CATALOG iceberg_catalog;
+USE my_db;
+TRUNCATE TABLE my_table;
+```
+
 ---

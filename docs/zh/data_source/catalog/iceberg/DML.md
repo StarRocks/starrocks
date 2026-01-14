@@ -117,4 +117,44 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## TRUNCATE
+
+您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。
+
+### 语法
+
+```SQL
+TRUNCATE TABLE <table_name>
+```
+
+### 参数
+
+- `table_name`: 要清空数据的 Iceberg 表名称。您可以使用：
+  - 完全限定名称：`catalog_name.database_name.table_name`
+  - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
+  - 仅表名（设置 catalog 和数据库后）：`table_name`
+
+### 示例
+
+#### 示例 1：使用完全限定名称清空表
+
+```SQL
+TRUNCATE TABLE iceberg_catalog.my_db.my_table;
+```
+
+#### 示例 2：设置 catalog 后清空表
+
+```SQL
+SET CATALOG iceberg_catalog;
+TRUNCATE TABLE my_db.my_table;
+```
+
+#### 示例 3：设置 catalog 和数据库后清空表
+
+```SQL
+SET CATALOG iceberg_catalog;
+USE my_db;
+TRUNCATE TABLE my_table;
+```
+
 ---
