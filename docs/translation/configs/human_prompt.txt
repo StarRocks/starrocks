@@ -32,6 +32,7 @@ Regarding StarRocks specifics, we have a list of product names and technical phr
 - Docker
 - Kubernetes
 - Kubernetes secret
+- MinIO
 
 These words appear often on lists like this:
 
