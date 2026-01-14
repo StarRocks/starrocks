@@ -199,7 +199,7 @@ docker compose run minio_mc
 这是 `FE` 配置的一部分，它指定 StarRocks 部署将使用共享数据。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
 
 ```sh
-# enable the shared data run mode
+# 启用共享数据运行模式
 run_mode = shared_data
 cloud_native_storage_type = S3
 ```
