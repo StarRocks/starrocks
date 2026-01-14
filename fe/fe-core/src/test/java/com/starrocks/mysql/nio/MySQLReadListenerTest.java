@@ -44,19 +44,28 @@ public class MySQLReadListenerTest {
 
     private MySQLReadListener listener;
 
+    private void resetGracefulExitFlag() {
+        Deencapsulation.setField(GracefulExitFlag.class, "GRACEFUL_EXIT", 
+            new java.util.concurrent.atomic.AtomicBoolean(false));
+    }
+
+    private boolean invokeIsTerminated() throws Exception {
+        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
+        method.setAccessible(true);
+        return (boolean) method.invoke(listener);
+    }
+
     @BeforeEach
     public void setUp() {
         // Reset GracefulExitFlag before each test
-        Deencapsulation.setField(GracefulExitFlag.class, "GRACEFUL_EXIT", 
-            new java.util.concurrent.atomic.AtomicBoolean(false));
+        resetGracefulExitFlag();
         listener = new MySQLReadListener(ctx, connectProcessor);
     }
 
     @AfterEach
     public void tearDown() {
         // Reset GracefulExitFlag after each test
-        Deencapsulation.setField(GracefulExitFlag.class, "GRACEFUL_EXIT", 
-            new java.util.concurrent.atomic.AtomicBoolean(false));
+        resetGracefulExitFlag();
     }
 
     @Test
@@ -64,10 +73,7 @@ public class MySQLReadListenerTest {
         // Set terminated flag to true
         Deencapsulation.setField(listener, "terminated", true);
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         Assertions.assertTrue(result, "isTerminated should return true when terminated flag is true");
     }
@@ -91,10 +97,7 @@ public class MySQLReadListenerTest {
             result = stmt;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         Assertions.assertTrue(result, 
             "isTerminated should return true when graceful exit is active and statement is not pre-query SQL");
@@ -119,10 +122,7 @@ public class MySQLReadListenerTest {
             result = stmt;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         Assertions.assertFalse(result, 
             "isTerminated should return false when graceful exit is active but statement is pre-query SQL");
@@ -147,10 +147,7 @@ public class MySQLReadListenerTest {
             result = stmt;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         Assertions.assertFalse(result, 
             "isTerminated should return false when graceful exit is not active");
@@ -172,10 +169,7 @@ public class MySQLReadListenerTest {
             result = null;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         // When parsedStmt is null, isPreQuerySQL returns false, so isTerminated should return true
         Assertions.assertTrue(result, 
@@ -195,10 +189,7 @@ public class MySQLReadListenerTest {
             result = null;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         // When executor is null, we should return false (not terminated yet)
         Assertions.assertFalse(result, 
@@ -224,10 +215,7 @@ public class MySQLReadListenerTest {
             result = stmt;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         Assertions.assertFalse(result, 
             "isTerminated should return false when graceful exit is active but statement is a pre-query SET");
@@ -252,10 +240,7 @@ public class MySQLReadListenerTest {
             result = stmt;
         }};
         
-        // Call isTerminated using reflection
-        Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
-        method.setAccessible(true);
-        boolean result = (boolean) method.invoke(listener);
+        boolean result = invokeIsTerminated();
         
         Assertions.assertFalse(result, 
             "isTerminated should return false when graceful exit is active but statement is connection_id()");
