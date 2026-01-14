@@ -172,6 +172,7 @@ inline void make_room(std::string* s, size_t n) {
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
+<<<<<<< HEAD
 template <typename Container, typename T = typename Container::value_type>
 inline typename std::enable_if<
         std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
@@ -180,8 +181,32 @@ stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
     ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
 }
 
+=======
+template <VecContainer Container>
+inline void stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
+    using T = typename Container::value_type;
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    reinterpret_cast<DstType*>(vec)->resize(new_size);
+    // Compiler memory barrier to prevent instruction reordering across the resize operation
+    asm volatile("" : : : "memory");
+}
+
+template <VecContainer Container>
+inline void stl_vector_resize_uninitialized(Container* vec, size_t reserve_size, size_t new_size) {
+    using T = typename Container::value_type;
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    reinterpret_cast<DstType*>(vec)->resize(reserve_size);
+    vec->resize(new_size);
+    // Compiler memory barrier to prevent instruction reordering across the resize operation
+    asm volatile("" : : : "memory");
+}
+
+>>>>>>> 692d67ebdc ([BugFix] Fix strict-aliasing violation in raw_container.h (#67876))
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
-    ((RawString*)str)->resize(new_size);
+    using DstType __attribute__((may_alias)) = RawString;
+    reinterpret_cast<DstType*>(str)->resize(new_size);
+    // Compiler memory barrier to prevent instruction reordering across the resize operation
+    asm volatile("" : : : "memory");
 }
 
 } // namespace starrocks::raw
