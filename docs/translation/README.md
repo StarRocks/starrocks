@@ -6,8 +6,9 @@ Docusaurus MDX components and enforcing official terminology.
 ## Setup
 
 1. **API Key:** Obtain a Gemini API Key and export it
-  ```sh
-  export GEMINI_API_KEY="your_key_here"
+    ```sh
+    export GEMINI_API_KEY="your_key_here"
+    ```
 2. **Python:** Ensure Python 3.10+ and `pip` are installed.
 3. **Environment:** (Optional) Add `export GEMINI_API_KEY="your_key_here"` to your `~/.zshrc` or `~/.bashrc` to avoid manual exports.
 
