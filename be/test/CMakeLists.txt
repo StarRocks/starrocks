@@ -307,6 +307,7 @@ set(EXEC_FILES
         ./storage/lake/auto_increment_partial_update_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
+        ./storage/lake/delete_test.cpp
         ./storage/lake/condition_update_test.cpp
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
