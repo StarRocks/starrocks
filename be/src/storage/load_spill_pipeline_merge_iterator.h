@@ -55,6 +55,9 @@ struct LoadSpillPipelineMergeTask {
     // Used to ensure roughly equal work distribution and for performance analysis.
     size_t total_block_groups = 0;
     size_t total_block_bytes = 0;
+
+    // Release block group in advance to free load spill disk space
+    void release_block_groups() { block_groups.clear(); }
 };
 
 /**

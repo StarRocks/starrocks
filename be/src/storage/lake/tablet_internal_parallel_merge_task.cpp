@@ -90,6 +90,8 @@ void TabletInternalParallelMergeTask::run() {
         SCOPED_TIMER(_write_io_timer);
         st = _writer->finish();
     }
+    // Release block groups to free up spill disk space
+    _task->release_block_groups();
     timer.stop();
     LOG(INFO) << fmt::format(
             "SpillMemTableSink parallel merge blocks to segment finished, txn:{} tablet:{} "
