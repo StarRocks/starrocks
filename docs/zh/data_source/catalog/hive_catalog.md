@@ -1166,6 +1166,56 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## 清空 Hive 表
+
+您可以使用 [TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) 语句快速删除 Hive 托管表中的所有数据。该操作支持：
+
+- 清空非分区表中的所有数据
+- 清空分区表中的所有分区
+- 清空分区表中的指定分区
+
+### 语法
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### 参数
+
+- `table_name`: 要清空数据的 Hive 表名称。清空表数据前，需要[切换至目标 Hive Catalog 和 Database](#切换-hive-catalog-和数据库)。
+- `partition_name = partition_value`: 分区列的名称和值，用于识别要清空的分区。
+
+### 示例
+
+以下示例的前提是已切换至目标 Hive Catalog 和 Database。
+
+1. 清空非分区表：
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. 清空分区表所有分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. 清空单分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. 清空多分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
+   ```
+
 ## 删除 Hive 表
 
 同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/user_privs/authorization/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
