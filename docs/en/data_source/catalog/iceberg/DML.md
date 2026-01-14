@@ -117,4 +117,44 @@ The partitions into which you want to load data. You must specify all partition 
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## TRUNCATE
+
+You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.
+
+### Syntax
+
+```SQL
+TRUNCATE TABLE <table_name>
+```
+
+### Parameters
+
+- `table_name`: The name of the Iceberg table that you want to truncate data from. You can use:
+  - Fully qualified name: `catalog_name.database_name.table_name`
+  - Database-qualified name (after setting catalog): `database_name.table_name`
+  - Table name only (after setting catalog and database): `table_name`
+
+### Examples
+
+#### Example 1: Truncate a table using fully qualified name
+
+```SQL
+TRUNCATE TABLE iceberg_catalog.my_db.my_table;
+```
+
+#### Example 2: Truncate a table after setting catalog
+
+```SQL
+SET CATALOG iceberg_catalog;
+TRUNCATE TABLE my_db.my_table;
+```
+
+#### Example 3: Truncate a table after setting catalog and database
+
+```SQL
+SET CATALOG iceberg_catalog;
+USE my_db;
+TRUNCATE TABLE my_table;
+```
+
 ---
