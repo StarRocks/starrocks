@@ -353,7 +353,7 @@ PROPERTIES ("storage_volume" = "s3_volume")
 
 ---
 
-## 加载两个数据集
+## 导入两个数据集
 
 有很多方法可以将数据加载到 StarRocks 中。对于本教程，最简单的方法是使用 curl 和 StarRocks Stream Load。
 
