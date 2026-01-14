@@ -180,13 +180,17 @@ inline void make_room(std::string* s, size_t n) {
 template <VecContainer Container>
 inline void stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
     using T = typename Container::value_type;
-    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    static_cast<DstType*>(vec)->resize(new_size);
+    asm volatile("" : : : "memory");
 }
 
 template <VecContainer Container>
 inline void stl_vector_resize_uninitialized(Container* vec, size_t reserve_size, size_t new_size) {
     using T = typename Container::value_type;
-    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(reserve_size);
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    static_cast<DstType*>(vec)->resize(reserve_size);
+    asm volatile("" : : : "memory");
     vec->resize(new_size);
 }
 
