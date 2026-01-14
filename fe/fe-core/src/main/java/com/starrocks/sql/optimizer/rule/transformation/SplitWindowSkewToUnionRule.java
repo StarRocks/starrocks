@@ -58,8 +58,14 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         if (input.getOp() instanceof LogicalWindowOperator) {
             LogicalWindowOperator lwo = (LogicalWindowOperator) input.getOp();
-            // Rule only applies if there is a PARTITION BY clause to optimize, with exactly one partition column.
-            return lwo.getPartitionExpressions().size() == 1;
+            List<ScalarOperator> partitionExprs = lwo.getPartitionExpressions();
+
+            // Rule only applies if there is exactly one partition expression,
+            // and that expression is a direct ColumnReference (not a function or expression).
+            return partitionExprs != null
+                    && partitionExprs.size() == 1
+                    && lwo.getOrderByElements() != null
+                    && !lwo.getOrderByElements().isEmpty();
         }
         return false;
     }

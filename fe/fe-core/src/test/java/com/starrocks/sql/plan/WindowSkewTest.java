@@ -227,4 +227,41 @@ public class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "ANALYTIC");
 
     }
+
+    @Test
+    void testWindowWithoutOrderBy() throws Exception {
+        OlapTable table = getOlapTable("window_skew_table");
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
+
+        setTableStatistics(table, 1000);
+        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
+        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
+
+        String sql = "select p, s, sum(x) over (partition by p) from window_skew_table";
+
+        String plan = getFragmentPlan(sql);
+
+        assertNotContains(plan, "UNION");
+        assertContains(plan, "ANALYTIC");
+    }
+
+    @Test
+    void testWindowWithComplexPartition() throws Exception {
+        OlapTable table = getOlapTable("window_skew_table");
+        final var statisticStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final var skewedColumnStat = ColumnStatistic.builder().setNullsFraction(0.3).build();
+
+        setTableStatistics(table, 1000);
+        statisticStorage.addColumnStatistic(table, "p", skewedColumnStat);
+        statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
+
+        // Partition by expression (case when) instead of direct column
+        String sql = "select p, s, sum(x) over (partition by case when p is null then -1 else p end order by s) from window_skew_table";
+
+        String plan = getFragmentPlan(sql);
+
+        assertNotContains(plan, "UNION");
+        assertContains(plan, "ANALYTIC");
+    }
 }
