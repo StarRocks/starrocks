@@ -38,6 +38,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
@@ -64,6 +66,7 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectListItem;
@@ -101,6 +104,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
@@ -109,6 +113,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.NullType;
@@ -920,13 +925,29 @@ public class InsertPlanner {
         Table targetTable = insertStmt.getTargetTable();
         if (targetTable instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) targetTable;
-            if (session.isEnableIcebergSinkGlobalShuffle() && (!icebergTable.getPartitionColumns().isEmpty())) {
-                List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
-                        .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                        HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                return new PhysicalPropertySet(DistributionProperty
-                        .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+            ConnectorSinkShuffleMode shuffleMode = session.getConnectorSinkShuffleMode();
+
+            // For shuffle mode except NEVER, only apply shuffle to partitioned tables
+            if (shuffleMode != ConnectorSinkShuffleMode.NEVER && !icebergTable.getPartitionColumns().isEmpty()) {
+
+                // Handle FORCE mode - always enable global shuffle
+                // We also handle the old session variable `enable_iceberg_sink_global_shuffle` for compatibility.
+                if (shuffleMode == ConnectorSinkShuffleMode.FORCE) {
+                    List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    return createShufflePropertyFromPartitions(partitionColumnIDs);
+                }
+
+                // Handle AUTO mode - use adaptive logic based on partition count and backend count
+                if (shuffleMode == ConnectorSinkShuffleMode.AUTO) {
+                    boolean shouldEnableGlobalShuffle = shouldEnableAdaptiveGlobalShuffle(
+                            insertStmt, icebergTable, session);
+                    if (shouldEnableGlobalShuffle) {
+                        List<Integer> partitionColumnIDs = icebergTable.partitionColumnIndexes().stream()
+                                .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                        return createShufflePropertyFromPartitions(partitionColumnIDs);
+                    }
+                }
             }
         }
 
@@ -945,10 +966,7 @@ public class InsertPlanner {
                 } else { // use hash shuffle for partitioned table
                     List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
                             .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
-                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
-                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
-                    return new PhysicalPropertySet(DistributionProperty
-                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                    return createShufflePropertyFromPartitions(partitionColumnIDs);
                 }
             }
 
@@ -999,6 +1017,13 @@ public class InsertPlanner {
 
         shuffleServiceEnable = true;
 
+        return new PhysicalPropertySet(property);
+    }
+
+    private PhysicalPropertySet createShufflePropertyFromPartitions(List<Integer> partitionColumnIDs) {
+        HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
+        DistributionProperty property = DistributionProperty.createProperty(spec);
         return new PhysicalPropertySet(property);
     }
 
@@ -1107,5 +1132,243 @@ public class InsertPlanner {
         }
         checkPartitionInsertValid(targetTable);
         return true;
+    }
+
+    /**
+     * Judge whether adaptive global shuffle should be enabled based on partition count and backend count.
+     *
+     * Decision criteria (configurable via session variables):
+     * 1. Enable when estimated partition count >= backend count * ratio
+     * 2. OR when estimated partition count >= absolute threshold
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @param session Session variable
+     * @return whether to enable global shuffle
+     */
+    private boolean shouldEnableAdaptiveGlobalShuffle(InsertStmt insertStmt,
+                                                       IcebergTable icebergTable,
+                                                       SessionVariable session) {
+        // Get the number of alive BE nodes and CN nodes in the cluster
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        int aliveBackendNum = clusterInfo.getAliveBackendNumber();
+        int totalComputeNodeNum = clusterInfo.getTotalComputeNodeNumber();
+        int totalWorkerNum = aliveBackendNum + totalComputeNodeNum;
+
+        // Don't enable global shuffle if we have only 1 or 0 worker nodes
+        if (totalWorkerNum <= 1) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
+                                "total worker nodes ({}) <= 1",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                        totalWorkerNum);
+            }
+            return false;
+        }
+
+        // Estimate the number of partitions that may be involved in this insert
+        long estimatedPartitionCount = estimatePartitionCountForInsert(insertStmt, icebergTable);
+
+        // Don't enable global shuffle if unable to estimate partition count or only writing to 1 partition
+        // estimatedPartitionCount <= 1 covers:
+        // - -1: unable to estimate (users typically write to only the latest partition)
+        // - 0 or 1: only writing to one partition
+        if (estimatedPartitionCount <= 1) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Disable adaptive global shuffle for connector table {}.{}: " +
+                                "estimated partition count ({}) <= 1",
+                        icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                        estimatedPartitionCount);
+            }
+            return false;
+        }
+
+        // Get configured thresholds from connector variables
+        long partitionCountThreshold = session.getConnectorSinkShufflePartitionThreshold();
+        double partitionCountNodeRatio = session.getConnectorSinkShufflePartitionNodeRatio();
+
+        // Decision logic:
+        // 1. estimated partitions >= total worker count * ratio coefficient
+        // 2. OR estimated partitions >= absolute threshold
+        boolean shouldEnable = estimatedPartitionCount >= (long) (totalWorkerNum * partitionCountNodeRatio)
+                || estimatedPartitionCount >= partitionCountThreshold;
+
+        if (shouldEnable && LOG.isDebugEnabled()) {
+            LOG.debug("Enable adaptive global shuffle for connector table {}.{}: " +
+                            "estimated partitions={}, total workers={}, threshold={}, ratio={}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(),
+                    estimatedPartitionCount, totalWorkerNum,
+                    partitionCountThreshold, partitionCountNodeRatio);
+        }
+
+        return shouldEnable;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved in this INSERT operation.
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count
+     */
+    private long estimatePartitionCountForInsert(InsertStmt insertStmt, IcebergTable icebergTable) {
+        Map<String, Double> partitionNdv = getPartitionColumnNdv(icebergTable);
+        long existingPartitionCount = 0;
+        boolean metadataAvailable = false;
+        try {
+            // 1. For static partition INSERT, we can know exactly how many partitions to write
+            if (insertStmt.isStaticKeyPartitionInsert()) {
+                PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
+                if (targetPartitionNames != null && !targetPartitionNames.getPartitionColNames().isEmpty()) {
+                    // Static partition insert, only writing to one specified partition
+                    return 1;
+                }
+            }
+
+            // 2. Try to get current partition count from table metadata
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listPartitionNames(icebergTable.getCatalogName(),
+                            icebergTable.getCatalogDBName(),
+                            icebergTable.getCatalogTableName(),
+                            new ConnectorMetadatRequestContext());
+            existingPartitionCount = partitionNames.size();
+            metadataAvailable = true;
+
+            // 3. If there's partition predicate filtering, try to estimate involved partitions
+            // For new tables (existingPartitionCount == 0), this estimates how many partitions will be created
+            // For existing tables, this estimates how many partitions will be written to
+            QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+            boolean hasWherePredicate = false;
+            if (queryRelation instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) queryRelation;
+                hasWherePredicate = selectRelation.hasWhereClause() && selectRelation.getPredicate() != null;
+            }
+
+            long filteredEstimate = estimatePartitionsFromPredicates(insertStmt, icebergTable,
+                    existingPartitionCount, partitionNdv);
+            if (filteredEstimate >= 0) {
+                // Only return the filtered estimate if it's different from existingPartitionCount
+                // or if we have meaningful predicate-based estimation
+                if (filteredEstimate != existingPartitionCount || existingPartitionCount > 0) {
+                    return filteredEstimate;
+                }
+            } else if (hasWherePredicate) {
+                // We have a WHERE predicate but can't estimate reliably; be conservative and treat as unknown.
+                return -1;
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition count for iceberg table {}.{}: {}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e.getMessage());
+        }
+
+        // 4. For empty tables (new tables) or when predicate estimation didn't help, try statistics
+        if (existingPartitionCount == 0) {
+            long statsEstimate = estimatePartitionCountFromStatistics(icebergTable, partitionNdv);
+            if (statsEstimate > 0) {
+                return statsEstimate;
+            }
+        }
+
+        // 5. Default to returning existing partition count (conservative: assume writing to all partitions)
+        // For new tables with no partitions and no statistics, return 0
+        // When metadata was unavailable (exception), return -1 to indicate unable to estimate
+        return metadataAvailable ? existingPartitionCount : -1;
+    }
+
+    /**
+     * Estimate the number of partitions that may be involved based on query predicates.
+     *
+     * @param insertStmt INSERT statement
+     * @param icebergTable target Iceberg table
+     * @return estimated partition count, -1 means unable to estimate
+     */
+    private long estimatePartitionsFromPredicates(InsertStmt insertStmt, IcebergTable icebergTable,
+                                                 long existingPartitionCount,
+                                                 Map<String, Double> partitionNdv) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+
+        // Only support SelectRelation with WHERE clause
+        if (!(queryRelation instanceof SelectRelation)) {
+            return -1;
+        }
+
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        if (!selectRelation.hasWhereClause()) {
+            // No WHERE clause, return existing partition count
+            // For new tables (existingPartitionCount == 0), return 0
+            return existingPartitionCount;
+        }
+
+        Expr predicate = selectRelation.getPredicate();
+        if (predicate == null) {
+            // No WHERE clause, return existing partition count
+            // For new tables (existingPartitionCount == 0), return 0
+            return existingPartitionCount;
+        }
+
+        if (icebergTable.getPartitionColumns().isEmpty()) {
+            return -1;
+        }
+
+        // Use InsertPartitionEstimator factory method to build column mapping and estimate
+        InsertPartitionEstimator estimator = InsertPartitionEstimator.create(
+                insertStmt, icebergTable, selectRelation, partitionNdv);
+        Long estimatedCount = estimator.estimate(predicate);
+        // If predicate estimation returns null (unable to estimate), return -1 to indicate unknown.
+        return estimatedCount != null ? estimatedCount : -1;
+    }
+
+    private Map<String, Double> getPartitionColumnNdv(IcebergTable icebergTable) {
+        Map<String, Double> partitionNdv = new HashMap<>();
+        if (icebergTable == null || icebergTable.getPartitionColumns().isEmpty()) {
+            return partitionNdv;
+        }
+
+        try {
+            if (GlobalStateMgr.getCurrentState().getStatisticStorage() == null) {
+                return partitionNdv;
+            }
+            for (Column partitionCol : icebergTable.getPartitionColumns()) {
+                ColumnStatistic statistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                        .getColumnStatistic(icebergTable, partitionCol.getName());
+                if (statistic == null || statistic.isUnknown()) {
+                    continue;
+                }
+                double ndv = statistic.getDistinctValuesCount();
+                if (!Double.isNaN(ndv) && ndv > 0) {
+                    partitionNdv.put(partitionCol.getName().toLowerCase(), ndv);
+                }
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to fetch partition column NDV for iceberg table {}.{}: {}",
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), e.getMessage());
+        }
+        return partitionNdv;
+    }
+
+    /**
+     * Estimate partition count from column NDV statistics.
+     * This is used as a fallback when partition metadata is unavailable.
+     * Returns -1 if unable to estimate (invalid or missing statistics).
+     */
+    private long estimatePartitionCountFromStatistics(IcebergTable icebergTable, Map<String, Double> partitionNdv) {
+        if (partitionNdv == null || partitionNdv.isEmpty()) {
+            return -1;
+        }
+        long estimate = 1;
+        boolean hasValidNdv = false;
+        for (double ndv : partitionNdv.values()) {
+            if (Double.isNaN(ndv) || ndv <= 0) {
+                return -1;  // Any invalid NDV makes the entire estimate unreliable
+            }
+            hasValidNdv = true;
+            long result = InsertPartitionEstimator.multiplyWithOverflowCheck(estimate, (long) Math.ceil(ndv));
+            if (result == -1) {
+                // Overflow detected
+                return -1;
+            }
+            estimate = result;
+        }
+        return hasValidNdv ? estimate : -1;
     }
 }
