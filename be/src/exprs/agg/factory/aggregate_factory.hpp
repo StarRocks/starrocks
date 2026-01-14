@@ -52,6 +52,7 @@
 #include "exprs/agg/retention.h"
 #include "exprs/agg/stream/retract_maxmin.h"
 #include "exprs/agg/sum.h"
+#include "exprs/agg/sum_map.h"
 #include "exprs/agg/variance.h"
 #include "exprs/agg/window.h"
 #include "exprs/agg/window_funnel.h"
