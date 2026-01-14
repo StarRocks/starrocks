@@ -100,12 +100,29 @@ class StarRocksTranslator:
             return
 
         print(f"🚀 Translating {input_file} to {output_file}...")
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
-            contents=current_human_prompt
-        )
-        
+        try:
+            response = client.models.generate_content(
+                model=MODEL_NAME,
+                config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
+                contents=current_human_prompt
+            )
+        except Exception as e:
+            error_message = str(e)
+            print("❌ Gemini API request failed:")
+            print(f"   Details: {error_message}")
+            lower_msg = error_message.lower()
+            if "429" in error_message or "rate" in lower_msg:
+                print("   Possible cause: rate limit exceeded. Try reducing request frequency or batching files.")
+            elif "quota" in lower_msg or "exceeded" in lower_msg:
+                print("   Possible cause: quota exhausted. Check your Gemini project billing and quota settings.")
+            elif "safety" in lower_msg or "blocked" in lower_msg:
+                print("   Possible cause: content blocked by safety filters. Review the source content and Gemini safety settings.")
+            elif "network" in lower_msg or "timeout" in lower_msg or "connection" in lower_msg:
+                print("   Possible cause: network connectivity issue. Verify your internet connection and retry.")
+            else:
+                print("   The error could be due to configuration, authentication, or an unexpected server issue.")
+            print("   If the problem persists, verify GEMINI_API_KEY is set correctly and that your environment can reach the Gemini API.")
+            return
         translated_text = response.text.strip()
         
         # CLEANUP: Remove markdown code fences if Gemini added them
