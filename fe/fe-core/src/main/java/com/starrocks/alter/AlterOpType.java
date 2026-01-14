@@ -46,6 +46,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropMVColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
@@ -101,6 +102,7 @@ public enum AlterOpType {
                 alterClause instanceof AddMVColumnClause ||
                 alterClause instanceof CreateIndexClause ||
                 alterClause instanceof DropColumnClause ||
+                alterClause instanceof DropMVColumnClause ||
                 alterClause instanceof DropFieldClause ||
                 alterClause instanceof DropIndexClause ||
                 alterClause instanceof ModifyColumnClause ||

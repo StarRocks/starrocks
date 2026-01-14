@@ -2895,9 +2895,10 @@ public class AlterTest {
         }
     }
 
-    public static void alterMVAddColumn(String sql, boolean expectedException) throws Exception {
+    public static void alterMVAddColumn(String sql, boolean expectedException) {
         try {
-            AlterMaterializedViewStmt alterTableStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            AlterMaterializedViewStmt alterTableStmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             DDLStmtExecutor.execute(alterTableStmt, connectContext);
             if (expectedException) {
                 Assertions.fail();
@@ -2935,10 +2936,6 @@ public class AlterTest {
         // mv1
         MaterializedView mv1 = (MaterializedView) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable(db.getFullName(), "mv1");
-
-//        String stmt = "alter table test.tbl1 add column k2 int";
-//        alterTableWithNewParser(stmt, false);
-//        waitSchemaChangeJobDone(false, tbl);
 
         String stmt = "alter materialized view mv1 add column count_k1 as count(k1)";
         alterMVAddColumn(stmt, false);

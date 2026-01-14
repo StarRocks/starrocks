@@ -2578,37 +2578,40 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.defineQueryParseNode = null;
     }
 
+    public synchronized ParseNode initDefineQueryParseNode() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        ConnectContext connectContext = ConnectContext.buildInner();
+        if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
+            try {
+                String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
+                connectContext.setDatabase(currentDBName);
+                return MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("parse original view define sql failed:", e);
+            }
+        }
+        if (!Strings.isNullOrEmpty(viewDefineSql)) {
+            try {
+                connectContext.setDatabase(db.getOriginName());
+                return MvUtils.getQueryAst(viewDefineSql, connectContext);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("parse view define sql failed:", e);
+            }
+        }
+        return null;
+    }
+
     /**
      * `defineQueryParseNode` is safe for multi threads since it is only initialized when mv becomes to active.
      */
     public synchronized ParseNode getDefineQueryParseNode() {
         if (this.defineQueryParseNode == null) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                return null;
-            }
-            ConnectContext connectContext = ConnectContext.buildInner();
-            if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
-                try {
-                    String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
-                    connectContext.setDatabase(currentDBName);
-                    this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
-                } catch (Exception e) {
-                    // ignore
-                    LOG.warn("parse original view define sql failed:", e);
-                }
-            }
-            if (this.defineQueryParseNode == null) {
-                if (!Strings.isNullOrEmpty(viewDefineSql)) {
-                    try {
-                        connectContext.setDatabase(db.getOriginName());
-                        this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
-                    } catch (Exception e) {
-                        // ignore
-                        LOG.warn("parse view define sql failed:", e);
-                    }
-                }
-            }
+            this.defineQueryParseNode = initDefineQueryParseNode();
         }
         return this.defineQueryParseNode;
     }

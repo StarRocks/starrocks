@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.DropMVColumnClause;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ParseNode;
@@ -656,16 +657,16 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
     @Override
     public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
-        MaterializedView materializedView = (MaterializedView) table;
+        MaterializedView mv = (MaterializedView) table;
         String columnName = clause.getColumnName();
         
         // Check if column already exists
-        if (materializedView.getColumn(columnName) != null) {
+        if (mv.getColumn(columnName) != null) {
             throw new SemanticException("Column '{}' already exists in materialized view", columnName);
         }
         
         // Validate aggregate expression - it should contain aggregate functions
-        ParseNode astParseNode = materializedView.getDefineQueryParseNode();
+        ParseNode astParseNode = mv.initDefineQueryParseNode();
         // chck mv's parse node is a simple QueryStatement
         if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
             throw new SemanticException("Materialized view definition is invalid");
@@ -673,9 +674,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         QueryStatement queryStatement = (QueryStatement) astParseNode;
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
 
+        // check whether it's a single table mv
 
         Locker locker = new Locker();
-        if (!locker.lockTableAndCheckDbExist(db, materializedView.getId(), LockType.WRITE)) {
+        if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -702,7 +704,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             Analyzer.analyze(queryStatement, connectContext);
 
             Column newColumn = createMVColumn(columnName, addColumnExpr, clause.getComment());
-            clause.setColumnDef(newColumn.toColumnDef(materializedView));
+            clause.setColumnDef(newColumn.toColumnDef(mv));
 
             SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
             AddColumnsClause addColumnsClause = clause.toAddColumnsClause();
@@ -711,25 +713,98 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // renew materialized view's defined query
             String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
                     .setEnableDigest(false)).visit(astParseNode);
-
-            materializedView.setViewDefineSql(newDefinedSql);
-            materializedView.setSimpleDefineSql(newDefinedSql);
-            materializedView.setOriginalViewDefineSql(newDefinedSql);
-            materializedView.resetDefinedQueryParseNode();
-            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(materializedView);
-
+            mv.setViewDefineSql(newDefinedSql);
+            mv.setSimpleDefineSql(newDefinedSql);
+            mv.setOriginalViewDefineSql(newDefinedSql);
+            mv.resetDefinedQueryParseNode();
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
 
             String exprSql = ExprToSql.toSql(addColumnExpr);
             // Log the schema change operation for audit purposes
             LOG.info("Logged schema change for materialized view '{}': added column '{}' with expression '{}'",
-                    materializedView.getName(), columnName, exprSql);
+                    mv.getName(), columnName, exprSql);
             return null;
         } catch (StarRocksException e) {
             throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
         } catch (DmlException e) {
             throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
         } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    @Override
+    public Void visitDropMVColumnClause(DropMVColumnClause clause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        String columnName = clause.getColumnName();
+
+        if (mv.getColumn(columnName) == null) {
+            throw new SemanticException("Column '{}' does not exist in materialized view", columnName);
+        }
+
+        ParseNode astParseNode = mv.initDefineQueryParseNode();
+        if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
+            throw new SemanticException("Materialized view definition is invalid");
+        }
+        QueryStatement queryStatement = (QueryStatement) astParseNode;
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+
+        Locker locker = new Locker();
+        if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
+            throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
+        }
+        try {
+            List<Column> visibleSchema = mv.getFullVisibleSchema();
+            int columnIndex = -1;
+            for (int i = 0; i < visibleSchema.size(); i++) {
+                if (visibleSchema.get(i).getName().equalsIgnoreCase(columnName)) {
+                    columnIndex = i;
+                    break;
+                }
+            }
+            if (columnIndex < 0) {
+                throw new SemanticException("Column '{}' does not exist in materialized view", columnName);
+            }
+
+            List<Expr> outputExpr = selectRelation.getOutputExpression();
+            SelectList selectList = selectRelation.getSelectList();
+            List<SelectListItem> selectListItems = selectList.getItems();
+            if (outputExpr == null || columnIndex >= outputExpr.size() || columnIndex >= selectListItems.size()) {
+                throw new SemanticException("Materialized view definition is invalid");
+            }
+
+            List<Expr> newOutputExpr = Lists.newArrayList(outputExpr);
+            Expr removedExpr = newOutputExpr.remove(columnIndex);
+            selectRelation.setOutputExpr(newOutputExpr);
+            selectListItems.remove(columnIndex);
+
+            if (removedExpr instanceof FunctionCallExpr && selectRelation.getAggregate() != null) {
+                selectRelation.getAggregate().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+            }
+
+            ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
+            Analyzer.analyze(queryStatement, connectContext);
+
+            SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            schemaChangeHandler.process(Lists.newArrayList(clause.toDropColumnClause()), db, (OlapTable) table);
+
+            String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
+                    .setEnableDigest(false)).visit(astParseNode);
+            mv.setViewDefineSql(newDefinedSql);
+            mv.setSimpleDefineSql(newDefinedSql);
+            mv.setOriginalViewDefineSql(newDefinedSql);
+            mv.resetDefinedQueryParseNode();
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+
+            LOG.info("Logged schema change for materialized view '{}': dropped column '{}'",
+                    mv.getName(), columnName);
+            return null;
+        } catch (StarRocksException e) {
+            throw new AlterJobException("Failed to drop column from materialized view: " + e.getMessage(), e);
+        } catch (DmlException e) {
+            throw new AlterJobException("Failed to drop column from materialized view: " + e.getMessage(), e);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
         }
     }
     

@@ -186,6 +186,7 @@ import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropIndexClause;
+import com.starrocks.sql.ast.DropMVColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -2328,6 +2329,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         // add column to materialized view
         if (context.addMVColumnClause() != null) {
             alterTableClause = (AddMVColumnClause) visit(context.addMVColumnClause());
+        }
+
+        // drop column from materialized view
+        if (context.dropMVColumnClause() != null) {
+            alterTableClause = (DropMVColumnClause) visit(context.dropMVColumnClause());
         }
         
         return new AlterMaterializedViewStmt(mvTableRef, alterTableClause, createPos(context));
@@ -4948,6 +4954,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             comment = ((StringLiteral) visit(context.string())).getStringValue();
         }
         return new AddMVColumnClause(columnName, aggregateExpression, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropMVColumnClause(com.starrocks.sql.parser.StarRocksParser.DropMVColumnClauseContext context) {
+        String columnName = context.identifier().getText();
+        return new DropMVColumnClause(columnName, createPos(context));
     }
 
     @Override
