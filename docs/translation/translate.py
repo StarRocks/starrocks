@@ -5,8 +5,22 @@ import re
 from google import genai
 from google.genai import types
 
-# Automatically picks up GEMINI_API_KEY from environment
-client = genai.Client()
+# Initialize Gemini client with explicit error handling for missing API key.
+if "GEMINI_API_KEY" not in os.environ:
+    raise RuntimeError(
+        "GEMINI_API_KEY environment variable is not set. "
+        "Please set GEMINI_API_KEY to your Gemini API key before running this script."
+    )
+
+try:
+    # Automatically picks up GEMINI_API_KEY from environment
+    client = genai.Client()
+except Exception as e:
+    raise RuntimeError(
+        "Failed to initialize Gemini client. "
+        "Please verify that GEMINI_API_KEY is correctly set and that your environment "
+        "is configured for the Google Gemini SDK."
+    ) from e
 MODEL_NAME = "gemini-2.0-flash" 
 CONFIG_BASE_PATH = "./docs/translation/configs"
 
