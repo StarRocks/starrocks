@@ -123,68 +123,6 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
-### Fast forward a branch to another
-
-**`fast_forward` Syntax**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE fast_forward('<from_branch>', '<to_branch>')
-```
-
-**Parameters**
-
-- `from_branch`: The branch you want to fast forward. Wrap the branch name in quotes.
-- `to_branch`: The branch to which you want to fast forwards the `from_branch`. Wrap the branch name in quotes.
-
-**Example**
-
-Fast forward the `main` branch to the branch `test-branch`.
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE fast_forward('main', 'test-branch');
-```
-
-### Cherry pick a snapshot 
-
-You can cherry pick a specific snapshot and apply it to the current status of the table. This operation will create a new snapshot based on an existing snapshot, and the original snapshot will not be affected.
-
-**`cherrypick_snapshot` Syntax**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE cherrypick_snapshot(<snapshot_id>)
-```
-
-**Parameter**
-
-`snapshot_id`: ID of the snapshot which you want to cherry pick.
-
-**Example**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE cherrypick_snapshot(54321);
-```
-
-### Expire snapshots
-
-You can expire snapshots earlier than a specific point of time. This operation will delete the data files of the expired snapshots.
-
-**`expire_snapshots` Syntax**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshots('<datetime>')
-```
-
-**Example**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshots('2023-12-17 00:14:38')
-```
 
 ### Drop a branch or a tag
 

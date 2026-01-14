@@ -123,69 +123,6 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
-### 快进一个分支到另一个分支
-
-**`fast_forward` 语法**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE fast_forward('<from_branch>', '<to_branch>')
-```
-
-**参数**
-
-- `from_branch`: 要快进的分支。用引号括住分支名称。
-- `to_branch`: 要快进到的分支。用引号括住分支名称。
-
-**示例**
-
-将 `main` 分支快进到分支 `test-branch`。
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE fast_forward('main', 'test-branch');
-```
-
-### 拣选一个快照
-
-您可以拣选一个特定的快照并将其应用到表的当前状态。此操作将基于现有快照创建一个新快照，原始快照不会受到影响。
-
-**`cherrypick_snapshot` 语法**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE cherrypick_snapshot(<snapshot_id>)
-```
-
-**参数**
-
-`snapshot_id`: 您要拣选的快照 ID。
-
-**示例**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE cherrypick_snapshot(54321);
-```
-
-### 过期快照
-
-您可以使快照在特定时间点之前过期。此操作将删除过期快照的数据文件。
-
-**`expire_snapshots` 语法**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshots('<datetime>')
-```
-
-**示例**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshots('2023-12-17 00:14:38')
-```
-
 ### 删除分支或标记
 
 **`DROP BRANCH`、`DROP TAG` 语法**
