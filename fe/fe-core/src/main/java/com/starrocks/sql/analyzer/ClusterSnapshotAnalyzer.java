@@ -25,6 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -33,6 +34,7 @@ import com.starrocks.sql.ast.DropClusterSnapshotStmt;
 import com.starrocks.sql.ast.RestoreTableFromSnapshotStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_SNAPSHOT_SCOPE;
 
@@ -62,6 +64,17 @@ public class ClusterSnapshotAnalyzer {
                 throw new SemanticException("Failed to get storage volume", e);
             }
 
+            IntervalLiteral intervalLiteral = statement.getIntervalLiteral();
+            long intervalSeconds = 0;
+            if (intervalLiteral != null) {
+                try {
+                    intervalSeconds = intervalLiteral.toSeconds();
+                } catch (IllegalArgumentException e) {
+                    throw new SemanticException(e.getMessage(), intervalLiteral.getPos());
+                }
+            }
+            statement.setIntervalSeconds(intervalSeconds);
+
             if (statement.getProperties() != null) {
                 String scope = statement.getProperties().get(PROPERTIES_SNAPSHOT_SCOPE);
                 if (scope != null) {
@@ -86,6 +99,31 @@ public class ClusterSnapshotAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
                 throw new SemanticException("Automated snapshot has not been turn on");
             }
+
+            return null;
+        }
+
+        public Void visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement,
+                                                                      ConnectContext context) {
+            if (!RunMode.isSharedDataMode()) {
+                throw new SemanticException("Automated snapshot only support share data mode");
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
+                throw new SemanticException("Automated snapshot has not been turn on");
+            }
+
+            IntervalLiteral intervalLiteral = statement.getIntervalLiteral();
+            if (intervalLiteral == null) {
+                throw new SemanticException("Interval literal is required");
+            }
+            long intervalSeconds;
+            try {
+                intervalSeconds = intervalLiteral.toSeconds();
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage(), intervalLiteral.getPos());
+            }
+            statement.setIntervalSeconds(intervalSeconds);
 
             return null;
         }

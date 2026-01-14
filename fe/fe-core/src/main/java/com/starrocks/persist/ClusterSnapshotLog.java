@@ -21,11 +21,19 @@ import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import java.util.Map;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, AUTOMATED_SNAPSHOT_ON, AUTOMATED_SNAPSHOT_OFF, UPDATE_SNAPSHOT_JOB }
+    public enum ClusterSnapshotLogType {
+        NONE,
+        AUTOMATED_SNAPSHOT_ON,
+        AUTOMATED_SNAPSHOT_OFF,
+        AUTOMATED_SNAPSHOT_INTERVAL,
+        UPDATE_SNAPSHOT_JOB
+    }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName = "";
+    @SerializedName(value = "automatedSnapshotIntervalSeconds")
+    private long automatedSnapshotIntervalSeconds = 0;
     @SerializedName(value = "properties")
     private Map<String, String> properties = null;
     // For UPDATE_SNAPSHOT_JOB
@@ -35,17 +43,23 @@ public class ClusterSnapshotLog implements Writable {
     public ClusterSnapshotLog() {}
 
     public void setAutomatedSnapshotOn(String storageVolumeName) {
-        setAutomatedSnapshotOn(storageVolumeName, null);
+        setAutomatedSnapshotOn(storageVolumeName, 0, null);
     }
 
-    public void setAutomatedSnapshotOn(String storageVolumeName, Map<String, String> properties) {
+    public void setAutomatedSnapshotOn(String storageVolumeName, long intervalSeconds, Map<String, String> properties) {
         this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_ON;
         this.storageVolumeName = storageVolumeName;
+        this.automatedSnapshotIntervalSeconds = intervalSeconds;
         this.properties = properties;
     }
 
     public void setAutomatedSnapshotOff() {
         this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF;
+    }
+
+    public void setAutomatedSnapshotInterval(long intervalSeconds) {
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_INTERVAL;
+        this.automatedSnapshotIntervalSeconds = intervalSeconds;
     }
 
     public void setSnapshotJob(ClusterSnapshotJob job) {
@@ -59,6 +73,10 @@ public class ClusterSnapshotLog implements Writable {
 
     public String getStorageVolumeName() {
         return this.storageVolumeName;
+    }
+
+    public long getAutomatedSnapshotIntervalSeconds() {
+        return automatedSnapshotIntervalSeconds;
     }
 
     public Map<String, String> getProperties() {

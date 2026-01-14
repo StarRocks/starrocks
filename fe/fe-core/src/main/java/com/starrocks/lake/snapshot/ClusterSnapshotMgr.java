@@ -31,6 +31,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.staros.StarMgrServer;
@@ -58,6 +59,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     @SerializedName(value = "storageVolumeName")
     protected volatile String storageVolumeName;
+    @SerializedName(value = "automatedSnapshotIntervalSeconds")
+    protected volatile long automatedSnapshotIntervalSeconds = 0;
     @SerializedName(value = "automatedSnapshotJobs")
     protected NavigableMap<Long, ClusterSnapshotJob> automatedSnapshotJobs = new ConcurrentSkipListMap<>();
     @SerializedName(value = "properties")
@@ -73,20 +76,23 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     // Turn on automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOn(AdminSetAutomatedSnapshotOnStmt stmt) {
         String storageVolumeName = stmt.getStorageVolumeName();
+        long intervalSeconds = stmt.getIntervalSeconds();
         Map<String, String> properties = stmt.getProperties();
-        setAutomatedSnapshotOn(storageVolumeName, properties);
+        setAutomatedSnapshotOn(storageVolumeName, intervalSeconds, properties);
 
         ClusterSnapshotLog log = new ClusterSnapshotLog();
-        log.setAutomatedSnapshotOn(storageVolumeName, properties);
+        log.setAutomatedSnapshotOn(storageVolumeName, intervalSeconds, properties);
         GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
     }
 
     protected void setAutomatedSnapshotOn(String storageVolumeName) {
-        setAutomatedSnapshotOn(storageVolumeName, null);
+        setAutomatedSnapshotOn(storageVolumeName, 0, null);
     }
 
-    protected void setAutomatedSnapshotOn(String storageVolumeName, Map<String, String> properties) {
+    protected void setAutomatedSnapshotOn(String storageVolumeName, long intervalSeconds,
+            Map<String, String> properties) {
         this.storageVolumeName = storageVolumeName;
+        this.automatedSnapshotIntervalSeconds = intervalSeconds;
         this.properties = properties != null ? new java.util.HashMap<>(properties) : null;
     }
 
@@ -123,6 +129,30 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 properties.get(PROPERTIES_SNAPSHOT_SCOPE).equalsIgnoreCase("external");
     }
 
+    public void setAutomatedSnapshotInterval(AdminAlterAutomatedSnapshotIntervalStmt stmt) {
+        long intervalSeconds = stmt.getIntervalSeconds();
+        setAutomatedSnapshotInterval(intervalSeconds);
+
+        ClusterSnapshotLog log = new ClusterSnapshotLog();
+        log.setAutomatedSnapshotInterval(intervalSeconds);
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
+    }
+
+    protected void setAutomatedSnapshotInterval(long intervalSeconds) {
+        this.automatedSnapshotIntervalSeconds = intervalSeconds;
+    }
+
+    public long getAutomatedSnapshotIntervalSeconds() {
+        return automatedSnapshotIntervalSeconds;
+    }
+
+    public long getEffectiveAutomatedSnapshotIntervalSeconds() {
+        if (automatedSnapshotIntervalSeconds > 0) {
+            return automatedSnapshotIntervalSeconds;
+        }
+        return Config.automated_cluster_snapshot_interval_seconds;
+    }
+
     protected void clearFinishedAutomatedClusterSnapshot(String keepSnapshotName) {
         for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
             ClusterSnapshotJob job = entry.getValue();
@@ -153,7 +183,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     public boolean canScheduleNextJob(long lastAutomatedJobStartTimeMs) {
         return isAutomatedSnapshotOn() && (System.currentTimeMillis()
-                - lastAutomatedJobStartTimeMs >= Config.automated_cluster_snapshot_interval_seconds * 1000L);
+                - lastAutomatedJobStartTimeMs >= getEffectiveAutomatedSnapshotIntervalSeconds() * 1000L);
     }
 
     public ClusterSnapshotJob getNextCluterSnapshotJob() {
@@ -457,12 +487,17 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         switch (logType) {
             case AUTOMATED_SNAPSHOT_ON: {
                 String storageVolumeName = log.getStorageVolumeName();
+                long intervalSeconds = log.getAutomatedSnapshotIntervalSeconds();
                 Map<String, String> properties = log.getProperties();
-                setAutomatedSnapshotOn(storageVolumeName, properties);
+                setAutomatedSnapshotOn(storageVolumeName, intervalSeconds, properties);
                 break;
             }
             case AUTOMATED_SNAPSHOT_OFF: {
                 setAutomatedSnapshotOff();
+                break;
+            }
+            case AUTOMATED_SNAPSHOT_INTERVAL: {
+                setAutomatedSnapshotInterval(log.getAutomatedSnapshotIntervalSeconds());
                 break;
             }
             case UPDATE_SNAPSHOT_JOB: {
@@ -509,6 +544,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         ClusterSnapshotMgr data = reader.readJson(ClusterSnapshotMgr.class);
 
         storageVolumeName = data.getAutomatedSnapshotSvName();
+        automatedSnapshotIntervalSeconds = data.getAutomatedSnapshotIntervalSeconds();
         automatedSnapshotJobs = data.getAutomatedSnapshotJobs();
         properties = data.getProperties();
         lastSuccFullSnapshotInfo = data.getLastSuccFullSnapshotInfo();

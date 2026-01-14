@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -764,6 +765,12 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt clause, Void context) {
+            return visitDDLStatement(clause, context);
+        }
+
+        @Override
+        public RedirectStatus visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt clause,
+                                                                                Void context) {
             return visitDDLStatement(clause, context);
         }
 
