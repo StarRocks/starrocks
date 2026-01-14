@@ -175,7 +175,7 @@ public:
     Node(MergePathCascadeMerger* merger) : _merger(merger) {}
     virtual ~Node() = default;
     virtual void process_input(const int32_t parallel_idx) = 0;
-    virtual void process_input_done(){};
+    virtual void process_input_done() {};
     virtual bool is_leaf() { return false; }
 
     // Current node can produce more output if one of the following conditions are met.
@@ -421,8 +421,7 @@ private:
 
     void _find_unfinished_level();
     using Action = std::function<void()>;
-    void _finish_current_stage(
-            const int32_t parallel_idx, const Action& stage_done_action = []() {});
+    void _finish_current_stage(const int32_t parallel_idx, const Action& stage_done_action = []() {});
     bool _has_pending_node();
 
     void _reset_output();

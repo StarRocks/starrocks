@@ -410,7 +410,7 @@ struct StatusInstance {
                                                   TStatusCode::LABEL_ALREADY_EXISTS,
                                                   TStatusCode::RESOURCE_BUSY};
 
-    static constexpr int SIZE = sizeof(random) / sizeof(Status(*)(std::string_view msg));
+    static constexpr int SIZE = sizeof(random) / sizeof(Status (*)(std::string_view msg));
 };
 
 #define RETURN_INJECT(index)                                                         \
@@ -519,7 +519,9 @@ struct StatusInstance {
 #define RETURN_IF_EXCEPTION(stmt)                   \
     do {                                            \
         try {                                       \
-            { stmt; }                               \
+            {                                       \
+                stmt;                               \
+            }                                       \
         } catch (const std::exception& e) {         \
             return Status::InternalError(e.what()); \
         }                                           \

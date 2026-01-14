@@ -408,8 +408,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb) {
-    return exec_plan_fragment(
-            params, [](auto&& PH1) { return empty_function(std::forward<decltype(PH1)>(PH1)); }, cb);
+    return exec_plan_fragment(params, [](auto&& PH1) { return empty_function(std::forward<decltype(PH1)>(PH1)); }, cb);
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,

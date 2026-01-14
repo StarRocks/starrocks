@@ -29,7 +29,7 @@ namespace starrocks {
 template <class T>
 class PathTrie {
 public:
-    PathTrie() : _root("/", "*"), _root_value(nullptr){};
+    PathTrie() : _root("/", "*"), _root_value(nullptr) {};
 
     ~PathTrie() {
         if (_root_value != nullptr) {

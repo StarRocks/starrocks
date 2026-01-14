@@ -42,7 +42,9 @@ extern "C" JNIEnv* getJNIEnv(void);
 #define DECLARE_NEW_BOX(PRIM_CLAZZ, TYPE, CLAZZ) \
     jobject new##CLAZZ(TYPE value);              \
     TYPE val##TYPE(jobject obj);                 \
-    jclass TYPE##_class() { return _class_##PRIM_CLAZZ; }
+    jclass TYPE##_class() {                      \
+        return _class_##PRIM_CLAZZ;              \
+    }
 
 namespace starrocks {
 class DirectByteBuffer;

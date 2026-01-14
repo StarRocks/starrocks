@@ -42,10 +42,10 @@ public:
     GermanString(const GermanString& rhs, void* ptr);
     GermanString(const GermanString& rhs);
 
-    explicit GermanString(const Slice& slice) : GermanString(slice.data, slice.size){};
+    explicit GermanString(const Slice& slice) : GermanString(slice.data, slice.size) {};
     GermanString& operator=(const Slice& slice);
 
-    GermanString(const std::string_view& str, void* ptr) : GermanString(str.data(), str.size(), ptr){};
+    GermanString(const std::string_view& str, void* ptr) : GermanString(str.data(), str.size(), ptr) {};
     GermanString(const std::string& str);
     GermanString& operator=(const std::string& str);
 

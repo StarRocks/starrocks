@@ -41,7 +41,7 @@ namespace starrocks::formats {
 class CSVFileWriterTest : public testing::Test {
 public:
     void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); };
-    void TearDown() override{};
+    void TearDown() override {};
 
 protected:
     std::vector<std::string> _make_type_names(const std::vector<TypeDescriptor>& type_descs) {

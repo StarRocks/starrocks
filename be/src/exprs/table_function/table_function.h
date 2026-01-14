@@ -64,7 +64,7 @@ public:
     bool is_required() { return _is_required; }
 
 private:
-    virtual void on_new_params(){};
+    virtual void on_new_params() {};
 
     //Params of table function
     Columns _columns;

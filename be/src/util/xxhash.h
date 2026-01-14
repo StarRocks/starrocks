@@ -1145,7 +1145,7 @@ struct XXH32_state_s {
     XXH32_hash_t mem32[4];     /*!< Internal buffer for partial reads. Treated as unsigned char[16]. */
     XXH32_hash_t memsize;      /*!< Amount of data in @ref mem32 */
     XXH32_hash_t reserved;     /*!< Reserved field. Do not read nor write to it. */
-};                             /* typedef'd to XXH32_state_t */
+}; /* typedef'd to XXH32_state_t */
 
 #ifndef XXH_NO_LONG_LONG /* defined when there is no 64-bit support */
 
@@ -1168,7 +1168,7 @@ struct XXH64_state_s {
     XXH32_hash_t memsize;    /*!< Amount of data in @ref mem64 */
     XXH32_hash_t reserved32; /*!< Reserved field, needed for padding anyways*/
     XXH64_hash_t reserved64; /*!< Reserved field. Do not read or write to it. */
-};                           /* typedef'd to XXH64_state_t */
+}; /* typedef'd to XXH64_state_t */
 
 #ifndef XXH_NO_XXH3
 
@@ -1278,7 +1278,9 @@ struct XXH3_state_s {
  * it's still necessary to use XXH3_NNbits_reset*() afterwards.
  */
 #define XXH3_INITSTATE(XXH3_state_ptr) \
-    { (XXH3_state_ptr)->seed = 0; }
+    {                                  \
+        (XXH3_state_ptr)->seed = 0;    \
+    }
 
 /*!
  * simple alias to pre-selected XXH3_128bits variant
@@ -4799,11 +4801,9 @@ static XXH64_hash_t XXH3_mergeAccs(const xxh_u64* XXH_RESTRICT acc, const xxh_u8
     return XXH3_avalanche(result64);
 }
 
-#define XXH3_INIT_ACC                                                                                            \
-    {                                                                                                            \
-        XXH_PRIME32_3, XXH_PRIME64_1, XXH_PRIME64_2, XXH_PRIME64_3, XXH_PRIME64_4, XXH_PRIME32_2, XXH_PRIME64_5, \
-                XXH_PRIME32_1                                                                                    \
-    }
+#define XXH3_INIT_ACC                                            \
+    {XXH_PRIME32_3, XXH_PRIME64_1, XXH_PRIME64_2, XXH_PRIME64_3, \
+     XXH_PRIME64_4, XXH_PRIME32_2, XXH_PRIME64_5, XXH_PRIME32_1}
 
 XXH_FORCE_INLINE XXH64_hash_t XXH3_hashLong_64b_internal(const void* XXH_RESTRICT input, size_t len,
                                                          const void* XXH_RESTRICT secret, size_t secretSize,

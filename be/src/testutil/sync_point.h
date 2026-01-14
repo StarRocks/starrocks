@@ -59,8 +59,10 @@ public:
     static KillPoint* GetInstance();
 };
 
-#define TEST_KILL_RANDOM_WITH_WEIGHT(kill_point, starrock_skill_odds_weight) \
-    { KillPoint::GetInstance()->TestKillRandom(kill_point, starrock_skill_odds_weight, __FILE__, __LINE__); }
+#define TEST_KILL_RANDOM_WITH_WEIGHT(kill_point, starrock_skill_odds_weight)                                  \
+    {                                                                                                         \
+        KillPoint::GetInstance()->TestKillRandom(kill_point, starrock_skill_odds_weight, __FILE__, __LINE__); \
+    }
 #define TEST_KILL_RANDOM(kill_point) TEST_KILL_RANDOM_WITH_WEIGHT(kill_point, 1)
 } // namespace starrocks
 

@@ -91,8 +91,7 @@ struct NullableAggregateFunctionState
 
 template <typename F, typename State>
 concept IsAggNullPred = requires(F f, State arg) {
-    { f(arg) }
-    ->std::convertible_to<bool>;
+    { f(arg) } -> std::convertible_to<bool>;
 };
 
 template <typename State>

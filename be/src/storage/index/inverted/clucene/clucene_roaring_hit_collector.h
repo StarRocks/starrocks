@@ -19,7 +19,7 @@
 namespace starrocks {
 class RoaringHitCollector final : public lucene::search::HitCollector {
 public:
-    RoaringHitCollector(roaring::Roaring* bitmap) : _collector(bitmap){};
+    RoaringHitCollector(roaring::Roaring* bitmap) : _collector(bitmap) {};
     void collect(const int32_t doc, const float_t score) override { _collector->add(doc); }
 
 private:

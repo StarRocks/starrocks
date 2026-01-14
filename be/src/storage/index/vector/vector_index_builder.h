@@ -23,7 +23,7 @@ enum IndexBuilderType { TEN_ANN = 0, UNKNOWN = 100 };
 class VectorIndexBuilder {
 public:
     VectorIndexBuilder(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path)
-            : _tablet_index(std::move(tablet_index)), _index_path(std::move(segment_index_path)){};
+            : _tablet_index(std::move(tablet_index)), _index_path(std::move(segment_index_path)) {};
     virtual ~VectorIndexBuilder() = default;
 
     // init from builder meta
@@ -49,7 +49,7 @@ protected:
 class EmptyVectorIndexBuilder final : public VectorIndexBuilder {
 public:
     EmptyVectorIndexBuilder(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path)
-            : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)){};
+            : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)) {};
 
     Status init() override { return Status::OK(); }
 

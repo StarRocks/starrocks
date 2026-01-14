@@ -173,7 +173,7 @@ public:
         auto rfile = std::move(res.value());
         auto buf = new uint8[segment_pb.data_size()];
         butil::IOBuf data;
-        data.append_user_data(buf, segment_pb.data_size(), [](void* buf) { delete[](uint8*) buf; });
+        data.append_user_data(buf, segment_pb.data_size(), [](void* buf) { delete[] (uint8*)buf; });
         auto st = rfile->read_fully(buf, segment_pb.data_size());
         ASSERT_OK(st);
         controller->request_attachment().append(data);

@@ -36,7 +36,7 @@ protected:
 
 class SplitDataStreamSink : public MultiCastDataStreamSink {
 public:
-    SplitDataStreamSink(RuntimeState* state) : MultiCastDataStreamSink(state), _pool(state->obj_pool()){};
+    SplitDataStreamSink(RuntimeState* state) : MultiCastDataStreamSink(state), _pool(state->obj_pool()) {};
     ~SplitDataStreamSink() override = default;
 
     // create split exprs and init data stream senders

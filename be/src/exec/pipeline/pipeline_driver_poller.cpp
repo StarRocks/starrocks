@@ -25,8 +25,7 @@ namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
     DCHECK(this->_polling_thread.get() == nullptr);
-    auto status = Thread::create(
-            "pipeline", "pip_poll_" + _name, [this]() { run_internal(); }, &this->_polling_thread);
+    auto status = Thread::create("pipeline", "pip_poll_" + _name, [this]() { run_internal(); }, &this->_polling_thread);
     if (!status.ok()) {
         LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
     }

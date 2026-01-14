@@ -49,7 +49,7 @@ namespace starrocks {
 
 class LakeReplicationTxnManagerTest : public testing::TestWithParam<TKeysType::type> {
 public:
-    LakeReplicationTxnManagerTest() : _test_dir(){};
+    LakeReplicationTxnManagerTest() : _test_dir() {};
 
     ~LakeReplicationTxnManagerTest() override = default;
 

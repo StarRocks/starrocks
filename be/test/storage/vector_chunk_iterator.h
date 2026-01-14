@@ -152,8 +152,8 @@ public:
               _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4), std::move(c5)} {}
 
     VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6)
-            : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3),
-                                                         std::move(c4), std::move(c5), std::move(c6)} {}
+            : ChunkIterator(std::move(schema)),
+              _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4), std::move(c5), std::move(c6)} {}
 
     VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7)
             : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),
@@ -166,28 +166,27 @@ public:
 
     VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
                         Datums c8, Datums c9)
-            : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3),
-                                                         std::move(c4), std::move(c5), std::move(c6),
-                                                         std::move(c7), std::move(c8), std::move(c9)} {}
+            : ChunkIterator(std::move(schema)),
+              _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4), std::move(c5),
+                       std::move(c6), std::move(c7), std::move(c8), std::move(c9)} {}
 
     VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
                         Datums c8, Datums c9, Datums c10)
-            : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),
-                                                         std::move(c5), std::move(c6), std::move(c7), std::move(c8),
-                                                         std::move(c9), std::move(c10)} {}
+            : ChunkIterator(std::move(schema)),
+              _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4), std::move(c5),
+                       std::move(c6), std::move(c7), std::move(c8), std::move(c9), std::move(c10)} {}
 
     VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
                         Datums c8, Datums c9, Datums c10, Datums c11)
-            : ChunkIterator(std::move(schema)), _columns{std::move(c1), std::move(c2),  std::move(c3), std::move(c4),
-                                                         std::move(c5), std::move(c6),  std::move(c7), std::move(c8),
-                                                         std::move(c9), std::move(c10), std::move(c11)} {}
+            : ChunkIterator(std::move(schema)),
+              _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),  std::move(c5), std::move(c6),
+                       std::move(c7), std::move(c8), std::move(c9), std::move(c10), std::move(c11)} {}
 
     VectorChunkIterator(Schema schema, Datums c1, Datums c2, Datums c3, Datums c4, Datums c5, Datums c6, Datums c7,
                         Datums c8, Datums c9, Datums c10, Datums c11, Datums c12)
-            : ChunkIterator(std::move(schema)), _columns{std::move(c1),  std::move(c2),  std::move(c3),
-                                                         std::move(c4),  std::move(c5),  std::move(c6),
-                                                         std::move(c7),  std::move(c8),  std::move(c9),
-                                                         std::move(c10), std::move(c11), std::move(c12)} {}
+            : ChunkIterator(std::move(schema)),
+              _columns{std::move(c1), std::move(c2), std::move(c3), std::move(c4),  std::move(c5),  std::move(c6),
+                       std::move(c7), std::move(c8), std::move(c9), std::move(c10), std::move(c11), std::move(c12)} {}
 
     void chunk_size(size_t n) { _chunk_size = n; }
     size_t chunk_size() const { return _chunk_size; }

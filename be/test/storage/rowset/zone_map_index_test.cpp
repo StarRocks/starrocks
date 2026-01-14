@@ -413,7 +413,9 @@ TEST_F(ColumnZoneMapTest, VarbinaryWithBinaryData) {
 
     // Add more binary data with different patterns
     std::vector<std::string> binary_values2 = {
-            std::string("\x01\x02\x03\x04", 4), std::string("\xFE\xFD\xFC\xFB", 4), std::string("EFGH", 4),
+            std::string("\x01\x02\x03\x04", 4),
+            std::string("\xFE\xFD\xFC\xFB", 4),
+            std::string("EFGH", 4),
             std::string("\xFF\xFF\xFF\xFF", 4), // All high bytes
     };
 

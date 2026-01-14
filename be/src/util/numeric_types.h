@@ -31,8 +31,8 @@ static constexpr FromType floating_to_integral_lower_bound =
         static_cast<FromType>(std::numeric_limits<ToType>::lowest());
 
 template <typename FromType, typename ToType>
-static constexpr FromType floating_to_integral_upper_bound = static_cast<FromType>(2) *
-                                                             (std::numeric_limits<ToType>::max() / 2 + 1);
+static constexpr FromType floating_to_integral_upper_bound =
+        static_cast<FromType>(2) * (std::numeric_limits<ToType>::max() / 2 + 1);
 
 /// Check whether the value of type `FromType` overflows when converted to type `ToType`.
 /// If overflowed, return true; otherwise, return false.

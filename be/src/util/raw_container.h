@@ -160,8 +160,7 @@ template <typename Container>
 concept VecContainer = requires(Container c) {
     typename Container::value_type;
     typename Container::allocator_type;
-}
-&&std::same_as<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>;
+} && std::same_as<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>;
 
 template <VecContainer Container>
 inline void make_room(Container* v, size_t n) {

@@ -76,7 +76,7 @@ class Reducer final : public pipeline::ContextWithDependency {
 public:
     Reducer(double init_value, ReduceFunc reduce_func, size_t output_num_rows);
     ~Reducer() override = default;
-    void close(starrocks::RuntimeState* state) override{};
+    void close(starrocks::RuntimeState* state) override {};
     Status reset_state(RuntimeState* state, const Chunks& chunks, pipeline::Operator* op);
 
     void set_result(double result) { _result = result; }

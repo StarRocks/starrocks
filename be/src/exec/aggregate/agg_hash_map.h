@@ -42,18 +42,14 @@ DECLARE_FAIL_POINT(aggregate_build_hash_map_bad_alloc);
 
 using AggDataPtr = uint8_t*;
 template <typename T>
-concept HasKeyType = requires {
-    typename T::KeyType;
-};
+concept HasKeyType = requires { typename T::KeyType; };
 
 template <typename T, typename HashMapWithKey>
-concept AllocFunc = HasKeyType<HashMapWithKey>&& requires(T t, const typename HashMapWithKey::KeyType& key,
-                                                          std::nullptr_t null) {
-    { t(key) }
-    ->std::same_as<AggDataPtr>;
-    { t(null) }
-    ->std::same_as<AggDataPtr>;
-};
+concept AllocFunc =
+        HasKeyType<HashMapWithKey> && requires(T t, const typename HashMapWithKey::KeyType& key, std::nullptr_t null) {
+            { t(key) } -> std::same_as<AggDataPtr>;
+            { t(null) } -> std::same_as<AggDataPtr>;
+        };
 
 // =====================
 // one level agg hash map
@@ -101,7 +97,7 @@ using SliceAggTwoLevelHashMap =
 
 template <typename T>
 concept HasImmutableData = requires(T t) {
-    {t.immutable_data()};
+    { t.immutable_data() };
 };
 
 template <typename T>

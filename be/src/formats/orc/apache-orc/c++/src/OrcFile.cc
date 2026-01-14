@@ -106,8 +106,8 @@ std::unique_ptr<InputStream> readLocalFile(const std::string& path, ReaderMetric
     return std::unique_ptr<InputStream>(new FileInputStream(path, metrics));
 }
 
-OutputStream::~OutputStream(){
-        // PASS
+OutputStream::~OutputStream() {
+    // PASS
 };
 
 class FileOutputStream : public OutputStream {

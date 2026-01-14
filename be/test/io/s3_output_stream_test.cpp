@@ -194,7 +194,7 @@ TEST_F(S3OutputStreamTest, test_get_direct_buffer_and_advance) {
     S3InputStream is(g_s3client, kBucketName, kObjectName);
 
     ASSERT_OK(os.write("abc", 3));
-    ASSIGN_OR_ABORT(uint8_t * buf, os.get_direct_buffer_and_advance(3));
+    ASSIGN_OR_ABORT(uint8_t* buf, os.get_direct_buffer_and_advance(3));
     memcpy(buf, "xyz", 3);
     ASSERT_OK(os.close());
 

@@ -20,7 +20,7 @@
 namespace starrocks {
 class BlackHoleTableSink final : public DataSink {
 public:
-    explicit BlackHoleTableSink(ObjectPool* pool) : _pool(pool){};
+    explicit BlackHoleTableSink(ObjectPool* pool) : _pool(pool) {};
     ~BlackHoleTableSink() override = default;
 
     Status prepare(RuntimeState* state) override;

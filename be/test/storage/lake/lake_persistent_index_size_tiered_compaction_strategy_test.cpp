@@ -164,7 +164,10 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_multiple_sstabl
 // Test 5: Three filesets with similar sizes - all should be selected
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_three_filesets_similar_size) {
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 110000, 200}, {3, 95000, 300}, {4, 500000, 400}, // active
+            {1, 100000, 100},
+            {2, 110000, 200},
+            {3, 95000, 300},
+            {4, 500000, 400}, // active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -327,7 +330,10 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_mixed_sizes) {
 // Test 13: Sequential fileset IDs vs non-sequential
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_non_sequential_fileset_ids) {
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {100, 100000, 100}, {200, 100000, 200}, {300, 100000, 300}, {400, 500000, 400}, // active
+            {100, 100000, 100},
+            {200, 100000, 200},
+            {300, 100000, 300},
+            {400, 500000, 400}, // active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);
@@ -430,7 +436,9 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_all_same_size) 
 // Test 18: Verify result is cleared on subsequent calls
 TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_result_cleared) {
     std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
-            {1, 100000, 100}, {2, 100000, 200}, {3, 100000, 300}, // active
+            {1, 100000, 100},
+            {2, 100000, 200},
+            {3, 100000, 300}, // active
     };
 
     auto metadata = create_tablet_metadata_with_sstables(sstables_info);

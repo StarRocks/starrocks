@@ -23,7 +23,7 @@ class FileReader;
 
 class HdfsParquetScanner final : public HdfsScanner {
 public:
-    HdfsParquetScanner() : _skip_rows_ctx(std::make_shared<SkipRowsContext>()){};
+    HdfsParquetScanner() : _skip_rows_ctx(std::make_shared<SkipRowsContext>()) {};
     ~HdfsParquetScanner() override = default;
 
     Status do_open(RuntimeState* runtime_state) override;

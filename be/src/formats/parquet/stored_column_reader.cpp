@@ -226,9 +226,9 @@ Status RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size
         _meet_first_record = false;
         DCHECK_EQ(0, rep_levels[levels_pos]);
     } // else {
-      //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
-      //  so we need to decode more levels to obtain a complete line or
-      //  we have read all the records in this column chunk.
+    //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
+    //  so we need to decode more levels to obtain a complete line or
+    //  we have read all the records in this column chunk.
     // }
 
     VLOG_ROW << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;

@@ -567,7 +567,9 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
     ASSIGN_OR_ABORT(auto tablet_meta_d1, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
 
     // 4. rebuild pindex
-    { write_data_fn(true); }
+    {
+        write_data_fn(true);
+    }
     write_data_fn(false);
     config::l0_max_mem_usage = old_val;
 

@@ -69,7 +69,7 @@ public:
 
     void resize(size_t n) override;
 
-    void reserve(size_t n) override{};
+    void reserve(size_t n) override {};
 
     void assign(size_t n, size_t idx) override;
 

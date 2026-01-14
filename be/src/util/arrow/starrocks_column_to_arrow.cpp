@@ -666,7 +666,7 @@ constexpr int32_t starrocks_to_arrow_convert_idx(LogicalType lt, ArrowTypeId at,
 }
 
 #define STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(lt, at, is_nullable) \
-    { starrocks_to_arrow_convert_idx(lt, at, is_nullable), &ColumnToArrowConverter<lt, at, is_nullable>::convert }
+    {starrocks_to_arrow_convert_idx(lt, at, is_nullable), &ColumnToArrowConverter<lt, at, is_nullable>::convert}
 
 #define STARROCKS_TO_ARROW_CONV_ENTRY_CTOR(lt, at) \
     STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(lt, at, false), STARROCKS_TO_ARROW_CONV_SINGLE_ENTRY_CTOR(lt, at, true)

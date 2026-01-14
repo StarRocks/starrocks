@@ -182,7 +182,9 @@ Status StreamAggregator::output_changes_internal(int32_t chunk_size, StreamChunk
             }
         }
 
-        { hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index); }
+        {
+            hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
+        }
 
         {
             // Create a view of MutableColumns as Columns for const Columns& parameters

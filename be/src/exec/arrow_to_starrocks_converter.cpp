@@ -166,9 +166,9 @@ void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, s
 }
 
 template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
-static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
-                                                             ? TypeDescriptor::MAX_VARCHAR_LENGTH
-                                                             : TypeDescriptor::MAX_CHAR_LENGTH;
+static inline constexpr uint32_t binary_max_length =
+        (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY) ? TypeDescriptor::MAX_VARCHAR_LENGTH
+                                                     : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGaurd<LT>> {
@@ -943,8 +943,7 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
     return (at << 17) | (lt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
 
-#define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) \
-    { convert_idx(a, b, t0, t1), &ArrowConverter<a, b, t0, t1>::apply }
+#define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) {convert_idx(a, b, t0, t1), &ArrowConverter<a, b, t0, t1>::apply}
 
 #define ARROW_CONV_ENTRY_CTOR(a, b)                                                                    \
     ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, false, false), ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, false, true), \
@@ -952,8 +951,7 @@ constexpr int32_t convert_idx(ArrowTypeId at, LogicalType lt, bool is_nullable, 
 
 #define ARROW_CONV_ENTRY(a, ...) DEF_BINARY_RELATION_ENTRY_SEP_COMMA(ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 
-#define STRICT_ARROW_CONV_ENTRY_CTOR(a, b) \
-    { a, b }
+#define STRICT_ARROW_CONV_ENTRY_CTOR(a, b) {a, b}
 #define STRICT_ARROW_CONV_ENTRY_R(a, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA_R(STRICT_ARROW_CONV_ENTRY_CTOR, a, ##__VA_ARGS__)
 

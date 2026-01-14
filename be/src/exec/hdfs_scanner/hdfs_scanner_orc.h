@@ -27,7 +27,7 @@ class OrcRowReaderFilter;
 
 class HdfsOrcScanner final : public HdfsScanner {
 public:
-    HdfsOrcScanner() : _skip_rows_ctx(std::make_shared<SkipRowsContext>()){};
+    HdfsOrcScanner() : _skip_rows_ctx(std::make_shared<SkipRowsContext>()) {};
     ~HdfsOrcScanner() override = default;
 
     Status do_open(RuntimeState* runtime_state) override;

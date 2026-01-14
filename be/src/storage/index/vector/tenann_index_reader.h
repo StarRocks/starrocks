@@ -31,7 +31,7 @@ namespace starrocks {
 class TenANNReader final : public VectorIndexReader {
 public:
     TenANNReader() = default;
-    ~TenANNReader() override{};
+    ~TenANNReader() override {};
 
     Status init_searcher(const tenann::IndexMeta& meta, const std::string& index_path) override;
 

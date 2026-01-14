@@ -74,7 +74,7 @@
 #define DIAGNOSTIC_PUSH __pragma(warning(push))
 #define DIAGNOSTIC_POP __pragma(warning(pop))
 #else
-#error("Unknown compiler")
+#error ("Unknown compiler")
 #endif
 #endif // ifndef DIAGNOSTIC_PUSH
 

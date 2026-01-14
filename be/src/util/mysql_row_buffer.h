@@ -47,7 +47,7 @@ namespace starrocks {
 class MysqlRowBuffer final {
 public:
     MysqlRowBuffer() = default;
-    MysqlRowBuffer(bool is_binary_format) : _is_binary_format(is_binary_format){};
+    MysqlRowBuffer(bool is_binary_format) : _is_binary_format(is_binary_format) {};
     ~MysqlRowBuffer() = default;
 
     void reset() { _data.clear(); }

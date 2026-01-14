@@ -8,7 +8,7 @@ namespace starrocks {
 class DebugExpr final : public Expr {
 public:
     using DebugFunctionCall = StatusOr<ColumnPtr> (*)(ExprContext* context, Chunk* columns);
-    DebugExpr(const TExprNode& node) : Expr(node){};
+    DebugExpr(const TExprNode& node) : Expr(node) {};
 
     ~DebugExpr() override = default;
 

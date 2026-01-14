@@ -1564,8 +1564,8 @@ Reader::~Reader() {
     // PASS
 }
 
-InputStream::~InputStream(){
-        // PASS
+InputStream::~InputStream() {
+    // PASS
 };
 
 uint64_t InputStream::getNaturalReadSizeAfterSeek() const {

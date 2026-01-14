@@ -56,7 +56,7 @@ public:
               _target_types(std::move(target_types)),
               _source_paths(std::move(source_paths)),
               _source_types(std::move(source_types)),
-              _need_remain(need_remain){};
+              _need_remain(need_remain) {};
 
     ~JsonFlatColumnIterator() override {
         if (transformer != nullptr) {
@@ -312,7 +312,7 @@ public:
             : _json_iter(std::move(json_iter)),
               _target_paths(std::move(target_paths)),
               _target_types(std::move(target_types)),
-              _need_remain(need_remain){};
+              _need_remain(need_remain) {};
 
     ~JsonDynamicFlatIterator() override = default;
 
@@ -450,7 +450,7 @@ public:
               _null_iter(std::move(null_iter)),
               _all_iter(std::move(all_iter)),
               _src_paths(std::move(src_paths)),
-              _src_types(std::move(src_types)){};
+              _src_types(std::move(src_types)) {};
 
     ~JsonMergeIterator() override = default;
 

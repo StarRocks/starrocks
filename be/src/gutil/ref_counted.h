@@ -269,7 +269,7 @@ public:
     // and comparison operations.
     operator T*() const { return ptr_; }
 #else
-    typedef T* scoped_refptr::*Testable;
+    typedef T* scoped_refptr::* Testable;
     operator Testable() const { return ptr_ ? &scoped_refptr::ptr_ : nullptr; }
 #endif
 

@@ -21,7 +21,7 @@ namespace starrocks {
 
 class CloneExpr final : public Expr {
 public:
-    CloneExpr(const TExprNode& node) : Expr(node){};
+    CloneExpr(const TExprNode& node) : Expr(node) {};
 
     ~CloneExpr() override = default;
 

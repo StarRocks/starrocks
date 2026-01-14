@@ -256,7 +256,7 @@ size_t PredicateLeaf::hashCode() const {
                   [&](const Literal& literal) { value = value * 17 + literal.getHashCode(); });
     auto colHash = mHasColumnName ? std::hash<std::string>{}(mColumnName) : std::hash<uint64_t>{}(mColumnId);
     return value * 103 * 101 * 3 * 17 + std::hash<int>{}(static_cast<int>(mOperator)) +
-           std::hash<int>{}(static_cast<int>(mType)) * 17 + std::hash<std::string>{}(mColumnName)*3 * 17 +
+           std::hash<int>{}(static_cast<int>(mType)) * 17 + std::hash<std::string>{}(mColumnName) * 3 * 17 +
            colHash * 3 * 17 * 17;
 }
 

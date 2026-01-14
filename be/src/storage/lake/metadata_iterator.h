@@ -29,7 +29,7 @@ template <typename T>
 class MetadataIterator {
 public:
     explicit MetadataIterator(TabletManager* manager, int64_t tablet_id, std::set<std::string> files)
-            : _manager(manager), _tablet_id(tablet_id), _files(std::move(files)), _iter(_files.begin()){};
+            : _manager(manager), _tablet_id(tablet_id), _files(std::move(files)), _iter(_files.begin()) {};
 
     bool has_next() const { return _iter != _files.end(); }
 

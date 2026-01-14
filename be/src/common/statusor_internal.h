@@ -319,7 +319,7 @@ struct MoveCtorBase<T, false> {
     MoveCtorBase& operator=(MoveCtorBase&&) noexcept = default;
 };
 
-template <typename T, bool = std::is_copy_constructible<T>::value&& std::is_copy_assignable<T>::value>
+template <typename T, bool = std::is_copy_constructible<T>::value && std::is_copy_assignable<T>::value>
 struct CopyAssignBase {
     CopyAssignBase() = default;
     CopyAssignBase(const CopyAssignBase&) = default;
@@ -337,7 +337,7 @@ struct CopyAssignBase<T, false> {
     CopyAssignBase& operator=(CopyAssignBase&&) noexcept = default;
 };
 
-template <typename T, bool = std::is_move_constructible<T>::value&& std::is_move_assignable<T>::value>
+template <typename T, bool = std::is_move_constructible<T>::value && std::is_move_assignable<T>::value>
 struct MoveAssignBase {
     MoveAssignBase() = default;
     MoveAssignBase(const MoveAssignBase&) = default;

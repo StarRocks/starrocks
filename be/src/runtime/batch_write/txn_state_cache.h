@@ -139,7 +139,7 @@ inline std::ostream& operator<<(std::ostream& os, TxnStateHandler& holder) {
 class TxnStateSubscriber {
 public:
     TxnStateSubscriber(TxnStateDynamicCache* cache, TxnStateDynamicCacheEntry* entry, std::string name)
-            : _cache(cache), _entry(entry), _name(std::move(name)){};
+            : _cache(cache), _entry(entry), _name(std::move(name)) {};
 
     ~TxnStateSubscriber() {
         _entry->value().unsubscribe();

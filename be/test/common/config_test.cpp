@@ -78,7 +78,9 @@ TEST_F(ConfigTest, test_init) {
     CONF_Bool(cfg_bool_env, "false");
     CONF_String_enum(cfg_string_enum, "true", "true,false");
     // Invalid config file name
-    { EXPECT_FALSE(config::init("/path/to/nonexist/file")); }
+    {
+        EXPECT_FALSE(config::init("/path/to/nonexist/file"));
+    }
     // Invalid bool value
     {
         std::stringstream ss;

@@ -267,8 +267,9 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::_group_rows
             for (const auto& r : current_group) {
                 group_ids.push_back(r->id());
             }
-            std::string reason =
-                    has_adjacency_gap ? " (adjacency gap)" : would_exceed_segments ? " (segment limit)" : "";
+            std::string reason = has_adjacency_gap       ? " (adjacency gap)"
+                                 : would_exceed_segments ? " (segment limit)"
+                                                         : "";
             VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " group " << valid_groups.size() << ": "
                     << current_group.size() << " rowsets, " << current_bytes << " bytes, " << current_segments
                     << " segments, ids=[" << JoinInts(group_ids, ",") << "]" << reason;
@@ -416,11 +417,10 @@ std::vector<std::vector<RowsetPtr>> TabletParallelCompactionManager::split_rowse
         for (const auto& r : all_rowsets) {
             group_ids.push_back(r->id());
         }
-        std::string reason = stats.has_delete_predicate
-                                     ? "has_delete_predicate"
-                                     : (max_parallel <= 1)
-                                               ? "max_parallel<=1"
-                                               : not_enough_segments ? "not_enough_segments" : "data_size_small";
+        std::string reason = stats.has_delete_predicate ? "has_delete_predicate"
+                             : (max_parallel <= 1)      ? "max_parallel<=1"
+                             : not_enough_segments      ? "not_enough_segments"
+                                                        : "data_size_small";
         VLOG(1) << "Parallel compaction: tablet=" << tablet_id << " fallback to normal compaction (" << reason
                 << "): " << all_rowsets.size() << " rowsets, " << stats.total_segments << " segments, "
                 << stats.total_bytes << " bytes, ids=[" << JoinInts(group_ids, ",") << "]";

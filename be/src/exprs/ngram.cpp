@@ -32,7 +32,7 @@ struct Ngramstate {
     using DriverMap = phmap::parallel_flat_hash_map<std::thread::id, std::unique_ptr<std::vector<NgramHash>>,
                                                     phmap::Hash<std::thread::id>, phmap::EqualTo<std::thread::id>,
                                                     phmap::Allocator<std::thread::id>, NUM_LOCK_SHARD_LOG, std::mutex>;
-    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0){};
+    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0) {};
     // unmodified map, only used for driver to copy
     std::vector<NgramHash> publicHashMap;
     DriverMap driver_maps; // hashMap for each pipeline_driver, to make it driver-local
@@ -211,7 +211,8 @@ private:
             DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
 
             // now get the result
-            double row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+            double row_result =
+                    1.0f - (needle_not_overlap_with_haystack) * 1.0f / std::max(needle_gram_count, (size_t)1);
 
             res->get_data()[i] = row_result;
         }
@@ -245,7 +246,7 @@ private:
         size_t needle_gram_count = state->needle_gram_count;
         size_t needle_not_overlap_with_haystack = calculateDistanceWithHaystack<false>(
                 map, cur_haystack, map_restore_helper, needle_gram_count, gram_num);
-        float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+        float result = 1.0f - (needle_not_overlap_with_haystack) * 1.0f / std::max(needle_gram_count, (size_t)1);
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
         return result;
     }

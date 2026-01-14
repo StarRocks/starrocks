@@ -958,9 +958,9 @@ public:
     using node_type = node_handle<Policy, hash_policy_traits<Policy>, Alloc>;
     using insert_return_type = InsertReturnType<iterator, node_type>;
 
-    raw_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
-                                    std::is_nothrow_default_constructible<key_equal>::value&&
-                                            std::is_nothrow_default_constructible<allocator_type>::value) {}
+    raw_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value &&
+                            std::is_nothrow_default_constructible<key_equal>::value &&
+                            std::is_nothrow_default_constructible<allocator_type>::value) {}
 
     explicit raw_hash_set(size_t bucket_cnt, const hasher& hashfn = hasher(), const key_equal& eq = key_equal(),
                           const allocator_type& alloc = allocator_type())
@@ -1070,9 +1070,9 @@ public:
         growth_left() -= that.size();
     }
 
-    raw_hash_set(raw_hash_set&& that) noexcept(
-            std::is_nothrow_copy_constructible<hasher>::value&& std::is_nothrow_copy_constructible<key_equal>::value&&
-                    std::is_nothrow_copy_constructible<allocator_type>::value)
+    raw_hash_set(raw_hash_set&& that) noexcept(std::is_nothrow_copy_constructible<hasher>::value &&
+                                               std::is_nothrow_copy_constructible<key_equal>::value &&
+                                               std::is_nothrow_copy_constructible<allocator_type>::value)
             : ctrl_(phmap::exchange(that.ctrl_, EmptyGroup())),
               slots_(phmap::exchange(that.slots_, nullptr)),
               size_(phmap::exchange(that.size_, 0)),
@@ -1114,8 +1114,8 @@ public:
     }
 
     raw_hash_set& operator=(raw_hash_set&& that) noexcept(
-            phmap::allocator_traits<allocator_type>::is_always_equal::value&& std::is_nothrow_move_assignable<
-                    hasher>::value&& std::is_nothrow_move_assignable<key_equal>::value) {
+            phmap::allocator_traits<allocator_type>::is_always_equal::value &&
+            std::is_nothrow_move_assignable<hasher>::value && std::is_nothrow_move_assignable<key_equal>::value) {
         // TODO(sbenza): We should only use the operations from the noexcept clause
         // to make sure we actually adhere to that contract.
         return move_assign(std::move(that), typename AllocTraits::propagate_on_container_move_assignment());
@@ -2519,9 +2519,9 @@ public:
 
     // ------------------------- c o n s t r u c t o r s ------------------
 
-    parallel_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
-                                         std::is_nothrow_default_constructible<key_equal>::value&&
-                                                 std::is_nothrow_default_constructible<allocator_type>::value) {}
+    parallel_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value &&
+                                 std::is_nothrow_default_constructible<key_equal>::value &&
+                                 std::is_nothrow_default_constructible<allocator_type>::value) {}
 
     explicit parallel_hash_set(size_t bucket_cnt, const hasher& hash_param = hasher(),
                                const key_equal& eq = key_equal(), const allocator_type& alloc = allocator_type()) {
@@ -2618,9 +2618,9 @@ public:
         for (size_t i = 0; i < num_tables; ++i) sets_[i].set_ = {that.sets_[i].set_, a};
     }
 
-    parallel_hash_set(parallel_hash_set&& that) noexcept(
-            std::is_nothrow_copy_constructible<hasher>::value&& std::is_nothrow_copy_constructible<key_equal>::value&&
-                    std::is_nothrow_copy_constructible<allocator_type>::value)
+    parallel_hash_set(parallel_hash_set&& that) noexcept(std::is_nothrow_copy_constructible<hasher>::value &&
+                                                         std::is_nothrow_copy_constructible<key_equal>::value &&
+                                                         std::is_nothrow_copy_constructible<allocator_type>::value)
             : parallel_hash_set(std::move(that), that.alloc_ref()) {}
 
     parallel_hash_set(parallel_hash_set&& that, const allocator_type& a) {
@@ -2633,8 +2633,8 @@ public:
     }
 
     parallel_hash_set& operator=(parallel_hash_set&& that) noexcept(
-            phmap::allocator_traits<allocator_type>::is_always_equal::value&& std::is_nothrow_move_assignable<
-                    hasher>::value&& std::is_nothrow_move_assignable<key_equal>::value) {
+            phmap::allocator_traits<allocator_type>::is_always_equal::value &&
+            std::is_nothrow_move_assignable<hasher>::value && std::is_nothrow_move_assignable<key_equal>::value) {
         for (size_t i = 0; i < num_tables; ++i) sets_[i].set_ = std::move(that.sets_[i].set_);
         return *this;
     }

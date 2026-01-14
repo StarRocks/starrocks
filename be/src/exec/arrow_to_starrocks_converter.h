@@ -74,7 +74,7 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable
 LogicalType get_strict_type(ArrowTypeId at);
 
 struct ConvertFuncTree {
-    ConvertFuncTree(ConvertFunc f) : func(f){};
+    ConvertFuncTree(ConvertFunc f) : func(f) {};
     ConvertFuncTree() = default;
     ConvertFunc func = nullptr;
     std::vector<std::string> field_names; // used in struct

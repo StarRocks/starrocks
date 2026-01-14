@@ -361,14 +361,12 @@ protected:
 
 template <typename F>
 concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
-    { f(index, hash_value) }
-    ->std::same_as<void>;
+    { f(index, hash_value) } -> std::same_as<void>;
 };
 
 template <typename F>
 concept HashValueAndBucketIdForEachFunc = requires(F f, size_t index, uint32_t& hash_value, uint32_t& bucket_id) {
-    { f(index, hash_value, bucket_id) }
-    ->std::same_as<void>;
+    { f(index, hash_value, bucket_id) } -> std::same_as<void>;
 };
 
 struct FullScanIterator {
@@ -1677,8 +1675,8 @@ public:
 };
 
 template <LogicalType LT>
-concept BitsetSupportedLogicalType = (lt_is_boolean<LT> || lt_is_date<LT> || lt_is_integer<LT> ||
-                                      lt_is_decimal<LT>)&&sizeof(RunTimeCppType<LT>) <= sizeof(int64_t);
+concept BitsetSupportedLogicalType = (lt_is_boolean<LT> || lt_is_date<LT> || lt_is_integer<LT> || lt_is_decimal<LT>) &&
+                                     sizeof(RunTimeCppType<LT>) <= sizeof(int64_t);
 
 template <LogicalType LT>
 class Bitset {

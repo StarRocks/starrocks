@@ -21,7 +21,7 @@ namespace starrocks {
 
 class NDVEstimator {
 public:
-    virtual ~NDVEstimator(){};
+    virtual ~NDVEstimator() {};
 
     virtual int64_t estimate(int64_t sample_row, int64_t sample_distinct, int64_t count_once, double sample_ratio) = 0;
 };

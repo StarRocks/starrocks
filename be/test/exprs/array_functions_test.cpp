@@ -482,12 +482,12 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
         target->append_datum(Datum{(int8_t)0});
@@ -992,12 +992,12 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
         target->append_datum(Datum{(int8_t)0});
@@ -1504,12 +1504,12 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
         target->append_datum(Datum{(int8_t)0});
@@ -2456,12 +2456,12 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         auto result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
@@ -2513,12 +2513,12 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         auto result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
@@ -2554,9 +2554,9 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
     {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) true, Datum(), Datum(), (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false, Datum()});
-        array->append_datum(DatumArray{(int8_t) true, Datum()});
+        array->append_datum(DatumArray{(int8_t)true, Datum(), Datum(), (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false, Datum()});
+        array->append_datum(DatumArray{(int8_t)true, Datum()});
 
         auto result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
@@ -2599,12 +2599,12 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         auto result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
@@ -2641,12 +2641,12 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
         MutableColumnPtr array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
-        array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
+        array->append_datum(DatumArray{(int8_t)true, (int8_t)false});
 
         auto result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());

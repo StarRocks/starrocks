@@ -106,7 +106,7 @@ StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri
 
 class StarletInputStream : public starrocks::io::SeekableInputStream {
 public:
-    explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
+    explicit StarletInputStream(ReadOnlyFilePtr file_ptr) : _file_ptr(std::move(file_ptr)) {};
     ~StarletInputStream() override = default;
     StarletInputStream(const StarletInputStream&) = delete;
     void operator=(const StarletInputStream&) = delete;
@@ -222,7 +222,7 @@ private:
 
 class StarletOutputStream : public starrocks::io::OutputStream {
 public:
-    explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)){};
+    explicit StarletOutputStream(WritableFilePtr file_ptr) : _file_ptr(std::move(file_ptr)) {};
     ~StarletOutputStream() override = default;
     StarletOutputStream(const StarletOutputStream&) = delete;
     void operator=(const StarletOutputStream&) = delete;

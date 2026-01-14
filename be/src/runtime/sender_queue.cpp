@@ -57,9 +57,8 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         phmap::flat_hash_map<SlotId, TypeDescriptor> slot_id_to_type;
-        std::for_each(slots.begin(), slots.end(), [&](SlotDescriptor* slot) {
-            slot_id_to_type.insert({slot->id(), slot->type()});
-        });
+        std::for_each(slots.begin(), slots.end(),
+                      [&](SlotDescriptor* slot) { slot_id_to_type.insert({slot->id(), slot->type()}); });
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
             auto iter = slot_id_to_type.find(kv.first);
             if (iter != slot_id_to_type.end()) {

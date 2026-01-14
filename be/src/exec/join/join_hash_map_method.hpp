@@ -184,22 +184,22 @@ void TLinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(
         }
     };
 
-    auto compute_hash_values = [&]<bool HasEquiJoinKeyNulls, bool HasAsofTemporalNulls>(
-                                       const uint8_t* asof_temporal_nulls) {
-        for (uint32_t i = 1; i < num_rows; i++) {
-            if constexpr (HasAsofTemporalNulls) {
-                if (asof_temporal_nulls[i] != 0) continue;
-            }
-            if constexpr (std::is_same_v<CppType, Slice> && HasEquiJoinKeyNulls) {
-                if (equi_join_key_nulls[i] != 0) continue;
-            }
+    auto compute_hash_values =
+            [&]<bool HasEquiJoinKeyNulls, bool HasAsofTemporalNulls>(const uint8_t* asof_temporal_nulls) {
+                for (uint32_t i = 1; i < num_rows; i++) {
+                    if constexpr (HasAsofTemporalNulls) {
+                        if (asof_temporal_nulls[i] != 0) continue;
+                    }
+                    if constexpr (std::is_same_v<CppType, Slice> && HasEquiJoinKeyNulls) {
+                        if (equi_join_key_nulls[i] != 0) continue;
+                    }
 
-            // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
-            // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
-            next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size << FP_BITS,
-                                                                  table_items->log_bucket_size + FP_BITS);
-        }
-    };
+                    // Only check `is_nulls_data[i]` for the nullable slice type. The hash calculation overhead for
+                    // fixed-size types is small, and thus we do not check it to allow vectorization of the hash calculation.
+                    next[i] = JoinHashMapHelper::calc_bucket_num<CppType>(keys[i], table_items->bucket_size << FP_BITS,
+                                                                          table_items->log_bucket_size + FP_BITS);
+                }
+            };
 
     auto dispatch_hash_computation = [&](const uint8_t* asof_temporal_nulls) {
         if (equi_join_key_nulls == nullptr) {

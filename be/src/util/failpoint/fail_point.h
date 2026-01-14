@@ -160,7 +160,9 @@ bool init_failpoint_from_conf(const std::string& conf_file);
         bool fp_triggered__ = false;                                    \
         fiu_do_on(#NAME, {                                              \
             fp_triggered__ = true;                                      \
-            { stmt; }                                                   \
+            {                                                           \
+                stmt;                                                   \
+            }                                                           \
         });                                                             \
         if (!fp_triggered__) {                                          \
             default_stmt;                                               \
@@ -176,7 +178,9 @@ bool init_failpoint_from_conf(const std::string& conf_file);
         bool fp_triggered__ = false;                                                  \
         fiu_do_on(#NAME, {                                                            \
             fp_triggered__ = true;                                                    \
-            { status = stmt; }                                                        \
+            {                                                                         \
+                status = stmt;                                                        \
+            }                                                                         \
         });                                                                           \
         if (!fp_triggered__) {                                                        \
             status = default_stmt;                                                    \

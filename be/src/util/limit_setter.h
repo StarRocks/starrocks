@@ -16,8 +16,8 @@
 
 #include <atomic>
 namespace starrocks {
-#define LIMIT_SETTER_ACTUAL_NUM(n) ((int32_t)((n)&0xffff'fffful))
-#define LIMIT_SETTER_EXPECT_NUM(n) ((int32_t)(((n)&0xffff'ffff'0000'0000ul) >> 32))
+#define LIMIT_SETTER_ACTUAL_NUM(n) ((int32_t)((n) & 0xffff'fffful))
+#define LIMIT_SETTER_EXPECT_NUM(n) ((int32_t)(((n) & 0xffff'ffff'0000'0000ul) >> 32))
 #define LIMIT_SETTER_MERGE(expect_num, real_num) ((((int64_t)(expect_num)) << 32) | ((int64_t)(real_num)))
 // LimitSetter is used to control maximum number of threads in thread pool dynamically
 class LimitSetter {

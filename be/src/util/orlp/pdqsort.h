@@ -218,17 +218,14 @@ inline std::pair<Iter, bool> partition_right_branchless(Iter begin, Iter end, Co
 
     // Find the first element greater than or equal than the pivot (the median of 3 guarantees
     // this exists).
-    while (comp(*++first, pivot))
-        ;
+    while (comp(*++first, pivot));
 
     // Find the first element strictly smaller than the pivot. We have to guard this search if
     // there was no element before *first.
     if (first - 1 == begin)
-        while (first < last && !comp(*--last, pivot))
-            ;
+        while (first < last && !comp(*--last, pivot));
     else
-        while (!comp(*--last, pivot))
-            ;
+        while (!comp(*--last, pivot));
 
     // If the first pair of elements that should be swapped to partition are the same element,
     // the passed in sequence already was correctly partitioned.
@@ -393,17 +390,14 @@ inline std::pair<Iter, bool> partition_right(Iter begin, Iter end, Compare comp)
 
     // Find the first element greater than or equal than the pivot (the median of 3 guarantees
     // this exists).
-    while (comp(*++first, pivot))
-        ;
+    while (comp(*++first, pivot));
 
     // Find the first element strictly smaller than the pivot. We have to guard this search if
     // there was no element before *first.
     if (first - 1 == begin)
-        while (first < last && !comp(*--last, pivot))
-            ;
+        while (first < last && !comp(*--last, pivot));
     else
-        while (!comp(*--last, pivot))
-            ;
+        while (!comp(*--last, pivot));
 
     // If the first pair of elements that should be swapped to partition are the same element,
     // the passed in sequence already was correctly partitioned.
@@ -414,10 +408,8 @@ inline std::pair<Iter, bool> partition_right(Iter begin, Iter end, Compare comp)
     // above.
     while (first < last) {
         std::iter_swap(first, last);
-        while (comp(*++first, pivot))
-            ;
-        while (!comp(*--last, pivot))
-            ;
+        while (comp(*++first, pivot));
+        while (!comp(*--last, pivot));
     }
 
     // Put the pivot in the right place.
@@ -440,22 +432,17 @@ inline Iter partition_left(Iter begin, Iter end, Compare comp) {
     Iter first = begin;
     Iter last = end;
 
-    while (comp(pivot, *--last))
-        ;
+    while (comp(pivot, *--last));
 
     if (last + 1 == end)
-        while (first < last && !comp(pivot, *++first))
-            ;
+        while (first < last && !comp(pivot, *++first));
     else
-        while (!comp(pivot, *++first))
-            ;
+        while (!comp(pivot, *++first));
 
     while (first < last) {
         std::iter_swap(first, last);
-        while (comp(pivot, *--last))
-            ;
-        while (!comp(pivot, *++first))
-            ;
+        while (comp(pivot, *--last));
+        while (!comp(pivot, *++first));
     }
 
     Iter pivot_pos = last;

@@ -61,7 +61,7 @@ ssize_t pread(int fd, void* buf, size_t size, off_t offset) {
     return static_cast<ssize_t>(rt);
 }
 #else
-#error("pread() undefined: unknown environment")
+#error ("pread() undefined: unknown environment")
 #endif
 #endif
 

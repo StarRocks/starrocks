@@ -108,13 +108,13 @@ public:
 
     void fetch_data(TFetchDataResult& return_val, const TFetchDataParams& params) override;
 
-    void submit_export_task(TStatus& t_status, const TExportTaskRequest& request) override{};
+    void submit_export_task(TStatus& t_status, const TExportTaskRequest& request) override {};
 
-    void get_export_status(TExportStatusResult& result, const TUniqueId& task_id) override{};
+    void get_export_status(TExportStatusResult& result, const TUniqueId& task_id) override {};
 
-    void erase_export_task(TStatus& t_status, const TUniqueId& task_id) override{};
+    void erase_export_task(TStatus& t_status, const TUniqueId& task_id) override {};
 
-    void get_tablet_stat(TTabletStatResult& result) override{};
+    void get_tablet_stat(TTabletStatResult& result) override {};
 
     void submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) override;
 

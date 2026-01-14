@@ -82,8 +82,8 @@ std::optional<int> get_used_bits(LogicalType ltype, const VectorizedLiteral& beg
                                  std::any& base) {
     size_t used_bits = 0;
     bool applied = scalar_type_dispatch(ltype, [&]<LogicalType Type>() {
-        if constexpr ((lt_is_integer<Type> || lt_is_decimal<Type> ||
-                       lt_is_date<Type>)&&(sizeof(RunTimeCppType<Type>) <= 16)) {
+        if constexpr ((lt_is_integer<Type> || lt_is_decimal<Type> || lt_is_date<Type>) &&
+                      (sizeof(RunTimeCppType<Type>) <= 16)) {
             RunTimeCppType<Type> cs_min = ColumnHelper::get_const_value<Type>(begin.value().get());
             RunTimeCppType<Type> cs_max = ColumnHelper::get_const_value<Type>(end.value().get());
             base = cs_min;

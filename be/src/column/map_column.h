@@ -61,7 +61,8 @@ public:
     static Ptr create(MapColumn&& rhs) { return Base::create(std::move(rhs)); }
 
     template <typename... Args>
-    requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
+        requires(IsMutableColumns<Args...>::value)
+    static MutablePtr create(Args&&... args) {
         return Base::create(std::forward<Args>(args)...);
     }
     ~MapColumn() override = default;

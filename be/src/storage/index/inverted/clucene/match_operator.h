@@ -35,7 +35,7 @@ using TermQueryPtr = std::unique_ptr<lucene::search::TermQuery, void (*)(lucene:
 class MatchOperator {
 public:
     MatchOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name)
-            : _searcher(searcher), _dir(dir), _field_name(std::move(field_name)){};
+            : _searcher(searcher), _dir(dir), _field_name(std::move(field_name)) {};
     virtual ~MatchOperator() = default;
     Status match(roaring::Roaring* result);
 
@@ -51,7 +51,7 @@ class MatchTermOperator : public MatchOperator {
 public:
     MatchTermOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
                       std::wstring term)
-            : MatchOperator(searcher, dir, std::move(field_name)), _term(std::move(term)){};
+            : MatchOperator(searcher, dir, std::move(field_name)), _term(std::move(term)) {};
 
 protected:
     std::wstring _term;
@@ -88,7 +88,7 @@ class MatchRangeOperator : public MatchOperator {
 public:
     MatchRangeOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
                        std::wstring bound, bool inclusive)
-            : MatchOperator(searcher, dir, std::move(field_name)), _bound(std::move(bound)), _inclusive(inclusive){};
+            : MatchOperator(searcher, dir, std::move(field_name)), _bound(std::move(bound)), _inclusive(inclusive) {};
 
 protected:
     virtual std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) = 0;
@@ -102,7 +102,7 @@ class MatchGreatThanOperator final : public MatchRangeOperator {
 public:
     MatchGreatThanOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
                            std::wstring field_name, std::wstring bound, bool inclusive)
-            : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive){};
+            : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive) {};
 
 protected:
     std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) override {
@@ -114,7 +114,7 @@ class MatchLessThanOperator final : public MatchRangeOperator {
 public:
     MatchLessThanOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
                           std::wstring field_name, std::wstring bound, bool inclusive)
-            : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive){};
+            : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive) {};
 
 protected:
     std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) override {

@@ -59,7 +59,7 @@ class ExecEnv;
 template <typename StubCacheT>
 class EndpointCleanupTask : public starrocks::pipeline::LightTimerTask {
 public:
-    EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint){};
+    EndpointCleanupTask(StubCacheT* cache, const butil::EndPoint& endpoint) : _cache(cache), _endpoint(endpoint) {};
     void Run() override { _cache->cleanup_expired(_endpoint); }
 
 private:

@@ -2417,7 +2417,9 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
     };
 
     // combined log does not exist
-    { do_test(next_id(), TStatusCode::NOT_FOUND); }
+    {
+        do_test(next_id(), TStatusCode::NOT_FOUND);
+    }
     // CombinedTxnLog does not contain the target txn log
     {
         auto txn_log = generate_write_txn_log(2, 101, 4096);

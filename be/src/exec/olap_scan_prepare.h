@@ -148,11 +148,11 @@ private:
     Status normalize_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType, bool Negative>
-    requires(!lt_is_date<SlotType>) Status
-            normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+        requires(!lt_is_date<SlotType>)
+    Status normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
     template <LogicalType SlotType, typename RangeValueType, bool Negative>
-    requires lt_is_date<SlotType> Status normalize_in_or_equal_predicate(const SlotDescriptor& slot,
-                                                                         ColumnValueRange<RangeValueType>* range);
+        requires lt_is_date<SlotType>
+    Status normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType, bool Negative>
     Status normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);

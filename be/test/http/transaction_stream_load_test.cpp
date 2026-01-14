@@ -837,7 +837,9 @@ TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
         SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker", [](void* arg) { \
             *((Status*)arg) = Status::MemoryLimitExceeded("TestFail");                             \
         });                                                                                        \
-        { stmt; }                                                                                  \
+        {                                                                                          \
+            stmt;                                                                                  \
+        }                                                                                          \
     } while (0)
 
 TEST_F(TransactionStreamLoadActionTest, huge_malloc) {

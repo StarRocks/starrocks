@@ -102,8 +102,7 @@ struct Packer<LT, DateOrDateTimeLTGuard<LT>> {
     }
 };
 
-#define LT_TO_PACKER_SINGLE_ENTRY_CTOR(nop, lt) \
-    { lt, Packer<lt>::pack }
+#define LT_TO_PACKER_SINGLE_ENTRY_CTOR(nop, lt) {lt, Packer<lt>::pack}
 
 #define LT_TO_PACKER_ENTRY(nop, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_COMMA(LT_TO_PACKER_SINGLE_ENTRY_CTOR, nop, ##__VA_ARGS__)

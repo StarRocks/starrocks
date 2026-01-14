@@ -509,9 +509,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
 
         append_chunk_for_one_key<EnablePassthrough>(
                 hash_map, chunk,
-                [&](uint32_t offset) {
-                    return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]};
-                },
+                [&](uint32_t offset) { return Slice{buffer + offset * max_one_row_size, slice_sizes[offset]}; },
                 [&](const KeyType& key) {
                     uint8_t* pos = mem_pool->allocate(key.size);
                     strings::memcpy_inlined(pos, key.data, key.size);

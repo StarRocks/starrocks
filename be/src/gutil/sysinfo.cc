@@ -91,8 +91,8 @@ void SleepForNanoseconds(int64_t nanoseconds) {
     struct timespec sleep_time;
     sleep_time.tv_sec = nanoseconds / 1000 / 1000 / 1000;
     sleep_time.tv_nsec = (nanoseconds % (1000 * 1000 * 1000));
-    while (nanosleep(&sleep_time, &sleep_time) != 0 && errno == EINTR)
-        ; // Ignore signals and wait for the full interval to elapse.
+    while (nanosleep(&sleep_time, &sleep_time) != 0 &&
+           errno == EINTR); // Ignore signals and wait for the full interval to elapse.
 }
 
 void SleepForMilliseconds(int64_t milliseconds) {

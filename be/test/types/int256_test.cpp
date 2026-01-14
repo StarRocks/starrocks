@@ -1643,8 +1643,10 @@ TEST_F(Int256Test, addition_boundary_values) {
     // Test subtracting 1 from boundary values
     {
         std::vector<int256_t> boundary_values = {
-                INT256_MAX, INT256_MIN, int256_t(0, 0), // Zero
-                int256_t(1, 0),                         // 2^128
+                INT256_MAX,
+                INT256_MIN,
+                int256_t(0, 0), // Zero
+                int256_t(1, 0), // 2^128
         };
 
         for (const auto& boundary : boundary_values) {
@@ -2071,9 +2073,13 @@ TEST_F(Int256Test, parse_from_string) {
         ASSERT_EQ("-123456789", result.to_string());
     }
 
-    { ASSERT_THROW(parse_int256("12a34"), std::invalid_argument); }
+    {
+        ASSERT_THROW(parse_int256("12a34"), std::invalid_argument);
+    }
 
-    { ASSERT_THROW(parse_int256(""), std::invalid_argument); }
+    {
+        ASSERT_THROW(parse_int256(""), std::invalid_argument);
+    }
 }
 
 // =============================================================================

@@ -147,18 +147,21 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
     // shared by sink operator and source operator
     auto should_cache = context->should_interpolate_cache_operator(id(), ops_with_sink[0]);
     auto* upstream_source_op = context->source_operator(ops_with_sink);
-    auto operators_generator = [
-        this, &should_cache, &upstream_source_op, context, &spill_channel_factory
-    ]<typename SinkFactoryT = SinkFactory, typename SourceFactoryT = SourceFactory>(bool post_cache) {
-        auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
-        AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
-        aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<SinkFactoryT>(context->next_operator_id(), id(), aggregator_factory,
-                                                            spill_channel_factory);
-        auto source_operator = std::make_shared<SourceFactoryT>(context->next_operator_id(), id(), aggregator_factory);
-        context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
-        return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
-    };
+    auto operators_generator =
+            [this, &should_cache, &upstream_source_op, context,
+             &spill_channel_factory]<typename SinkFactoryT = SinkFactory, typename SourceFactoryT = SourceFactory>(
+                    bool post_cache) {
+                auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
+                AggrMode aggr_mode =
+                        should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
+                aggregator_factory->set_aggr_mode(aggr_mode);
+                auto sink_operator = std::make_shared<SinkFactoryT>(context->next_operator_id(), id(),
+                                                                    aggregator_factory, spill_channel_factory);
+                auto source_operator =
+                        std::make_shared<SourceFactoryT>(context->next_operator_id(), id(), aggregator_factory);
+                context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
+                return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
+            };
 
     auto [agg_sink_op, agg_source_op] = operators_generator(false);
     if constexpr (std::is_same_v<SourceFactory, SpillablePartitionWiseDistinctSourceOperatorFactory>) {

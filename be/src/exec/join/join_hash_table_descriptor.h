@@ -359,8 +359,10 @@ inline bool is_asof_join(TJoinOp::type join_type) {
 
 constexpr size_t get_asof_variant_index(LogicalType logical_type, TExprOpcode::type opcode) {
     size_t base = (logical_type == TYPE_BIGINT) ? 0 : (logical_type == TYPE_DATE) ? 4 : 8;
-    size_t offset =
-            (opcode == TExprOpcode::LT) ? 0 : (opcode == TExprOpcode::LE) ? 1 : (opcode == TExprOpcode::GT) ? 2 : 3;
+    size_t offset = (opcode == TExprOpcode::LT)   ? 0
+                    : (opcode == TExprOpcode::LE) ? 1
+                    : (opcode == TExprOpcode::GT) ? 2
+                                                  : 3;
     return base + offset;
 }
 
@@ -408,7 +410,9 @@ void create_asof_index(JoinHashTableItems* table_items, uint32_t asof_lookup_ind
 
     CREATE_ASOF_INDEX_CASE(int64_t, 0)
     CREATE_ASOF_INDEX_CASE(DateValue, 4)
-    CREATE_ASOF_INDEX_CASE(TimestampValue, 8) { static_assert(VariantIndex < 12, "Invalid variant index"); }
+    CREATE_ASOF_INDEX_CASE(TimestampValue, 8) {
+        static_assert(VariantIndex < 12, "Invalid variant index");
+    }
 }
 
 #undef CREATE_ASOF_INDEX_CASE

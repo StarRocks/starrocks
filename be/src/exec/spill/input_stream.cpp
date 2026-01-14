@@ -131,7 +131,7 @@ public:
     StatusOr<ChunkUniquePtr> get_next(workgroup::YieldContext& yield_ctx, SerdeContext& ctx) override;
 
     bool is_ready() override { return true; };
-    void close() override{};
+    void close() override {};
 
 private:
     size_t _total_rows{};

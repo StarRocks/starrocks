@@ -853,13 +853,13 @@ struct EncodeColumnToDigest {
             } else if constexpr (sizeof(CppType) == 2) {
                 marker_type = RowFingerprintValueType::Int16;
             } else if constexpr (sizeof(CppType) == 4) {
-                marker_type = (LT == TYPE_FLOAT)
-                                      ? RowFingerprintValueType::Float
-                                      : lt_is_date<LT> ? RowFingerprintValueType::Date : RowFingerprintValueType::Int32;
+                marker_type = (LT == TYPE_FLOAT) ? RowFingerprintValueType::Float
+                              : lt_is_date<LT>   ? RowFingerprintValueType::Date
+                                                 : RowFingerprintValueType::Int32;
             } else if constexpr (sizeof(CppType) == 8) {
-                marker_type = (LT == TYPE_DOUBLE) ? RowFingerprintValueType::Double
-                                                  : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
-                                                                       : RowFingerprintValueType::Int64;
+                marker_type = (LT == TYPE_DOUBLE)  ? RowFingerprintValueType::Double
+                              : lt_is_datetime<LT> ? RowFingerprintValueType::DateTime
+                                                   : RowFingerprintValueType::Int64;
             } else if constexpr (sizeof(CppType) == 16) {
                 marker_type = lt_is_decimal<LT> ? RowFingerprintValueType::Decimal : RowFingerprintValueType::Int128;
             } else {

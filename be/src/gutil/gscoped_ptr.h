@@ -388,7 +388,7 @@ public:
     // Allow gscoped_ptr<element_type> to be used in boolean expressions, but not
     // implicitly convertible to a real bool (which is dangerous).
 private:
-    typedef starrocks::internal::gscoped_ptr_impl<element_type, deleter_type> gscoped_ptr::*Testable;
+    typedef starrocks::internal::gscoped_ptr_impl<element_type, deleter_type> gscoped_ptr::* Testable;
 
 public:
     operator Testable() const { return impl_.get() ? &gscoped_ptr::impl_ : NULL; }
@@ -493,7 +493,7 @@ public:
     // Allow gscoped_ptr<element_type> to be used in boolean expressions, but not
     // implicitly convertible to a real bool (which is dangerous).
 private:
-    typedef starrocks::internal::gscoped_ptr_impl<element_type, deleter_type> gscoped_ptr::*Testable;
+    typedef starrocks::internal::gscoped_ptr_impl<element_type, deleter_type> gscoped_ptr::* Testable;
 
 public:
     operator Testable() const { return impl_.get() ? &gscoped_ptr::impl_ : NULL; }
@@ -627,7 +627,7 @@ public:
 
     // Allow gscoped_array<C> to be used in boolean expressions, but not
     // implicitly convertible to a real bool (which is dangerous).
-    typedef C* gscoped_array::*Testable;
+    typedef C* gscoped_array::* Testable;
     operator Testable() const { return array_ ? &gscoped_array::array_ : NULL; }
 
     // Comparison operators.
@@ -742,7 +742,7 @@ public:
 
     // Allow gscoped_ptr_malloc<C> to be used in boolean expressions, but not
     // implicitly convertible to a real bool (which is dangerous).
-    typedef C* gscoped_ptr_malloc::*Testable;
+    typedef C* gscoped_ptr_malloc::* Testable;
     operator Testable() const { return ptr_ ? &gscoped_ptr_malloc::ptr_ : NULL; }
 
     // Comparison operators.

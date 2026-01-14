@@ -67,7 +67,8 @@ public:
     static Ptr create(const ArrayColumn& rhs) { return Base::create(rhs); }
 
     template <typename... Args>
-    requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
+        requires(IsMutableColumns<Args...>::value)
+    static MutablePtr create(Args&&... args) {
         return Base::create(std::forward<Args>(args)...);
     }
 

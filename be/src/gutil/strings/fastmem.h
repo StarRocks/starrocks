@@ -107,7 +107,8 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
     auto dst = static_cast<uint8_t*>(_dst);
     auto src = static_cast<const uint8_t*>(_src);
 
-    [[maybe_unused]] tail : if (size <= 16) {
+[[maybe_unused]] tail:
+    if (size <= 16) {
         if (size >= 8) {
             __builtin_memcpy(dst + size - 8, src + size - 8, 8);
             __builtin_memcpy(dst, src, 8);
@@ -120,8 +121,7 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
         } else if (size >= 1) {
             *dst = *src;
         }
-    }
-    else {
+    } else {
 #ifdef __AVX2__
         if (size <= 256) {
             if (size <= 32) {
