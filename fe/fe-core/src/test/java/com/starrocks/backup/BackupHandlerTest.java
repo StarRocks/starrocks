@@ -55,6 +55,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -173,6 +174,18 @@ public class BackupHandlerTest {
 
     @Test
     public void testCreateAndDropRepository(@Mocked BrokerMgr brokerMgr) throws Exception {
+        new MockUp<WarehouseMetricMgr>() {
+            @Mock
+            public static void increaseUnfinishedBackupJobs(Long warehouseId, Long delta) {
+                return;
+            }
+
+            @Mock
+            public static void increaseUnfinishedRestoreJobs(Long warehouseId, Long delta) {
+                return;
+            }
+        };
+
         setUpMocker();
         new MockUp<Repository>() {
             @Mock
