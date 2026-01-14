@@ -179,14 +179,37 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
     Buffer<rowid_t> hit_rowids;
     {
         SCOPED_RAW_TIMER(&_stats->gin_predicate_filter_dict_ns);
-        auto predicate = [&keywords](const Slice* dict) -> bool {
-            // just need to make sure keywords is in order.
+        // Check if pattern starts/ends with '%' to enforce SQL LIKE semantics
+        bool pattern_starts_with_wildcard = (*search_query)[0] == '%';
+        bool pattern_ends_with_wildcard = (*search_query)[search_query->get_size() - 1] == '%';
+
+        auto predicate = [&keywords, pattern_starts_with_wildcard,
+                          pattern_ends_with_wildcard](const Slice* dict) -> bool {
+            if (keywords.empty()) {
+                return true;
+            }
+
+            // Find each keyword in order, checking start/end constraints
             int64_t last_pos = 0;
-            for (const auto& [keyword, next_array] : keywords) {
+            for (size_t i = 0; i < keywords.size(); ++i) {
+                const auto& [keyword, next_array] = keywords[i];
                 last_pos = dict->find(keyword, next_array, last_pos);
                 if (last_pos == -1) {
                     return false;
                 }
+
+                // First keyword must be at start if pattern doesn't start with '%'
+                if (i == 0 && !pattern_starts_with_wildcard && last_pos != 0) {
+                    return false;
+                }
+
+                // Last keyword must end at dict end if pattern doesn't end with '%'
+                if (i == keywords.size() - 1 && !pattern_ends_with_wildcard) {
+                    if (last_pos + keyword.get_size() != dict->get_size()) {
+                        return false;
+                    }
+                }
+
                 last_pos += keyword.get_size();
             }
             return true;
