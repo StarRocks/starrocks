@@ -919,6 +919,13 @@ SlotId Expr::max_used_slot_id() const {
     return max_slot_id;
 }
 
+Status Expr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    for (auto& child : _children) {
+        RETURN_IF_ERROR(callback(child));
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks
 
 #pragma clang diagnostic pop
