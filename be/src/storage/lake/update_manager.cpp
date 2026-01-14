@@ -964,8 +964,9 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
 
     // Obtain thread pool token for parallel execution if enabled
     std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_get) {
-        token = ExecEnv::GetInstance()->pk_index_get_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    if (config::enable_pk_index_parallel_execution) {
+        token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
     }
 
     // Setup shared state protected by mutex
