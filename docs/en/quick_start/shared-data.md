@@ -39,7 +39,7 @@ There is a lot of information in this document, and it is presented with the ste
 ### Docker
 
 - [Docker](https://docs.docker.com/engine/install/)
-- 4 GB RAM assigned to Docker
+- 4 GB RAM assigned to Docker
 - 10 GB free disk space assigned to Docker
 
 ### SQL client
@@ -79,6 +79,14 @@ This guide does not use BEs, this information is included here so that you under
 :::
 
 ---
+
+## Edit your hosts file
+
+The ingest method used in this guide is Stream Load. Stream Load connects to the FE service to start the ingest job. The FE then assigns the job to a backend node—the CN in this guide. In order for the ingest job to connect to the CN, the name of the CN must be available to your operating system. Add this line to `/etc/hosts`:
+
+```bash
+127.0.0.1 starrocks-cn
+```
 
 ## Download the lab files
 
@@ -188,7 +196,7 @@ Open [http://localhost:9001/buckets](http://localhost:9001/buckets) and add a bu
 
 ## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and MinIO.
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
 
 This is the part of the `FE` configuration that specifies that the StarRocks deployment will use shared data. This was added to the file `fe.conf` when Docker Compose created the deployment.
 
@@ -239,7 +247,7 @@ Empty set (0.04 sec)
 
 #### Create a shared-data storage volume
 
-Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MinIO bucket using the access key and secret.
+Earlier you created a bucket in MinIO named `my-starrocks-volume`, and you verified that MinIO has an access key named `AAAAAAAAAAAAAAAAAAAA`. The following SQL will create a storage volume in the MionIO bucket using the access key and secret.
 
 ```sql
 CREATE STORAGE VOLUME s3_volume
@@ -564,7 +572,7 @@ These three changes allow traffic between the host network and the CN:
 
 In this tutorial you:
 
-- Deployed StarRocks and MinIO in Docker
+- Deployed StarRocks and Minio in Docker
 - Created a MinIO access key
 - Configured a StarRocks Storage Volume that uses MinIO
 - Loaded crash data provided by New York City and weather data provided by NOAA
@@ -585,3 +593,4 @@ There is more to learn; we intentionally glossed over the data transform done du
 The [Motor Vehicle Collisions - Crashes](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) dataset is provided by New York City subject to these [terms of use](https://www.nyc.gov/home/terms-of-use.page) and [privacy policy](https://www.nyc.gov/home/privacy-policy.page).
 
 The [Local Climatological Data](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD) is provided by NOAA with this [disclaimer](https://www.noaa.gov/disclaimer) and this [privacy policy](https://www.noaa.gov/protecting-your-privacy).
+
