@@ -606,6 +606,17 @@ private:
                 _metadata->mutable_rowsets()->Clear();
                 _metadata->mutable_delvec_meta()->Clear();
 
+                // Clear sstable_meta for cloud native persistent index.
+                // The SST files contain old segment id mappings that are no longer valid
+                // after full replication replaces all rowsets with new ones.
+                for (const auto& sstable : _metadata->sstable_meta().sstables()) {
+                    FileMetaPB file_meta;
+                    file_meta.set_name(sstable.filename());
+                    file_meta.set_size(sstable.filesize());
+                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+                }
+                _metadata->clear_sstable_meta();
+
                 auto new_next_rowset_id = _metadata->next_rowset_id();
                 for (const auto& op_write : op_replication.op_writes()) {
                     auto rowset = _metadata->add_rowsets();
