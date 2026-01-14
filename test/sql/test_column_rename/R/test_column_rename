@@ -339,6 +339,7 @@ SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column
 -- !result
 drop table t_rename_column_unused_output_column_name force;
 -- result:
+-- !result
 -- name: test_wrong_access_path_after_column_rename
 CREATE TABLE `t_wrong_access_path_after_column_rename` (
   `k` STRING NOT NULL COMMENT "",
@@ -367,7 +368,7 @@ alter table t_wrong_access_path_after_column_rename rename column JOB_NAME_NEW t
 -- !result
 select * from t_wrong_access_path_after_column_rename;
 -- result:
-1	2	["aa","bb"]	null
+1	2	["aa","bb"]	None
 -- !result
 select JOB_NAME_OLD from t_wrong_access_path_after_column_rename where JOB_NAME is NULL;
 -- result:
