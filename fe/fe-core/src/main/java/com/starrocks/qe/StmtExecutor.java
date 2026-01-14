@@ -1057,7 +1057,7 @@ public class StmtExecutor {
             }
 
             if (shouldMarkIdleCheck && originWarehouseId != null) {
-                WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
+                WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId, originStmt.originStmt);
             }
 
             recordExecStatsIntoContext();
