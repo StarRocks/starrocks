@@ -47,7 +47,7 @@ jobs:
           BODY: ${{ steps.get_checks.outputs.result }}
           FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
-          pip install -U google-genai pyyaml
+          pip install -U google-genai==0.3.0 pyyaml==6.0.2
           # Use double quotes around "$FILES" to prevent word-splitting
           if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then python docs/translation/translate.py -l ja --files "$FILES"; fi
           if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then python docs/translation/translate.py -l zh --files "$FILES"; fi
@@ -71,7 +71,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           if [[ -n $(git status --porcelain) ]]; then
-            git add .
+            git add docs/
             git commit -m "docs: automated translation via Gemini [skip ci]"
             git push origin HEAD:refs/heads/${{ steps.pr_info.outputs.head_ref }}
           fi
