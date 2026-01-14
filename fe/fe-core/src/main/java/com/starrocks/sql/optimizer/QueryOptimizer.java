@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
@@ -560,6 +561,10 @@ public class QueryOptimizer extends Optimizer {
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
 
+        if (sessionVariable.isEnableSplitWindowSkewToUnion()) {
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+            scheduler.rewriteOnce(tree, rootTaskContext, SplitWindowSkewToUnionRule.getInstance());
+        }
         // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES
         scheduler.rewriteOnce(tree, rootTaskContext, new LargeInPredicateToJoinRule());
 
