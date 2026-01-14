@@ -191,9 +191,9 @@ inline void stl_vector_resize_uninitialized(Container* vec, size_t reserve_size,
     using T = typename Container::value_type;
     using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
     reinterpret_cast<DstType*>(vec)->resize(reserve_size);
+    vec->resize(new_size);
     // Compiler memory barrier to prevent instruction reordering across the resize operation
     asm volatile("" : : : "memory");
-    vec->resize(new_size);
 }
 
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
