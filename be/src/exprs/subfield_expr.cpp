@@ -87,10 +87,12 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
     int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+        int n = Expr::get_subfields(subfields);
         if (subfields != nullptr) {
             subfields->push_back(_used_subfield_names);
+            n += 1;
         }
-        return 1;
+        return n;
     }
 
 private:
