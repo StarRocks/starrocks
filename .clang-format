@@ -1,18 +1,36 @@
 ---
 Language: Cpp
 BasedOnStyle: Google
-AccessModifierOffset: -4
-AllowShortFunctionsOnASingleLine: Inline
-ColumnLimit: 120
-ConstructorInitializerIndentWidth: 8 # double of IndentWidth
-ContinuationIndentWidth: 8 # double of IndentWidth
-DerivePointerAlignment: false # always use PointerAlignment
-IndentCaseLabels: false
+
+# Layout
 IndentWidth: 4
+ContinuationIndentWidth: 8
+ConstructorInitializerIndentWidth: 8
+AccessModifierOffset: -4
+IndentCaseLabels: false
+ColumnLimit: 120
+UseTab: Never
+TabWidth: 4
+
+# One-liners
+AllowShortFunctionsOnASingleLine: Inline
+
+# Pointers
+DerivePointerAlignment: false
 PointerAlignment: Left
+
+# Comments
 ReflowComments: false
-SortUsingDeclarations: false
 SpacesBeforeTrailingComments: 1
+
+# Sorting (explicitly pin to avoid version drift)
+SortIncludes: false
+IncludeBlocks: Preserve
+SortUsingDeclarations: false
+
+# Spacing (explicitly pin)
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
 ---
 Language: Java
 BasedOnStyle: Google
