@@ -325,9 +325,9 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
 // 3. Verify final state matches expected merge results based on max(c1) logic
 TEST_P(ConditionUpdateTest, test_condition_update_parallel) {
     // Configure test environment for parallel execution
-    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_get, true);
+    ConfigResetGuard<bool> guard(&config::enable_pk_index_parallel_execution, true);
     ConfigResetGuard<bool> guard2(&config::enable_pk_index_parallel_compaction, true);
-    ConfigResetGuard<int64_t> guard3(&config::pk_index_parallel_get_min_rows, 4096);
+    ConfigResetGuard<int64_t> guard3(&config::pk_index_parallel_execution_min_rows, 4096);
     ConfigResetGuard<int64_t> guard4(&config::pk_parallel_execution_threshold_bytes, 1);
     ConfigResetGuard<bool> guard5(&config::ignore_merge_condition_inside_same_transaction, true);
     ConfigResetGuard<int64_t> guard6(&config::lake_publish_version_slow_log_ms, 0);
