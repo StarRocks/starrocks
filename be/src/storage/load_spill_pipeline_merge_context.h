@@ -23,6 +23,8 @@
 
 namespace starrocks {
 
+class ThreadPoolToken;
+
 namespace lake {
 class TabletInternalParallelMergeTask;
 class TabletWriter;
@@ -50,6 +52,13 @@ class LoadSpillPipelineMergeContext {
 public:
     LoadSpillPipelineMergeContext(lake::TabletWriter* writer) : _writer(writer) {}
     ~LoadSpillPipelineMergeContext() = default;
+
+    /**
+     * Lazily create thread pool token for submitting parallel merge tasks.
+     * 
+     * THREAD SAFETY: thread-safe, must be called once during initialization
+     */
+    void create_thread_pool_token();
 
     /**
      * Register a merge task for later result collection.
@@ -80,9 +89,17 @@ public:
      */
     std::atomic<bool>* quit_flag() { return &_quit_flag; }
 
+    ThreadPoolToken* token() { return _token.get(); }
+
 private:
     // Parent writer that owns the final tablet data. All task results merge into this.
     lake::TabletWriter* _writer;
+
+    // Thread pool token for submitting parallel merge tasks.
+    // WHY LAZILY CREATED: Only allocated when parallel merge is enabled AND spill size
+    // reaches threshold (pk_index_eager_build_threshold_bytes). This avoids unnecessary
+    // thread pool overhead for small loads that don't need parallel merge.
+    std::unique_ptr<ThreadPoolToken> _token;
 
     // Collection of parallel merge tasks. Each task processes a subset of spilled data
     // using a cloned writer. Vector grows as pipeline operators generate tasks.

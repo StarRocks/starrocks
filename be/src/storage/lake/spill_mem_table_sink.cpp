@@ -78,11 +78,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         _writer->try_enable_pk_index_eager_build();
 
         // Lazy initialization: create thread pool token only when first needed
-        if (_token == nullptr) {
-            _token = StorageEngine::instance()
-                             ->load_spill_block_merge_executor()
-                             ->create_tablet_internal_parallel_merge_token();
-        }
+        _pipeline_merge_context->create_thread_pool_token();
 
         // Generate ONE merge task eagerly (not all tasks). This allows pipeline execution
         // where merge tasks are generated and submitted incrementally as resources allow,
@@ -94,7 +90,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         if (task_iterator.has_more()) {
             auto current_task = task_iterator.current_task();
             _pipeline_merge_context->add_merge_task(current_task);
-            auto submit_st = _token->submit(current_task);
+            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
             if (!submit_st.ok()) {
                 // Submit failure doesn't fail the flush - task will report error when checked later
                 current_task->update_status(submit_st);
@@ -136,10 +132,8 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
 
     // Lazy token creation: may already exist from eager merge in flush_chunk()
-    if (config::enable_load_spill_parallel_merge && _token == nullptr) {
-        _token = StorageEngine::instance()
-                         ->load_spill_block_merge_executor()
-                         ->create_tablet_internal_parallel_merge_token();
+    if (config::enable_load_spill_parallel_merge) {
+        _pipeline_merge_context->create_thread_pool_token();
     }
 
     // FINAL MERGE PHASE: Merge all remaining spilled blocks to final tablet segments.
@@ -157,9 +151,9 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
         auto current_task = task_iterator.current_task();
         _pipeline_merge_context->add_merge_task(current_task);
 
-        if (_token) {
+        if (_pipeline_merge_context->token()) {
             // PARALLEL PATH: Submit to thread pool for async execution
-            auto submit_st = _token->submit(current_task);
+            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
             if (!submit_st.ok()) {
                 current_task->update_status(submit_st);
                 break; // Stop submitting new tasks if thread pool is unavailable
@@ -173,11 +167,6 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
                 break; // Stop on first error
             }
         }
-    }
-
-    // Wait for all submitted tasks to complete (no-op if serial path was used)
-    if (_token) {
-        _token->wait();
     }
 
     // RESULT CONSOLIDATION: Check all task statuses and merge their tablet writer results

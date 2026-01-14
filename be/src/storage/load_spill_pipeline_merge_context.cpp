@@ -16,8 +16,18 @@
 
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks {
+
+void LoadSpillPipelineMergeContext::create_thread_pool_token() {
+    std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    if (_token == nullptr) {
+        _token = StorageEngine::instance()
+                         ->load_spill_block_merge_executor()
+                         ->create_tablet_internal_parallel_merge_token();
+    }
+}
 
 void LoadSpillPipelineMergeContext::add_merge_task(const std::shared_ptr<lake::TabletInternalParallelMergeTask>& task) {
     // THREAD SAFETY: Lock required because multiple pipeline operators may concurrently
@@ -33,6 +43,9 @@ Status LoadSpillPipelineMergeContext::merge_task_results() {
     // while iterating. This is safe because merge_task_results() is only called after
     // all tasks complete, so no new tasks should be added anyway.
     std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    if (_token != nullptr) {
+        _token->wait();
+    }
 
     for (const auto& task : _merge_tasks) {
         // IMPORTANT: Check task status first to fail fast if any parallel merge task failed.

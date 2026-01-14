@@ -65,7 +65,7 @@ void TabletInternalParallelMergeTask::run() {
     // handles the case where quit_flag is nullptr (cancellation not supported). When nullptr,
     // we skip the quit check entirely and run to completion. When non-null, we check the
     // atomic flag on each iteration to support early termination on error or user cancellation.
-    while (_quit_flag && !_quit_flag->load()) {
+    while (!_quit_flag || !_quit_flag->load()) {
         chunk->reset();
         auto itr_st = _task->merge_itr->get_next(chunk);
         if (itr_st.is_end_of_file()) {

@@ -66,12 +66,6 @@ private:
     // Manages spilling chunks to disk and provides merge capabilities
     std::unique_ptr<LoadChunkSpiller> _load_chunk_spiller = nullptr;
 
-    // Thread pool token for submitting parallel merge tasks.
-    // WHY LAZILY CREATED: Only allocated when parallel merge is enabled AND spill size
-    // reaches threshold (pk_index_eager_build_threshold_bytes). This avoids unnecessary
-    // thread pool overhead for small loads that don't need parallel merge.
-    std::unique_ptr<ThreadPoolToken> _token = nullptr;
-
     // Coordinates parallel merge tasks and consolidates their results.
     // Collects tasks from both eager merge (in flush_chunk) and final merge phases,
     // ensuring all task results are properly merged into the tablet writer.
