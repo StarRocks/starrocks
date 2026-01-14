@@ -14,6 +14,8 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Range;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -31,9 +33,11 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropPartitionsInfo;
@@ -45,11 +49,12 @@ import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
-import com.starrocks.sql.analyzer.AlterDbQuotaAnalyzer;
+import com.starrocks.sql.analyzer.AlterDatabaseAnalyzer;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.KeysType;
@@ -68,6 +73,9 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,10 +83,13 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
@@ -219,7 +230,7 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         if (ctx.getCurrentCatalog() == null) {
             ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         }
-        AlterDbQuotaAnalyzer.analyze(stmt, ctx);
+        AlterDatabaseAnalyzer.analyze(stmt, ctx);
 
         // 3. Execute alterDatabaseQuota
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -251,11 +262,11 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         followerDb.setReplicaQuota(initialReplicaQuota);
         followerMetastore.unprotectCreateDb(followerDb);
 
-        // Temporarily set follower metastore to GlobalStateMgr so replayAlterDatabaseQuota can find the database
+        // Temporarily set follower metastore to GlobalStateMgr so replayAlterDatabase can find the database
         LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
         try {
-            followerMetastore.replayAlterDatabaseQuota(replayInfo);
+            followerMetastore.replayAlterDatabase(replayInfo);
         } finally {
             GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
         }
@@ -276,7 +287,7 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         AlterDatabaseQuotaStmt stmt = new AlterDatabaseQuotaStmt(
                 DB_NAME, AlterDatabaseQuotaStmt.QuotaType.DATA, "1000B", NodePosition.ZERO);
         // Analyze the statement to set quota value
-        com.starrocks.sql.analyzer.AlterDbQuotaAnalyzer.analyze(stmt, UtFrameUtils.createDefaultCtx());
+        AlterDatabaseAnalyzer.analyze(stmt, UtFrameUtils.createDefaultCtx());
 
         // 3. Mock EditLog.logAlterDb to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
@@ -313,7 +324,7 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // Analyze the statement (normally done before execution)
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase(oldDbName);
-        com.starrocks.sql.analyzer.AlterDatabaseRenameStatementAnalyzer.analyze(stmt, ctx);
+        AlterDatabaseAnalyzer.analyze(stmt, ctx);
 
         // 3. Execute renameDatabase
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -354,6 +365,122 @@ public class LocalMetastoreSimpleOpsEditLogTest {
     }
 
     @Test
+    public void testAlterDatabaseSetStorageVolume(@Mocked StarOSAgent starOSAgent) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        Assertions.assertNotNull(db);
+        String dbName = db.getFullName();
+
+        StorageVolumeMgr svMgrLeader = new SharedDataStorageVolumeMgr();
+        StorageVolumeMgr svMgrFollower = new SharedDataStorageVolumeMgr();
+        AtomicReference<StorageVolumeMgr> refSvMgr = new AtomicReference<>(svMgrLeader);
+
+        FileStoreInfo defaultSv = FileStoreInfo.newBuilder()
+                .setFsKey("aa-bb-cc-dd")
+                .setFsType(FileStoreType.HDFS)
+                .setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
+                .setEnabled(true)
+                .build();
+        FileStoreInfo sv02 = FileStoreInfo.newBuilder()
+                .setFsKey("ee-ff-gg-hh")
+                .setFsType(FileStoreType.HDFS)
+                .setFsName("sv_02")
+                .setEnabled(true)
+                .build();
+
+        List<FileStoreInfo> fsInfos = Arrays.asList(defaultSv, sv02);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StorageVolumeMgr getStorageVolumeMgr() {
+                return refSvMgr.get();
+            }
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+                for (FileStoreInfo fileStoreInfo : fsInfos) {
+                    if (fileStoreInfo.getFsName().equals(fsName)) {
+                        return fileStoreInfo;
+                    }
+                }
+                return null;
+            }
+
+            @Mock
+            public FileStoreInfo getFileStore(String fsKey) throws DdlException {
+                for (FileStoreInfo fileStoreInfo : fsInfos) {
+                    if (fileStoreInfo.getFsKey().equals(fsKey)) {
+                        return fileStoreInfo;
+                    }
+                }
+                return null;
+            }
+        };
+
+        new MockUp<RunMode>() {
+            @Mock
+            public static RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        // prepare the leader svMgr state
+        Assertions.assertDoesNotThrow(() -> svMgrLeader.bindDbToStorageVolume(defaultSv.getFsName(), db.getId()));
+        { // leader op
+            String svNameBefore = svMgrLeader.getStorageVolumeNameOfDb(db.getId());
+            Assertions.assertEquals(defaultSv.getFsName(), svNameBefore);
+
+            Map<String, String> properties = new HashMap<>();
+            properties.put(PROPERTIES_STORAGE_VOLUME, sv02.getFsName());
+            AlterDatabaseSetStmt stmt = new AlterDatabaseSetStmt(dbName, properties, NodePosition.ZERO);
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ctx.setDatabase(dbName);
+            AlterDatabaseAnalyzer.analyze(stmt, ctx);
+
+            LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+            Assertions.assertDoesNotThrow(() -> metastore.alterDatabaseSet(stmt));
+
+            String svNameAfter = svMgrLeader.getStorageVolumeNameOfDb(db.getId());
+            Assertions.assertEquals(sv02.getFsName(), svNameAfter);
+        }
+
+        // Test follower replay
+        AtomicReference<DatabaseInfo> dbInfoRef = new AtomicReference<>();
+        Assertions.assertDoesNotThrow(() -> {
+            DatabaseInfo info = (DatabaseInfo) UtFrameUtils.PseudoJournalReplayer
+                    .replayNextJournal(OperationType.OP_ALTER_DB_V2);
+            dbInfoRef.set(info);
+        });
+
+        DatabaseInfo replayInfo = dbInfoRef.get();
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(dbName, replayInfo.getDbName());
+        Assertions.assertEquals(sv02.getFsKey(), replayInfo.getStorageVolumeId());
+
+        // switch to follower svMgr
+        refSvMgr.set(svMgrFollower);
+
+        { // replay and verify follower state
+            LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+            Database followerDb = new Database(DB_ID, dbName);
+            followerMetastore.unprotectCreateDb(followerDb);
+
+            String svNameBefore = svMgrFollower.getStorageVolumeNameOfDb(db.getId());
+            Assertions.assertEquals(defaultSv.getFsName(), svNameBefore);
+
+            followerMetastore.replayAlterDatabase(replayInfo);
+
+            String svNameAfter = svMgrFollower.getStorageVolumeNameOfDb(db.getId());
+            Assertions.assertEquals(sv02.getFsName(), svNameAfter);
+        }
+    }
+
+    @Test
     public void testRenameDatabaseEditLogException() throws Exception {
         // 1. Get database
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
@@ -367,7 +494,7 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // Analyze the statement (normally done before execution)
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase(oldDbName);
-        com.starrocks.sql.analyzer.AlterDatabaseRenameStatementAnalyzer.analyze(stmt, ctx);
+        AlterDatabaseAnalyzer.analyze(stmt, ctx);
 
         // 3. Mock EditLog.logDatabaseRename to throw exception
         EditLog spyEditLog = spy(new EditLog(null));

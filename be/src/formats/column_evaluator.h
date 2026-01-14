@@ -14,44 +14,31 @@
 
 #pragma once
 
-#include "column/chunk.h"
+#include <memory>
+#include <vector>
+
 #include "column/column.h"
+#include "common/global_types.h"
 #include "common/statusor.h"
-#include "exprs/expr.h"
-#include "exprs/expr_context.h"
-#include "runtime/runtime_state.h"
+#include "gen_cpp/Exprs_types.h"
+#include "runtime/types.h"
 
 namespace starrocks {
+
+class Chunk;
+class ExprContext;
+class RuntimeState;
 
 // a convenience class to abstract away complexities of handling expr and its context
 // take chunk as input, and output column
 class ColumnEvaluator {
 public:
-    static Status init(const std::vector<std::unique_ptr<ColumnEvaluator>>& source) {
-        for (const auto& e : source) {
-            RETURN_IF_ERROR(e->init());
-        }
-        return Status::OK();
-    }
+    static Status init(const std::vector<std::unique_ptr<ColumnEvaluator>>& source);
 
     static std::vector<std::unique_ptr<ColumnEvaluator>> clone(
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& source) {
-        std::vector<std::unique_ptr<ColumnEvaluator>> es;
-        es.reserve(source.size());
-        for (const auto& e : source) {
-            es.push_back(e->clone());
-        }
-        return es;
-    }
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& source);
 
-    static std::vector<TypeDescriptor> types(const std::vector<std::unique_ptr<ColumnEvaluator>>& source) {
-        std::vector<TypeDescriptor> types;
-        types.reserve(source.size());
-        for (const auto& e : source) {
-            types.push_back(e->type());
-        }
-        return types;
-    }
+    static std::vector<TypeDescriptor> types(const std::vector<std::unique_ptr<ColumnEvaluator>>& source);
 
     virtual ~ColumnEvaluator() = default;
 
@@ -70,45 +57,19 @@ public:
 class ColumnExprEvaluator : public ColumnEvaluator {
 public:
     static std::vector<std::unique_ptr<ColumnEvaluator>> from_exprs(const std::vector<TExpr>& exprs,
-                                                                    RuntimeState* state) {
-        std::vector<std::unique_ptr<ColumnEvaluator>> es;
-        es.reserve(exprs.size());
-        for (const auto& e : exprs) {
-            es.push_back(std::make_unique<ColumnExprEvaluator>(e, state));
-        }
-        return es;
-    }
+                                                                    RuntimeState* state);
 
-    ColumnExprEvaluator(const TExpr& expr, RuntimeState* state) : _expr(expr), _state(state) {}
+    ColumnExprEvaluator(const TExpr& expr, RuntimeState* state);
 
-    ~ColumnExprEvaluator() override {
-        if (_expr_ctx) {
-            _expr_ctx->close(_state);
-        }
-    }
+    ~ColumnExprEvaluator() override;
 
-    Status init() override {
-        if (_expr_ctx == nullptr) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), _expr, &_expr_ctx, _state));
-            RETURN_IF_ERROR(_expr_ctx->prepare(_state));
-            RETURN_IF_ERROR(_expr_ctx->open(_state));
-        }
-        return Status::OK();
-    }
+    Status init() override;
 
-    std::unique_ptr<ColumnEvaluator> clone() const override {
-        return std::make_unique<ColumnExprEvaluator>(_expr, _state);
-    }
+    std::unique_ptr<ColumnEvaluator> clone() const override;
 
-    TypeDescriptor type() const override {
-        DCHECK(_expr_ctx != nullptr) << "not inited";
-        return _expr_ctx->root()->type();
-    }
+    TypeDescriptor type() const override;
 
-    StatusOr<ColumnPtr> evaluate(Chunk* chunk) override {
-        DCHECK(_expr_ctx != nullptr) << "not inited";
-        return _expr_ctx->evaluate(chunk);
-    }
+    StatusOr<ColumnPtr> evaluate(Chunk* chunk) override;
 
 private:
     TExpr _expr;
@@ -119,31 +80,19 @@ private:
 // used for UT, since it is too hard to mock TExpr :(
 class ColumnSlotIdEvaluator : public ColumnEvaluator {
 public:
-    static std::vector<std::unique_ptr<ColumnEvaluator>> from_types(const std::vector<TypeDescriptor>& types) {
-        std::vector<std::unique_ptr<ColumnEvaluator>> es;
-        es.reserve(types.size());
-        for (size_t i = 0; i < types.size(); i++) {
-            es.push_back(std::make_unique<ColumnSlotIdEvaluator>(i, types[i]));
-        }
-        return es;
-    }
+    static std::vector<std::unique_ptr<ColumnEvaluator>> from_types(const std::vector<TypeDescriptor>& types);
 
     ColumnSlotIdEvaluator(SlotId slot_id, TypeDescriptor type) : _slot_id(slot_id), _type(type) {}
 
     ~ColumnSlotIdEvaluator() override = default;
 
-    Status init() override { return Status::OK(); }
+    Status init() override;
 
-    std::unique_ptr<ColumnEvaluator> clone() const override {
-        return std::make_unique<ColumnSlotIdEvaluator>(_slot_id, _type);
-    }
+    std::unique_ptr<ColumnEvaluator> clone() const override;
 
     TypeDescriptor type() const override { return _type; }
 
-    StatusOr<ColumnPtr> evaluate(Chunk* chunk) override {
-        DCHECK(chunk->is_slot_exist(_slot_id));
-        return chunk->get_column_by_slot_id(_slot_id);
-    }
+    StatusOr<ColumnPtr> evaluate(Chunk* chunk) override;
 
 private:
     SlotId _slot_id;

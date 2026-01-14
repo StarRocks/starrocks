@@ -1137,10 +1137,6 @@ public class RestoreJobTest {
                 return Maps.newHashMap();
             }
             
-            @Mock
-            public Map<String, Long> getPhysicalPartitionNameToPartitionId() {
-                return Maps.newHashMap();
-            }
         };
         
         // Create the MaterializedView instance after MockUp is set up

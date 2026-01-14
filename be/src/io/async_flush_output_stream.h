@@ -14,17 +14,20 @@
 
 #pragma once
 
+#include <cstdint>
 #include <future>
 #include <queue>
 #include <string>
 #include <vector>
 
 #include "common/statusor.h"
-#include "fs/fs.h"
-#include "runtime/current_thread.h"
-#include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 #include "util/raw_container.h"
+
+namespace starrocks {
+class WritableFile;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
 
 namespace starrocks::io {
 
@@ -58,10 +61,11 @@ public:
 
     AsyncFlushOutputStream(std::unique_ptr<WritableFile> file, PriorityThreadPool* io_executor,
                            RuntimeState* runtime_state);
+    ~AsyncFlushOutputStream();
 
     Status write(const uint8_t* data, int64_t size);
 
-    const std::string& filename() const { return _file->filename(); }
+    const std::string& filename() const;
 
     int64_t tell() const { return _total_size; }
 
