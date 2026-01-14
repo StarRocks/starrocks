@@ -184,7 +184,7 @@ docker compose run minio_mc
 
 ---
 
-## 用于共享数据的 StarRocks 配置
+## 用于存算分离的 StarRocks 配置
 
 此时，您已经运行了 StarRocks，并且已经运行了 MinIO。MinIO 访问密钥用于连接 StarRocks 和 MinIO。
 
