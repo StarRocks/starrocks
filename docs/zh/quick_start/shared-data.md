@@ -47,7 +47,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### curl
 
-`curl` 用于向 StarRocks 发起数据导入任务，并下载数据集。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 来检查是否已安装 curl。如果未安装 curl，请[在此获取 curl](https://curl.se/dlwiz/?type=bin)。
+`curl` 用于向 StarRocks 发出数据导入作业，并下载数据集。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 来检查是否已安装。如果未安装 curl，请[在此处获取 curl](https://curl.se/dlwiz/?type=bin)。
 
 ### `/etc/hosts`
 
