@@ -985,7 +985,12 @@ public class ConnectContext {
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.sessionVariable.setCatalog(currentCatalog);
+        SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(currentCatalog));
+        try {
+            globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+        } catch (DdlException e) {
+            LOG.warn("failed to set catalog {}", currentCatalog, e);
+        }
     }
 
     public Long getCurrentWarehouseIdAllowNull() {
