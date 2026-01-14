@@ -480,7 +480,7 @@ FE 配置与默认配置略有不同，因为必须将 FE 配置为期望数据�
 `docker-compose.yml` 文件在 `command` 中生成 FE 配置。
 
 ```plaintext
-# enable shared data, set storage type, set endpoint
+# 启用存算分离，设置存储类型，设置端点
 run_mode = shared_data
 cloud_native_storage_type = S3
 ```
