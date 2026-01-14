@@ -1,0 +1,23 @@
+-- name: test_low_cardinality_with_lamda_function
+
+CREATE TABLE t1 (
+    c VARCHAR(65535) NULL COMMENT ""
+)
+ENGINE = OLAP
+DUPLICATE KEY(c)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t1 VALUES ('A'), ('A');
+SELECT SLEEP(3);
+[UC] ANALYZE FULL TABLE t1;
+function: wait_global_dict_ready('c', 't1')
+
+set enable_scan_predicate_expr_reuse=false;
+WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3;
+WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 0;
+WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+
+drop table t1;
