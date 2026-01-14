@@ -505,7 +505,7 @@ cloud_native_storage_type = S3
 
 #### `run_mode=shared_data`
 
-这启用了共享数据使用。
+启用存算分离。
 
 #### `cloud_native_storage_type=S3`
 
