@@ -25,6 +25,7 @@
 #include "common/statusor.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/string_functions.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -63,6 +64,7 @@ public:
         std::string pattern = "-";
         _state->pattern = pattern;
         _state->use_hyperscan = true;
+        _state->use_hyperscan_vec = true;
         _state->size_of_pattern = int(pattern.size());
         if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SOM_LEFTMOST,
                        HS_MODE_BLOCK, nullptr, &_state->database, &_state->compile_err) != HS_SUCCESS) {

@@ -62,6 +62,8 @@ struct StringFunctionsState {
     DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     bool use_hyperscan = false;
+    bool use_hyperscan_vec = false;
+
     int size_of_pattern = -1;
 
     // a pointer to the generated database that responsible for parsed expression.
