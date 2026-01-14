@@ -68,7 +68,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
@@ -189,11 +191,16 @@ public class LoadAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
         String label = request.getRequest().headers().get(LABEL_KEY);
 
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
+        } else {
+            String userWarehouseName = getUserDefaultWarehouse(request);
+            if (warehouseManager.warehouseExists(userWarehouseName)) {
+                warehouseName = userWarehouseName;
+            }
         }
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
@@ -215,6 +222,15 @@ public class LoadAction extends RestBaseAction {
             BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
         TableId tableId = new TableId(dbName, tableName);
         StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        if (!params.getWarehouse().isPresent()) {
+            String userWarehouseName = getUserDefaultWarehouse(request);
+            if (GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName)) {
+                Map<String, String> newParams = new HashMap<>(params.toMap());
+                newParams.put(StreamLoadHttpHeader.HTTP_WAREHOUSE, userWarehouseName);
+                params = new StreamLoadKvParams(newParams);
+            }
+        }
+
         RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
                 .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
         if (!result.isOk()) {
