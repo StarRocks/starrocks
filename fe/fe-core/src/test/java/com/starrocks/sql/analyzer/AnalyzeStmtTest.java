@@ -891,4 +891,23 @@ public class AnalyzeStmtTest {
         Assertions.assertEquals(3, failedSize);
     }
 
+    @Test
+    public void testStatisticSQLBuilderBatchDropSqls() {
+        List<Long> tableIds = List.of(1L, 2L, 3L);
+        String sampleSql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, StatsConstants.AnalyzeType.SAMPLE);
+        Assertions.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID IN (1, 2, 3)", sampleSql);
+
+        String fullSql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, StatsConstants.AnalyzeType.FULL);
+        Assertions.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID IN (1, 2, 3)", fullSql);
+
+        Assertions.assertThrows(IllegalStateException.class, () ->
+                StatisticSQLBuilder.buildDropStatisticsSQL(List.of(), StatsConstants.AnalyzeType.FULL));
+
+        String mcSql = StatisticSQLBuilder.buildDropMultipleStatisticsSQL(List.of(10L, 20L));
+        Assertions.assertEquals("DELETE FROM multi_column_statistics WHERE TABLE_ID IN (10, 20)", mcSql);
+
+        String histogramSql = StatisticSQLBuilder.buildDropHistogramSQL(List.of(100L));
+        Assertions.assertEquals("delete from histogram_statistics where table_id in (100)", histogramSql);
+    }
+
 }

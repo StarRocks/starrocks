@@ -776,14 +776,14 @@ public class AnalyzeMgr implements Writable {
         if (tableIds == null || tableIds.isEmpty()) {
             return;
         }
-        List<Long> distinctTableIds = tableIds.stream().distinct().collect(Collectors.toList());
-        Set<Long> tableIdSet = new HashSet<>(distinctTableIds);
+        List<Long> distinctTableIdsToDelete = tableIds.stream().distinct().collect(Collectors.toList());
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        boolean ok = statisticExecutor.dropHistogramByTableIds(statsConnectCtx, distinctTableIds);
+        boolean ok = statisticExecutor.dropHistogramByTableIds(statsConnectCtx, distinctTableIdsToDelete);
         if (!ok) {
             return;
         }
 
+        Set<Long> tableIdSet = new HashSet<>(distinctTableIdsToDelete);
         List<Pair<Long, String>> keysToRemove = new ArrayList<>();
         List<HistogramStatsMeta> metasToRemove = new ArrayList<>();
         for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry : histogramStatsMetaMap.entrySet()) {
@@ -806,14 +806,14 @@ public class AnalyzeMgr implements Writable {
         if (tableIds == null || tableIds.isEmpty()) {
             return;
         }
-        List<Long> distinctTableIds = tableIds.stream().distinct().collect(Collectors.toList());
-        Set<Long> tableIdSet = new HashSet<>(distinctTableIds);
+        List<Long> distinctTableIdsToDelete = tableIds.stream().distinct().collect(Collectors.toList());
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        boolean ok = statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, distinctTableIds);
+        boolean ok = statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, distinctTableIdsToDelete);
         if (!ok) {
             return;
         }
 
+        Set<Long> tableIdSet = new HashSet<>(distinctTableIdsToDelete);
         List<MultiColumnStatsKey> keysToRemove = new ArrayList<>();
         List<MultiColumnStatsMeta> metasToRemove = new ArrayList<>();
         for (Map.Entry<MultiColumnStatsKey, MultiColumnStatsMeta> entry : multiColumnStatsMetaMap.entrySet()) {
