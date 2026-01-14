@@ -338,7 +338,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：控制用于生成 Profile 日志文件名中日期部分的时间粒度。有效值（不区分大小写）为 `HOUR` 和 `DAY`。`HOUR` 模式会产生 `"%d{yyyyMMddHH}"`（按小时分桶），`DAY` 模式会产生 `"%d{yyyyMMdd}"`（按天分桶）。该值在计算 Log4j 配置中的 `profile_file_pattern` 时使用，仅影响基于时间的轮转文件名部分；基于大小的轮转仍由 `profile_log_roll_size_mb` 控制，保留行为由 `profile_log_roll_num` / `profile_log_delete_age` 控制。无效值会在日志初始化期间引发 IOException（Error Message: "profile_log_roll_interval config error: <value>"）。对于高流量的 Profiling 场景请选择 `HOUR` 以限制每小时每文件大小，或选择 `DAY` 进行日级聚合。
+- 描述：控制用于生成 Profile 日志文件名中日期部分的时间粒度。有效值（不区分大小写）为 `HOUR` 和 `DAY`。`HOUR` 模式会产生 `"%d{yyyyMMddHH}"`（按小时分桶），`DAY` 模式会产生 `"%d{yyyyMMdd}"`（按天分桶）。该值在计算 Log4j 配置中的 `profile_file_pattern` 时使用，仅影响基于时间的轮转文件名部分；基于大小的轮转仍由 `profile_log_roll_size_mb` 控制，保留行为由 `profile_log_roll_num` / `profile_log_delete_age` 控制。无效值会在日志初始化期间引发 `IOException（Error Message: "profile_log_roll_interval config error: <value>"）`。对于高流量的 Profiling 场景请选择 `HOUR` 以限制每小时每文件大小，或选择 `DAY` 进行日级聚合。
 - 引入版本：v3.2.5
 
 ##### profile_log_roll_num
