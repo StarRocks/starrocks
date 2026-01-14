@@ -186,7 +186,7 @@ docker compose run minio_mc
 
 ## 用于存算分离的 StarRocks 配置
 
-此时，您已经运行了 StarRocks，并且已经运行了 MinIO。MinIO 访问密钥用于连接 StarRocks 和 MinIO。
+此时您已经运行了 StarRocks 和 MinIO。MinIO 访问密钥用于连接 StarRocks 和 MinIO。
 
 这是 `FE` 配置的一部分，它指定 StarRocks 部署将使用共享数据。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
 
