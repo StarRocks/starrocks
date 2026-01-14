@@ -428,7 +428,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 ### 天气数据
 
-以与加载崩溃数据相同的方式加载天气数据集。
+以与加载事故数据相同的方式加载天气数据集。
 
 ```bash
 curl --location-trusted -u root             \
