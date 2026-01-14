@@ -1,0 +1,26 @@
+-- name: test_greatest_date_datetime_wrong_result @system
+-- The actual user-visible bug: wrapping result in date() returns wrong date
+select date(greatest(date('2026-01-14'), timestamp('2026-01-11 00:00:00')));
+
+-- name: test_greatest_date_datetime_returns_datetime @system
+-- Root cause: greatest(DATE, DATETIME) should return DATETIME, not BIGINT
+select greatest(date('2026-01-11'), timestamp('2026-01-14 00:00:00'));
+select typeof(greatest(date('2026-01-11'), timestamp('2026-01-14 00:00:00')));
+
+-- name: test_least_date_datetime_returns_datetime @system
+select least(date('2026-01-14'), timestamp('2026-01-11 00:00:00'));
+select typeof(least(date('2026-01-14'), timestamp('2026-01-11 00:00:00')));
+
+-- name: test_coalesce_date_datetime_returns_datetime @system
+select coalesce(null, date('2026-01-11'), timestamp('2026-01-14 00:00:00'));
+select typeof(coalesce(null, date('2026-01-11'), timestamp('2026-01-14 00:00:00')));
+
+-- name: test_greatest_pure_dates_returns_datetime @system
+-- greatest/least only have DATETIME signatures, so pure DATE inputs return DATETIME (not INT)
+select greatest(date('2026-01-11'), date('2026-01-14'), date('2026-01-09'));
+select typeof(greatest(date('2026-01-11'), date('2026-01-14'), date('2026-01-09')));
+
+-- name: test_numeric_types_unchanged @system
+-- Verify no regression: numeric types should still work correctly
+select typeof(greatest(cast(100 as int), cast(200 as bigint)));
+select typeof(greatest(20260114, 20260115));
