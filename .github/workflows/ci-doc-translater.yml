@@ -40,6 +40,7 @@ jobs:
       - name: Get Changed Files
         id: changed-files
         uses: tj-actions/changed-files@v44
+
       - name: Run Translations
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -47,9 +48,11 @@ jobs:
           FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           pip install -U google-genai pyyaml
-          if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then python docs/translation/translate.py -l ja --files $FILES; fi
-          if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then python docs/translation/translate.py -l zh --files $FILES; fi
-          if [[ "$BODY" == *" [x] **English (en)**"* ]]; then python docs/translation/translate.py -l en --files $FILES; fi
+          # Use double quotes around "$FILES" to prevent word-splitting
+          if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then python docs/translation/translate.py -l ja --files "$FILES"; fi
+          if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then python docs/translation/translate.py -l zh --files "$FILES"; fi
+          if [[ "$BODY" == *" [x] **English (en)**"* ]]; then python docs/translation/translate.py -l en --files "$FILES"; fi
+
       - name: Get PR Info
         id: pr_info
         uses: actions/github-script@v7

@@ -55,37 +55,41 @@ class StarRocksTranslator:
             print(f"Warning: Input file not found, skipping: {input_file}")
             return
         
-        # 1. Detect Source Language from path
+        # 1. Detect Source Language
         source_lang = "en"
         if "docs/zh/" in input_file: source_lang = "zh"
         elif "docs/ja/" in input_file: source_lang = "ja"
         source_lang_full = LANG_MAP.get(source_lang, source_lang)
 
-        # 2. Determine Output Path
+        # 2. Path Mapping
         abs_input = os.path.abspath(input_file)
         output_file = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
         
-        # Skip if target exists and is newer (protects manual edits)
         if os.path.exists(output_file) and os.path.getmtime(output_file) >= os.path.getmtime(abs_input):
-            print(f"⏩ Skipping {output_file}: Target is newer than, or same as, the source.")
+            print(f"⏩ Skipping {output_file}: Target is up to date.")
             return
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-        # 3. Dynamic Prompt Injection
-        system_instruction = self.system_template.replace("${source_lang}", source_lang_full).replace("${target_lang}", self.target_lang_full).replace("${dictionary}", self.dictionary_str)
-        self.human_template += f"\n\n### CONTENT TO TRANSLATE ###\n\n{self._read_file(input_file)}"
-        human_prompt = self.human_template
+        # 3. FIXED: Dynamic Prompt Injection (Using local variables)
+        system_instruction = (self.system_template
+                              .replace("${source_lang}", source_lang_full)
+                              .replace("${target_lang}", self.target_lang_full)
+                              .replace("${dictionary}", self.dictionary_str))
+        
+        # We don't modify self.human_template; we create a new string for THIS file
+        current_human_prompt = (self.human_template 
+                                + f"\n\n### CONTENT TO TRANSLATE ###\n\n{self._read_file(input_file)}")
 
         if self.dry_run:
-            print(f"🔍 [DRY RUN] {source_lang_full} -> {self.target_lang_full} | Path: {output_file}")
+            print(f"🔍 [DRY RUN] {source_lang_full} -> {self.target_lang_full}")
             return
 
         print(f"🚀 Translating {input_file} to {output_file}...")
         response = client.models.generate_content(
             model=MODEL_NAME,
             config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
-            contents=human_prompt
+            contents=current_human_prompt
         )
         
         translated_text = response.text.strip()
