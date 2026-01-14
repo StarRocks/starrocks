@@ -1983,6 +1983,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas), walApplier);
     }
 
+    public void logRemoveBasicStatsMetaBatch(List<BasicStatsMeta> metas, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas), walApplier);
+    }
+
     public void logAddHistogramStatsMeta(HistogramStatsMeta meta, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta, walApplier);
 >>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
@@ -2001,6 +2005,11 @@ public class EditLog {
                 new BatchRemoveHistogramStatsMetaLog(metas), walApplier);
     }
 
+    public void logRemoveHistogramStatsMetaBatch(List<HistogramStatsMeta> metas, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH,
+                new BatchRemoveHistogramStatsMetaLog(metas), walApplier);
+    }
+
     public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta, walApplier);
 >>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
@@ -2014,6 +2023,11 @@ public class EditLog {
     public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
         logEdit(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
 =======
+    public void logRemoveMultiColumnStatsMetaBatch(List<MultiColumnStatsMeta> metas, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH,
+                new BatchRemoveMultiColumnStatsMetaLog(metas), walApplier);
+    }
+
     public void logRemoveMultiColumnStatsMetaBatch(List<MultiColumnStatsMeta> metas, WALApplier walApplier) {
         logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH,
                 new BatchRemoveMultiColumnStatsMetaLog(metas), walApplier);

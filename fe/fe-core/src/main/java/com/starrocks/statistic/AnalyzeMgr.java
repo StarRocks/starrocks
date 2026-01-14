@@ -743,11 +743,6 @@ public class AnalyzeMgr implements Writable {
                 return;
             }
 
-<<<<<<< HEAD
-                statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, tableId);
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
-                basicStatsMetaMap.remove(tableId);
-=======
             // Both types of tables need to be deleted, because there may have been a switch of
             // collecting statistics types, leaving some discarded statistics data.
             boolean sampleOk = statisticExecutor.dropTableStatistics(statsConnectCtx, distinctTableIds,
@@ -760,7 +755,6 @@ public class AnalyzeMgr implements Writable {
                         basicStatsMetaMap.remove(meta.getTableId());
                     }
                 });
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
             }
         }
     }
@@ -776,17 +770,6 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-<<<<<<< HEAD
-        for (Map.Entry<Long, List<String>> histogramItem : expireHistogram.entrySet()) {
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropHistogram(statsConnectCtx, histogramItem.getKey(), histogramItem.getValue());
-
-            for (String histogramColumn : histogramItem.getValue()) {
-                Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);
-                GlobalStateMgr.getCurrentState().getEditLog()
-                        .logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
-                histogramStatsMetaMap.remove(histogramKey);
-=======
         Set<Long> tableIdSet = new HashSet<>(distinctTableIdsToDelete);
         List<Pair<Long, String>> keysToRemove = new ArrayList<>();
         List<HistogramStatsMeta> metasToRemove = new ArrayList<>();
@@ -794,7 +777,6 @@ public class AnalyzeMgr implements Writable {
             if (tableIdSet.contains(entry.getKey().first)) {
                 keysToRemove.add(entry.getKey());
                 metasToRemove.add(entry.getValue());
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
             }
         }
         if (metasToRemove.isEmpty()) {
@@ -823,25 +805,11 @@ public class AnalyzeMgr implements Writable {
         List<MultiColumnStatsMeta> metasToRemove = new ArrayList<>();
         for (Map.Entry<MultiColumnStatsKey, MultiColumnStatsMeta> entry : multiColumnStatsMetaMap.entrySet()) {
             MultiColumnStatsKey key = entry.getKey();
-<<<<<<< HEAD
-            MultiColumnStatsMeta value = entry.getValue();
-
-            StatisticExecutor statisticExecutor = new StatisticExecutor();
-
-            if (tableIdHasDeleted.contains(key.tableId)) {
-                statisticExecutor.dropTableMultiColumnStatistics(statsConnectCtx, key.tableId);
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveMultiColumnStatsMeta(value);
-=======
             if (tableIdSet.contains(key.tableId)) {
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
                 keysToRemove.add(key);
                 metasToRemove.add(entry.getValue());
             }
         }
-<<<<<<< HEAD
-
-        keysToRemove.forEach(multiColumnStatsMetaMap::remove);
-=======
         if (metasToRemove.isEmpty()) {
             return;
         }
@@ -850,7 +818,6 @@ public class AnalyzeMgr implements Writable {
                 multiColumnStatsMetaMap.remove(key);
             }
         });
->>>>>>> ee70f1e49e ([Enhancement] Batch delete dropped-table statistics and batch editlog writes (#67896))
     }
 
     public void dropExternalBasicStatsMetaAndData(String catalogName, String dbName, String tableName) {
