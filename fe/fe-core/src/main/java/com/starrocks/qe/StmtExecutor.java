@@ -1828,14 +1828,14 @@ public class StmtExecutor {
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
-            analyzeMgr.dropMultiColumnStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+            analyzeMgr.dropMultiColumnStatsMetaAndData(StatisticUtils.buildConnectContext(), List.of(table.getId()));
             statisticStorage.expireMultiColumnStatistics(table.getId());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
 
             if (!dropStatsStmt.isMultiColumn()) {
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                        .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+                        .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), List.of(table.getId()));
                 GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
             }
         }
@@ -1864,7 +1864,7 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                     .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(),
-                            Sets.newHashSet(table.getId()));
+                            List.of(table.getId()));
             GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
         }
     }
