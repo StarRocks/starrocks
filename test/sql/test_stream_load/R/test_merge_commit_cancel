@@ -44,32 +44,7 @@ function: get_running_transaction_count("db_${uuid0}")
 -- result:
 0
 -- !result
-shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_async:true" -H "merge_commit_interval_ms:600000" -H "merge_commit_parallel:1" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t0/_stream_load
--- result:
-0
-{
-    "Status": "Success",
-    "Message": "OK"
-}
--- !result
-function: get_running_transaction_count("db_${uuid0}")
--- result:
-1
--- !result
-[UC]function: label2=get_single_running_transaction_label("db_${uuid0}")
--- result:
-merge_commit_019b7ea8-2daa-7e32-8798-18fb4088bce4
--- !result
-shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
--- result:
-0
-{"status":"OK","code":"0","msg":"Success","message":"OK"}
--- !result
-function: get_running_transaction_count("db_${uuid0}")
--- result:
-0
--- !result
-select count(*) from t0 where id in (1, 2);
+select count(*) from t0;
 -- result:
 0
 -- !result

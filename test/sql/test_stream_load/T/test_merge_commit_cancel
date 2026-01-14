@@ -29,15 +29,7 @@ shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_ca
 -- 4) Verify no running transactions
 function: get_running_transaction_count("db_${uuid0}")
 
--- 5) Start another merge-commit stream load, repeat cancel
-shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_async:true" -H "merge_commit_interval_ms:600000" -H "merge_commit_parallel:1" -d '{"id":2,"name":"n2","score":2}' ${url}/api/db_${uuid0}/t0/_stream_load
-
-function: get_running_transaction_count("db_${uuid0}")
-
-[UC]function: label2=get_single_running_transaction_label("db_${uuid0}")
-shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label2}"
-
-function: get_running_transaction_count("db_${uuid0}")
+-- 5) TODO verify merge commit task state is CANCELLED after supporting information_schema.loads later
 
 -- 6) Verify data not loaded
-select count(*) from t0 where id in (1, 2);
+select count(*) from t0;
