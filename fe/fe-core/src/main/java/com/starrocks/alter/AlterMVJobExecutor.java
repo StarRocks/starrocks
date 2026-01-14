@@ -689,7 +689,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 isAggregateFunction = ExprUtils.isAggregateFunction(funcName);
             }
             GroupByClause groupByClause = selectRelation.getGroupByClause();
-            if (isAggregateFunction && groupByClause.isEmpty()) {
+            if (isAggregateFunction && (groupByClause == null || groupByClause.isEmpty())) {
                 throw new DdlException("Add new aggregate function column failed: Materialized view must contain group by " +
                         "columns.");
             }
@@ -703,12 +703,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             if (isAggregateFunction) {
                 selectRelation.getAggregate().add((FunctionCallExpr) addColumnExpr);
             } else {
-                if (!selectRelation.getAggregate().isEmpty()) {
+                if (groupByClause != null && !selectRelation.getAggregate().isEmpty()) {
                     groupByClause.getGroupingExprs().add(addColumnExpr);
                     groupByClause.getOriGroupingExprs().add(addColumnExpr);
 
                     List<Expr> groupByExprs = selectRelation.getGroupBy();
-                    groupByExprs.add(addColumnExpr);
+                    if (groupByExprs != null) {
+                        groupByExprs.add(addColumnExpr);
+                    }
                 }
             }
             selectRelation.setOutputExpr(newOutputCols);
@@ -797,7 +799,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             if (removedExpr instanceof FunctionCallExpr && selectRelation.getAggregate() != null) {
                 selectRelation.getAggregate().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
-            } else if (selectRelation.getGroupByClause() != null) {
+            }
+
+            if (selectRelation.getGroupByClause() != null) {
                 GroupByClause groupByClause = selectRelation.getGroupByClause();
                 groupByClause.getGroupingExprs().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
                 groupByClause.getOriGroupingExprs().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
