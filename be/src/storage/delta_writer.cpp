@@ -556,6 +556,7 @@ Status DeltaWriter::manual_flush() {
 }
 
 Status DeltaWriter::flush_memtable_async(bool eos) {
+    DeferOp defer([this] { _mem_table.reset(); });
     _last_write_ts = 0;
     _write_buffer_size = 0;
     // _mem_table is nullptr means write() has not been called
