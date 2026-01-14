@@ -106,7 +106,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 下载这两个数据集：
 
-#### 纽约市崩溃数据
+#### 纽约市交通事故数据
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
