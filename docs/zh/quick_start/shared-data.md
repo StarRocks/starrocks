@@ -67,7 +67,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### CN
 
-Compute Nodes 负责在共享数据部署中执行查询计划。
+Compute Node 负责在存算分离部署中执行查询计划。
 
 ### BE
 
