@@ -60,6 +60,11 @@ public class JDBCScanNode extends ScanNode {
         if (identifier.isEmpty()) {
             return name;
         }
+        // If name already have identifier wrapped, just return
+        if (name.length() > 2 && name.startsWith(identifier) && name.endsWith(identifier)) {
+            return name;
+        }
+
         String[] parts = name.split("\\.", -1);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
@@ -67,7 +72,7 @@ public class JDBCScanNode extends ScanNode {
                 sb.append(".");
             }
             String part = parts[i];
-            if (part.startsWith(identifier) && part.endsWith(identifier)) {
+            if (part.length() > 2 && part.startsWith(identifier) && part.endsWith(identifier)) {
                 sb.append(part);
             } else {
                 sb.append(identifier).append(part).append(identifier);
@@ -129,8 +134,8 @@ public class JDBCScanNode extends ScanNode {
                 columns.add(objectIdentifier + colName + objectIdentifier);
             }
         }
-        // this happends when count(*)
-        if (0 == columns.size()) {
+        // this happens when count(*)
+        if (columns.isEmpty()) {
             columns.add("*");
         }
     }
