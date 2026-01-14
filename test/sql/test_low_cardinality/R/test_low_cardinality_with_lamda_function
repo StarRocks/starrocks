@@ -1,0 +1,46 @@
+-- name: test_low_cardinality_with_lamda_function
+CREATE TABLE t1 (
+    c VARCHAR(65535) NULL COMMENT ""
+)
+ENGINE = OLAP
+DUPLICATE KEY(c)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t1 VALUES ('A'), ('A');
+-- result:
+-- !result
+SELECT SLEEP(3);
+-- result:
+1
+-- !result
+[UC] ANALYZE FULL TABLE t1;
+-- result:
+test_db_bf1e812a1ddf43f49bddea55b1ae64eb.t1	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('c', 't1')
+-- result:
+
+-- !result
+set enable_scan_predicate_expr_reuse=false;
+-- result:
+-- !result
+WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3;
+-- result:
+1
+1
+-- !result
+WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 0;
+-- result:
+1
+1
+-- !result
+WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
