@@ -15,12 +15,16 @@
 package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.RequestPackage;
 import com.starrocks.mysql.ssl.SSLDecoder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.sql.ast.StatementBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -114,11 +118,23 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         ctx.cleanup();
     }
 
+    private boolean isTerminated() {
+        if (terminated) {
+            return true;
+        }
+        StmtExecutor executor = connectProcessor.getExecutor();
+        if (executor == null) {
+            return false;
+        }
+        final StatementBase lastStmt = executor.getParsedStmt();
+        return GracefulExitFlag.isGracefulExit() && !SqlUtils.isPreQuerySQL(lastStmt);
+    }
+
     private synchronized void handleRequest(RequestPackage req) {
         ctx.setThreadLocalInfo();
         try {
             connectProcessor.processOnce(req);
-            if (ctx.isKilled() || terminated) {
+            if (ctx.isKilled() || isTerminated()) {
                 ctx.stopAcceptQuery();
                 ctx.cleanup();
             }
