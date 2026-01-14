@@ -20,6 +20,7 @@ option java_package = "com.starrocks.proto";
 import "types.proto";
 import "lake_types.proto";
 import "status.proto";
+import "tablet_schema.proto";
 
 option cc_generic_services = true;
 
@@ -196,6 +197,11 @@ message DeleteDataRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
     optional DeletePredicatePB delete_predicate = 3;
+    // Schema key identifying the table schema. The delete predicate is generated
+    // based on this schema. This key is used for fast schema evolution v2 during
+    // delete operation, allowing the backend to update tablet metadata schema 
+    // during transaction publishing if needed.
+    optional TableSchemaKeyPB schema_key = 4;
 }
 
 message DeleteDataResponse {
