@@ -65,6 +65,7 @@ import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.DropMVColumnClause;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ParseNode;
@@ -674,14 +675,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         QueryStatement queryStatement = (QueryStatement) astParseNode;
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
 
-        // check whether it's a single table mv
-
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
-            // Step 1: Determine the column type from the aggregate expression
+            // Determine the column type from the aggregate expression
             Expr addColumnExpr = clause.getAggregateExpression();
             boolean isAggregateFunction = false;
             if (addColumnExpr instanceof FunctionCallExpr) {
@@ -689,10 +688,28 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 String funcName = funcExpr.getFunctionName();
                 isAggregateFunction = ExprUtils.isAggregateFunction(funcName);
             }
+            GroupByClause groupByClause = selectRelation.getGroupByClause();
+            if (isAggregateFunction && groupByClause.isEmpty()) {
+                throw new DdlException("Add new aggregate function column failed: Materialized view must contain group by " +
+                        "columns.");
+            }
+
             List<Expr> newOutputCols = Lists.newArrayList(selectRelation.getOutputExpression());
+            // always add it into output column
             newOutputCols.add(addColumnExpr);
+            // if the column is not a expr, it can be:
+            // - group by column, if the query contains aggregate
+            // - output column, if the query contains no aggregate
             if (isAggregateFunction) {
                 selectRelation.getAggregate().add((FunctionCallExpr) addColumnExpr);
+            } else {
+                if (!selectRelation.getAggregate().isEmpty()) {
+                    groupByClause.getGroupingExprs().add(addColumnExpr);
+                    groupByClause.getOriGroupingExprs().add(addColumnExpr);
+
+                    List<Expr> groupByExprs = selectRelation.getGroupBy();
+                    groupByExprs.add(addColumnExpr);
+                }
             }
             selectRelation.setOutputExpr(newOutputCols);
             SelectList selectList = selectRelation.getSelectList();
@@ -780,6 +797,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             if (removedExpr instanceof FunctionCallExpr && selectRelation.getAggregate() != null) {
                 selectRelation.getAggregate().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+            } else if (selectRelation.getGroupByClause() != null) {
+                GroupByClause groupByClause = selectRelation.getGroupByClause();
+                groupByClause.getGroupingExprs().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+                groupByClause.getOriGroupingExprs().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+
+                if (selectRelation.getGroupBy() != null) {
+                    selectRelation.getGroupBy().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+                }
             }
 
             ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
