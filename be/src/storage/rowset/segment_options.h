@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -56,6 +57,9 @@ public:
 
     // Specified ranges outside the segment, is used to support parallel-reading within a tablet
     std::vector<SeekRange> ranges;
+
+    // Use to filter the data by range distribution key
+    std::optional<SeekRange> tablet_range;
 
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
