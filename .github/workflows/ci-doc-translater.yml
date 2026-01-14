@@ -1,0 +1,62 @@
+name: Translation Runner
+on:
+  issue_comment:
+    types: [created]
+jobs:
+  execute:
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/translate')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Team Membership
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = context.payload.comment.user.login;
+            try {
+              await github.rest.teams.getMembershipForUserInOrg({
+                org: 'StarRocks',
+                team_slug: 'docs-maintainer',
+                username: user,
+              });
+            } catch (error) {
+              core.setFailed(`User ${user} is not authorized.`);
+            }
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/pull/${{ github.event.issue.number }}/head
+      - name: Get Checkbox State
+        id: get_checks
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+            });
+            const report = comments.find(c => c.body.includes('### 🌎 Translation Required?'));
+            return report ? report.body : '';
+      - name: Get Changed Files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+      - name: Run Translations
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BODY: ${{ steps.get_checks.outputs.result }}
+          FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          pip install -U google-genai pyyaml
+          if [[ "$BODY" == *" [x] **Japanese (ja)**"* ]]; then docs/translation/python translate.py -l ja --files $FILES; fi
+          if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then docs/translation/python translate.py -l zh --files $FILES; fi
+          if [[ "$BODY" == *" [x] **English (en)**"* ]]; then docs/translation/python translate.py -l en --files $FILES; fi
+      - name: Commit and Push
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if [[ -n $(git status --porcelain) ]]; then
+            git add .
+            git commit -m "docs: automated translation via Gemini [skip ci]"
+            git push origin HEAD:refs/heads/${{ github.event.issue.pull_request.head.ref }}
+          fi
+
