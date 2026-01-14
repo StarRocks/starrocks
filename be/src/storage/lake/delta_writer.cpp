@@ -438,6 +438,11 @@ inline Status DeltaWriterImpl::reset_memtable() {
 inline Status DeltaWriterImpl::flush_async() {
     Status st;
     if (_mem_table != nullptr) {
+        DeferOp defer([this] {
+            _mem_table.reset();
+            _last_write_ts = 0;
+        });
+
         RETURN_IF_ERROR(_mem_table->finalize());
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
@@ -461,8 +466,6 @@ inline Status DeltaWriterImpl::flush_async() {
                                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
                     }
                 });
-        _mem_table.reset(nullptr);
-        _last_write_ts = 0;
     }
     return st;
 }
