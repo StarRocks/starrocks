@@ -454,7 +454,7 @@ curl --location-trusted -u root             \
 
 ---
 
-## 为共享数据配置 StarRocks
+## 为存算分离配置 StarRocks
 
 现在您已经体验了将 StarRocks 与共享数据一起使用，了解配置非常重要。
 
