@@ -98,14 +98,6 @@ public class CheckReplicatedTableJobTest {
 
         OlapTable localTable = (OlapTable) tableMeta.getTable();
         OlapTable remoteTable = DeepCopy.copyWithGson(localTable, OlapTable.class);
-        Partition remotePartition = remoteTable.getPartition("p1");
-        PhysicalPartition remoteDefaultPartition = remotePartition.getDefaultPhysicalPartition();
-
-        remotePartition.removeSubPartition(remoteDefaultPartition.getId());
-        remoteTable.removePhysicalPartition(remoteDefaultPartition);
-        remoteDefaultPartition.setName(remoteDefaultPartition.getName() + "_remote");
-        remotePartition.addSubPartition(remoteDefaultPartition);
-        remoteTable.addPhysicalPartition(remoteDefaultPartition);
 
         Partition localPartition = localTable.getPartition("p1");
         int localPhysicalPartitionCount = localPartition.getSubPartitions().size();
@@ -148,7 +140,6 @@ public class CheckReplicatedTableJobTest {
         MaterializedIndex baseIndexCopy = DeepCopy.copyWithGson(
                 remotePartition.getDefaultPhysicalPartition().getBaseIndex(), MaterializedIndex.class);
         PhysicalPartition extraPartition = new PhysicalPartition(newPhysicalPartitionId,
-                remotePartition.generatePhysicalPartitionName(newPhysicalPartitionId),
                 remotePartition.getId(), baseIndexCopy);
         extraPartition.setBucketNum(remotePartition.getDistributionInfo().getBucketNum());
         remotePartition.addSubPartition(extraPartition);

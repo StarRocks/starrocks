@@ -49,9 +49,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "id")
     private long id;
 
-    @SerializedName(value = "name")
-    private String name;
-
     private long beforeRestoreId;
 
     @SerializedName(value = "parentId")
@@ -142,9 +139,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     }
 
-    public PhysicalPartition(long id, String name, long parentId, MaterializedIndex baseIndex) {
+    public PhysicalPartition(long id, long parentId, MaterializedIndex baseIndex) {
         this.id = id;
-        this.name = name;
         this.parentId = parentId;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
@@ -156,55 +152,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
-    /*
-     * Copy all the fields except materialized indexes
-     */
-    public PhysicalPartition(long id, String name, PhysicalPartition other) {
-        this.id = id;
-        this.name = name;
-
-        this.beforeRestoreId = other.beforeRestoreId;
-        this.parentId = other.parentId;
-
-        this.shardGroupId = other.shardGroupId;
-
-        this.isImmutable = other.isImmutable;
-
-        this.visibleVersion = other.visibleVersion;
-        this.visibleVersionTime = other.visibleVersionTime;
-        this.nextVersion = other.nextVersion;
-
-        this.dataVersion = other.dataVersion;
-        this.nextDataVersion = other.nextDataVersion;
-
-        this.versionEpoch = other.versionEpoch;
-        this.versionTxnType = other.versionTxnType;
-
-        this.metadataSwitchVersion = other.metadataSwitchVersion;
-
-        this.visibleTxnId = other.visibleTxnId;
-
-        this.lastVacuumTime.set(other.lastVacuumTime.get());
-
-        this.minRetainVersion.set(other.minRetainVersion.get());
-
-        this.lastSuccVacuumVersion.set(other.lastSuccVacuumVersion.get());
-
-        this.bucketNum = other.bucketNum;
-
-        this.extraFileSize.set(other.extraFileSize.get());
-    }
-
     public long getId() {
         return this.id;
-    }
-
-    public String getName() {
-        return this.name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     public void setIdForRestore(long id) {
@@ -584,7 +533,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("partitionId: ").append(id).append("; ");
-        buffer.append("partitionName: ").append(name).append("; ");
         buffer.append("parentPartitionId: ").append(parentId).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("isImmutable: ").append(isImmutable()).append("; ");

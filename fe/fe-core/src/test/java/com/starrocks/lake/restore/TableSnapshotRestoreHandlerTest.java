@@ -117,7 +117,6 @@ public class TableSnapshotRestoreHandlerTest {
         PhysicalPartition originalPhysicalPartition = originalPartition.getDefaultPhysicalPartition();
         long originalPartitionId = originalPartition.getId();
         long originalPhysicalPartitionId = originalPhysicalPartition.getId();
-        String originalPhysicalPartitionName = originalPhysicalPartition.getName();
 
         handler.resetIdsForRestore(new Database(44L, "target_db"), table);
 
@@ -129,11 +128,7 @@ public class TableSnapshotRestoreHandlerTest {
         Assertions.assertEquals(updatedPartition.getId(), updatedPhysicalPartition.getParentId());
         Assertions.assertEquals(updatedPartition.getId(),
                 table.getPhysicalPartitionIdToPartitionId().get(updatedPhysicalPartition.getId()));
-        Assertions.assertEquals(updatedPartition.getId(),
-                table.getPhysicalPartitionNameToPartitionId().get(updatedPhysicalPartition.getName()));
         Assertions.assertFalse(table.getPhysicalPartitionIdToPartitionId().containsKey(originalPhysicalPartitionId));
-        Assertions.assertEquals(updatedPartition.getId(),
-                table.getPhysicalPartitionNameToPartitionId().get(originalPhysicalPartitionName));
     }
 
     private LakeTable createLakeTable() {

@@ -403,17 +403,6 @@ public class OlapTableTest {
     }
 
     @Test
-    public void testGetPhysicalPartitionByName() {
-        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
-        List<Table> tables = db.getTables();
-        for (Table table : tables) {
-            OlapTable olapTable = (OlapTable) table;
-            PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
-            Assertions.assertNull(partition);
-        }
-    }
-
-    @Test
     public void testGetIndexesBySchema() {
         List<Index> indexesInTable = Lists.newArrayList();
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.VARCHAR), true, null, "", "");

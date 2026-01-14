@@ -358,7 +358,6 @@ public class RestoreHandler {
         List<Partition> partitions = Lists.newArrayList(tableForRestore.getIdToPartition().values());
         tableForRestore.getIdToPartition().clear();
         tableForRestore.getPhysicalPartitionIdToPartitionId().clear();
-        tableForRestore.getPhysicalPartitionNameToPartitionId().clear();
         for (Partition partition : partitions) {
             long oldPartitionId = partition.getId();
             long newPartitionId = partitionOldIdToNewId.get(oldPartitionId);
@@ -380,7 +379,6 @@ public class RestoreHandler {
                     partition.addSubPartition(physicalPartition);
                 }
                 tableForRestore.getPhysicalPartitionIdToPartitionId().put(physicalPartition.getId(), newPartitionId);
-                tableForRestore.getPhysicalPartitionNameToPartitionId().put(physicalPartition.getName(), newPartitionId);
             });
         }
 

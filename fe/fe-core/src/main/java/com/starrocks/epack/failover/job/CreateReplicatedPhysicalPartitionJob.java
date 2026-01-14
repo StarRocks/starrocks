@@ -39,7 +39,7 @@ public class CreateReplicatedPhysicalPartitionJob extends FailoverGroupJob {
     @Override
     public void execute() {
         LOG.info("Creating physical partition {}.{}.{}.{} in failover group {}", localDatabase.getFullName(),
-                localTable.getName(), localPartition.getName(), remotePhysicalPartition.getName(),
+                localTable.getName(), localPartition.getName(), remotePhysicalPartition.getId(),
                 failoverGroup.getName());
 
         ComputeResource computeResource  = GlobalStateMgr.getServingState().getWarehouseMgr().getBackgroundComputeResource();
@@ -48,11 +48,11 @@ public class CreateReplicatedPhysicalPartitionJob extends FailoverGroupJob {
                     localPartition, 1, computeResource);
         } catch (Exception e) {
             failoverGroup.addErrorMessage("Failed to create physical partition " + localDatabase.getFullName() + "." +
-                    localTable.getName() + "." + localPartition.getName() + "." + remotePhysicalPartition.getName() +
+                    localTable.getName() + "." + localPartition.getName() + "." + remotePhysicalPartition.getId() +
                     ", error: " + e.getMessage());
             LOG.warn("Failed to create physical partition {}.{}.{}.{} in failover group {}, ",
                     localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
-                    remotePhysicalPartition.getName(), failoverGroup.getName(), e);
+                    remotePhysicalPartition.getId(), failoverGroup.getName(), e);
             return;
         }
 
