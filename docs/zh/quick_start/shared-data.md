@@ -3,7 +3,7 @@ sidebar_position: 2
 description: Separate compute and storage
 ---
 
-# 存储和计算分离
+# 存算分离
 
 import DDL from '../_assets/quick-start/_DDL.mdx'
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
