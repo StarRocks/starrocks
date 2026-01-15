@@ -516,16 +516,16 @@ public class LakePublishBatchTest {
         VisibleStateWaiter waiter7 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets1,
                 Lists.newArrayList(), null);
 
-        // mock the switch from single to batch by adding transactionId to publishingLakeTransactions
-        publishVersionDaemon.publishingLakeTransactions.clear();
-        publishVersionDaemon.publishingLakeTransactions.add(transactionId6);
+        // mock the switch from single to batch by adding transactionId to publishingTransactionIds
+        publishVersionDaemon.publishingTransactionIds.clear();
+        publishVersionDaemon.publishingTransactionIds.add(transactionId6);
 
         Config.lake_enable_batch_publish_version = true;
         publishVersionDaemon.runAfterCatalogReady();
         Assertions.assertFalse(waiter6.await(5, TimeUnit.SECONDS));
         Assertions.assertFalse(waiter7.await(5, TimeUnit.SECONDS));
 
-        publishVersionDaemon.publishingLakeTransactions.clear();
+        publishVersionDaemon.publishingTransactionIds.clear();
         publishVersionDaemon.runAfterCatalogReady();
         Assertions.assertTrue(waiter6.await(60, TimeUnit.SECONDS));
         Assertions.assertTrue(waiter7.await(60, TimeUnit.SECONDS));
