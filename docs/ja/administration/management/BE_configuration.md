@@ -335,7 +335,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### plugin_path
 
-- デフォルト: ${STARROCKS_HOME}/plugin
+- デフォルト: `${STARROCKS_HOME}/plugin`
 - タイプ: string
 - 単位: Path
 - 変更可能: No
