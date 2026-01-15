@@ -257,7 +257,8 @@ public class WindowSkewTest extends PlanTestBase {
         statisticStorage.getColumnStatistics(table, List.of("p", "s", "x"));
 
         // Partition by expression (case when) instead of direct column
-        String sql = "select p, s, sum(x) over (partition by case when p is null then -1 else p end order by s) from window_skew_table";
+        String sql = "select p, s, sum(x) " +
+                "over (partition by case when p is null then -1 else p end order by s) from window_skew_table";
 
         String plan = getFragmentPlan(sql);
 
