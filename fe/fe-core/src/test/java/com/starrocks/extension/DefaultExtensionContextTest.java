@@ -15,17 +15,11 @@
 package com.starrocks.extension;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 public class DefaultExtensionContextTest {
 
     private DefaultExtensionContext context;
-
-    @BeforeAll
-    public void setUp() {
-        context = new DefaultExtensionContext();
-    }
 
     // Test classes for dependency injection scenarios
 
@@ -119,87 +113,106 @@ public class DefaultExtensionContextTest {
 
     @Test
     public void testRegisterAndGet() {
+        context = new DefaultExtensionContext();
         SimpleService service = new SimpleService();
         context.register(SimpleService.class, service);
         
         SimpleService retrieved = context.get(SimpleService.class);
-        Assertions.AssertionsSame(service, retrieved);
+        Assertions.assertSame(service, retrieved);
     }
 
     @Test
     public void testGetWithNoArgConstructor() {
+        context = new DefaultExtensionContext();
         SimpleService service = context.get(SimpleService.class);
-        Assertions.AssertionsNotNull(service);
-        Assertions.AssertionsEquals("simple", service.getValue());
+        Assertions.assertNotNull(service);
+        Assertions.assertEquals("simple", service.getValue());
     }
 
     @Test
     public void testAlwaysNewInstance() {
+        context = new DefaultExtensionContext();
         SimpleService service1 = context.get(SimpleService.class);
         SimpleService service2 = context.get(SimpleService.class);
         
-        Assertions.AssertionsNotNull(service1);
-        Assertions.AssertionsNotNull(service2);
+        Assertions.assertNotNull(service1);
+        Assertions.assertNotNull(service2);
         // Should be different instances
-        Assertions.AssertionsNotSame(service1, service2);
+        Assertions.assertNotSame(service1, service2);
     }
 
     @Test
     public void testDependencyInjection() {
+        context = new DefaultExtensionContext();
         ServiceWithDependency service = context.get(ServiceWithDependency.class);
-        Assertions.AssertionsNotNull(service);
-        Assertions.AssertionsEquals("dependent:simple", service.getValue());
+        Assertions.assertNotNull(service);
+        Assertions.assertEquals("dependent:simple", service.getValue());
     }
 
     @Test
     public void testInjectAnnotation() {
+        context = new DefaultExtensionContext();
         ServiceWithInject service = context.get(ServiceWithInject.class);
-        Assertions.AssertionsNotNull(service);
-        Assertions.AssertionsEquals("injected:simple", service.getValue());
+        Assertions.assertNotNull(service);
+        Assertions.assertEquals("injected:simple", service.getValue());
     }
 
     @Test
     public void testComplexDependencyResolution() {
+        context = new DefaultExtensionContext();
         ComplexService service = context.get(ComplexService.class);
-        Assertions.AssertionsNotNull(service);
-        Assertions.AssertionsEquals("complex:simple,dependent:simple", service.getValue());
+        Assertions.assertNotNull(service);
+        Assertions.assertEquals("complex:simple,dependent:simple", service.getValue());
     }
 
     @Test
     public void testRecursiveDependencyResolution() {
+        context = new DefaultExtensionContext();
         // ComplexService depends on ServiceWithDependency which depends on SimpleService
         ComplexService service = context.get(ComplexService.class);
-        Assertions.AssertionsNotNull(service);
+        Assertions.assertNotNull(service);
         
         // Verify each call creates new instances
         ComplexService service2 = context.get(ComplexService.class);
-        Assertions.AssertionsNotSame(service, service2);
+        Assertions.assertNotSame(service, service2);
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testAmbiguousConstructorFails() {
-        context.get(AmbiguousService.class);
+        context = new DefaultExtensionContext();
+        Assertions.assertThrows(IllegalStateException.class, () -> {
+            context.get(AmbiguousService.class);
+        });
     }
 
     @Test
     public void testResolvedAmbiguousConstructor() {
+        context = new DefaultExtensionContext();
         ResolvedAmbiguousService service = context.get(ResolvedAmbiguousService.class);
-        Assertions.AssertionsNotNull(service);
-        Assertions.AssertionsEquals("simple", service.getValue());
+        Assertions.assertNotNull(service);
+        Assertions.assertEquals("simple", service.getValue());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testRegisterNullClass() {
-        context.register(null, new SimpleService());
+        context = new DefaultExtensionContext();
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            context.register(null, new SimpleService());
+        });
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void testRegisterNullInstance() {
-        context.register(SimpleService.class, null);
+        context = new DefaultExtensionContext();
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            context.register(SimpleService.class, null);
+        });
     }
 
     @Test
     public void testRegisteredInstanceTakesPrecedence() {
+        context = new DefaultExtensionContext();
+
         SimpleService registered = new SimpleService() {
             @Override
             public String getValue() {
@@ -210,20 +223,22 @@ public class DefaultExtensionContextTest {
         context.register(SimpleService.class, registered);
         SimpleService retrieved = context.get(SimpleService.class);
         
-        Assertions.AssertionsSame(registered, retrieved);
-        Assertions.AssertionsEquals("registered", retrieved.getValue());
+        Assertions.assertSame(registered, retrieved);
+        Assertions.assertEquals("registered", retrieved.getValue());
     }
 
     @Test
     public void testConstructorMetadataCaching() {
+        context = new DefaultExtensionContext();
+
         // First call should cache constructor metadata
         SimpleService service1 = context.get(SimpleService.class);
-        Assertions.AssertionsNotNull(service1);
+        Assertions.assertNotNull(service1);
         
         // Second call should use cached metadata but create new instance
         SimpleService service2 = context.get(SimpleService.class);
-        Assertions.AssertionsNotNull(service2);
-        Assertions.AssertionsNotSame(service1, service2);
+        Assertions.assertNotNull(service2);
+        Assertions.assertNotSame(service1, service2);
     }
 
     // Test for multiple @Inject annotations (should fail)
@@ -237,53 +252,63 @@ public class DefaultExtensionContextTest {
         }
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void testMultipleInjectAnnotationsFails() {
-        context.get(MultipleInjectService.class);
+        context = new DefaultExtensionContext();
+
+        Assertions.assertThrows(IllegalStateException.class, () -> {
+            context.get(MultipleInjectService.class);
+        });
+
     }
 
     @Test
     public void testDefaultRegistrations() {
+        context = new DefaultExtensionContext();
         // DefaultExtensionContext registers defaults in constructor
         // Verify that default capabilities are available
-        Assertions.AssertionsNotNull(context.get(com.starrocks.server.WarehouseManager.class));
-        Assertions.AssertionsNotNull(context.get(com.starrocks.qe.scheduler.slot.ResourceUsageMonitor.class));
-        Assertions.AssertionsNotNull(context.get(com.starrocks.qe.scheduler.slot.BaseSlotManager.class));
-        Assertions.AssertionsNotNull(context.get(com.starrocks.persist.gson.IGsonBuilderFactory.class));
+        Assertions.assertNotNull(context.get(com.starrocks.server.WarehouseManager.class));
+        Assertions.assertNotNull(context.get(com.starrocks.qe.scheduler.slot.ResourceUsageMonitor.class));
+        Assertions.assertNotNull(context.get(com.starrocks.qe.scheduler.slot.BaseSlotManager.class));
+        Assertions.assertNotNull(context.get(com.starrocks.persist.gson.IGsonBuilderFactory.class));
     }
 
     @Test
     public void testRegisterConstructor() {
+        context = new DefaultExtensionContext();
         // Test registerConstructor method
         ConstructorMetadata metadata = context.registerConstructor(SimpleService.class, SimpleService.class);
-        Assertions.AssertionsNotNull(metadata);
-        Assertions.AssertionsNotNull(metadata.getConstructor());
-        Assertions.AssertionsEquals(0, metadata.getParameterTypes().length);
+        Assertions.assertNotNull(metadata);
+        Assertions.assertNotNull(metadata.getConstructor());
+        Assertions.assertEquals(0, metadata.getParameterTypes().length);
     }
 
     @Test
     public void testRegisterConstructorWithDependencies() {
+        context = new DefaultExtensionContext();
         // Test registerConstructor for class with dependencies
         ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class, ServiceWithDependency.class);
-        Assertions.AssertionsNotNull(metadata);
-        Assertions.AssertionsNotNull(metadata.getConstructor());
-        Assertions.AssertionsEquals(1, metadata.getParameterTypes().length);
-        Assertions.AssertionsEquals(SimpleService.class, metadata.getParameterTypes()[0]);
+        Assertions.assertNotNull(metadata);
+        Assertions.assertNotNull(metadata.getConstructor());
+        Assertions.assertEquals(1, metadata.getParameterTypes().length);
+        Assertions.assertEquals(SimpleService.class, metadata.getParameterTypes()[0]);
     }
 
     @Test
     public void testRegisterConstructorWithInject() {
+        context = new DefaultExtensionContext();
         // Test registerConstructor respects @Inject annotation
         ConstructorMetadata metadata = context.registerConstructor(ServiceWithInject.class, ServiceWithInject.class);
-        Assertions.AssertionsNotNull(metadata);
-        Assertions.AssertionsNotNull(metadata.getConstructor());
+        Assertions.assertNotNull(metadata);
+        Assertions.assertNotNull(metadata.getConstructor());
         // Should select the @Inject constructor which has 1 parameter
-        Assertions.AssertionsEquals(1, metadata.getParameterTypes().length);
-        Assertions.AssertionsEquals(SimpleService.class, metadata.getParameterTypes()[0]);
+        Assertions.assertEquals(1, metadata.getParameterTypes().length);
+        Assertions.assertEquals(SimpleService.class, metadata.getParameterTypes()[0]);
     }
 
     @Test
     public void testRegisterConstructorCachesMetadata() {
+        context = new DefaultExtensionContext();
         // First call to registerConstructor
         ConstructorMetadata metadata1 = context.registerConstructor(SimpleService.class, SimpleService.class);
         
@@ -291,30 +316,31 @@ public class DefaultExtensionContextTest {
         SimpleService service1 = context.get(SimpleService.class);
         SimpleService service2 = context.get(SimpleService.class);
         
-        Assertions.AssertionsNotNull(service1);
-        Assertions.AssertionsNotNull(service2);
-        Assertions.AssertionsNotSame(service1, service2);
+        Assertions.assertNotNull(service1);
+        Assertions.assertNotNull(service2);
+        Assertions.assertNotSame(service1, service2);
     }
 
     @Test
     public void testGetDoesNotCallRegisterConstructor() {
+        context = new DefaultExtensionContext();
         // Test that get() doesn't call the public registerConstructor method
         // This is important because registerConstructor should be for explicit registration
         // while get() uses internal resolution
         
         // Call get() which should internally resolve without calling registerConstructor
         SimpleService service = context.get(SimpleService.class);
-        Assertions.AssertionsNotNull(service);
+        Assertions.assertNotNull(service);
         
         // Now call registerConstructor - it should still work and cache the metadata
         ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class, ServiceWithDependency.class);
-        Assertions.AssertionsNotNull(metadata);
+        Assertions.assertNotNull(metadata);
         
         // Subsequent get() calls should use the cached metadata
         ServiceWithDependency dep1 = context.get(ServiceWithDependency.class);
         ServiceWithDependency dep2 = context.get(ServiceWithDependency.class);
-        Assertions.AssertionsNotNull(dep1);
-        Assertions.AssertionsNotNull(dep2);
-        Assertions.AssertionsNotSame(dep1, dep2);
+        Assertions.assertNotNull(dep1);
+        Assertions.assertNotNull(dep2);
+        Assertions.assertNotSame(dep1, dep2);
     }
 }
