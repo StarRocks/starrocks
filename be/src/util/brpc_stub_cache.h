@@ -98,11 +98,13 @@ class HttpBrpcStubCache {
 public:
     static HttpBrpcStubCache* getInstance();
     StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> get_http_stub(const TNetworkAddress& taddr);
+    void cleanup_expired(const butil::EndPoint& endpoint);
 
 private:
     HttpBrpcStubCache();
     HttpBrpcStubCache(const HttpBrpcStubCache&) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache&) = delete;
+    ~HttpBrpcStubCache();
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, std::pair<std::shared_ptr<PInternalService_RecoverableStub>,
