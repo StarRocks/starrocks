@@ -80,7 +80,7 @@ public class JsonPathRewriteRule extends TransformationRule {
 
     private static final Logger LOG = LogManager.getLogger(JsonPathRewriteRule.class);
     private static final java.util.regex.Pattern JSON_PATH_VALID_PATTERN =
-            java.util.regex.Pattern.compile("^[a-zA-Z0-9_]+$");
+            java.util.regex.Pattern.compile("^[a-zA-Z0-9\-_]+$");
     public static final String COLUMN_REF_HINT = "JsonPathExtended";
 
     private static final Set<String> SUPPORTED_JSON_FUNCTIONS = Set.of(
