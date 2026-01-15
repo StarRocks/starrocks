@@ -163,22 +163,17 @@ public class DefaultExtensionContext implements ExtensionContext {
 
     /**
      * Register default capabilities.
-     * Creates initial instances and registers them in the capability map.
-     * After registration, these instances will be returned by get() instead of creating new ones.
+     * Registers constructor metadata to enable dependency injection.
+     * Instances will be created on-demand via dependency injection.
      */
     public void registerDefault() {
         // Register constructor for ResourceUsageMonitor to enable dependency injection
         registerConstructor(ResourceUsageMonitor.class, ResourceUsageMonitor.class);
         
-        // Create and register instances using dependency injection where applicable
-        ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
-        register(ResourceUsageMonitor.class, resourceUsageMonitor);
-        
         register(WarehouseManager.class, new WarehouseManager());
         
         // Register constructor for BaseSlotManager to enable dependency injection
         registerConstructor(BaseSlotManager.class, SlotManager.class);
-        register(BaseSlotManager.class, new SlotManager(resourceUsageMonitor));
         
         register(IGsonBuilderFactory.class, new DefaultGsonBuilderFactory());
     }
