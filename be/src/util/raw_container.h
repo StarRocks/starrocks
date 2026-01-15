@@ -177,11 +177,16 @@ inline typename std::enable_if<
         std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
         void>::type
 stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
-    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
+    using DstType __attribute__((may_alias)) = RawVector<T, typename Container::allocator_type>;
+    ((DstType*)vec)->resize(new_size);
+    asm volatile("" : : : "memory");
 }
 
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
-    ((RawString*)str)->resize(new_size);
+    using DstType __attribute__((may_alias)) = RawString;
+    reinterpret_cast<DstType*>(str)->resize(new_size);
+    // Compiler memory barrier to prevent instruction reordering across the resize operation
+    asm volatile("" : : : "memory");
 }
 
 } // namespace starrocks::raw
