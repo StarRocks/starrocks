@@ -23,5 +23,5 @@ public interface ExtensionContext {
      * @param clazz the class to resolve constructor for
      * @return constructor metadata containing the resolved constructor
      */
-    DefaultExtensionContext.ConstructorMetadata registerConstructor(Class<?> clazz);
+    ConstructorMetadata registerConstructor(Class<?> clazz);
 }

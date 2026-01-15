@@ -30,31 +30,6 @@ public class DefaultExtensionContext implements ExtensionContext {
     private final Map<Class<?>, Object> capabilityMap = Maps.newHashMap();
     private final Map<Class<?>, ConstructorMetadata> constructorMetadataMap = Maps.newHashMap();
 
-    /**
-     * Stores metadata about a constructor for dependency injection.
-     */
-    public static class ConstructorMetadata {
-        private final Constructor<?> constructor;
-        private final Class<?>[] parameterTypes;
-
-        public ConstructorMetadata(Constructor<?> constructor) {
-            this.constructor = constructor;
-            this.parameterTypes = constructor.getParameterTypes();
-            // Ensure constructor is accessible
-            if (!constructor.isAccessible()) {
-                constructor.setAccessible(true);
-            }
-        }
-
-        public Constructor<?> getConstructor() {
-            return constructor;
-        }
-
-        public Class<?>[] getParameterTypes() {
-            return parameterTypes;
-        }
-    }
-
     public DefaultExtensionContext() {
         registerDefault();
     }
@@ -124,7 +99,7 @@ public class DefaultExtensionContext implements ExtensionContext {
      * 4. Throw an exception for ambiguity
      */
     @Override
-    public DefaultExtensionContext.ConstructorMetadata registerConstructor(Class<?> clazz) {
+    public ConstructorMetadata registerConstructor(Class<?> clazz) {
         Constructor<?>[] constructors = clazz.getDeclaredConstructors();
 
         // Rule 1: Look for @Inject annotated constructor
