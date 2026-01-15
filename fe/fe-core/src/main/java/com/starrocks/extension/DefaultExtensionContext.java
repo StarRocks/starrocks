@@ -167,6 +167,9 @@ public class DefaultExtensionContext implements ExtensionContext {
      * After registration, these instances will be returned by get() instead of creating new ones.
      */
     public void registerDefault() {
+        // Register constructor for ResourceUsageMonitor to enable dependency injection
+        registerConstructor(ResourceUsageMonitor.class);
+        
         // Create and register instances using dependency injection where applicable
         ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
         register(ResourceUsageMonitor.class, resourceUsageMonitor);
