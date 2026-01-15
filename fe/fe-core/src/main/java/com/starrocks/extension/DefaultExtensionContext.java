@@ -170,7 +170,8 @@ public class DefaultExtensionContext implements ExtensionContext {
         // Register constructor for ResourceUsageMonitor to enable dependency injection
         registerConstructor(ResourceUsageMonitor.class, ResourceUsageMonitor.class);
         
-        register(WarehouseManager.class, new WarehouseManager());
+        // Register constructor for WarehouseManager to enable dependency injection
+        registerConstructor(WarehouseManager.class, WarehouseManager.class);
         
         // Register constructor for BaseSlotManager to enable dependency injection
         registerConstructor(BaseSlotManager.class, SlotManager.class);
