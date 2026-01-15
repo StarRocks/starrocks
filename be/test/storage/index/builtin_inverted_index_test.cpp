@@ -97,6 +97,7 @@ TEST_F(BuiltinInvertedIndexTest, test_parser_none_equal_query) {
     // Load builtin inverted index via BuiltinInvertedReader.
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
 
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;

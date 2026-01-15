@@ -193,6 +193,21 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
             int64_t last_pos = 0;
             for (size_t i = 0; i < keywords.size(); ++i) {
                 const auto& [keyword, next_array] = keywords[i];
+
+                if (i == keywords.size() - 1 && !pattern_ends_with_wildcard) {
+                    // The last keyword must align to the end. Use the last possible position instead of
+                    // the first occurrence to avoid rejecting cases like "a%c" on "acc".
+                    if (!dict->ends_with(keyword)) {
+                        return false;
+                    }
+                    int64_t required_pos = dict->get_size() - keyword.get_size();
+                    if (required_pos < last_pos) {
+                        return false;
+                    }
+                    last_pos = required_pos + keyword.get_size();
+                    continue;
+                }
+
                 last_pos = dict->find(keyword, next_array, last_pos);
                 if (last_pos == -1) {
                     return false;
@@ -201,13 +216,6 @@ Status BuiltinInvertedIndexIterator::_wildcard_query(const Slice* search_query, 
                 // First keyword must be at start if pattern doesn't start with '%'
                 if (i == 0 && !pattern_starts_with_wildcard && last_pos != 0) {
                     return false;
-                }
-
-                // Last keyword must end at dict end if pattern doesn't end with '%'
-                if (i == keywords.size() - 1 && !pattern_ends_with_wildcard) {
-                    if (last_pos + keyword.get_size() != dict->get_size()) {
-                        return false;
-                    }
                 }
 
                 last_pos += keyword.get_size();
