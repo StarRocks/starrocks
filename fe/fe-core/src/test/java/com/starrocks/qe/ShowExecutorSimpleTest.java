@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
@@ -114,7 +115,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -173,7 +173,7 @@ public class ShowExecutorSimpleTest {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
@@ -225,10 +225,6 @@ public class ShowExecutorSimpleTest {
                 table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
-
-                table.getStorageTypeByIndexMetaId(0L);
-                minTimes = 0;
-                result = TStorageType.COLUMN;
 
                 table.getPartition(anyLong);
                 minTimes = 0;
@@ -553,8 +549,9 @@ public class ShowExecutorSimpleTest {
     @Test
     public void testShowCreateTableEmptyDb() {
         assertThrows(SemanticException.class, () -> {
-            ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
-                    ShowCreateTableStmt.CreateTableType.TABLE);
+            TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("emptyDb", "testTable")),
+                    null, NodePosition.ZERO);
+            ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
             ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -838,8 +835,9 @@ public class ShowExecutorSimpleTest {
             }
         };
 
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
@@ -893,8 +891,9 @@ public class ShowExecutorSimpleTest {
             }
         };
 
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));

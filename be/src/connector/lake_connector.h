@@ -76,6 +76,8 @@ private:
     void update_counter(RuntimeState* state);
 
     Status _extend_schema_by_access_paths();
+    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                          const ColumnAccessPath* path);
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -160,6 +162,8 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;

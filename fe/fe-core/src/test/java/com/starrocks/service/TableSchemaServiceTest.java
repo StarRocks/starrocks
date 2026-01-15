@@ -16,9 +16,8 @@ package com.starrocks.service;
 
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
+import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
@@ -58,6 +57,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -102,29 +102,17 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
                 .getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
-    private LakeTableAsyncFastSchemaChangeJob executeAlterAndWaitFinish(LakeTable table, String sql)
+    private SchemaChangeJobV2 executeAlterAndWaitFinish(LakeTable table, String sql)
             throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
         AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
-        List<AlterJobV2> jobs = alterJobMgr.getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        Assertions.assertEquals(1, jobs.size());
-        AlterJobV2 alterJob = jobs.get(0);
-        long startTime = System.currentTimeMillis();
-        long timeoutMs = 10 * 60 * 1000; // 10 minutes timeout
-        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED
-                || table.getState() != OlapTable.OlapTableState.NORMAL) {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - startTime > timeoutMs) {
-                throw new RuntimeException(
-                        String.format("Alter job timeout after 10 minutes. Job state: %s, table state: %s",
-                                alterJob.getJobState(), table.getState()));
-            }
-            alterJob.run();
-            Thread.sleep(100);
-        }
-        Assertions.assertInstanceOf(LakeTableAsyncFastSchemaChangeJob.class, alterJob);
-        return (LakeTableAsyncFastSchemaChangeJob) alterJob;
+        Optional<AlterJobV2> alterJob = alterJobMgr.getSchemaChangeHandler().getAlterJobsV2().values().stream()
+                .filter(job -> table.getId() == job.getTableId())
+                .max(Comparator.comparingLong(AlterJobV2::getJobId));
+        Assertions.assertTrue(alterJob.isPresent());
+        Assertions.assertInstanceOf(SchemaChangeJobV2.class, alterJob.get());
+        return (SchemaChangeJobV2) alterJob.get();
     }
 
     private Coordinator executeQueryAndRegister(String sql, TUniqueId queryId) throws Exception {
@@ -203,8 +191,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testScanNodeCacheSchema() throws Exception {
         LakeTable table = createTable("t_scan_node_cache_schema");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // Generate OlapScanNode
         ExecPlan plan1 = UtFrameUtils.getPlanAndFragment(
@@ -250,8 +238,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInQueryCoordinator() throws Exception {
         LakeTable table = createTable("t_scan_coordinator");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // Execute query to create coordinator with OlapScanNode
         TUniqueId queryId1 = UUIDUtil.genTUniqueId();
@@ -281,8 +269,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInCatalog() throws Exception {
         LakeTable table = createTable("t_found_in_catalog");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // query fallback to catalog
         TUniqueId queryId = UUIDUtil.genTUniqueId();
@@ -305,8 +293,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testFoundInHistory() throws Exception {
         LakeTable table = createTable("t_found_in_history");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // Begin a transaction before alter to prevent the history schema to be cleaned
         TransactionState.TxnCoordinator txnCoordinator = new TransactionState.TxnCoordinator(
@@ -316,7 +304,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
 
         // Execute alter to create schema change job with history schema
-        LakeTableAsyncFastSchemaChangeJob job = executeAlterAndWaitFinish(
+        SchemaChangeJobV2 job = executeAlterAndWaitFinish(
                 table, "ALTER TABLE t_found_in_history ADD COLUMN c1 BIGINT");
 
         // Verify history schema exists
@@ -361,8 +349,8 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testScanNotFound() throws Exception {
         LakeTable table = createTable("t_scan_not_found");
-        long indexId = table.getBaseIndexMetaId();
-        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, table.getIndexMetaByIndexId(indexId));
+        long indexMetaId = table.getBaseIndexMetaId();
+        SchemaInfo schemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, table.getIndexMetaByMetaId(indexMetaId));
 
         // query not exists, and schema not found in catalog and history
         {
@@ -399,7 +387,7 @@ public class TableSchemaServiceTest extends StarRocksTestBase {
     @Test
     public void testLoadNotFound() throws Exception {
         LakeTable table = createTable("t_load_not_found");
-        long invalidSchemaId = table.getIndexMetaByIndexId(table.getBaseIndexMetaId()).getSchemaId() - 1;
+        long invalidSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId() - 1;
 
         // txn not exist
         {

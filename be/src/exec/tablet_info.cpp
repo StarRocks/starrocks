@@ -18,6 +18,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/mem_pool.h"
+#include "storage/metadata_util.h"
 #include "storage/tablet_schema.h"
 #include "types/constexpr.h"
 #include "util/string_parser.hpp"
@@ -169,7 +170,15 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
 
         if (t_index.__isset.column_param) {
             auto col_param = _obj_pool.add(new OlapTableColumnParam());
-            for (auto& tcolumn_desc : t_index.column_param.columns) {
+            std::vector<TColumn> columns_copy = t_index.column_param.columns;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in OlapTableSchemaParam::init: "
+                             << preprocess_status.to_string();
+                columns_copy = t_index.column_param.columns;
+            }
+
+            for (auto& tcolumn_desc : columns_copy) {
                 TabletColumn* tc = _obj_pool.add(new TabletColumn());
                 tc->init_from_thrift(tcolumn_desc);
                 col_param->columns.emplace_back(tc);
@@ -695,8 +704,9 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
         if (!_partitions_expr_ctxs.empty()) {
             for (size_t i = 0; i < partition_columns.size(); ++i) {
                 ASSIGN_OR_RETURN(auto partition_column, _partitions_expr_ctxs[i]->evaluate(chunk));
-                partition_columns[i] = ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows,
-                                                                         std::move(partition_column));
+                partition_columns[i] =
+                        ColumnHelper::unfold_const_column(_partition_slot_descs[i]->type(), num_rows, partition_column)
+                                ->as_mutable_ptr();
             }
         } else {
             for (size_t i = 0; i < partition_columns.size(); ++i) {

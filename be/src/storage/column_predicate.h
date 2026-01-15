@@ -18,7 +18,6 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "column/type_traits.h"
@@ -270,6 +269,9 @@ ColumnPredicate* new_column_in_predicate_from_datum(const TypeInfoPtr& type, Col
                                                     const std::vector<Datum>& operands);
 ColumnPredicate* new_column_not_in_predicate_from_datum(const TypeInfoPtr& type, ColumnId id,
                                                         const std::vector<Datum>& operands);
+
+Status compound_and_predicates_evaluate(const std::vector<const ColumnPredicate*>& predicates, const Column* col,
+                                        uint8_t* selection, uint16_t* selected_idx, uint16_t from, uint16_t to);
 
 template <LogicalType LT>
 class Bitset;

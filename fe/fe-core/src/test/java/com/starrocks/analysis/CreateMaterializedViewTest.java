@@ -3023,8 +3023,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
@@ -3050,8 +3050,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test_mv_different_db");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
 
@@ -3889,7 +3889,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvName = createMaterializedViewStatement.getTableName();
+            TableName mvName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
             Assertions.assertNotNull(table);
             Assertions.assertTrue(table instanceof MaterializedView);
@@ -3910,7 +3910,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvTableName = createMaterializedViewStatement.getTableName();
+            TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             mvName = mvTableName.getTbl();
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
@@ -4745,7 +4745,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         System.out.println(result);
         Assertions.assertTrue(result.contains("rack:*"));
         for (Tablet tablet : materializedView.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()) {
             Assertions.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 

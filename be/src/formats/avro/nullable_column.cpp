@@ -31,8 +31,8 @@ static Status add_adaptive_nullable_numeric_column(Column* column, const TypeDes
         column->append_nulls(1);
         return Status::OK();
     }
-    auto data_column = nullable_column->begin_append_not_default_value();
-    RETURN_IF_ERROR(add_numeric_column<T>(data_column.get(), type_desc, name, value));
+    auto* data_column = nullable_column->begin_append_not_default_value();
+    RETURN_IF_ERROR(add_numeric_column<T>(data_column, type_desc, name, value));
     nullable_column->finish_append_one_not_default_value();
     return Status::OK();
 }
@@ -84,9 +84,9 @@ static Status add_adpative_nullable_binary_column(Column* column, const TypeDesc
         nullable_column->append_nulls(1);
         return Status::OK();
     }
-    auto data_column = nullable_column->begin_append_not_default_value();
+    auto* data_column = nullable_column->begin_append_not_default_value();
 
-    RETURN_IF_ERROR(add_binary_column(data_column.get(), type_desc, name, value));
+    RETURN_IF_ERROR(add_binary_column(data_column, type_desc, name, value));
 
     nullable_column->finish_append_one_not_default_value();
 
@@ -115,9 +115,9 @@ static Status add_adpative_nullable_native_json_column(Column* column, const Typ
         nullable_column->append_nulls(1);
         return Status::OK();
     }
-    auto data_column = nullable_column->begin_append_not_default_value();
+    auto* data_column = nullable_column->begin_append_not_default_value();
 
-    RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+    RETURN_IF_ERROR(add_native_json_column(data_column, type_desc, name, value));
 
     nullable_column->finish_append_one_not_default_value();
 
@@ -221,7 +221,7 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
         if (avro_value_get_type(&value) == AVRO_ARRAY) {
             auto nullable_column = down_cast<AdaptiveNullableColumn*>(column);
 
-            auto array_column = down_cast<ArrayColumn*>(nullable_column->mutable_begin_append_not_default_value());
+            auto array_column = down_cast<ArrayColumn*>(nullable_column->begin_append_not_default_value());
 
             auto* elems_column = array_column->elements_column_raw_ptr();
             size_t n = 0;

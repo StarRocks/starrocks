@@ -1854,3 +1854,95 @@ All transaction metrics share the following labels:
 - Unit: ms
 - Type: Summary
 - Description: The final acknowledgment latency, from when the `publish` task finishes to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes any final steps or acknowledgments required.
+
+### Merge Commit BE Metrics
+
+#### merge_commit_request_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of merge commit requests received by BE.
+
+#### merge_commit_request_bytes
+
+- Unit: Bytes
+- Type: Cumulative
+- Description: Total bytes of data received across merge commit requests.
+
+#### merge_commit_success_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Merge commit requests that finished successfully.
+
+#### merge_commit_fail_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Merge commit requests that failed.
+
+#### merge_commit_pending_total
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Merge commit tasks currently waiting in the execution queue.
+
+#### merge_commit_pending_bytes
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Total bytes of data held by pending merge commit tasks.
+
+#### merge_commit_send_rpc_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: RPC requests sent to FE for starting merge commit operations.
+
+#### merge_commit_register_pipe_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Stream load pipes registered for merge commit operations.
+
+#### merge_commit_unregister_pipe_total
+
+- Unit: Count
+- Type: Cumulative
+- Description: Stream load pipes unregistered from merge commit operations.
+
+Latency metrics expose percentile series such as `merge_commit_request_latency_99` and `merge_commit_request_latency_90`, reported in microseconds. The end-to-end latency obeys:
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **Note**: Before v3.4.11, v3.5.12, and v4.0.4, these latency metrics were reported in nanoseconds.
+
+#### merge_commit_request
+
+- Unit: microsecond
+- Type: Summary
+- Description: End-to-end processing latency for merge commit requests.
+
+#### merge_commit_pending
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time merge commit tasks spend waiting in the pending queue before execution.
+
+#### merge_commit_wait_plan
+
+- Unit: microsecond
+- Type: Summary
+- Description: Combined latency for the RPC request and waiting for the stream load pipe to become available.
+
+#### merge_commit_append_pipe
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time spent appending data to the stream load pipe during merge commit.
+
+#### merge_commit_wait_finish
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time spent waiting for merge commit load operations to finish.

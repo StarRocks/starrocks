@@ -365,9 +365,13 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
     METRICS_DEFINE_THREAD_POOL(pip_prepare);
+    METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 

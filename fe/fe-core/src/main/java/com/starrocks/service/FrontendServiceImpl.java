@@ -167,11 +167,14 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
@@ -2037,7 +2040,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
-        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
@@ -2054,7 +2057,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                      OlapTable olapTable, ComputeResource computeResource) throws StarRocksException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
-        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
             if (olapTable.isCloudNativeTable()) {
                 for (Tablet tablet : index.getTablets()) {
@@ -2239,18 +2242,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP && willCreateNewPartition) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
+                    QualifiedName qualifiedName = QualifiedName.of(
+                            Lists.newArrayList(db.getFullName(), olapTable.getName()));
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     state.getLocalMetastore().cancelAlter(
-                            new CancelAlterTableStmt(
-                                    ShowAlterStmt.AlterType.ROLLUP,
-                                    new TableName(db.getFullName(), olapTable.getName())), errMsg);
+                            new CancelAlterTableStmt(ShowAlterStmt.AlterType.ROLLUP, tableRef), errMsg);
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE && willCreateNewPartition) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
+                    QualifiedName qualifiedName = QualifiedName.of(
+                            Lists.newArrayList(db.getFullName(), olapTable.getName()));
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     state.getLocalMetastore().cancelAlter(
-                            new CancelAlterTableStmt(
-                                    ShowAlterStmt.AlterType.COLUMN,
-                                    new TableName(db.getFullName(), olapTable.getName())), errMsg);
+                            new CancelAlterTableStmt(ShowAlterStmt.AlterType.COLUMN, tableRef), errMsg);
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
@@ -2349,7 +2354,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         try {
@@ -2473,7 +2478,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
@@ -3109,7 +3114,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partitionId);
-                partitionMeta.setPartition_name(physicalPartition.getName());
+                partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
                 partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
                 partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());

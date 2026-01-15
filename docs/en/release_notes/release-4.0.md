@@ -6,9 +6,67 @@ displayed_sidebar: docs
 
 :::warning
 
-After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5.1, otherwise it will cause metadata incompatibility and FE crash. You must downgrade the cluster to v3.5.2 or later to prevent these issues.
+**Downgrade Notes**
+
+- After upgrading StarRocks to v4.0, DO NOT downgrade it directly to v3.5.0 & v3.5.1, otherwise it will cause metadata incompatibility and FE crash. You must downgrade the cluster to v3.5.2 or later to prevent these issues.
+- Before downgrading clusters from v4.0.3 to v3.5.2~v3.5.10, execute the following statement:
+
+  ```SQL
+  SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
+  ```
 
 :::
+
+## 4.0.3
+
+Release Date: December 25, 2025
+
+### Improvements
+
+- Supports `ORDER BY` clauses for STRUCT data types [#66035](https://github.com/StarRocks/starrocks/pull/66035)
+- Supports creating Iceberg views with properties and displaying properties in the output of `SHOW CREATE VIEW`. [#65938](https://github.com/StarRocks/starrocks/pull/65938)
+- Supports altering Iceberg table partition specs using `ALTER TABLE ADD/DROP PARTITION COLUMN`. [#65922](https://github.com/StarRocks/starrocks/pull/65922)
+- Supports `COUNT/SUM/AVG(DISTINCT)` aggregation over framed windows (for example, `ORDER BY`/`PARTITION BY`) with optimization options. [#65815](https://github.com/StarRocks/starrocks/pull/65815)
+- Optimized CSV parsing performance by using `memchr` for single-character delimiters. [#63715](https://github.com/StarRocks/starrocks/pull/63715)
+- Added an optimizer rule to push down Partial TopN to the Pre-Aggregation phase to reduce network overhead. [#61497](https://github.com/StarRocks/starrocks/pull/61497)
+- Enhanced Data Cache monitoring
+  - Added new metrics for memory/disk quota and usage. [#66168](https://github.com/StarRocks/starrocks/pull/66168)
+  - Added Page Cache statistics to the `api/datacache/stat` HTTP endpoint. [#66240](https://github.com/StarRocks/starrocks/pull/66240)
+  - Added hit rate statistics for native tables. [#66198](https://github.com/StarRocks/starrocks/pull/66198)
+- Optimized Sort and Aggregation operators to support rapid memory release in OOM scenarios. [#66157](https://github.com/StarRocks/starrocks/pull/66157)
+- Added `TableSchemaService` in FE for shared-data clusters to allow CNs to fetch specific schemas on demand. [#66142](https://github.com/StarRocks/starrocks/pull/66142)
+- Optimized Fast Schema Evolution to retain history schemas until all dependent ingestion jobs are finished. [#65799](https://github.com/StarRocks/starrocks/pull/65799)
+- Enhanced `filterPartitionsByTTL` to properly handle NULL partition values to prevent all partitions from being filtered. [#65923](https://github.com/StarRocks/starrocks/pull/65923)
+- Optimized `FusedMultiDistinctState` to clear the associated MemPool upon reset. [#66073](https://github.com/StarRocks/starrocks/pull/66073)
+- Made `ICEBERG_CATALOG_SECURITY` property check case-insensitive in Iceberg REST Catalog. [#66028](https://github.com/StarRocks/starrocks/pull/66028)
+- Added HTTP endpoint `GET /service_id` to retrieve StarOS Service ID in shared-data clusters. [#65816](https://github.com/StarRocks/starrocks/pull/65816)
+- Replaced deprecated `metadata.broker.list` with `bootstrap.servers` in Kafka consumer configurations. [#65437](https://github.com/StarRocks/starrocks/pull/65437)
+- Added FE configuration `lake_enable_fullvacuum` (Default: false) to allow disabling the Full Vacuum Daemon. [#66685](https://github.com/StarRocks/starrocks/pull/66685)
+- Updated lz4 library to v1.10.0. [#67080](https://github.com/StarRocks/starrocks/pull/67080)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- `latest_cached_tablet_metadata` could cause versions to be incorrectly skipped during batch Publish. [#66558](https://github.com/StarRocks/starrocks/pull/66558)
+- Potential issues caused by `ClusterSnapshot` relative checks in `CatalogRecycleBin` when running in shared-nothing clusters. [#66501](https://github.com/StarRocks/starrocks/pull/66501)
+- BE crash when writing complex data types (ARRAY/MAP/STRUCT) to Iceberg tables during Spill operations. [#66209](https://github.com/StarRocks/starrocks/pull/66209)
+- Potential hang in Connector Chunk Sink when the writer's initialization or initial write fails. [#65951](https://github.com/StarRocks/starrocks/pull/65951)
+- Connector Chunk Sink bug where `PartitionChunkWriter` initialization failure caused a null pointer dereference during close. [#66097](https://github.com/StarRocks/starrocks/pull/66097)
+- Setting a non-existent system variable would silently succeed instead of reporting an error. [#66022](https://github.com/StarRocks/starrocks/pull/66022)
+- Bundle metadata parsing failure when Data Cache is corrupted. [#66021](https://github.com/StarRocks/starrocks/pull/66021)
+- MetaScan returned NULL instead of 0 for count columns when the result is empty. [#66010](https://github.com/StarRocks/starrocks/pull/66010)
+- `SHOW VERBOSE RESOURCE GROUP ALL` displays NULL instead of `default_mem_pool` for resource groups created in earlier versions. [#65982](https://github.com/StarRocks/starrocks/pull/65982)
+- A `RuntimeException` during query execution after disabling the `flat_json` table configuration. [#65921](https://github.com/StarRocks/starrocks/pull/65921)
+- Type mismatch issue in shared-data clusters caused by rewriting `min`/`max` statistics to MetaScan after Schema Change. [#65911](https://github.com/StarRocks/starrocks/pull/65911)
+- BE crash caused by ranking window optimization when `PARTITION BY` and `ORDER BY` are missing. [#67093](https://github.com/StarRocks/starrocks/pull/67093)
+- Incorrect `can_use_bf` check when merging runtime filters, which could lead to wrong results or crashes. [#67062](https://github.com/StarRocks/starrocks/pull/67062)
+- Pushing down runtime bitset filters into nested OR predicates causes incorrect results. [#67061](https://github.com/StarRocks/starrocks/pull/67061)
+- Potential data race and data loss issues caused by write or flush operations after the DeltaWriter has finished. [#66966](https://github.com/StarRocks/starrocks/pull/66966)
+- Execution error caused by mismatched nullable properties when rewriting simple aggregation to MetaScan. [#67068](https://github.com/StarRocks/starrocks/pull/67068)
+- Incorrect row count calculation in the MetaScan rewrite rule. [#66967](https://github.com/StarRocks/starrocks/pull/66967)
+- Versions might be incorrectly skipped during batch Publish due to inconsistent cached tablet metadata. [#66575](https://github.com/StarRocks/starrocks/pull/66575)
+- Improper error handling for memory allocation failures in HyperLogLog operations. [#66827](https://github.com/StarRocks/starrocks/pull/66827)
 
 ## 4.0.2
 

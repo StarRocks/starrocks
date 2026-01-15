@@ -6,6 +6,7 @@ keywords: ['iceberg']
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
@@ -137,7 +138,7 @@ Iceberg catalog の説明です。このパラメーターはオプションで�
 
 StarRock sがカタログへのデータアクセスを管理する方法に関するパラメータ。
 
-Iceberg REST カタログのデータアクセス管理の詳細な手順については、[Iceberg REST カタログのセキュリティ設定](./iceberg_rest_security.md)を参照してください。
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 
@@ -420,6 +421,10 @@ SHOW DATABASES FROM r2;
   - 必須：いいえ
   - 説明：データベースのパスワード。
 
+- `iceberg.catalog.jdbc.init-catalog-tables`
+  - 必須：いいえ
+  - 説明：`iceberg.catalog.uri` で指定されたデータベースにメタデータを格納するためのテーブル `iceberg_namespace_properties` および `iceberg_tables` を作成するかどうか。デフォルト値は `false` です。`iceberg.catalog.uri` で指定されたデータベースにこれらの 2 つのテーブルがまだ作成されていない場合は `true` を指定してください。
+
 次の例は、Iceberg catalog `iceberg_jdbc` を作成し、メタストアとして JDBC を使用します。
 
 ```SQL
@@ -428,12 +433,17 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "jdbc",
-    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
     "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
     "iceberg.catalog.jdbc.user" = "username",
-    "iceberg.catalog.jdbc.password" = "password"
+    "iceberg.catalog.jdbc.password" = "password",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+
+MySQL やその他のカスタム JDBC ドライバを使用する場合、対応する JAR ファイルを `fe/lib` ディレクトリおよび `be/lib/jni-packages` ディレクトリに配置する必要があります。
 
 </TabItem>
 
@@ -1266,467 +1276,21 @@ Iceberg テーブルのスキーマを表示するには、次のいずれかの
 
 ---
 
-### Iceberg データベースの作成
+### Iceberg DDL 操作
 
-StarRocks の内部 catalog と同様に、Iceberg catalog に対して [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) 権限を持っている場合、 [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) ステートメントを使用して、その Iceberg catalog にデータベースを作成できます。この機能は v3.1 以降でサポートされています。
-
-:::tip
-
-[GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
-
-:::
-
-[Iceberg catalog に切り替え](#switch-to-an-iceberg-catalog-and-a-database-in-it)、次にその catalog に Iceberg データベースを作成するために次のステートメントを使用します。
-
-```SQL
-CREATE DATABASE <database_name>
-[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
-```
-
-`location` パラメーターを使用して、データベースを作成するファイルパスを指定できます。HDFS とクラウドストレージの両方がサポートされています。`location` パラメーターを指定しない場合、StarRocks は Iceberg catalog のデフォルトのファイルパスにデータベースを作成します。
-
-`prefix` は使用するストレージシステムに基づいて異なります。
-
-#### HDFS
-
-`Prefix` 値: `hdfs`
-
-#### Google GCS
-
-`Prefix` 値: `gs`
-
-#### Azure Blob Storage
-
-`Prefix` 値:
-
-- ストレージアカウントが HTTP 経由でのアクセスを許可する場合、`prefix` は `wasb` です。
-- ストレージアカウントが HTTPS 経由でのアクセスを許可する場合、`prefix` は `wasbs` です。
-
-#### Azure Data Lake Storage Gen1
-
-`Prefix` 値: `adl`
-
-#### Azure Data Lake Storage Gen2
-
-`Prefix` 値:
-
-- ストレージアカウントが HTTP 経由でのアクセスを許可する場合、`prefix` は `abfs` です。
-- ストレージアカウントが HTTPS 経由でのアクセスを許可する場合、`prefix` は `abfss` です。
-
-#### AWS S3 または他の S3 互換ストレージ（例: MinIO）
-
-`Prefix` 値: `s3`
+DDL 操作（CREATE/DROP DATABASE、CREATE/DROP TABLE、CREATE/ALTER VIEW）は、[Iceberg DDL 操作](./DDL.md)を参照してください。
 
 ---
 
-### Iceberg データベースの削除
+### Iceberg DML 操作
 
-StarRocks の内部データベースと同様に、Iceberg データベースに対して [DROP](../../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、 [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) ステートメントを使用して、その Iceberg データベースを削除できます。この機能は v3.1 以降でサポートされています。空のデータベースのみを削除できます。
-
-Iceberg データベースを削除すると、HDFS クラスターまたはクラウドストレージ上のデータベースのファイルパスはデータベースと共に削除されません。
-
-[Iceberg catalog に切り替え](#switch-to-an-iceberg-catalog-and-a-database-in-it)、次にその catalog に Iceberg データベースを削除するために次のステートメントを使用します。
-
-```SQL
-DROP DATABASE <database_name>;
-```
+DML 操作（INSERT）は、[Iceberg DML 操作](./DML.md)を参照してください。
 
 ---
 
-### Iceberg テーブルの作成
+### Iceberg プロシージャ
 
-StarRocks の内部データベースと同様に、Iceberg データベースに対して [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) 権限を持っている場合、 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) または [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md) ステートメントを使用して、その Iceberg データベースにテーブルを作成できます。この機能は v3.1 以降でサポートされています。
-
-[Iceberg catalog とそのデータベースに切り替え](#switch-to-an-iceberg-catalog-and-a-database-in-it)、次にそのデータベースに Iceberg テーブルを作成するために次の構文を使用します。
-
-#### 構文
-
-```SQL
-CREATE TABLE [IF NOT EXISTS] [database.]table_name
-(column_definition1[, column_definition2, ...
-partition_column_definition1,partition_column_definition2...])
-[partition_desc]
-[ORDER BY sort_desc)]
-[PROPERTIES ("key" = "value", ...)]
-[AS SELECT query]
-```
-
-#### パラメーター
-
-##### column_definition
-
-`column_definition` の構文は次のとおりです。
-
-```SQL
-col_name col_type [COMMENT 'comment']
-```
-
-:::note
-
-すべての非パーティション列はデフォルト値として `NULL` を使用する必要があります。つまり、テーブル作成ステートメントで各非パーティション列に対して `DEFAULT "NULL"` を指定する必要があります。さらに、パーティション列は非パーティション列の後に定義され、デフォルト値として `NULL` を使用することはできません。
-
-:::
-
-##### partition_desc
-
-`partition_desc` の構文は次のとおりです。
-
-```SQL
-PARTITION BY (partition_expr[, partition_expr...])
-```
-
-各 `partition_expr` は以下の形式のいずれかです。
-
-```SQL
-column_name
-| transform_expr(column_name)
-| transform_expr(column_name, parameter)
-```
-
-現在、StarRocks は Apache Iceberg 仕様で定義されたパーティション変換式 [transform expr](https://iceberg.apache.org/spec/#partitioning) をサポートしています。これにより、StarRocks は変換された列値に基づいて隠しパーティション (Hidden Partition) を持つ Iceberg テーブルを作成できます。
-
-:::note
-
-パーティション列は非パーティション列の後に定義される必要があります。パーティション列は FLOAT、DOUBLE、DECIMAL、および DATETIME を除くすべてのデータ型をサポートし、デフォルト値として `NULL` を使用することはできません。
-
-:::
-
-##### ORDER BY
-
-v4.0 以降、StarRocks は ORDER BY 句を介して Iceberg テーブルのソートキーを指定する機能をサポートしています。これにより、指定されたソートキーに基づいて同一データファイル内のデータを並べ替えることが可能です。
-
-ORDER BY 句には複数のソートキーを含めることができ、以下の形式で指定します：
-
-```SQL
-ORDER BY (column_name [sort_direction] [nulls_order], ...)
-```
-
-- `column_name`: ソートキーとして使用する列の名前。テーブルスキーマに存在する列でなければなりません。現在、Transform 式はサポートされていません。
-- `sort_direction`: ソート方向。有効な値: `ASC` (デフォルト) および `DESC`。
-- `nulls_order`: NULL 値の順序。有効な値: `NULLS FIRST` (`ASC` 指定時のデフォルト) および `NULLS LAST` (`DESC` 指定時のデフォルト)。
-
-`sort_direction` および `nulls_order` はオプションです。例えば、以下の各々は有効な `sort_desc` です：
-
-- `column_name`
-- `column_name ASC`
-- `column_name DESC NULLS FIRST`
-
-##### PROPERTIES
-
-`PROPERTIES` で `"key" = "value"` 形式でテーブル属性を指定できます。 [Iceberg テーブル属性](https://iceberg.apache.org/docs/latest/configuration/) を参照してください。
-
-次の表は、いくつかの主要なプロパティを説明しています。
-
-###### location
-
-説明: Iceberg テーブルを作成するファイルパス。メタストアとして HMS を使用する場合、`location` パラメーターを指定する必要はありません。StarRocks は現在の Iceberg catalog のデフォルトのファイルパスにテーブルを作成します。メタストアとして AWS Glue を使用する場合:
-
-- テーブルを作成するデータベースに対して `location` パラメーターを指定している場合、テーブルに対して `location` パラメーターを指定する必要はありません。そのため、テーブルは所属するデータベースのファイルパスにデフォルト設定されます。
-- テーブルを作成するデータベースに対して `location` を指定していない場合、テーブルに対して `location` パラメーターを指定する必要があります。
-
-###### file_format
-
-説明: Iceberg テーブルのファイル形式。Parquet 形式のみがサポートされています。デフォルト値: `parquet`。
-
-###### compression_codec
-
-説明: Iceberg テーブルに使用される圧縮アルゴリズム。サポートされている圧縮アルゴリズムは SNAPPY、GZIP、ZSTD、および LZ4 です。デフォルト値: `gzip`。このプロパティは v3.2.3 で非推奨となり、それ以降のバージョンでは Iceberg テーブルにデータをシンクするために使用される圧縮アルゴリズムはセッション変数 [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec) によって一元的に制御されます。
-
----
-
-### 例
-
-1. `unpartition_tbl` という名前の非パーティションテーブルを作成します。このテーブルは `id` と `score` の 2 つの列で構成されています。
-
-   ```SQL
-   CREATE TABLE unpartition_tbl
-   (
-       id int,
-       score double
-   );
-   ```
-
-2. `partition_tbl_1` という名前のパーティションテーブルを作成します。このテーブルは `action`、`id`、および `dt` の 3 つの列で構成されており、そのうち `id` と `dt` はパーティション列として定義されています。
-
-   ```SQL
-   CREATE TABLE partition_tbl_1
-   (
-       action varchar(20),
-       id int,
-       dt date
-   )
-   PARTITION BY (id,dt);
-   ```
-
-3. 既存のテーブル `partition_tbl_1` をクエリし、そのクエリ結果に基づいて `partition_tbl_2` という名前のパーティションテーブルを作成します。`partition_tbl_2` では、`id` と `dt` がパーティション列として定義されています。
-
-   ```SQL
-   CREATE TABLE partition_tbl_2
-   PARTITION BY (id, dt)
-   AS SELECT * from employee;
-   ```
-
-4. 隠されたパーティションを持つ `partition_tbl_3` という名前のテーブルを作成します。このテーブルには `action`、`id`、`dt` の三つの列が含まれています。そのうち、`id` と `dt` はパーティションキーとして使用されますが、パーティションは変換式によって定義されているため、これらのパーティションは隠されています。
-
-   ```SQL
-   CREATE TABLE partition_tbl_3 (
-     action VARCHAR(20),
-     id INT,
-     dt DATE
-   )
-   PARTITION BY bucket(id, 10), year(dt);
-   ```
-
----
-
-### Iceberg テーブルへのデータシンク
-
-StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して、StarRocks テーブルのデータをその Iceberg テーブルにシンクできます（現在、Parquet 形式の Iceberg テーブルのみがサポートされています）。この機能は v3.1 以降でサポートされています。
-
-[Iceberg catalog とそのデータベースに切り替え](#switch-to-an-iceberg-catalog-and-a-database-in-it)、次にそのデータベース内の Parquet 形式の Iceberg テーブルに StarRocks テーブルのデータをシンクするために次の構文を使用します。
-
-#### 構文
-
-```SQL
-INSERT {INTO | OVERWRITE} <table_name>
-[ (column_name [, ...]) ]
-{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
-
--- 指定されたパーティションにデータをシンクする場合、次の構文を使用します。
-INSERT {INTO | OVERWRITE} <table_name>
-PARTITION (par_col1=<value> [, par_col2=<value>...])
-{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
-```
-
-:::note
-
-パーティション列は `NULL` 値を許可しません。したがって、Iceberg テーブルのパーティション列に空の値がロードされないようにする必要があります。
-
-:::
-
-#### パラメーター
-
-##### INTO
-
-StarRocks テーブルのデータを Iceberg テーブルに追加します。
-
-##### OVERWRITE
-
-StarRocks テーブルのデータで Iceberg テーブルの既存のデータを上書きします。
-
-##### column_name
-
-データをロードしたい宛先列の名前。1 つ以上の列を指定できます。複数の列を指定する場合、カンマ (`,`) で区切ります。Iceberg テーブルに実際に存在する列のみを指定できます。また、指定した宛先列には Iceberg テーブルのパーティション列を含める必要があります。指定した宛先列は、StarRocks テーブルの列と順番に 1 対 1 でマッピングされます。宛先列名が何であっても関係ありません。宛先列が指定されていない場合、データは Iceberg テーブルのすべての列にロードされます。StarRocks テーブルの非パーティション列が Iceberg テーブルの任意の列にマッピングできない場合、StarRocks は Iceberg テーブル列にデフォルト値 `NULL` を書き込みます。INSERT ステートメントに含まれるクエリステートメントの戻り列タイプが宛先列のデータタイプと異なる場合、StarRocks は不一致の列に対して暗黙の変換を行います。変換が失敗した場合、構文解析エラーが返されます。
-
-##### expression
-
-宛先列に値を割り当てる式。
-
-##### DEFAULT
-
-宛先列にデフォルト値を割り当てます。
-
-##### query
-
-Iceberg テーブルにロードされるクエリステートメントの結果。StarRocks がサポートする任意の SQL ステートメントである可能性があります。
-
-##### PARTITION
-
-データをロードしたいパーティション。Iceberg テーブルのすべてのパーティション列をこのプロパティで指定する必要があります。このプロパティで指定するパーティション列は、テーブル作成ステートメントで定義したパーティション列と異なる順序であってもかまいません。このプロパティを指定する場合、`column_name` プロパティを指定することはできません。
-
-#### 例
-
-1. `partition_tbl_1` テーブルに 3 行のデータを挿入します。
-
-   ```SQL
-   INSERT INTO partition_tbl_1
-   VALUES
-       ("buy", 1, "2023-09-01"),
-       ("sell", 2, "2023-09-02"),
-       ("buy", 3, "2023-09-03");
-   ```
-
-2. 簡単な計算を含む SELECT クエリの結果を `partition_tbl_1` テーブルに挿入します。
-
-   ```SQL
-   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
-   ```
-
-3. `partition_tbl_1` テーブルからデータを読み取る SELECT クエリの結果を同じテーブルに挿入します。
-
-   ```SQL
-   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
-   FROM partition_tbl_1
-   WHERE id=1;
-   ```
-
-4. `partition_tbl_2` テーブルの `dt='2023-09-01'` および `id=1` の条件を満たすパーティションに SELECT クエリの結果を挿入します。
-
-   ```SQL
-   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
-   ```
-
-   または
-
-   ```SQL
-   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
-   ```
-
-5. `partition_tbl_1` テーブルの `dt='2023-09-01'` および `id=1` の条件を満たすパーティション内のすべての `action` 列の値を `close` で上書きします。
-
-   ```SQL
-   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
-   ```
-
-   または
-
-   ```SQL
-   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
-   ```
-
----
-
-### Iceberg テーブルの削除
-
-StarRocks の内部テーブルと同様に、Iceberg テーブルに対して [DROP](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用して、その Iceberg テーブルを削除できます。この機能は v3.1 以降でサポートされています。
-
-Iceberg テーブルを削除すると、HDFS クラスターまたはクラウドストレージ上のテーブルのファイルパスとデータはテーブルと共に削除されません。
-
-Iceberg テーブルを強制的に削除する場合（つまり、DROP TABLE ステートメントで `FORCE` キーワードを指定した場合）、HDFS クラスターまたはクラウドストレージ上のテーブルのデータはテーブルと共に削除されますが、テーブルのファイルパスは保持されます。
-
-[Iceberg catalog とそのデータベースに切り替え](#switch-to-an-iceberg-catalog-and-a-database-in-it)、次にそのデータベース内の Iceberg テーブルを削除するために次のステートメントを使用します。
-
-```SQL
-DROP TABLE <table_name> [FORCE];
-```
-
-### Iceberg ビューの作成
-
-StarRocks で Iceberg ビューを定義したり 、 既存の Iceberg ビューに StarRocks 方言を追加することがで き ます。このような Iceberg ビューに対するクエリは、これらのビューの StarRocks 方言の解析をサポートします。この機能は v3.5 以降でサポートされています。
-
-```SQL
-CREATE VIEW [IF NOT EXISTS]
-[<catalog>.<database>.]<view_name>
-(
-    <column_name>[ COMMENT 'column comment']
-    [, <column_name>[ COMMENT 'column comment'], ...]
-)
-[COMMENT 'view comment']
-[PROPERTIES ("key" = "value", ...)]
-AS <query_statement>
-```
-
-#### 例
-
-Iceberg テーブル `iceberg_table` に基づいて Iceberg ビュー `iceberg_view1` を作成する。
-
-```SQL
-CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
-SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-v4.0.3以降、`PROPERTIES `内でビュー属性を `"key" = "value"` 形式で指定できます。
-
-```SQL
-CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1
-PROPERTIES (
-  "key1" = "value1",
-  "key2" = "value2"
-)
-AS
-SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-### 既存の Iceberg ビューに StarRocks 方言を追加または変更する
-
-Iceberg ビューが Apache Spark などの他のシステムから作成されており、StarRocks からこれらのビューにクエリを実行したい場合、これらのビューに StarRocks 方言を追加できます。この機能は v3.5 以降でサポートされています。
-
-:::note
-
-- ビューの両方の方言の本質的な意味が同一であることを保証する必要があります。StarRocks や他のシステムでは、異なる定義間の一貫性は保証されません。
-- 各 Iceberg ビューに対して定義できる StarRocks 方言は 1 つだけです。方言の定義は MODIFY 句を使用して変更できます。
-:::
-
-```SQL
-ALTER VIEW
-[<catalog>.<database>.]<view_name>
-(
-    <column_name>
-    [, <column_name>]
-)
-{ ADD | MODIFY } DIALECT
-<query_statement>
-```
-
-#### 例
-
-1. 既存の Iceberg ビュー `iceberg_view2` に StarRocks 方言を追加する。
-
-```SQL
-ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-2. 既存の Iceberg ビュー `iceberg_view2` の StarRocks 方言を変更する。
-
-```SQL
-ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-### 手動コンパクション
-
-v4.0 以降、StarRocks は Iceberg テーブルに対する手動コンパクションをサポートしています。
-
-Iceberg テーブルにデータがロードされるたびに、新しいデータファイルとメタデータファイルが生成されます。時間の経過とともに過剰なデータファイルが蓄積されると、クエリプランの生成が大幅に遅延し、パフォーマンスに影響を及ぼす可能性があります。
-
-この場合、テーブルまたはパーティションに対して手動コンパクションを実行し、小さなデータファイルをマージすることでパフォーマンスを改善する必要があります。
-
-#### 構文
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name 
-EXECUTE rewrite_data_files
-("key"=value [,"key"=value, ...]) 
-[WHERE <predicate>]
-```
-
-#### パラメータ
-
-##### `rewrite_data_files` プロパティ
-
-手動コンパクションの動作を指定する `"key"=value` ペア。キーは二重引用符で囲む必要があることに注意してください。
-
-###### `min_file_size_bytes`
-
-- 説明: 小規模データファイルの上限値。この値より小さいサイズのデータファイルは、コンパクション時にマージされます。
-- 単位: Byte
-- タイプ: Int
-- デフォルト: 268,435,456 (256 MB)
-
-###### `batch_size`
-
-- 説明: 各バッチで処理可能なデータの最大サイズ。
-- 単位: Byte
-- タイプ: Int
-- デフォルト: 10,737,418,240 (10 GB)
-
-###### `rewrite_all`
-
-- 説明: 特定の要件を持つデータファイルをフィルタリングするパラメータを無視し、コンパクション中にすべてのデータファイルを書き換えるかどうか。
-- 単位: -
-- タイプ: Boolean
-- デフォルト: false
-
-##### `WHERE` 句
-
-- 説明: コンパクションに含めるパーティションを指定するために使用されるフィルタ述語。
-
-#### 例
-
-以下の例は、Iceberg テーブル `t1` 内の特定のパーティションに対して手動コンパクションを実行します。パーティションは `part_col = 'p1'` 句で指定されます。これらのパーティションでは、134,217,728 Byte（128 MB）未満のデータファイルがコンパクション中にマージされます。
-
-```SQL
-ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
-```
+プロシージャについては、[Iceberg プロシージャ](./procedures.md)を参照してください。
 
 ---
 

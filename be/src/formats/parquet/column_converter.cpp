@@ -287,7 +287,7 @@ public:
         auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
         auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column_raw_ptr());
 
-        const BinaryColumn::Bytes& src_data = src_column->get_bytes();
+        auto src_data = src_column->get_immutable_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
@@ -598,7 +598,7 @@ Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
         dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
@@ -622,7 +622,7 @@ Status Int32ToTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
@@ -649,7 +649,7 @@ Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
@@ -688,7 +688,7 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     auto fill_dst_fn = [&]<bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
@@ -789,7 +789,7 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
@@ -841,7 +841,7 @@ Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];

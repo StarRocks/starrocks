@@ -119,13 +119,13 @@ public class MigrationAction extends RestBaseAction {
 
                 for (Partition partition : olapTable.getPartitions()) {
                     String partitionName = partition.getName();
-                    MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+                    MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                     for (Tablet tablet : baseIndex.getTablets()) {
                         List<Comparable> row = Lists.newArrayList();
                         row.add(tableName);
                         row.add(partitionName);
                         row.add(tablet.getId());
-                        row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getId()));
+                        row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getMetaId()));
                         if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
                             Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                             row.add(replica.getBackendId());
@@ -145,13 +145,13 @@ public class MigrationAction extends RestBaseAction {
 
                     for (Partition partition : olapTable.getPartitions()) {
                         String partitionName = partition.getName();
-                        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+                        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                         for (Tablet tablet : baseIndex.getTablets()) {
                             List<Comparable> row = Lists.newArrayList();
                             row.add(tableName);
                             row.add(partitionName);
                             row.add(tablet.getId());
-                            row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getId()));
+                            row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getMetaId()));
                             if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
                                 Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                                 row.add(replica.getBackendId());

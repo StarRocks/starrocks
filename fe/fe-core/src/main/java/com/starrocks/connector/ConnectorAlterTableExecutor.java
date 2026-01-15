@@ -33,7 +33,7 @@ public class ConnectorAlterTableExecutor implements AstVisitorExtendInterface<Vo
 
     public ConnectorAlterTableExecutor(AlterTableStmt stmt) {
         this.stmt = stmt;
-        tableName = stmt.getTbl();
+        tableName = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
         actions = new ArrayList<>();
     }
 

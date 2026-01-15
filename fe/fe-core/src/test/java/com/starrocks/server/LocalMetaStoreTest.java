@@ -41,11 +41,15 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.TruncateTableAnalyzer;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
@@ -56,8 +60,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -65,6 +71,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
@@ -87,6 +97,16 @@ public class LocalMetaStoreTest {
                                 "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                             " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
+    }
+
+    @BeforeEach
+    public void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void teardown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -144,13 +164,12 @@ public class LocalMetaStoreTest {
         Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
         PhysicalPartition p = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
-        int schemaHash = table.getSchemaHashByIndexMetaId(p.getBaseIndex().getId());
         MaterializedIndex index = new MaterializedIndex();
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
                     index.getId(), table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
-                    db.getId(), table.getId(), p.getParentId(), new PhysicalPartition(123, "", p.getId(), index));
+                    db.getId(), table.getId(), p.getParentId(), new PhysicalPartition(123, p.getId(), index));
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.replayAddSubPartition(info);
@@ -177,7 +196,6 @@ public class LocalMetaStoreTest {
         try {
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
-            table.setTableProperty(null);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
@@ -228,7 +246,7 @@ public class LocalMetaStoreTest {
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         try {
             localMetastore.alterTableProperties(db, table, properties);
-        } catch (RuntimeException e) {
+        } catch (DdlException e) {
             Assertions.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
@@ -339,5 +357,96 @@ public class LocalMetaStoreTest {
         Assertions.assertEquals(tabletsCountBefore, tabletsCountAfter,
                 "Tablets should not be changed when truncate fails");
         Assertions.assertTrue(writeLockAcquired.get(), "Write lock should be acquired during truncate");
+    }
+
+    @Test
+    public void testTruncateTableEditLog() throws Exception {
+        String catalogName = connectContext.getCurrentCatalog();
+        String dbFullName = "test";
+        String tableName = "edit_log_t1";
+        starRocksAssert.useDatabase("test").withTable(
+                        "CREATE TABLE test.edit_log_t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        // Include catalog name in QualifiedName, use dbFullName for database name
+        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
+        // Analyze the statement (normally done before execution)
+        TruncateTableAnalyzer.analyze(stmt, connectContext);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
+        OlapTable followerTable  = AnalyzerUtils.getShadowCopyTable(table);
+        long oldPartitionId = table.getPartition(tableName).getId();
+
+        // 3. Execute truncateTable
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        metastore.truncateTable(stmt, connectContext);
+
+        // 4. Verify master state - partition is replaced with new one
+        // For unpartitioned table, partition name should be the same as table name
+        Partition newPartition = table.getPartition(tableName);
+        Assertions.assertNotNull(newPartition);
+        Assertions.assertNotEquals(oldPartitionId, newPartition.getId());
+
+        // 5. Test follower replay
+        TruncateTableInfo replayInfo = (TruncateTableInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_TRUNCATE_TABLE);
+
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(database.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTblId());
+        Assertions.assertNotNull(replayInfo.getPartitions());
+        Assertions.assertFalse(replayInfo.getPartitions().isEmpty());
+
+        LocalMetastore followerLocalMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
+        Database followerDatabase = new Database(database.getId(), database.getFullName());
+        followerLocalMetastore.replayCreateDb(followerDatabase);
+        followerDatabase.registerTableUnlocked(followerTable);
+        followerLocalMetastore.replayTruncateTable(replayInfo);
+        Partition followerPartition = followerTable.getPartition(tableName);
+        Assertions.assertNotNull(followerPartition);
+        Assertions.assertNotEquals(oldPartitionId, followerPartition.getId());
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testTruncateTableEditLogException() throws Exception {
+        String catalogName = connectContext.getCurrentCatalog();
+        String dbFullName = "test";
+        String tableName = "edit_log_t2";
+        starRocksAssert.useDatabase(dbFullName).withTable(
+                        "CREATE TABLE " + tableName + "(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        // Include catalog name in QualifiedName, use dbFullName for database name
+        QualifiedName qualifiedName = QualifiedName.of(List.of(catalogName, dbFullName, tableName));
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        TruncateTableStmt stmt = new TruncateTableStmt(tableRef, NodePosition.ZERO);
+        // Analyze the statement (normally done before execution)
+        TruncateTableAnalyzer.analyze(stmt, connectContext);
+
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
+        long oldPartitionId = table.getPartition(tableName).getId();
+
+        // 3. Mock EditLog.logTruncateTable to throw exception
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logTruncateTable(any(TruncateTableInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        // 4. Execute truncateTable and expect exception
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> {
+            metastore.truncateTable(stmt, connectContext);
+        });
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+
+        // 5. Verify partition ID remains unchanged after exception
+        // For unpartitioned table, partition name should be the same as table name
+        Assertions.assertEquals(oldPartitionId, table.getPartition(tableName).getId());
     }
 }

@@ -136,7 +136,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         FN_NAME_TO_PATTERN.put(FunctionSet.PERCENTILE_UNION, new MVColumnPercentileUnionPattern());
     }
 
-    private final TableName mvTableName;
+    private TableRef mvTableRef;
     private final Map<String, String> properties;
 
     private final QueryStatement queryStatement;
@@ -161,9 +161,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public static String WHERE_PREDICATE_COLUMN_NAME = "__WHERE_PREDICATION";
 
-    public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties) {
+    public CreateMaterializedViewStmt(TableRef mvTableRef, QueryStatement queryStatement, Map<String, String> properties) {
         super(NodePosition.ZERO);
-        this.mvTableName = mvTableName;
+        this.mvTableRef = mvTableRef;
         this.queryStatement = queryStatement;
         this.properties = properties;
     }
@@ -180,8 +180,24 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         return isReplay;
     }
 
+    public TableRef getMvTableRef() {
+        return mvTableRef;
+    }
+
+    public void setMvTableRef(TableRef mvTableRef) {
+        this.mvTableRef = mvTableRef;
+    }
+
     public String getMVName() {
-        return mvTableName.getTbl();
+        return mvTableRef == null ? null : mvTableRef.getTableName();
+    }
+
+    public String getCatalogName() {
+        return mvTableRef == null ? null : mvTableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return mvTableRef == null ? null : mvTableRef.getDbName();
     }
 
     public List<MVColumnItem> getMVColumnItemList() {
@@ -205,7 +221,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     }
 
     public String getDBName() {
-        return dbName;
+        if (dbName != null) {
+            return dbName;
+        }
+        return mvTableRef == null ? null : mvTableRef.getDbName();
     }
 
     public void setDBName(String dbName) {
@@ -324,11 +343,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         Table table = entry.getValue();
 
         // SyncMV doesn't support mv's database is different from table's db.
-        if (mvTableName != null && !Strings.isNullOrEmpty(mvTableName.getDb()) &&
-                !mvTableName.getDb().equalsIgnoreCase(entry.getKey().getDb())) {
+        if (mvTableRef != null && !Strings.isNullOrEmpty(mvTableRef.getDbName()) &&
+                !mvTableRef.getDbName().equalsIgnoreCase(entry.getKey().getDb())) {
             throw new UnsupportedMVException(
                     String.format("Creating materialized view does not support: MV's db %s is different " +
-                            "from table's db %s", mvTableName.getDb(), entry.getKey().getDb()));
+                            "from table's db %s", mvTableRef.getDbName(), entry.getKey().getDb()));
         }
 
         if (table instanceof View) {

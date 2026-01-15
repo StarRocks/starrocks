@@ -14,22 +14,121 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "formats/parquet/variant.h"
+#include "runtime/time_types.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
-#include "variant_util.h"
+#include "types/timestamp_value.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
-#define VARIANT_CAST_NOT_SUPPORT(variant_type, logical_type)                                                           \
-    Status::NotSupported(fmt::format("Cannot cast variant({}) to type: {}", VariantUtil::type_to_string(variant_type), \
+#define VARIANT_CAST_NOT_SUPPORT(variant_type, logical_type)                            \
+    Status::NotSupported(fmt::format("Cannot cast variant({}) to type: {}",             \
+                                     VariantUtil::variant_type_to_string(variant_type), \
                                      logical_type_to_string(logical_type)))
 
-Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>& result);
+inline std::pair<int64_t, int64_t> split_micros_to_seconds(int64_t micros) {
+    int64_t seconds = micros / USECS_PER_SEC;
+    int64_t microseconds = micros % USECS_PER_SEC;
+    if (microseconds < 0) {
+        microseconds += USECS_PER_SEC;
+        --seconds;
+    }
+    return {seconds, microseconds};
+}
 
-Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zone, ColumnBuilder<TYPE_VARCHAR>& result);
+Status cast_variant_to_bool(const VariantRowValue& row, ColumnBuilder<TYPE_BOOLEAN>& result);
+
+Status cast_variant_to_string(const VariantRowValue& row, const cctz::time_zone& zone,
+                              ColumnBuilder<TYPE_VARCHAR>& result);
+
+inline Status cast_variant_to_date(const VariantRowValue& row, const cctz::time_zone& zone,
+                                   ColumnBuilder<TYPE_DATE>& result) {
+    const VariantValue& variant = row.get_value();
+    switch (const VariantType type = variant.type()) {
+    case VariantType::NULL_TYPE:
+        result.append_null();
+        return Status::OK();
+    case VariantType::DATE: {
+        ASSIGN_OR_RETURN(int32_t days, variant.get_date());
+        result.append(DateValue::from_days_since_unix_epoch(days));
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unixtime(seconds, microseconds, zone);
+        int year, month, day;
+        timestamp::to_date(tsv.timestamp(), &year, &month, &day);
+        result.append(DateValue::create(year, month, day));
+        return Status::OK();
+    }
+    default:
+        return VARIANT_CAST_NOT_SUPPORT(type, TYPE_DATE);
+    }
+}
+
+inline Status cast_variant_to_time(const VariantRowValue& row, const cctz::time_zone& zone,
+                                   ColumnBuilder<TYPE_TIME>& result) {
+    const VariantValue& variant = row.get_value();
+    switch (const VariantType type = variant.type()) {
+    case VariantType::NULL_TYPE:
+        result.append_null();
+        return Status::OK();
+    case VariantType::TIME_NTZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_time_micros_ntz());
+        result.append(static_cast<double>(micros) / USECS_PER_SEC);
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unixtime(seconds, microseconds, zone);
+        int hour, minute, second, microsecond;
+        tsv.to_time(&hour, &minute, &second, &microsecond);
+        int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC + microsecond;
+        result.append(static_cast<double>(total_micros) / USECS_PER_SEC);
+        return Status::OK();
+    }
+    default:
+        return VARIANT_CAST_NOT_SUPPORT(type, TYPE_TIME);
+    }
+}
+
+inline Status cast_variant_to_datetime(const VariantRowValue& row, const cctz::time_zone& zone,
+                                       ColumnBuilder<TYPE_DATETIME>& result) {
+    const VariantValue& variant = row.get_value();
+    switch (const VariantType type = variant.type()) {
+    case VariantType::NULL_TYPE:
+        result.append_null();
+        return Status::OK();
+    case VariantType::TIMESTAMP_NTZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros_ntz());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unix_second(seconds, microseconds);
+        result.append(tsv);
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unixtime(seconds, microseconds, zone);
+        result.append(tsv);
+        return Status::OK();
+    }
+    default:
+        return VARIANT_CAST_NOT_SUPPORT(type, TYPE_DATETIME);
+    }
+}
 
 #define VARIANT_CAST_CASE(VARIANT_TYPE_ENUM, GETTER_METHOD)                    \
     case VariantType::VARIANT_TYPE_ENUM: {                                     \
@@ -42,13 +141,15 @@ Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zon
     }
 
 template <LogicalType ResultType>
-Status cast_variant_to_arithmetic(const Variant& variant, ColumnBuilder<ResultType>& result) {
+Status cast_variant_to_arithmetic(const VariantRowValue& row, ColumnBuilder<ResultType>& result) {
+    const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE: {
         result.append_null();
         return Status::OK();
     }
-        VARIANT_CAST_CASE(BOOLEAN, get_bool)
+        VARIANT_CAST_CASE(BOOLEAN_TRUE, get_bool)
+        VARIANT_CAST_CASE(BOOLEAN_FALSE, get_bool)
         VARIANT_CAST_CASE(INT8, get_int8)
         VARIANT_CAST_CASE(INT16, get_int16)
         VARIANT_CAST_CASE(INT32, get_int32)
@@ -64,16 +165,17 @@ Status cast_variant_to_arithmetic(const Variant& variant, ColumnBuilder<ResultTy
 }
 
 template <LogicalType ResultType, bool AllowThrowException>
-static Status cast_variant_value_to(const Variant& variant, const cctz::time_zone& zone,
+static Status cast_variant_value_to(const VariantRowValue& row, const cctz::time_zone& zone,
                                     ColumnBuilder<ResultType>& result) {
-    const VariantType variant_type = variant.type();
+    const VariantType variant_type = row.get_value().type();
     // Supported types: arithmetic, string, variant
     // Some casting require more information like target type within ARRAY/MAP/STRUCT which is not available here:
     // VARIANT -> ARRAY<ANY>: CastVariantToArray
     // VARIANT -> MAP<VARCHAR, ANY>: CastVariantToMap
     // VARIANT -> STRUCT<...>: CastVariantToStruct
     // VARIANT -> Decimal types: DecimalNonDecimalCast
-    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && ResultType != TYPE_VARIANT) {
+    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && !lt_is_time<ResultType> &&
+                  !lt_is_date_or_datetime<ResultType> && ResultType != TYPE_VARIANT) {
         if constexpr (AllowThrowException) {
             return VARIANT_CAST_NOT_SUPPORT(variant_type, ResultType);
         }
@@ -88,17 +190,23 @@ static Status cast_variant_value_to(const Variant& variant, const cctz::time_zon
     }
 
     if constexpr (ResultType == TYPE_VARIANT) {
-        result.append(VariantValue::of_variant(variant));
+        result.append(VariantRowValue::from_variant(row.get_metadata(), row.get_value()));
         return Status::OK();
     }
 
     Status status;
     if constexpr (ResultType == TYPE_BOOLEAN) {
-        status = cast_variant_to_bool(variant, result);
+        status = cast_variant_to_bool(row, result);
     } else if constexpr (lt_is_arithmetic<ResultType>) {
-        status = cast_variant_to_arithmetic<ResultType>(variant, result);
+        status = cast_variant_to_arithmetic<ResultType>(row, result);
     } else if constexpr (lt_is_string<ResultType>) {
-        status = cast_variant_to_string(variant, zone, result);
+        status = cast_variant_to_string(row, zone, result);
+    } else if constexpr (ResultType == TYPE_DATE) {
+        status = cast_variant_to_date(row, zone, result);
+    } else if constexpr (ResultType == TYPE_DATETIME) {
+        status = cast_variant_to_datetime(row, zone, result);
+    } else if constexpr (ResultType == TYPE_TIME) {
+        status = cast_variant_to_time(row, zone, result);
     }
 
     if (!status.ok()) {

@@ -34,6 +34,7 @@ public class AuditEventTest {
                 .setBigQueryLogCPUSecondThreshold(1)
                 .setCatalog("catalog")
                 .setQueryId("queryId")
+                .setWriteClientTimeMs(100)
                 .setStmtId(123)
                 .setStmt("stmt")
                 .setDigest("digest")
@@ -74,6 +75,7 @@ public class AuditEventTest {
         Assertions.assertEquals("customQueryId", event.customQueryId);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
+        Assertions.assertEquals(100, event.writeClientTimeMs);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());
     }
 }

@@ -1,0 +1,50 @@
+-- name: test_merge_commit_cancel
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t0`
+(
+    `id` int(11) NOT NULL COMMENT "user id",
+    `name` varchar(65533) NULL COMMENT "user name",
+    `score` int(11) NOT NULL COMMENT "user score"
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "format:json" -H "enable_merge_commit:true" -H "merge_commit_async:true" -H "merge_commit_interval_ms:600000" -H "merge_commit_parallel:1" -d '{"id":1,"name":"n1","score":1}' ${url}/api/db_${uuid0}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+function: get_running_transaction_count("db_${uuid0}")
+-- result:
+1
+-- !result
+[UC]function: label1=get_single_running_transaction_label("db_${uuid0}")
+-- result:
+merge_commit_019b7ea8-2d85-7586-8877-91d55c347c2d
+-- !result
+shell: curl --location-trusted -u "root:" -X POST "${url}/api/db_${uuid0}/t0/_cancel?label=${label1}"
+-- result:
+0
+{"status":"OK","code":"0","msg":"Success","message":"OK"}
+-- !result
+function: get_running_transaction_count("db_${uuid0}")
+-- result:
+0
+-- !result
+select count(*) from t0;
+-- result:
+0
+-- !result

@@ -19,7 +19,8 @@
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
 #include "runtime/decimalv3.h"
-#include "util/variant_util.h"
+#include "util/decimal_types.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
@@ -443,26 +444,41 @@ inline static bool convert_variant_decimal(SrcType src_value, int src_scale, Dst
 }
 
 template <typename DecimalCppType>
-inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const Variant& variant, int precision,
-                                                     int scale) {
+inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, const VariantValue& variant,
+                                                     int precision, int scale) {
+    if (scale < 0 || precision <= 0 || scale > precision || scale > decimal_precision_limit<DecimalCppType> ||
+        precision > decimal_precision_limit<DecimalCppType>) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid decimal target precision/scale: precision={}, scale={}, limit={}", precision,
+                            scale, decimal_precision_limit<DecimalCppType>));
+    }
     const VariantType type = variant.type();
     bool overflow = false;
 
     switch (type) {
     case VariantType::DECIMAL4: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal4());
+        if (src_decimal.scale < 0 || src_decimal.scale > decimal_precision_limit<int32_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid variant decimal4 scale: {}", src_decimal.scale));
+        }
         overflow = convert_variant_decimal<int32_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
                                                                     scale);
         break;
     }
     case VariantType::DECIMAL8: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal8());
+        if (src_decimal.scale < 0 || src_decimal.scale > decimal_precision_limit<int64_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid variant decimal8 scale: {}", src_decimal.scale));
+        }
         overflow = convert_variant_decimal<int64_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
                                                                     scale);
         break;
     }
     case VariantType::DECIMAL16: {
         ASSIGN_OR_RETURN(auto src_decimal, variant.get_decimal16());
+        if (src_decimal.scale < 0 || src_decimal.scale > decimal_precision_limit<int128_t>) {
+            return Status::InvalidArgument(fmt::format("Invalid variant decimal16 scale: {}", src_decimal.scale));
+        }
         overflow = convert_variant_decimal<int128_t, DecimalCppType>(src_decimal.value, src_decimal.scale, dst_value,
                                                                      scale);
         break;
@@ -527,7 +543,7 @@ inline static StatusOr<bool> cast_variant_to_decimal(DecimalCppType* dst_value, 
             decimal_type = TYPE_UNKNOWN;
         }
         return Status::NotSupported(fmt::format("The type cast from variant(type={}) to {} is not supported",
-                                                VariantUtil::type_to_string(type),
+                                                VariantUtil::variant_type_to_string(type),
                                                 logical_type_to_string(decimal_type)));
     }
 
@@ -554,18 +570,18 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, VariantType, DecimalLTG
 
         const auto variant_column = ColumnHelper::cast_to_raw<VariantType>(column);
         for (auto i = 0; i < num_rows; ++i) {
-            const VariantValue* variant_value = variant_column->get_object(i);
-            Variant variant(variant_value->get_metadata(), variant_value->get_value());
+            const VariantRowValue* variant = variant_column->get_object(i);
+            const VariantValue& value = variant->get_value();
 
             if constexpr (check_overflow<overflow_mode>) {
-                if (variant.type() == VariantType::NULL_TYPE) {
+                if (value.type() == VariantType::NULL_TYPE) {
                     has_null = true;
                     nulls[i] = DATUM_NULL;
                     continue;
                 }
             }
 
-            auto overflow = cast_variant_to_decimal<DecimalCppType>(&result_data[i], variant, precision, scale);
+            auto overflow = cast_variant_to_decimal<DecimalCppType>(&result_data[i], value, precision, scale);
             if (!overflow.ok()) {
                 throw std::runtime_error(overflow.status().to_string());
             }

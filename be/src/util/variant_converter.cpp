@@ -12,78 +12,64 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "variant_converter.h"
+#include "util/variant_converter.h"
 
-#include "variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks {
 
-Status cast_variant_to_bool(const Variant& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
-    const VariantType type = variant.type();
+Status cast_variant_to_bool(const VariantRowValue& variant, ColumnBuilder<TYPE_BOOLEAN>& result) {
+    const VariantValue& value = variant.get_value();
+    const VariantType type = value.type();
     if (type == VariantType::NULL_TYPE) {
         result.append_null();
         return Status::OK();
     }
 
-    if (type == VariantType::BOOLEAN) {
-        auto value = variant.get_bool();
-        if (!value.ok()) {
-            return value.status();
-        }
-
-        result.append(value.value());
+    if (type == VariantType::BOOLEAN_TRUE || type == VariantType::BOOLEAN_FALSE) {
+        ASSIGN_OR_RETURN(const auto ret, value.get_bool());
+        result.append(ret);
         return Status::OK();
     }
 
     if (type == VariantType::STRING) {
-        auto str = variant.get_string();
-        if (str.ok()) {
-            const char* str_value = str.value().data();
-            size_t len = str.value().size();
-            StringParser::ParseResult parsed;
-            auto r = StringParser::string_to_int<int32_t>(str_value, len, &parsed);
+        ASSIGN_OR_RETURN(const auto str, value.get_string());
+        const char* str_value = str.data();
+        size_t len = str.size();
+        StringParser::ParseResult parsed;
+        auto r = StringParser::string_to_int<int32_t>(str_value, len, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS) {
+            const bool casted = StringParser::string_to_bool(str_value, len, &parsed);
             if (parsed != StringParser::PARSE_SUCCESS) {
-                const bool casted = StringParser::string_to_bool(str_value, len, &parsed);
-                if (parsed != StringParser::PARSE_SUCCESS) {
-                    return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str.value()));
-                }
-
-                result.append(casted);
-            } else {
-                result.append(r != 0);
+                return Status::VariantError(fmt::format("Failed to cast string '{}' to BOOLEAN", str));
             }
-
-            return Status::OK();
+            result.append(casted);
+        } else {
+            result.append(r != 0);
         }
+        return Status::OK();
     }
 
     return VARIANT_CAST_NOT_SUPPORT(type, TYPE_BOOLEAN);
 }
 
-Status cast_variant_to_string(const Variant& variant, const cctz::time_zone& zone,
+Status cast_variant_to_string(const VariantRowValue& variant, const cctz::time_zone& zone,
                               ColumnBuilder<TYPE_VARCHAR>& result) {
-    switch (variant.type()) {
+    const VariantValue& value = variant.get_value();
+    switch (value.type()) {
     case VariantType::NULL_TYPE: {
         result.append(Slice("null"));
         return Status::OK();
     }
     case VariantType::STRING: {
-        auto str = variant.get_string();
-        if (!str.ok()) {
-            return str.status();
-        }
-
-        result.append(Slice(std::string(str.value())));
+        ASSIGN_OR_RETURN(const auto str, value.get_string());
+        result.append(Slice(str));
         return Status::OK();
     }
     default: {
-        const VariantValue value = VariantValue::of_variant(variant);
+        // TODO: extra copy. from variant -> ss, and ss -> result.
         std::stringstream ss;
-        Status status = VariantUtil::variant_to_json(value.get_metadata(), value.get_value(), ss, zone);
-        if (!status.ok()) {
-            return status;
-        }
-
+        RETURN_IF_ERROR(VariantUtil::variant_to_json(variant.get_metadata(), value, ss, zone));
         std::string json_str = ss.str();
         result.append(Slice(json_str));
         return Status::OK();

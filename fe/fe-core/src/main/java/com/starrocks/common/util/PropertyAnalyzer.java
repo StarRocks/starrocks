@@ -272,9 +272,19 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
 
+    // Maximum number of parallel compaction subtasks per tablet
+    // 0 means disable parallel compaction, positive value enables it
+    public static final String PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL = "lake_compaction_max_parallel";
+
     public static final String PROPERTIES_TABLET_RESHARD_TARGET_SIZE = "tablet_reshard_target_size";
 
     public static final String PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD = "enable_statistic_collect_on_first_load";
+
+    // For admin repair cloud native table
+    // Enforces consistent version across all tablets in a physical partition
+    public static final String PROPERTIES_ENFORCE_CONSISTENT_VERSION = "enforce_consistent_version";
+    // Allows empty tablet recovery of tablets with no valid metadata
+    public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
@@ -1351,6 +1361,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
             String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
             if (Strings.isNullOrEmpty(constraintDescs)) {
+                properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
                 return uniqueConstraints;
             }
 
@@ -1437,7 +1448,7 @@ public class PropertyAnalyzer {
         if (parentTable.isNativeTableOrMaterializedView()) {
             OlapTable parentOlapTable = (OlapTable) parentTable;
             parentTableKeyType =
-                    parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexMetaId()).getKeysType();
+                    parentOlapTable.getIndexMetaByMetaId(parentOlapTable.getBaseIndexMetaId()).getKeysType();
         }
 
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
@@ -1484,6 +1495,7 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             String foreignKeyConstraintsDesc = properties.get(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
             if (Strings.isNullOrEmpty(foreignKeyConstraintsDesc)) {
+                properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
                 return foreignKeyConstraints;
             }
 
@@ -1608,6 +1620,28 @@ public class PropertyAnalyzer {
             }
         }
         return TCompactionStrategy.DEFAULT;
+    }
+
+    // Analyze lake_compaction_max_parallel property
+    // Returns the max parallel value (default 3, 0 means disabled)
+    public static int analyzeLakeCompactionMaxParallel(Map<String, String> properties) throws AnalysisException {
+        int defaultValue = 3;
+        if (properties != null && properties.containsKey(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            String value = properties.get(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            properties.remove(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            try {
+                int maxParallel = Integer.parseInt(value);
+                if (maxParallel < 0) {
+                    throw new AnalysisException("Invalid lake_compaction_max_parallel value: " + value +
+                            ". Value must be non-negative.");
+                }
+                return maxParallel;
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid lake_compaction_max_parallel value: " + value +
+                        ". Value must be an integer.");
+            }
+        }
+        return defaultValue;
     }
 
     public static long analyzeTabletReshardTargetSize(Map<String, String> properties, boolean removeProperties)

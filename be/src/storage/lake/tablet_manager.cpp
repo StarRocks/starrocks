@@ -166,6 +166,10 @@ std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view d
     return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
+std::string TabletManager::lcrm_location(int64_t tablet_id, std::string_view crm_name) const {
+    return _location_provider->lcrm_location(tablet_id, crm_name);
+}
+
 std::string TabletManager::sst_location(int64_t tablet_id, std::string_view sst_name) const {
     return _location_provider->sst_location(tablet_id, sst_name);
 }
@@ -189,6 +193,7 @@ Status TabletManager::drop_local_cache(const std::string& path) {
 
 // current lru cache does not support updating value size, so use refill to update.
 void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+    TEST_SYNC_POINT_CALLBACK("lake::TabletManager::update_segment_cache_size", nullptr);
     _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
 }
 
@@ -1134,10 +1139,36 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 #endif
 
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
-    auto tablet_metadata = tablet.metadata();
+    const auto& tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy,
                      CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
+    return compact(context, std::move(input_rowsets));
+}
+
+StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context,
+                                                   std::vector<RowsetPtr> input_rowsets) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Retrieve table_id and partition_id from shard info if not already set.
+    // This is needed for parallel compaction which may call this overload directly.
+    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+        if (shard_info_or.ok()) {
+            auto id_pair = get_table_partition_id(shard_info_or.value());
+            if (context->table_id == 0) {
+                context->table_id = id_pair.first;
+            }
+            if (context->partition_id == 0) {
+                context->partition_id = id_pair.second;
+            }
+        }
+    }
+#endif
+
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
+    auto tablet_metadata = tablet.metadata();
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;
     size_t total_input_rowsets_file_size = 0;

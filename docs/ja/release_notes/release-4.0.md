@@ -6,9 +6,68 @@ displayed_sidebar: docs
 
 :::warning
 
-StarRocks を v4.0 にアップグレードした後、v3.5.0 および v3.5.1 にダウングレードしないでください。そうするとメタデータの非互換性が発生し、FE がクラッシュする可能性があります。これらの問題を回避するには、クラスタを v3.5.2 以降にダウングレードする必要があります。
+**ダウングレードに関する注意事項**
+
+- StarRocks を v4.0 にアップグレードした後、v3.5.0 および v3.5.1 にダウングレードしないでください。そうするとメタデータの非互換性が発生し、FE がクラッシュする可能性があります。これらの問題を回避するには、クラスタを v3.5.2 以降にダウングレードする必要があります。
+
+- クラスターを v4.0.3 から v3.5.2～v3.5.10 にダウングレードする前に、以下のステートメントを実行してください。
+
+  ```SQL
+  SET GLOBAL enable_rewrite_simple_agg_to_meta_scan=false;
+  ```
 
 :::
+
+## 4.0.3
+
+リリース日：2025 年 12 月 25 日
+
+### 改善点
+
+- STRUCT データ型に対する `ORDER BY` 句をサポートしました。[#66035](https://github.com/StarRocks/starrocks/pull/66035)
+- プロパティ付き Iceberg ビューの作成をサポートし、`SHOW CREATE VIEW` の出力にプロパティを表示できるようになりました。[#65938](https://github.com/StarRocks/starrocks/pull/65938)
+- `ALTER TABLE ADD/DROP PARTITION COLUMN` による Iceberg テーブルのパーティション Spec の変更をサポートしました。[#65922](https://github.com/StarRocks/starrocks/pull/65922)
+- フレーム付きウィンドウ（例：`ORDER BY` / `PARTITION BY`）上での `COUNT/SUM/AVG(DISTINCT)` 集約をサポートし、最適化オプションを追加しました。[#65815](https://github.com/StarRocks/starrocks/pull/65815)
+- 単一文字区切り文字に `memchr` を使用することで、CSV パース性能を最適化しました。[#63715](https://github.com/StarRocks/starrocks/pull/63715)
+- ネットワークオーバーヘッド削減のため、Partial TopN を事前集約（Pre-Aggregation）フェーズにプッシュダウンするオプティマイザルールを追加しました。[#61497](https://github.com/StarRocks/starrocks/pull/61497)
+- Data Cache の監視機能を強化しました：
+  - メモリ／ディスクのクォータおよび使用量に関する新しいメトリクスを追加しました。[#66168](https://github.com/StarRocks/starrocks/pull/66168)
+  - `api/datacache/stat` HTTP エンドポイントに Page Cache の統計情報を追加しました。[#66240](https://github.com/StarRocks/starrocks/pull/66240)
+  - ネイティブテーブルのヒット率統計を追加しました。[#66198](https://github.com/StarRocks/starrocks/pull/66198)
+- OOM 発生時に迅速にメモリを解放できるよう、Sort および Aggregation オペレーターを最適化しました。[#66157](https://github.com/StarRocks/starrocks/pull/66157)
+- 共有データクラスターにおいて、CN が必要なスキーマをオンデマンドで取得できるよう、FE に `TableSchemaService` を追加しました。[#66142](https://github.com/StarRocks/starrocks/pull/66142)
+- すべての依存する取り込みジョブが完了するまで履歴スキーマを保持するよう、Fast Schema Evolution を最適化しました。[#65799](https://github.com/StarRocks/starrocks/pull/65799)
+- `filterPartitionsByTTL` を強化し、NULL パーティション値を正しく処理することで、全パーティションが誤って除外される問題を防止しました。[#65923](https://github.com/StarRocks/starrocks/pull/65923)
+- `FusedMultiDistinctState` を最適化し、リセット時に関連する MemPool を解放するようにしました。[#66073](https://github.com/StarRocks/starrocks/pull/66073)
+- Iceberg REST Catalog において、`ICEBERG_CATALOG_SECURITY` プロパティのチェックを大文字・小文字を区別しないようにしました。[#66028](https://github.com/StarRocks/starrocks/pull/66028)
+- 共有データクラスター向けに、StarOS Service ID を取得する HTTP エンドポイント `GET /service_id` を追加しました。[#65816](https://github.com/StarRocks/starrocks/pull/65816)
+- Kafka コンシューマー設定において、非推奨の `metadata.broker.list` を `bootstrap.servers` に置き換えました。[#65437](https://github.com/StarRocks/starrocks/pull/65437)
+- Full Vacuum Daemon を無効化できる FE 設定項目 `lake_enable_fullvacuum`（デフォルト：false）を追加しました。[#66685](https://github.com/StarRocks/starrocks/pull/66685)
+- lz4 ライブラリを v1.10.0 に更新しました。[#67080](https://github.com/StarRocks/starrocks/pull/67080)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `latest_cached_tablet_metadata` により、バッチ Publish 中にバージョンが誤ってスキップされる可能性がありました。[#66558](https://github.com/StarRocks/starrocks/pull/66558)
+- 共有なしクラスター実行時に、`CatalogRecycleBin` 内の `ClusterSnapshot` の相対チェックが引き起こす可能性のある問題。[#66501](https://github.com/StarRocks/starrocks/pull/66501)
+- Spill 処理中に、複雑なデータ型（ARRAY / MAP / STRUCT）を Iceberg テーブルへ書き込む際に BE がクラッシュする問題。[#66209](https://github.com/StarRocks/starrocks/pull/66209)
+- writer の初期化または初回書き込みが失敗した場合に、Connector Chunk Sink がハングする可能性がある問題。[#65951](https://github.com/StarRocks/starrocks/pull/65951)
+- Connector Chunk Sink において、`PartitionChunkWriter` の初期化失敗により、クローズ時に Null Pointer 参照が発生する問題。[#66097](https://github.com/StarRocks/starrocks/pull/66097)
+- 存在しないシステム変数を設定した際に、エラーが返されず成功してしまう問題。[#66022](https://github.com/StarRocks/starrocks/pull/66022)
+- Data Cache が破損している場合に、Bundle メタデータの解析が失敗する問題。[#66021](https://github.com/StarRocks/starrocks/pull/66021)
+- 結果が空の場合に、MetaScan が count 列に対して 0 ではなく NULL を返す問題。[#66010](https://github.com/StarRocks/starrocks/pull/66010)
+- 旧バージョンで作成されたリソースグループに対し、`SHOW VERBOSE RESOURCE GROUP ALL` が `default_mem_pool` ではなく NULL を表示する問題。[#65982](https://github.com/StarRocks/starrocks/pull/65982)
+- `flat_json` テーブル設定を無効化した後、クエリ実行中に `RuntimeException` が発生する問題。[#65921](https://github.com/StarRocks/starrocks/pull/65921)
+- 共有データクラスターにおいて、Schema Change 後に `min` / `max` 統計を MetaScan に書き換える際に発生する型不一致の問題。[#65911](https://github.com/StarRocks/starrocks/pull/65911)
+- `PARTITION BY` および `ORDER BY` が指定されていない場合に、ランキングウィンドウ最適化によって BE がクラッシュする問題。[#67093](https://github.com/StarRocks/starrocks/pull/67093)
+- 実行時フィルター統合時の `can_use_bf` 判定が不正確で、誤った結果やクラッシュを引き起こす可能性がある問題。[#67062](https://github.com/StarRocks/starrocks/pull/67062)
+- 実行時 bitset フィルターをネストした OR 述語にプッシュダウンした際に、結果が不正になる問題。[#67061](https://github.com/StarRocks/starrocks/pull/67061)
+- DeltaWriter 完了後の書き込みや flush 処理により、データ競合やデータ損失が発生する可能性がある問題。[#66966](https://github.com/StarRocks/starrocks/pull/66966)
+- 単純集約を MetaScan に書き換える際、nullable 属性の不一致により実行エラーが発生する問題。[#67068](https://github.com/StarRocks/starrocks/pull/67068)
+- MetaScan 書き換えルールにおける行数計算が正しくない問題。[#66967](https://github.com/StarRocks/starrocks/pull/66967)
+- Tablet メタデータキャッシュの不整合により、バッチ Publish 中にバージョンが誤ってスキップされる可能性がある問題。[#66575](https://github.com/StarRocks/starrocks/pull/66575)
+- HyperLogLog 処理において、メモリ割り当て失敗時のエラーハンドリングが不適切な問題。[#66827](https://github.com/StarRocks/starrocks/pull/66827)
 
 ## 4.0.2
 

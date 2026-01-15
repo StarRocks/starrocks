@@ -204,7 +204,7 @@ class BinaryColumnSerde {
 public:
     template <typename T>
     static int64_t max_serialized_size(const BinaryColumnBase<T>& column, const int encode_level) {
-        const auto& bytes = column.get_bytes();
+        auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
         int64_t res = sizeof(T) * 2;
         int64_t offsets_size = offsets.size() * sizeof(typename BinaryColumnBase<T>::Offset);
@@ -224,7 +224,7 @@ public:
 
     template <typename T>
     static uint8_t* serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
-        const auto& bytes = column.get_bytes();
+        auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
 
         T bytes_size = bytes.size() * sizeof(uint8_t);
@@ -421,9 +421,9 @@ public:
         for (int i = 0; i < num_objects; ++i) {
             uint64_t serialized_size = 0;
             buff = read_little_endian_64(buff, &serialized_size);
-            auto variant = VariantValue::create(Slice(buff, serialized_size));
+            auto variant = VariantRowValue::create(Slice(buff, serialized_size));
             if (!variant.ok()) {
-                return Status::Corruption(fmt::format("Failed to deserialize VariantValue at index {}: {}", i,
+                return Status::Corruption(fmt::format("Failed to deserialize VariantRowValue at index {}: {}", i,
                                                       variant.status().to_string()));
             }
 

@@ -107,7 +107,7 @@ std::string VariantPathParser::parse_quoted_string(ParserState& state, char quot
     return str;
 }
 
-StatusOr<ArrayExtraction> VariantPathParser::parse_array_index(ParserState& state) {
+StatusOr<VariantArrayExtraction> VariantPathParser::parse_array_index(ParserState& state) {
     if (!state.match('[')) {
         return Status::VariantError(fmt::format("Expected '[' at position {}", static_cast<int>(state.pos)));
     }
@@ -125,14 +125,14 @@ StatusOr<ArrayExtraction> VariantPathParser::parse_array_index(ParserState& stat
 
     try {
         int index = std::stoi(indexStr);
-        return ArrayExtraction(index);
+        return VariantArrayExtraction(index);
     } catch (const std::exception&) {
         return Status::VariantError(
                 fmt::format("Invalid array index '{}' at position {}", indexStr, static_cast<int>(state.pos)));
     }
 }
 
-StatusOr<ObjectExtraction> VariantPathParser::parse_quoted_key(ParserState& state) {
+StatusOr<VariantObjectExtraction> VariantPathParser::parse_quoted_key(ParserState& state) {
     if (!state.match('[')) {
         return Status::VariantError(fmt::format("Expected '[' at position {}", static_cast<int>(state.pos)));
     }
@@ -157,10 +157,10 @@ StatusOr<ObjectExtraction> VariantPathParser::parse_quoted_key(ParserState& stat
                 fmt::format("Expected ']' after quoted key '{}' at position {}", key, static_cast<int>(state.pos)));
     }
 
-    return ObjectExtraction(key);
+    return VariantObjectExtraction(key);
 }
 
-StatusOr<ObjectExtraction> VariantPathParser::parse_object_key(ParserState& state) {
+StatusOr<VariantObjectExtraction> VariantPathParser::parse_object_key(ParserState& state) {
     if (!state.match('.')) {
         return Status::VariantError(fmt::format("Expected '.' at position {}", static_cast<int>(state.pos)));
     }
@@ -170,7 +170,7 @@ StatusOr<ObjectExtraction> VariantPathParser::parse_object_key(ParserState& stat
         return Status::VariantError(fmt::format("Expected key after '.' at position {}", static_cast<int>(state.pos)));
     }
 
-    return ObjectExtraction(key);
+    return VariantObjectExtraction(key);
 }
 
 StatusOr<VariantPathExtraction> VariantPathParser::parse_segment(ParserState& state) {
@@ -245,44 +245,30 @@ void VariantPath::reset(VariantPath&& rhs) {
     segments = std::move(rhs.segments);
 }
 
-StatusOr<VariantValue> VariantPath::seek(const VariantValue* value, const VariantPath* variant_path) {
-    if (value == nullptr || variant_path == nullptr) {
+StatusOr<VariantRowValue> VariantPath::seek(const VariantRowValue* variant, const VariantPath* variant_path) {
+    if (variant == nullptr || variant_path == nullptr) {
         return Status::InvalidArgument("Variant value and path must not be null");
     }
 
-    const std::string& metadata = value->get_metadata();
-    if (metadata.empty()) {
-        return Status::InvalidArgument("Can not find variant value with empty metadata");
-    }
-
-    const std::string& val = value->get_value();
-    if (val.empty()) {
-        return Status::InvalidArgument("Variant value is empty");
-    }
-
-    Variant current{metadata, val};
+    const VariantMetadata& metadata = variant->get_metadata();
+    VariantValue current{variant->get_value().raw()};
     for (size_t seg_idx = 0; seg_idx < variant_path->segments.size(); ++seg_idx) {
         const auto& segment = variant_path->segments[seg_idx];
-
-        StatusOr<Variant> sub;
-        std::visit(
-                [&]<typename T0>(const T0& seg) {
-                    if constexpr (std::is_same_v<std::decay_t<T0>, ObjectExtraction>) {
-                        sub = current.get_object_by_key(seg.get_key());
-                    } else if constexpr (std::is_same_v<std::decay_t<T0>, ArrayExtraction>) {
-                        sub = current.get_element_at_index(seg.get_index());
+        RETURN_IF_ERROR(std::visit(
+                [&]<typename T0>(const T0& seg) -> Status {
+                    if constexpr (std::is_same_v<std::decay_t<T0>, VariantObjectExtraction>) {
+                        ASSIGN_OR_RETURN(current, current.get_object_by_key(metadata, seg.get_key()));
+                    } else if constexpr (std::is_same_v<std::decay_t<T0>, VariantArrayExtraction>) {
+                        ASSIGN_OR_RETURN(current, current.get_element_at_index(metadata, seg.get_index()));
                     }
+                    return Status::OK();
                 },
-                segment);
-
-        if (!sub.ok()) {
-            return sub.status();
+                segment));
+        if (current.is_null()) {
+            break;
         }
-
-        current = Variant{sub->metadata(), sub->value()};
     }
-
-    return VariantValue::of_variant(current);
+    return VariantRowValue::from_variant(metadata, current);
 }
 
 } // namespace starrocks

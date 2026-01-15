@@ -30,11 +30,7 @@
 
 #include <utility>
 
-#include "column/chunk.h"
-#include "column/nullable_column.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace parquet {
 class ColumnWriter;

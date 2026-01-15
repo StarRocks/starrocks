@@ -19,6 +19,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -589,6 +590,12 @@ public class IcebergTable extends Table {
             case ADD_FILES -> AddFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.INSERT, TableOperation.DROP, TableOperation.CREATE,
+                TableOperation.ALTER, TableOperation.DELETE);
     }
 
     public void setIcebergMetricsReporter(IcebergMetricsReporter reporter) {

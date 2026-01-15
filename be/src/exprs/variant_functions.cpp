@@ -43,6 +43,18 @@ StatusOr<ColumnPtr> VariantFunctions::get_variant_double(FunctionContext* contex
     return _do_variant_query<TYPE_DOUBLE>(context, columns);
 }
 
+StatusOr<ColumnPtr> VariantFunctions::get_variant_date(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DATE>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_datetime(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DATETIME>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_time(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_TIME>(context, columns);
+}
+
 Status VariantFunctions::variant_segments_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
@@ -120,13 +132,13 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             continue;
         }
 
-        const VariantValue* variant_value = variant_viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = variant_viewer.value(row);
+        if (variant == nullptr) {
             result.append_null();
             continue;
         }
 
-        auto field = VariantPath::seek(variant_value, variant_segments_status.value());
+        auto field = VariantPath::seek(variant, variant_segments_status.value());
         if (!field.ok()) {
             // If seek fails (e.g., path not found), append null
             result.append_null();
@@ -137,14 +149,8 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             result.append(std::move(field.value()));
         } else {
             const RuntimeState* state = context->state();
-            cctz::time_zone zone;
-            if (state == nullptr) {
-                zone = cctz::local_time_zone();
-            } else {
-                zone = context->state()->timezone_obj();
-            }
-            Variant field_view(field.value().get_metadata(), field.value().get_value());
-            Status casted = cast_variant_value_to<ResultType, true>(field_view, zone, result);
+            cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
+            Status casted = cast_variant_value_to<ResultType, true>(field.value(), zone, result);
             // Append null if casting fails
             if (!casted.ok()) {
                 result.append_null();
@@ -166,12 +172,12 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             result.append_null();
             continue;
         }
-        const VariantValue* variant_value = variant_viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = variant_viewer.value(row);
+        if (variant == nullptr) {
             result.append_null();
             continue;
         }
-        result.append(variant_type_to_string(variant_value->to_variant().type()));
+        result.append(VariantUtil::variant_type_to_string(variant->get_value().type()));
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

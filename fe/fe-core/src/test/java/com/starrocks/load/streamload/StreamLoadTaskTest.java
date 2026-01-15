@@ -312,6 +312,8 @@ public class StreamLoadTaskTest {
                 10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
         Deencapsulation.invoke(task, "setState", StreamLoadTask.State.PREPARING);
         Deencapsulation.setField(task, "coord", c);
+        Deencapsulation.setField(task, "dbName", "pipe_test_db");
+        Deencapsulation.setField(task, "tableName", "tbl1");
         StreamLoadKvParams params = new StreamLoadKvParams(java.util.Map.of("max_filter_ratio", "0.1"));
         Deencapsulation.setField(task, "streamLoadParams", params);
         new Expectations() {
@@ -340,6 +342,8 @@ public class StreamLoadTaskTest {
                 10000, 1, 0, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
         Deencapsulation.invoke(task, "setState", StreamLoadTask.State.PREPARING);
         Deencapsulation.setField(task, "coord", c);
+        Deencapsulation.setField(task, "dbName", "pipe_test_db");
+        Deencapsulation.setField(task, "tableName", "tbl1");
         StreamLoadKvParams params = new StreamLoadKvParams(java.util.Map.of("max_filter_ratio", "0.5"));
         Deencapsulation.setField(task, "streamLoadParams", params);
         new Expectations() {

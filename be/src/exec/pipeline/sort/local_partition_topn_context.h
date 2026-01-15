@@ -83,6 +83,8 @@ public:
                               std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
                               int64_t partition_limit, const TTopNType::type topn_type);
 
+    ~LocalPartitionTopnContext() = default;
+
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
     // Add one chunk to partitioner

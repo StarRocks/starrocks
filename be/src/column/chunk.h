@@ -24,6 +24,7 @@
 #include "column/schema.h"
 #include "common/global_types.h"
 #include "exec/query_cache/owner_info.h"
+#include "storage/variant_tuple.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -32,6 +33,10 @@ class ChunkPB;
 class DatumTuple;
 class ChunkExtraData;
 using ChunkExtraDataPtr = std::shared_ptr<ChunkExtraData>;
+class MutableChunk;
+using MutableChunkPtr = std::shared_ptr<MutableChunk>;
+
+/**
 /**
  * ChunkExtraData is an extra data which can be used to extend Chunk and 
  * attach extra infos beside the schema. eg, In Stream MV scenes, 
@@ -64,15 +69,20 @@ public:
     using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
 
     Chunk();
-    Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, SlotHashMap slot_map);
+    Chunk(Columns&& columns, SchemaPtr schema);
+    Chunk(Columns&& columns, SlotHashMap slot_map);
 
     // Chunk with extra data implements.
-    Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
-    Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
+    Chunk(Columns&& columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
+    Chunk(Columns&& columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
+
+    // Build a Chunk from the MutableChunk and transfer the ownership to the Chunk.
+    friend class MutableChunk;
+    Chunk(MutableChunk&& other);
+    Chunk& operator=(MutableChunk&& other);
 
     ~Chunk() = default;
 
@@ -112,18 +122,24 @@ public:
     // schema must exists.
     std::string_view get_column_name(size_t idx) const;
 
-    // schema must exist and will be updated.
-    void append_column(ColumnPtr column, const FieldPtr& field);
+    // NOTE: schema must exist and will be updated.
+    // NOTE: all those methods should take care the ownership of the column, otherwise it will cause undefined behavior.
 
-    void append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id);
+    // - When those method are called, the column will be moved into the chunk, and the original column will be reset.
+    // - If the column is shared with others, it will be cloned and moved into the chunk.
+    void append_column(ColumnPtr&& column, const FieldPtr& field);
+    void append_column(ColumnPtr&& column, SlotId slot_id);
+    void update_column(ColumnPtr&& column, SlotId slot_id);
+    // - When those method are called, ensure the column is not shared with other columns in the chunk;
+    // otherwise chunk's internal methods may cause undefined behavior.
+    void append_column(const ColumnPtr& column, const FieldPtr& field);
+    void append_column(const ColumnPtr& column, SlotId slot_id);
+    void update_column(ColumnPtr& column, SlotId slot_id);
+    void append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id);
 
-    void append_column(ColumnPtr column, SlotId slot_id);
-    void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
-
-    void update_column(ColumnPtr column, SlotId slot_id);
-    void update_column_by_index(ColumnPtr column, size_t idx);
-
-    void append_or_update_column(ColumnPtr column, SlotId slot_id);
+    void append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
+    void update_column_by_index(ColumnPtr&& column, size_t idx);
+    void append_or_update_column(ColumnPtr&& column, SlotId slot_id);
 
     void update_rows(const Chunk& src, const uint32_t* indexes);
 
@@ -228,6 +244,8 @@ public:
     // This method is relatively slow and mainly used for unit tests now.
     DatumTuple get(size_t n) const;
 
+    VariantTuple get(size_t n, const std::vector<uint32_t>& column_indexes) const;
+
     void set_delete_state(DelCondSatisfied state) { _delete_state = state; }
 
     DelCondSatisfied delete_state() const { return _delete_state; }
@@ -314,13 +332,19 @@ public:
         size_t num_columns = _columns.size();
         MutableColumns mutable_columns(num_columns);
         for (size_t i = 0; i < num_columns; ++i) {
-            mutable_columns[i] = _columns[i]->as_mutable_ptr();
+            mutable_columns[i] = std::move(*(_columns[i])).mutate();
         }
         return mutable_columns;
     }
 
 private:
     void rebuild_cid_index();
+
+    bool _is_column_ptr_shared(const Column* col) const { return _column_ptr_set.contains(col); }
+    void _update_column_checked(size_t idx, const ColumnPtr& ptr);
+    void _update_column_checked(size_t idx, ColumnPtr&& ptr);
+    void _append_column_checked(size_t idx, const ColumnPtr& ptr);
+    void _append_column_checked(size_t idx, ColumnPtr&& ptr);
 
     Columns _columns;
     std::shared_ptr<Schema> _schema;
@@ -330,6 +354,10 @@ private:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
+    // Chunk's columns should be unique, so we need to track the column ptrs to avoid duplicates.
+    // key      : column address
+    // value    : index in _columns
+    std::unordered_map<const Column*, size_t> _column_ptr_set;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {
@@ -440,4 +468,235 @@ inline const Column* Chunk::get_column_raw_ptr_by_slot_id(SlotId slot_id) const 
     return _columns[idx].get();
 }
 
+// MutableChunk: a variant of Chunk where all columns are MutableColumns.
+// Its API closely follows Chunk so it can substitute Chunk in many contexts.
+class MutableChunk {
+public:
+    using MutableChunkPtr = std::shared_ptr<MutableChunk>;
+    using SlotHashMap = Chunk::SlotHashMap;
+    using ColumnIdHashMap = Chunk::ColumnIdHashMap;
+
+    MutableChunk();
+    MutableChunk(MutableColumns columns, SchemaPtr schema);
+    MutableChunk(MutableColumns columns, SlotHashMap slot_map);
+    MutableChunk(MutableColumns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
+    MutableChunk(MutableColumns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
+
+    MutableChunk(MutableChunk&& other) = default;
+    MutableChunk& operator=(MutableChunk&& other) = default;
+
+    ~MutableChunk() = default;
+
+    // Disallow copy and assignment.
+    MutableChunk(const MutableChunk& other) = delete;
+    MutableChunk& operator=(const MutableChunk& other) = delete;
+
+    friend class Chunk;
+    MutableChunk(Chunk&& other);
+    MutableChunk& operator=(Chunk&& other);
+    // Build a Chunk from the MutableChunk and transfer the ownership to the Chunk.
+    // NOTE: After build, the MutableChunk will be in an invalid state and should not be used anymore.
+    Chunk to_chunk();
+
+    Status upgrade_if_overflow();
+    Status downgrade();
+    void reset();
+
+    bool has_large_column() const;
+
+    bool has_rows() const { return num_rows() > 0; }
+    bool is_empty() const { return num_rows() == 0; }
+    bool has_columns() const { return !_columns.empty(); }
+    size_t num_columns() const { return _columns.size(); }
+    size_t num_rows() const { return _columns.empty() ? 0 : _columns[0]->size(); }
+
+    // Resize the chunk to contain |count| rows elements.
+    //  - If the current size is less than count, additional default values are appended.
+    //  - If the current size is greater than count, the chunk is reduced to its first count elements.
+    void set_num_rows(size_t count);
+
+    void swap_chunk(MutableChunk& other);
+
+    const SchemaPtr& schema() const { return _schema; }
+    SchemaPtr& schema() { return _schema; }
+    void reset_schema() { _schema.reset(); }
+    const MutableColumns& columns() const { return _columns; }
+    MutableColumns& columns() { return _columns; }
+    // schema must exists.
+    std::string_view get_column_name(size_t idx) const;
+
+    // schema must exist and will be updated.
+    void append_column(MutableColumnPtr&& column, const FieldPtr& field);
+    void append_vector_column(MutableColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
+    void append_column(MutableColumnPtr&& column, SlotId slot_id);
+    void insert_column(size_t idx, MutableColumnPtr&& column, const FieldPtr& field);
+    void update_column(MutableColumnPtr&& column, SlotId slot_id);
+    void update_column_by_index(MutableColumnPtr&& column, size_t idx);
+    void append_or_update_column(MutableColumnPtr&& column, SlotId slot_id);
+
+    void update_rows(const Chunk& src, const uint32_t* indexes);
+    void append_default();
+
+    void remove_column_by_index(size_t idx);
+    void remove_column_by_slot_id(SlotId slot_id);
+    void remove_columns_by_index(const std::vector<size_t>& indexes);
+
+    // schema must exists.
+    const MutableColumnPtr& get_column_by_name(const std::string& column_name) const {
+        size_t idx = _schema->get_field_index_by_name(column_name);
+        DCHECK_LT(idx, _columns.size());
+        return _columns[idx];
+    }
+    MutableColumnPtr& get_column_by_name(const std::string& column_name) {
+        size_t idx = _schema->get_field_index_by_name(column_name);
+        DCHECK_LT(idx, _columns.size());
+        return _columns[idx];
+    }
+
+    const MutableColumnPtr& get_column_by_index(size_t idx) const {
+        DCHECK_LT(idx, _columns.size());
+        return _columns[idx];
+    }
+    MutableColumnPtr& get_column_by_index(size_t idx) {
+        DCHECK_LT(idx, _columns.size());
+        return _columns[idx];
+    }
+
+    const MutableColumnPtr& get_column_by_id(ColumnId cid) const {
+        DCHECK(!_cid_to_index.empty());
+        DCHECK(_cid_to_index.contains(cid));
+        size_t idx = _cid_to_index.at(cid);
+        return _columns[idx];
+    }
+    MutableColumnPtr& get_column_by_id(ColumnId cid) {
+        DCHECK(!_cid_to_index.empty());
+        DCHECK(_cid_to_index.contains(cid));
+        size_t idx = _cid_to_index.at(cid);
+        return _columns[idx];
+    }
+
+    // Must ensure the slot_id exist
+    const MutableColumnPtr& get_column_by_slot_id(SlotId slot_id) const {
+        DCHECK(is_slot_exist(slot_id)) << slot_id;
+        if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+            throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+        }
+        size_t idx = _slot_id_to_index.at(slot_id);
+        return _columns[idx];
+    }
+    MutableColumnPtr& get_column_by_slot_id(SlotId slot_id) {
+        DCHECK(is_slot_exist(slot_id)) << slot_id;
+        if (UNLIKELY(!_slot_id_to_index.contains(slot_id))) {
+            throw std::runtime_error(fmt::format("slot_id {} not found", slot_id));
+        }
+        size_t idx = _slot_id_to_index.at(slot_id);
+        return _columns[idx];
+    }
+
+    bool is_column_nullable(SlotId slot_id) const { return get_column_by_slot_id(slot_id)->is_nullable(); }
+    void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
+    bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
+    bool is_cid_exist(ColumnId cid) const { return _cid_to_index.contains(cid); }
+    void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
+    size_t get_index_by_slot_id(SlotId slot_id) const {
+        DCHECK(is_slot_exist(slot_id)) << slot_id;
+        return _slot_id_to_index.at(slot_id);
+    }
+
+    // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
+    MutableChunkPtr clone_empty() const;
+    MutableChunkPtr clone_empty_with_slot() const;
+    MutableChunkPtr clone_empty_with_schema() const;
+    // Create an empty chunk with the same meta and reserve it of specified size.
+    MutableChunkPtr clone_empty(size_t size) const;
+    MutableChunkPtr clone_empty_with_slot(size_t size) const;
+    MutableChunkPtr clone_empty_with_schema(size_t size) const;
+    MutableChunkPtr clone_unique() const;
+
+    void append(const Chunk& src) { append(src, 0, src.num_rows()); }
+    void merge(MutableChunk&& src);
+    void append(const Chunk& src, size_t offset, size_t count);
+    void append_safe(const Chunk& src) { append_safe(src, 0, src.num_rows()); }
+    void append_safe(const Chunk& src, size_t offset, size_t count);
+    void append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+    void rolling_append_selective(Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+    size_t filter(const Buffer<uint8_t>& selection, bool force = false);
+    size_t filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
+    DatumTuple get(size_t n) const;
+
+    void set_delete_state(DelCondSatisfied state) { _delete_state = state; }
+    DelCondSatisfied delete_state() const { return _delete_state; }
+
+    const SlotHashMap& get_slot_id_to_index_map() const { return _slot_id_to_index; }
+    const ColumnIdHashMap& get_column_id_to_index_map() const { return _cid_to_index; }
+
+    void reserve(size_t cap);
+
+    size_t memory_usage() const;
+
+    size_t container_memory_usage() const;
+    size_t reference_memory_usage() const { return reference_memory_usage(0, num_rows()); }
+    size_t reference_memory_usage(size_t from, size_t size) const;
+
+    size_t bytes_usage() const;
+    size_t bytes_usage(size_t from, size_t size) const;
+
+    bool has_const_column() const;
+
+    void materialized_nullable() {
+        for (auto& c : _columns) {
+            c->materialized_nullable();
+        }
+    }
+
+    void unpack_and_duplicate_const_columns();
+
+#ifndef NDEBUG
+    // check whether the internal state is consistent, abort the program if check failed.
+    void check_or_die();
+#else
+    void check_or_die() {}
+#endif
+
+#ifndef NDEBUG
+#define DCHECK_CHUNK(chunk_ptr)          \
+    do {                                 \
+        if ((chunk_ptr) != nullptr) {    \
+            (chunk_ptr)->check_or_die(); \
+        }                                \
+    } while (false)
+#else
+#define DCHECK_CHUNK(chunk_ptr)
+#endif
+
+    std::string debug_row(size_t index) const;
+    std::string debug_columns() const;
+
+    std::string rebuild_csv_row(size_t index, const std::string& delimiter) const;
+
+    Status capacity_limit_reached() const {
+        for (const auto& column : _columns) {
+            RETURN_IF_ERROR(column->capacity_limit_reached());
+        }
+        return Status::OK();
+    }
+    bool has_capacity_limit_reached() const { return !capacity_limit_reached().ok(); }
+
+    query_cache::owner_info& owner_info() { return _owner_info; }
+    const ChunkExtraDataPtr& get_extra_data() const { return _extra_data; }
+    ChunkExtraDataPtr& get_extra_data() { return _extra_data; }
+    void set_extra_data(ChunkExtraDataPtr data) { this->_extra_data = std::move(data); }
+    bool has_extra_data() const { return this->_extra_data != nullptr; }
+
+private:
+    void rebuild_cid_index();
+
+    MutableColumns _columns;
+    std::shared_ptr<Schema> _schema;
+    ColumnIdHashMap _cid_to_index;
+    SlotHashMap _slot_id_to_index;
+    DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
+    query_cache::owner_info _owner_info;
+    ChunkExtraDataPtr _extra_data;
+};
 } // namespace starrocks

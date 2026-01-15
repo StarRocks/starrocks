@@ -155,6 +155,8 @@ public class OperationTypeTest {
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_CLUSTER_SNAPSHOT_LOG));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST));
+        Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_DELETE_SQL_DIGEST_BLACK_LIST));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG));
         Assertions.assertTrue(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG));
     }
@@ -179,7 +181,7 @@ public class OperationTypeTest {
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_INVALID));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_LEADER_INFO_CHANGE_V2));
-        Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS));
+        Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_FAST_ALTER_TABLE_COLUMNS));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RECOVER_DB_V2));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RECOVER_PARTITION_V2));
         Assertions.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_RECOVER_TABLE_V2));

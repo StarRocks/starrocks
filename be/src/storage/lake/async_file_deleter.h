@@ -120,6 +120,11 @@ public:
 
     bool is_empty() const { return _pending_files.empty(); }
 
+    void clear() {
+        _pending_files.clear();
+        _delay_delete_files.clear();
+    }
+
 private:
     // file to shared count.
     std::unordered_map<std::string, uint32_t> _pending_files;

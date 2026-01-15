@@ -442,7 +442,15 @@
                 },
                 {
                     "type": "doc",
+                    "id": "integrations/airflow"
+                },
+                {
+                    "type": "doc",
                     "id": "integrations/dbt"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/smt/starrocks_sqlalchemy"
                 }
             ]
         },
@@ -475,6 +483,7 @@
                     },
                     "items": [
                         "administration/management/logs",
+                        "administration/management/proc_profile",
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",

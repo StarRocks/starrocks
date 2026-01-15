@@ -32,7 +32,6 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -44,7 +43,6 @@
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
-#include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
@@ -58,6 +56,7 @@
 #include "util/mysql_global.h"
 #include "util/numeric_types.h"
 #include "util/variant_converter.h"
+#include "util/variant_encoder.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/ir_helper.h"
@@ -193,7 +192,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
             value = JsonValue::from_string(str);
         } else if constexpr (lt_is_variant<FromType>) {
-            auto json_str = static_cast<VariantValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
+            auto json_str = static_cast<VariantRowValue*>(viewer.value(row))->to_json(cctz::local_time_zone());
             if (!json_str.ok()) {
                 overflow = true;
             } else {
@@ -262,17 +261,16 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
             continue;
         }
 
-        const VariantValue* variant_value = viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = viewer.value(row);
+        if (variant == nullptr) {
             builder.append_null();
             continue;
         }
 
-        Variant variant(variant_value->get_metadata(), variant_value->get_value());
-        auto status = cast_variant_value_to<ToType, AllowThrowException>(variant, cctz::local_time_zone(), builder);
+        auto status = cast_variant_value_to<ToType, AllowThrowException>(*variant, cctz::local_time_zone(), builder);
         if (!status.ok()) {
             if constexpr (AllowThrowException) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant_value->to_string());
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, variant->to_string());
             }
             builder.append_null();
         }
@@ -283,8 +281,38 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_to_variant_fn(ColumnPtr& column) {
-    // TODO: require to implement variant encoding
-    THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+    if constexpr (FromType != TYPE_JSON) {
+        THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+    }
+
+    ColumnViewer<TYPE_JSON> viewer(column);
+    ColumnBuilder<TYPE_VARIANT> builder(viewer.size());
+
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        JsonValue* json = viewer.value(row);
+        if (json == nullptr) {
+            builder.append_null();
+            continue;
+        }
+
+        auto encoded = VariantEncoder::encode_json_to_variant(*json);
+        if (!encoded.ok()) {
+            VLOG_ROW << "encode json to variant failed: " << encoded.status();
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string_uncheck());
+            }
+            builder.append_null();
+            continue;
+        }
+        builder.append(std::move(encoded.value()));
+    }
+
+    return builder.build(column->is_constant());
 }
 
 SELF_CAST(TYPE_BOOLEAN);
@@ -301,6 +329,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_from_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_BOOLEAN, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_VARIANT, cast_to_variant_fn);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
@@ -472,7 +501,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     if (column->is_nullable()) {
         const auto* input_column = down_cast<const NullableColumn*>(column.get());
         auto null_column_ptr = input_column->null_column()->clone();
-        auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
         auto& null_data = null_column->get_data();
         for (int i = 0; i < sz; ++i) {
@@ -694,6 +723,9 @@ UNARY_FN_CAST(TYPE_TIME, TYPE_DOUBLE, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DOUBLE, cast_float_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_DOUBLE, cast_from_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DOUBLE, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DATE, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DATETIME, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_TIME, cast_from_variant_fn);
 
 // decimal
 DEFINE_UNARY_FN_WITH_IMPL(NumberToDecimal, value) {
@@ -947,7 +979,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
 
         auto null_column_ptr = input_column->null_column()->clone();
-        auto* null_column = down_cast<NullColumn*>(null_column_ptr->as_mutable_raw_ptr());
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
         auto& null_data = null_column->get_data();
 
         for (int i = 0; i < num_rows; ++i) {
@@ -1133,7 +1165,7 @@ public:
         }
         const TypeDescriptor& to_type = this->type();
 
-        MutableColumnPtr result_column;
+        ColumnPtr result_column;
         // NOTE
         // For json type, it could not be converted from decimal directly, as a workaround we convert decimal
         // to double at first, then convert double to JSON
@@ -1147,11 +1179,9 @@ public:
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
                             FromType, TYPE_DOUBLE>(column);
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column))
-                                        ->as_mutable_ptr();
+                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
             } else {
-                result_column =
-                        CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
+                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
             }
         } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
             if constexpr (lt_is_decimal<ToType>) {
@@ -1194,11 +1224,11 @@ public:
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
             result_column = Column::mutate(std::move(column));
         } else {
-            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
+            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
-            result_column->resize(col_size);
+            result_column->as_mutable_raw_ptr()->resize(col_size);
         }
         return result_column;
     };
@@ -1230,7 +1260,6 @@ public:
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
-
                 if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
                                       ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
                                          static_cast<long double>(std::numeric_limits<FromCppType>::max()))
@@ -1594,6 +1623,15 @@ private:
         }                                                                     \
     }
 
+#define CASE_TO_VARIANT(FROM_TYPE, ALLOWTHROWEXCEPTION)                          \
+    case FROM_TYPE: {                                                            \
+        if (ALLOWTHROWEXCEPTION) {                                               \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, true>(node);  \
+        } else {                                                                 \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, false>(node); \
+        }                                                                        \
+    }
+
 #define CASE_FROM_VARIANT_TO(TO_TYPE, ALLOWTHROWEXCEPTION)                     \
     case TO_TYPE: {                                                            \
         if (ALLOWTHROWEXCEPTION) {                                             \
@@ -1650,6 +1688,20 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
         only_null->resize(ptr->num_rows());
     }
     return only_null;
+}
+
+StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
+    const size_t num_rows = column->size();
+
+    if (num_rows != 0 && ColumnHelper::count_nulls(column) == num_rows) {
+        return ColumnHelper::create_const_null_column(num_rows);
+    }
+
+    ColumnBuilder<TYPE_VARIANT> builder(num_rows);
+    RETURN_IF_ERROR(VariantEncoder::encode_column(column, _from_type, &builder, _allow_throw_exception));
+
+    return builder.build(column->is_constant());
 }
 
 // Check whether JSON can be cast to complex types (ARRAY / MAP / STRUCT)
@@ -1965,6 +2017,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_JSON_TO(TYPE_FLOAT, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_VARIANT, allow_throw_exception);
             default:
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
@@ -2005,6 +2058,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_VARIANT_TO(TYPE_LARGEINT, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_FLOAT, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DOUBLE, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DATE, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DATETIME, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_TIME, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DECIMAL32, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_FROM_VARIANT_TO(TYPE_DECIMAL128, allow_throw_exception);
@@ -2014,13 +2070,12 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 return nullptr;
             }
         }
-        // TODO: Support cast from other types to VARIANT after implementing string -> variant encoding
         if (to_type == TYPE_VARIANT) {
-            switch (from_type) {
-            default:
-                LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
-                return nullptr;
+            TypeDescriptor from_desc(thrift_to_type(node.child_type));
+            if (node.__isset.child_type_desc) {
+                from_desc = TypeDescriptor::from_thrift(node.child_type_desc);
             }
+            return new CastToVariantExpr(node, std::move(from_desc), allow_throw_exception);
         }
     } else if (is_binary_type(to_type)) {
         if (is_string_type(from_type)) {

@@ -26,7 +26,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -117,18 +116,12 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
                         Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
                         for (Tablet tablet : indexEntry.getValue()) {
-                            int newTabletCount = 0;
-                            if (splitTabletClause.getTabletReshardTargetSize() <= 0) {
-                                long splitCount = -splitTabletClause.getTabletReshardTargetSize();
-                                if (splitCount > Config.tablet_reshard_max_split_count) {
-                                    throw new StarRocksException("Invalid tablet_reshard_target_size: "
-                                            + splitTabletClause.getTabletReshardTargetSize());
-                                }
+                            int newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
+                                    splitTabletClause.getTabletReshardTargetSize());
 
-                                newTabletCount = (int) splitCount;
-                            } else {
-                                newTabletCount = TabletReshardUtils.calcSplitCount(tablet.getDataSize(true),
-                                        splitTabletClause.getTabletReshardTargetSize());
+                            if (newTabletCount <= 0) {
+                                throw new StarRocksException("Invalid tablet_reshard_target_size: "
+                                        + splitTabletClause.getTabletReshardTargetSize());
                             }
 
                             if (newTabletCount <= 1) {
@@ -174,10 +167,12 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
 
                         Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
                         for (Tablet tablet : oldIndex.getTablets()) {
+                            // When not specifying which tablets to split,
+                            // tablet_reshard_target_size must be greater than 0
                             Preconditions.checkState(splitTabletClause.getTabletReshardTargetSize() > 0,
                                     "Invalid tablet_reshard_target_size: "
                                             + splitTabletClause.getTabletReshardTargetSize());
@@ -284,13 +279,14 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex,
             List<ReshardingTablet> reshardingTablets) {
-        // TODO: Use new id after multiple versions of MaterializedIndex is supported
-        MaterializedIndex newIndex = new MaterializedIndex(oldIndex.getId(), IndexState.NORMAL,
-                oldIndex.getShardGroupId());
+        MaterializedIndex newIndex = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(), oldIndex.getMetaId(),
+                IndexState.NORMAL, oldIndex.getShardGroupId());
 
         for (ReshardingTablet reshardingTablet : reshardingTablets) {
+            Tablet oldTablet = oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());
+            Preconditions.checkNotNull(oldTablet, "Not found tablet " + reshardingTablet.getFirstOldTabletId());
             for (long tabletId : reshardingTablet.getNewTabletIds()) {
-                Tablet tablet = new LakeTablet(tabletId);
+                Tablet tablet = new LakeTablet(tabletId, oldTablet.getRange());
                 newIndex.addTablet(tablet, null, false);
             }
         }

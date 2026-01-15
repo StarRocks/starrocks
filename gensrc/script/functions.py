@@ -323,6 +323,7 @@ vectorized_functions = [
     [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper', 'StringFunctions::upper_prepare', 'StringFunctions::upper_close'],
 
     [30160, 'reverse', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
+    [30161, 'initcap', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::initcap'],
 
     [30170, 'trim', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
@@ -899,6 +900,15 @@ vectorized_functions = [
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
     [110204, "get_variant_string", False, True, "VARCHAR", ["VARIANT", "VARCHAR"],
      "VariantFunctions::get_variant_string",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110206, "get_variant_date", False, False, "DATE", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_date",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110207, "get_variant_datetime", False, False, "DATETIME", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_datetime",
+     "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
+    [110208, "get_variant_time", False, False, "TIME", ["VARIANT", "VARCHAR"],
+     "VariantFunctions::get_variant_time",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
     [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
 

@@ -33,6 +33,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -68,7 +69,7 @@ public abstract class StatisticsCollectJob {
     protected final StatsConstants.AnalyzeType analyzeType;
 
     // statistics types are empty on single column statistics jobs.
-    protected List<StatsConstants.StatisticsType> statisticsTypes;
+    protected List<StatisticsType> statisticsTypes;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
     protected Priority priority;
@@ -98,7 +99,7 @@ public abstract class StatisticsCollectJob {
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
                                    StatsConstants.AnalyzeType analyzeType, StatsConstants.ScheduleType scheduleType,
-                                   Map<String, String> properties, List<StatsConstants.StatisticsType> statisticsTypes,
+                                   Map<String, String> properties, List<StatisticsType> statisticsTypes,
                                    List<List<String>> columnGroups) {
         this.db = db;
         this.table = table;
@@ -169,7 +170,7 @@ public abstract class StatisticsCollectJob {
         return !statisticsTypes.isEmpty();
     }
 
-    public List<StatsConstants.StatisticsType> getStatisticsTypes() {
+    public List<StatisticsType> getStatisticsTypes() {
         return statisticsTypes;
     }
 

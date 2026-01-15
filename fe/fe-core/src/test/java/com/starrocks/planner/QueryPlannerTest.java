@@ -40,6 +40,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,10 +53,15 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class QueryPlannerTest {
@@ -92,6 +98,42 @@ public class QueryPlannerTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+    }
+
+    @BeforeEach
+    public void beforeEach() throws Exception {
+        // This test class touches GlobalStateMgr singletons (blacklists + frontend configs).
+        // Make each case independent so running the whole class/suite doesn't leak state between cases.
+        clearSqlBlackList();
+        clearSqlDigestBlackList();
+        connectContext.getState().setError("");
+    }
+
+    @AfterEach
+    public void afterEach() throws Exception {
+        clearSqlBlackList();
+        clearSqlDigestBlackList();
+        // Reset configs to avoid affecting other test classes in the same JVM.
+        setFrontendConfig("enable_sql_blacklist", "false");
+        setFrontendConfig("enable_sql_digest", "false");
+        connectContext.getState().setError("");
+    }
+
+    private static void clearSqlBlackList() {
+        for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
+            GlobalStateMgr.getCurrentState().getSqlBlackList().delete(entry.id);
+        }
+    }
+
+    private static void clearSqlDigestBlackList() {
+        GlobalStateMgr.getCurrentState().getSqlDigestBlackList()
+                .deleteAll(new ArrayList<>(GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests()));
+    }
+
+    private static void setFrontendConfig(String key, String value) throws Exception {
+        String sql = "admin set frontend config (\"" + key + "\" = \"" + value + "\")";
+        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        new StmtExecutor(connectContext, statement).execute();
     }
 
     @Test
@@ -159,7 +201,7 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
+        Assertions.assertEquals(1, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
         long id = -1;
         for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
             id = entry.id;
@@ -276,7 +318,7 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
+        Assertions.assertEquals(1, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
         long id = -1;
         for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
             id = entry.id;
@@ -319,7 +361,7 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
         stmtExecutor1.execute();
 
-        Assertions.assertEquals(GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size(), 1);
+        Assertions.assertEquals(1, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
         long id = -1;
         for (BlackListSql entry : GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists()) {
             id = entry.id;
@@ -346,6 +388,56 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
         stmtExecutor3.execute();
         Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getSqlBlackList().getBlackLists().size());
+    }
+
+    @Test
+    public void testSqlDigestBlackList() throws Exception {
+        String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
+        StatementBase statement = SqlParser.parseSingleStatement(setEnableSqlBlacklist,
+                connectContext.getSessionVariable().getSqlMode());
+
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, statement);
+        stmtExecutor0.execute();
+
+        String setEnableDigest = "admin set frontend config (\"enable_sql_digest\" = \"true\")";
+        statement = SqlParser.parseSingleStatement(setEnableDigest,
+                connectContext.getSessionVariable().getSqlMode());
+
+        stmtExecutor0 = new StmtExecutor(connectContext, statement);
+        stmtExecutor0.execute();
+
+        String sql = "select k1 from test.baseall";
+        StatementBase sqlStmt = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        String digest = "389d2ef8d98994a4290b5d2e1d5838aa";
+        String addBlackListSql = "add sql digest blacklist " + digest;
+        statement = SqlParser.parseSingleStatement(addBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, statement);
+        stmtExecutor1.execute();
+
+        Assertions.assertEquals(1,
+                GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests().size());
+        for (String d : GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests()) {
+            Assertions.assertEquals(digest, d);
+        }
+        try (MockedStatic<ConnectProcessor> digestMethod = Mockito.mockStatic(ConnectProcessor.class)) {
+            digestMethod.when(() -> ConnectProcessor.computeStatementDigest(Mockito.any())).thenReturn(digest);
+
+            StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sqlStmt);
+            stmtExecutor2.execute();
+            Assertions.assertEquals("Access denied; This sql is in blacklist (id: -1), please contact your admin. " +
+                            "Digest: 389d2ef8d98994a4290b5d2e1d5838aa",
+                    connectContext.getState().getErrorMessage());
+            connectContext.getState().setError("");
+        }
+
+        String deleteBlackListSql = "delete sql digest blacklist " + digest;
+        statement = SqlParser.parseSingleStatement(deleteBlackListSql,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, statement);
+        stmtExecutor3.execute();
+        Assertions.assertEquals(0,
+                GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests().size());
     }
 
     @Test

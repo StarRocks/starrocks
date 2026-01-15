@@ -27,6 +27,7 @@ import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
@@ -112,7 +113,7 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties,
-                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 List<StatisticsType> statisticsTypes,
                                                                  List<List<String>> columnGroup,
                                                                  boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {

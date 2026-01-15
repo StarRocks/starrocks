@@ -17,9 +17,9 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
@@ -28,7 +28,10 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -86,8 +89,10 @@ public class ShowCreateTableStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx.setDatabase("testDb");
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
         ShowCreateTableStmt stmt =
-                new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);
+                new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("testDb", stmt.getDb());
         Assertions.assertEquals("testTbl", stmt.getTable());
@@ -291,5 +296,82 @@ public class ShowCreateTableStmtTest {
                 "foreign_key_constraints should include parent table names. Got: " + createTable3);
         Assertions.assertTrue(createTable3.contains("parent1_k1") && createTable3.contains("parent1_k2"),
                 "foreign_key_constraints should include child column names. Got: " + createTable3);
+    }
+
+    private String buildComplexTypeTableDdl(String tableName, String columnDef) {
+        return "CREATE TABLE test." + tableName + " (\n" +
+                "  k1 INT,\n" +
+                "  " + columnDef + "\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"fast_schema_evolution\" = \"true\"\n" +
+                ");";
+    }
+
+    private void verifyShowCreateTableNoCast(String tableName, String columnDef,
+                                             String expectedFragment) throws Exception {
+        starRocksAssert.withTable(buildComplexTypeTableDdl(tableName, columnDef));
+
+        String showSql = "show create table test." + tableName;
+        ShowCreateTableStmt stmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
+        ShowResultSet result = ShowExecutor.execute(stmt, ctx);
+        String output = result.getResultRows().get(0).get(1);
+
+        Assertions.assertTrue(output.contains(expectedFragment),
+                String.format("Expected output to contain '%s'. Got: %s", expectedFragment, output));
+        Assertions.assertFalse(output.contains("CAST"),
+                String.format("Output should not contain CAST. Got: %s", output));
+    }
+
+    @Test
+    public void testComplexTypeDefaultValueRemoveCast() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test");
+
+        verifyShowCreateTableNoCast(
+                "test_array_struct",
+                "k2 ARRAY<STRUCT<id INT, name STRING>> DEFAULT [row(1, 'alice'), row(2, 'bob')]",
+                "DEFAULT [row(1, 'alice'),row(2, 'bob')]"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_map_struct",
+                "k2 MAP<STRING, STRUCT<id INT, score DOUBLE>> DEFAULT map{'user1': row(1, 95.5), 'user2': row(2, 88.0)}",
+                "row(1, 95.5)"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_struct_array",
+                "k2 STRUCT<id INT, tags ARRAY<STRING>> DEFAULT row(1, ['tag1', 'tag2', 'tag3'])",
+                "row(1, ['tag1','tag2','tag3'])"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_struct_nested",
+                "k2 STRUCT<user STRUCT<id INT, name STRING>, meta STRUCT<created_at STRING, updated_at STRING>> " +
+                        "DEFAULT row(row(100, 'admin'), row('2024-01-01', '2024-01-02'))",
+                "row(row(100, 'admin'), row('2024-01-01', '2024-01-02'))"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_complex_nested",
+                "k2 MAP<INT, STRUCT<id INT, items ARRAY<STRUCT<item_id INT, quantity INT>>>> " +
+                        "DEFAULT map{1: row(100, [row(1, 5), row(2, 3)])}",
+                "row(100, [row(1, 5),row(2, 3)])"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_array_map_struct",
+                "k2 ARRAY<MAP<STRING, STRUCT<val INT>>> DEFAULT [map{'a': row(1)}, map{'b': row(2)}]",
+                "row(1)"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_map_array_struct",
+                "k2 MAP<STRING, ARRAY<STRUCT<x INT, y INT>>> DEFAULT map{'point1': [row(1, 2), row(3, 4)]}",
+                "[row(1, 2),row(3, 4)]"
+        );
     }
 }

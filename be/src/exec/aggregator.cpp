@@ -589,10 +589,10 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
         if (!AggStateUtils::is_agg_state_if(func_name)) {
             agg_state_desc.set_is_result_nullable(is_result_nullable);
         }
-        ASSIGN_OR_RETURN(auto agg_state_func,
+        ASSIGN_OR_RETURN(const AggregateFunction* agg_state_func,
                          AggStateUtils::get_agg_state_function(agg_state_desc, func_name, arg_types));
-        *ret = agg_state_func.get();
-        _combinator_function.emplace_back(std::move(agg_state_func));
+        *ret = agg_state_func;
+        _combinator_function.emplace_back(agg_state_func);
     } else {
         // get function
         if (func_name == FUNCTION_COUNT) {
@@ -762,6 +762,12 @@ void Aggregator::close(RuntimeState* state) {
             Expr::close(i, state);
         }
         Expr::close(_conjunct_ctxs, state);
+
+        for (auto* func : _combinator_function) {
+            delete func;
+        }
+        _combinator_function.clear();
+
         return Status::OK();
     };
 #ifdef __APPLE__
@@ -933,10 +939,34 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 }
 
 RuntimeFilter* Aggregator::build_in_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    if (desc->type() != TRuntimeFilterBuildType::AGG_FILTER) {
+        return nullptr;
+    }
     int expr_order = desc->build_expr_order();
     const auto& group_type_type = _group_by_types[expr_order].result_type.type;
     AggInRuntimeFilterBuilder in_builder(desc, group_type_type);
     return in_builder.build(this, state->obj_pool());
+}
+
+RuntimeFilter* Aggregator::build_topn_filters(RuntimeState* state, RuntimeFilterBuildDescriptor* desc) {
+    if (desc->type() != TRuntimeFilterBuildType::TOPN_FILTER) {
+        return nullptr;
+    }
+    int expr_order = desc->build_expr_order();
+    const auto& group_type_type = _group_by_types[expr_order].result_type.type;
+    // only build when group by keys's size is less than limit
+    if (size() < desc->limit()) {
+        return nullptr;
+    }
+
+    if (_topn_runtime_filter_builder == nullptr) {
+        // for the first time to build the topn runtime filter
+        _topn_runtime_filter_builder = new AggTopNRuntimeFilterBuilder(desc, group_type_type);
+        _pool->add(_topn_runtime_filter_builder);
+        return _topn_runtime_filter_builder->build(this, state->obj_pool());
+    } else {
+        return _topn_runtime_filter_builder->runtime_filter();
+    }
 }
 
 Status Aggregator::_evaluate_const_columns(int i) {
@@ -1620,6 +1650,22 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
                                                          AllocateState<MapType>(this), &_tmp_agg_states,
                                                          &_streaming_selection);
     });
+}
+
+void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
+    _streaming_selection.resize(chunk_size);
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                        AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                        &_streaming_selection);
+    });
+    // if _streaming_selection is not all 0, means there are new group by keys,
+    // we need to build the topn runtime filter
+    if (_topn_runtime_filter_builder != nullptr &&
+        SIMD::count_zero(_streaming_selection.data(), chunk_size) != chunk_size) {
+        _topn_runtime_filter_builder->update(_group_by_columns, _streaming_selection);
+    }
 }
 
 // When meets not found group keys, mark the first pos into `_streaming_selection` and insert into the hashmap

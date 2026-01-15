@@ -254,6 +254,7 @@ public class FunctionSet {
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
+    public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
 
@@ -282,6 +283,9 @@ public class FunctionSet {
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
     public static final String GET_VARIANT_STRING = "get_variant_string";
+    public static final String GET_VARIANT_DATE = "get_variant_date";
+    public static final String GET_VARIANT_DATETIME = "get_variant_datetime";
+    public static final String GET_VARIANT_TIME = "get_variant_time";
     // Matching functions:
     public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
@@ -550,6 +554,7 @@ public class FunctionSet {
     public static final String MAP_SIZE = "map_size";
 
     public static final String MAP_AGG = "map_agg";
+    public static final String SUM_MAP = "sum_map";
 
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
@@ -923,6 +928,7 @@ public class FunctionSet {
                     .add(INTERSECT_COUNT)
                     .add(LC_PERCENTILE_DISC)
                     .add(MAP_AGG)
+                    .add(SUM_MAP)
                     .build();
 
     public static final Set<String> RANK_RALATED_FUNCTIONS =
@@ -1180,6 +1186,11 @@ public class FunctionSet {
         fns.add(fn);
     }
 
+    public boolean isAggregateFunction(String functionName) {
+        List<Function> fns = vectorizedFunctions.getOrDefault(functionName, Collections.EMPTY_LIST);
+        return !fns.isEmpty() && fns.get(0) instanceof AggregateFunction;
+    }
+
     // for vectorized engine
     public void addVectorizedScalarBuiltin(long fid, String fnName, boolean varArgs,
                                            Type retType, Type... args) {
@@ -1279,7 +1290,7 @@ public class FunctionSet {
                 false, false, false));
 
         for (Type t : SUPPORTED_TYPES) {
-            if (t.isFunctionType()) {
+            if (t.isFunctionType() || t.isVariantType()) {
                 continue;
             }
             if (t.isNull()) {
@@ -1435,6 +1446,9 @@ public class FunctionSet {
 
         // map_agg
         registerBuiltinMapAggFunction();
+
+        // sum_map
+        registerBuiltinSumMapFunction();
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
@@ -1752,6 +1766,13 @@ public class FunctionSet {
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
                 Lists.newArrayList(DateType.TIME, AnyElementType.ANY_ELEMENT), AnyMapType.ANY_MAP, null,
+                false, false, false));
+    }
+
+    private void registerBuiltinSumMapFunction() {
+        // sum_map takes a MAP as input and returns a MAP with summed values
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.SUM_MAP,
+                Lists.newArrayList(AnyMapType.ANY_MAP), AnyMapType.ANY_MAP, null,
                 false, false, false));
     }
 

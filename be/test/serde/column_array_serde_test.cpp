@@ -32,7 +32,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/hash_util.hpp"
 #include "util/json.h"
-#include "util/variant_util.h"
+#include "util/variant.h"
 
 namespace starrocks::serde {
 
@@ -95,18 +95,20 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
     auto c1 = VariantColumn::create();
     ASSERT_EQ(4, ColumnArraySerde::max_serialized_size(*c1));
 
+    auto primitive_header = [](VariantType type) { return (static_cast<uint8_t>(type) << 2); };
+
     // Prepare 5 int8 variant values
     const uint8_t int8_values[][2] = {
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x01}, // 1
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x02}, // 2
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x03}, // 3
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x04}, // 4
-            {VariantUtil::primitiveHeader(VariantPrimitiveType::INT8), 0x05}, // 5
+            {primitive_header(VariantType::INT8), 0x01}, // 1
+            {primitive_header(VariantType::INT8), 0x02}, // 2
+            {primitive_header(VariantType::INT8), 0x03}, // 3
+            {primitive_header(VariantType::INT8), 0x04}, // 4
+            {primitive_header(VariantType::INT8), 0x05}, // 5
     };
     size_t expected_max_size = sizeof(uint32_t);
     for (size_t i = 0; i < std::size(int8_values); ++i) {
         std::string_view value(reinterpret_cast<const char*>(int8_values[i]), sizeof(int8_values[i]));
-        VariantValue variant(VariantMetadata::kEmptyMetadata, value);
+        VariantRowValue variant(VariantMetadata::kEmptyMetadata, value);
         c1->append(&variant);
         expected_max_size += sizeof(uint64_t) + variant.serialize_size();
     }
@@ -122,8 +124,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
 
     ASSERT_EQ(5, c2->size());
     for (size_t i = 0; i < c1->size(); i++) {
-        const VariantValue* datum1 = c1->get(i).get_variant();
-        const VariantValue* datum2 = c2->get(i).get_variant();
+        const VariantRowValue* datum1 = c1->get(i).get_variant();
+        const VariantRowValue* datum2 = c2->get(i).get_variant();
         ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
         ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
         ASSERT_EQ(datum1->get_value(), datum2->get_value());
@@ -140,8 +142,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
 
         ASSERT_EQ(5, c2->size());
         for (size_t i = 0; i < c1->size(); i++) {
-            const VariantValue* datum1 = c1->get(i).get_variant();
-            const VariantValue* datum2 = c2->get(i).get_variant();
+            const VariantRowValue* datum1 = c1->get(i).get_variant();
+            const VariantRowValue* datum2 = c2->get(i).get_variant();
             ASSERT_EQ(datum1->serialize_size(), datum2->serialize_size());
             ASSERT_EQ(datum1->get_metadata(), datum2->get_metadata());
             ASSERT_EQ(datum1->get_value(), datum2->get_value());
@@ -158,7 +160,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     // Prepare a variant value with an unsupported version
     constexpr uint8_t v2_metadata_charts[] = {0x02, 0x00, 0x00};
     const std::string_view v2_metadata(reinterpret_cast<const char*>(v2_metadata_charts), sizeof(v2_metadata_charts));
-    const VariantValue variant(v2_metadata, "");
+    const VariantRowValue variant(v2_metadata, "");
     c1->append(&variant);
     ASSERT_EQ(1, c1->size());
 

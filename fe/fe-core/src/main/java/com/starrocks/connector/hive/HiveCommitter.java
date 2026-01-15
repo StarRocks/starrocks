@@ -209,11 +209,16 @@ public class HiveCommitter {
         } else {
             Path oldTableStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName() + "_" +
                     ConnectContext.get().getQueryId().toString());
+            Optional<String> writePathRelativeToTarget = getRelativePathIfDescendant(targetPath, writePath);
             fileOps.renameDirectory(targetPath, oldTableStagingPath,
                     () -> renameDirTasksForAbort.add(new RenameDirectoryTask(oldTableStagingPath, targetPath)));
             clearPathsForFinish.add(oldTableStagingPath);
 
-            fileOps.renameDirectory(writePath, targetPath,
+            Path sourcePath = writePathRelativeToTarget
+                    .map(relative -> new Path(oldTableStagingPath, relative))
+                    .orElse(writePath);
+
+            fileOps.renameDirectory(sourcePath, targetPath,
                     () -> clearTasksForAbort.add(new DirectoryCleanUpTask(targetPath, true)));
 
         }
@@ -460,6 +465,9 @@ public class HiveCommitter {
                 .setParameters(ImmutableMap.<String, String>builder()
                         .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
                         .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                        .buildOrThrow())
+                .setSerDeParameters(ImmutableMap.<String, String>builder()
+                        .putAll(table.getSerdeProperties())
                         .buildOrThrow())
                 .setStorageFormat(table.getStorageFormat())
                 .setLocation(partitionUpdate.getTargetPath().toString())
@@ -757,6 +765,25 @@ public class HiveCommitter {
         }
 
         return new DeleteRecursivelyResult(false, notDeletedEligibleItems);
+    }
+
+    private Optional<String> getRelativePathIfDescendant(Path parentPath, Path childPath) {
+        Path normalizedParent = Path.getPathWithoutSchemeAndAuthority(parentPath);
+        Path normalizedChild = Path.getPathWithoutSchemeAndAuthority(childPath);
+        String parent = ensureTrailingSlash(normalizedParent.toString());
+        String child = normalizedChild.toString();
+        if (!child.startsWith(parent)) {
+            return Optional.empty();
+        }
+        String relative = child.substring(parent.length());
+        if (relative.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(relative);
+    }
+
+    private String ensureTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
     }
 
     private synchronized void addSuppressedExceptions(

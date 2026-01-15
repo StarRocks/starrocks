@@ -328,6 +328,10 @@ public class Deployer {
             return;
         }
 
+        // 1. change state to DEPLOYING before sending rpc to avoid race condition with report status
+        fragmentInstanceExecStates.forEach(FragmentInstanceExecState::changeStateIntoDeploying);
+
+        // 2. send RPC
         Future<PExecBatchPlanFragmentsResult> batchFuture = null;
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
             batchFuture = execRemoteBatchFragmentsAsync(fragmentInstanceExecStates);
@@ -341,10 +345,10 @@ public class Deployer {
         FakeDeployFuture sharedFakeFuture = new FakeDeployFuture(batchFuture);
         fragmentInstanceExecStates.forEach(
                 fragmentInstanceExecState -> {
-                    fragmentInstanceExecState.changeStateIntoDeploying();
                     fragmentInstanceExecState.setDeployFuture(sharedFakeFuture);
                 });
 
+        // 3. wait
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
             waitForDeploymentCompletion(fragmentInstanceExecStates);
         }

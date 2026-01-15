@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
@@ -193,42 +194,51 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
+            TableRef tableRef = node.getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
             return super.visitInsertStatement(node, context);
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
+            TableRef tableRef = node.getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
             return super.visitUpdateStatement(node, context);
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
+            TableRef tableRef = node.getTableRef();
+            TableName tableName = TableName.fromTableRef(tableRef);
+            Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
             return super.visitDeleteStatement(node, context);
         }
 
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTbl());
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterTableStatement(statement, context);
         }
 
         @Override
         public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTableName());
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterViewStatement(statement, context);
         }
 
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getMvName());
+            Pair<Database, Table> dbAndTable = resolveTable(session, 
+                    com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef()));
             put(dbAndTable);
             return super.visitAlterMaterializedViewStatement(statement, context);
         }

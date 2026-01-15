@@ -70,6 +70,7 @@ struct StringFunctionsState {
     DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     bool use_hyperscan = false;
+    bool use_hyperscan_vec = false;
     std::optional<std::string> opt_const_rpl{};
     bool global_mode = true;
     int size_of_pattern = -1;
@@ -254,6 +255,13 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(reverse);
+
+    /**
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(initcap);
 
     /**
      * @param: [string_value]

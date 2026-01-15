@@ -12,6 +12,7 @@ set(EXEC_FILES
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/const_column_test.cpp
+        ./column/copied_datum_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
         ./column/field_test.cpp
@@ -39,6 +40,7 @@ set(EXEC_FILES
         ./connector_sink/partition_chunk_writer_test.cpp
         ./connector_sink/async_flush_output_stream_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
+        ./connector_sink/iceberg_delete_sink_test.cpp
         ./connector_sink/sink_memory_manager_test.cpp
         ./fs/azure/azblob_uri_test.cpp
         ./fs/azure/fs_azblob_test.cpp
@@ -57,6 +59,7 @@ set(EXEC_FILES
         ./fs/bundle_file_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/range_router_test.cpp
+        ./exec/plain_text_builder_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
@@ -87,7 +90,8 @@ set(EXEC_FILES
         ./exec/schema_fe_tablet_schedules_scanner_test.cpp
         ./exec/schema_materialized_views_scanner_test.cpp
         ./exec/schema_task_runs_scanner_test.cpp
-	    ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
+        ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
+        ./exec/schema_scanner/schema_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -115,6 +119,7 @@ set(EXEC_FILES
         ./exec/sorting_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/tablet_sink_sender_range_test.cpp
+        ./exec/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exec/file_scanner/avro_cpp_scanner_test.cpp
@@ -334,12 +339,14 @@ set(EXEC_FILES
         ./types/int256_test.cpp
         ./types/int256_arithmetic_test.cpp
         ./types/type_checker_test.cpp
+        ./types/type_checker_xml_loader_test.cpp 
         ./types/variant_value_test.cpp
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
         ./simd/simd_expand_test.cpp
+        ./util/heap_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
@@ -497,6 +504,7 @@ SET(DW_TEST_FILES
     ./storage/hll_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp
+    ./storage/index/builtin_inverted_index_test.cpp
     ./storage/key_coder_test.cpp
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
@@ -510,6 +518,7 @@ SET(DW_TEST_FILES
     ./storage/lake/filenames_test.cpp
     ./storage/lake/lake_data_source_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
+    ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./storage/lake/lake_scan_node_test.cpp
@@ -527,10 +536,14 @@ SET(DW_TEST_FILES
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
     ./storage/lake/tablet_manager_test.cpp
+    ./storage/lake/tablet_range_helper_test.cpp
+    ./storage/lake/sst_seek_range_test.cpp
+    ./storage/lake/tablet_parallel_compaction_manager_test.cpp
     ./storage/lake/tablet_reader_test.cpp
     ./storage/lake/tablet_retain_info_test.cpp
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
+    ./storage/lake/delete_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
@@ -546,6 +559,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp
     ./storage/persistent_index_consistency_test.cpp

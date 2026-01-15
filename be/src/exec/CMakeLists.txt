@@ -84,7 +84,7 @@ set(EXEC_FILES
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
-    spillable_chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter.cpp
     cross_join_node.cpp
     union_node.cpp
     raw_values_node.cpp
@@ -110,8 +110,7 @@ set(EXEC_FILES
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
     range_router.cpp
-    iceberg/iceberg_delete_builder.cpp
-    iceberg/iceberg_delete_file_iterator.cpp
+    iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp

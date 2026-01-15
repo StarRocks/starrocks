@@ -576,6 +576,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     auto start_wait_writer_ts = watch.elapsed_time();
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
     count_down_latch.wait();
+    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
+        int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
+        if (timeout_ms > 0) {
+            bthread_usleep(timeout_ms * 1000);
+        }
+    });
 
     auto finish_wait_writer_ts = watch.elapsed_time();
 
@@ -988,12 +994,13 @@ void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, Runti
 
     const FlushStatistic* flush_stat = writer->get_flush_stats();
     ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count, 0));
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
-    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime", DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns, 0));
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
     ADD_AND_SET_TIMER(profile, "MemtableInsertTime",

@@ -38,10 +38,10 @@ public:
 
     inline static MutableColumnPtr wrap_if_necessary(ColumnPtr&& column) {
         if (column->is_nullable()) {
-            return (std::move(column))->as_mutable_ptr();
+            return std::move(*column).mutate();
         }
         auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create((std::move(column))->as_mutable_ptr(), std::move(null));
+        return NullableColumn::create(std::move(*column).mutate(), std::move(null));
     }
 
     inline static ColumnPtr wrap_if_necessary(const ColumnPtr& column) {
@@ -259,7 +259,6 @@ public:
 
     size_t null_count() const;
     size_t null_count(size_t offset, size_t count) const;
-
     Datum get(size_t n) const override {
         if (_has_null && (immutable_null_column_data()[n])) {
             return {};

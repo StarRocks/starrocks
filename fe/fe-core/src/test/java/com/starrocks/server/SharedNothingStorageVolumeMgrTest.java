@@ -86,12 +86,8 @@ public class SharedNothingStorageVolumeMgrTest {
         storageParams.put(AWS_S3_ENDPOINT, "endpoint1");
         storageParams.put(AWS_S3_ACCESS_KEY, "ak");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        try {
-            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update");
-            Assertions.fail();
-        } catch (IllegalStateException e) {
-            Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
-        }
+        Assertions.assertThrows(MetaNotFoundException.class, () ->
+                svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update"));
         storageParams.put("aaa", "bbb");
         Assertions.assertThrows(DdlException.class, () ->
                 svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update"));

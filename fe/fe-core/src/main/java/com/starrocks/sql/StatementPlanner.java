@@ -24,6 +24,7 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -55,6 +56,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
@@ -518,7 +520,8 @@ public class StatementPlanner {
         // 1. explain (exclude explain analyze)
         // 2. insert into files
         // 3. old delete
-        // 4. insert overwrite
+        // 4. insert overwrite (first plan, before handleInsertOverwrite)
+        // 5. txnId already set (e.g., by InsertOverwriteJobRunner for dynamic overwrite re-plan)
         if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
             return;
         }
@@ -528,17 +531,35 @@ public class StatementPlanner {
                 return;
             }
         }
+        // If txnId is already set, skip creating a new transaction.
+        // This happens when InsertOverwriteJobRunner.executeInsert() re-plans the insertStmt
+        // with txnId already set from prepare() phase.
+        if (stmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
+            return;
+        }
 
-        stmt.getTableName().normalization(session);
-        String catalogName = stmt.getTableName().getCatalog();
-        String dbName = stmt.getTableName().getDb();
-        String tableName = stmt.getTableName().getTbl();
+        TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference is null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, session);
+        if (stmt instanceof InsertStmt) {
+            ((InsertStmt) stmt).setTableRef(tableRef);
+        } else if (stmt instanceof DeleteStmt) {
+            ((DeleteStmt) stmt).setTableRef(tableRef);
+        } else if (stmt instanceof UpdateStmt) {
+            ((UpdateStmt) stmt).setTableRef(tableRef);
+        }
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
 
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
+        TableName tableNameObj = TableName.fromTableRef(tableRef);
+        Table targetTable = MetaUtils.getSessionAwareTable(session, db, tableNameObj);
         if (targetTable == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -622,14 +643,19 @@ public class StatementPlanner {
             return;
         }
 
-        stmt.getTableName().normalization(session);
-        String catalogName = stmt.getTableName().getCatalog();
-        String dbName = stmt.getTableName().getDb();
+        TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            LOG.warn("Cannot abort transaction {}: table reference is null", txnId);
+            return;
+        }
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Table targetTable = MetaUtils.getSessionAwareTable(session, db, stmt.getTableName());
+        TableName tableNameObj = TableName.fromTableRef(tableRef);
+        Table targetTable = MetaUtils.getSessionAwareTable(session, db, tableNameObj);
         try {
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
