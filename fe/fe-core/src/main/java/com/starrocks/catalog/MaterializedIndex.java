@@ -97,6 +97,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     @SerializedName(value = "id")
     private long id;
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "metaId")
+    private long metaId = 0L;
+>>>>>>> 2973a0df13 ([BugFix] Fix MaterializedIndex metaId initialization when upgrading from old version (#67967))
     @SerializedName(value = "state")
     private IndexState state;
     @SerializedName(value = "rowCount")
@@ -228,8 +233,14 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         return tablet;
     }
 
+<<<<<<< HEAD
     public void setIdForRestore(long idxId) {
         this.id = idxId;
+=======
+    public void setIdForRestore(long idxMetaId) {
+        this.id = idxMetaId;
+        this.metaId = idxMetaId;
+>>>>>>> 2973a0df13 ([BugFix] Fix MaterializedIndex metaId initialization when upgrading from old version (#67967))
     }
 
     public long getId() {
@@ -365,5 +376,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         for (Tablet tablet : tablets) {
             idToTablets.put(tablet.getId(), tablet);
         }
+<<<<<<< HEAD
+=======
+        if (metaId == 0L) {
+            metaId = id;
+        }
+>>>>>>> 2973a0df13 ([BugFix] Fix MaterializedIndex metaId initialization when upgrading from old version (#67967))
     }
 }
