@@ -576,7 +576,8 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  LakePrimaryIndex& index, MetaFileBuilder* builder,
                                                  int64_t base_version, uint32_t rowset_id,
-                                                 const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment) {
+                                                 const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                                 uint32_t* new_del_rebuild_rssid) {
     if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
         return Status::OK();
     }
@@ -696,13 +697,22 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     new_rows_op.mutable_rowset()->set_num_rows(total_rows);
     new_rows_op.mutable_rowset()->set_data_size(total_data_size);
     new_rows_op.mutable_rowset()->set_overlapped(new_rows_op.rowset().segments_size() > 1);
-    if (new_rows_op.rowset().segments_size() > 0) {
+    // append del files from old op to new op
+    for (int i = 0; i < op_write.dels_size(); i++) {
+        new_rows_op.add_dels(op_write.dels(i));
+    }
+    for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
+        new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
+    }
+    if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
             (void)builder->update_num_del_stat(segment_id_to_add_dels_new_acc);
             segment_id_to_add_dels_new_acc.clear();
         }
     }
+    // set new del_rebuild_rssid via new op
+    *new_del_rebuild_rssid = rowset_id + std::max(new_rows_op.rowset().segments_size(), 1) - 1;
 
     return Status::OK();
 }
@@ -778,17 +788,17 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     }
 
     const uint32_t rowset_id = metadata->next_rowset_id();
-    const uint32_t del_rebuild_rssid = rowset_id + std::max(op_write.rowset().segments_size(), 1) - 1;
+    uint32_t new_del_rebuild_rssid = rowset_id; // default value if no insert rows
 
     auto& index = dynamic_cast<LakePrimaryIndex&>(index_entry->value());
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
-                                               rowset_id, insert_rowids_by_segment));
+                                               rowset_id, insert_rowids_by_segment, &new_del_rebuild_rssid));
 
     // 2. handle delete files and generate delvecs for existing rssids only
     RETURN_IF_ERROR(_handle_delete_files(op_write, txn_id, metadata, tablet, index, index_entry, builder, base_version,
-                                         del_rebuild_rssid, params));
+                                         new_del_rebuild_rssid, params));
 
     return Status::OK();
 }
