@@ -123,7 +123,7 @@ public class DefaultExtensionContext implements ExtensionContext {
      * 3. Otherwise, use the no-arg constructor
      * 4. Throw an exception for ambiguity
      */
-    private ConstructorMetadata resolveConstructor(Class<?> clazz) {
+    public ConstructorMetadata resolveConstructor(Class<?> clazz) {
         Constructor<?>[] constructors = clazz.getDeclaredConstructors();
 
         // Rule 1: Look for @Inject annotated constructor
