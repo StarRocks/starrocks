@@ -84,7 +84,7 @@ public class IndicesProcDir implements ProcDirInterface {
         locker.lockDatabase(db.getId(), LockType.READ);
         try {
             result.setNames(TITLE_NAMES);
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
+            for (MaterializedIndex materializedIndex : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 List<Comparable> indexInfo = new ArrayList<Comparable>();
                 indexInfo.add(materializedIndex.getId());
                 indexInfo.add(olapTable.getIndexNameByMetaId(materializedIndex.getMetaId()));

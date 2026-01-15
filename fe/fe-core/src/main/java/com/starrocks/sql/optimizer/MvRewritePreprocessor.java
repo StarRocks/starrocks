@@ -1117,7 +1117,7 @@ public class MvRewritePreprocessor {
                 selectPartitionIds.add(p.getId());
                 selectedPartitionNames.add(p.getName());
                 for (PhysicalPartition physicalPartition : p.getSubPartitions()) {
-                    MaterializedIndex materializedIndex = physicalPartition.getIndex(mv.getBaseIndexMetaId());
+                    MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(mv.getBaseIndexMetaId());
                     selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
                 }
             }

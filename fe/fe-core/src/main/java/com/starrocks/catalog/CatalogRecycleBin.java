@@ -957,7 +957,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 TStorageMedium medium = dataProperty.getStorageMedium();
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     long physicalPartitionId = physicalPartition.getId();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                         long indexId = index.getId();
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium,
                                 table.isCloudNativeTable());
@@ -1014,7 +1014,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             TStorageMedium medium = partitionInfo.getDataProperty().getStorageMedium();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
                     TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium,
                             olapTable.isCloudNativeTable());
