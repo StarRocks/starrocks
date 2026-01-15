@@ -251,4 +251,70 @@ public class DefaultExtensionContextTest {
         Assert.assertNotNull(context.get(com.starrocks.qe.scheduler.slot.BaseSlotManager.class));
         Assert.assertNotNull(context.get(com.starrocks.persist.gson.IGsonBuilderFactory.class));
     }
+
+    @Test
+    public void testRegisterConstructor() {
+        // Test registerConstructor method
+        ConstructorMetadata metadata = context.registerConstructor(SimpleService.class);
+        Assert.assertNotNull(metadata);
+        Assert.assertNotNull(metadata.getConstructor());
+        Assert.assertEquals(0, metadata.getParameterTypes().length);
+    }
+
+    @Test
+    public void testRegisterConstructorWithDependencies() {
+        // Test registerConstructor for class with dependencies
+        ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class);
+        Assert.assertNotNull(metadata);
+        Assert.assertNotNull(metadata.getConstructor());
+        Assert.assertEquals(1, metadata.getParameterTypes().length);
+        Assert.assertEquals(SimpleService.class, metadata.getParameterTypes()[0]);
+    }
+
+    @Test
+    public void testRegisterConstructorWithInject() {
+        // Test registerConstructor respects @Inject annotation
+        ConstructorMetadata metadata = context.registerConstructor(ServiceWithInject.class);
+        Assert.assertNotNull(metadata);
+        Assert.assertNotNull(metadata.getConstructor());
+        // Should select the @Inject constructor which has 1 parameter
+        Assert.assertEquals(1, metadata.getParameterTypes().length);
+        Assert.assertEquals(SimpleService.class, metadata.getParameterTypes()[0]);
+    }
+
+    @Test
+    public void testRegisterConstructorCachesMetadata() {
+        // First call to registerConstructor
+        ConstructorMetadata metadata1 = context.registerConstructor(SimpleService.class);
+        
+        // Get should use cached metadata
+        SimpleService service1 = context.get(SimpleService.class);
+        SimpleService service2 = context.get(SimpleService.class);
+        
+        Assert.assertNotNull(service1);
+        Assert.assertNotNull(service2);
+        Assert.assertNotSame(service1, service2);
+    }
+
+    @Test
+    public void testGetDoesNotCallRegisterConstructor() {
+        // Test that get() doesn't call the public registerConstructor method
+        // This is important because registerConstructor should be for explicit registration
+        // while get() uses internal resolution
+        
+        // Call get() which should internally resolve without calling registerConstructor
+        SimpleService service = context.get(SimpleService.class);
+        Assert.assertNotNull(service);
+        
+        // Now call registerConstructor - it should still work and cache the metadata
+        ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class);
+        Assert.assertNotNull(metadata);
+        
+        // Subsequent get() calls should use the cached metadata
+        ServiceWithDependency dep1 = context.get(ServiceWithDependency.class);
+        ServiceWithDependency dep2 = context.get(ServiceWithDependency.class);
+        Assert.assertNotNull(dep1);
+        Assert.assertNotNull(dep2);
+        Assert.assertNotSame(dep1, dep2);
+    }
 }
