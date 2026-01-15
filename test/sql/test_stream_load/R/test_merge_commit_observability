@@ -1,4 +1,4 @@
--- name: test_merge_commit_observability
+-- name: test_merge_commit_observability @native
 create database db_${uuid0};
 -- result:
 -- !result
@@ -42,7 +42,7 @@ select * from t1 order by id;
 -- !result
 select STATE, TYPE, (DB_NAME = 'db_${uuid0}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, SINK_ROWS, FILTERED_ROWS, UNSELECTED_ROWS, PROGRESS, ERROR_MSG, TRACKING_SQL, (PROFILE_ID IS NOT NULL) from information_schema.loads where DB_NAME='db_${uuid0}' and TABLE_NAME='t1';
 -- result:
-FINISHED	MERGE_COMMIT	1	t1	1	default_warehouse	1	70	1	0	0	Merge Window 100.00%		None	1
+FINISHED	MERGE_COMMIT	1	t1	1		1	70	1	0	0	Merge Window 100.00%		None	1
 -- !result
 SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid0}' and TABLE_NAME='t1' ORDER BY j.`key`;
 -- result:
@@ -86,7 +86,7 @@ PROPERTIES (
 0
 {
     "Status": "Fail",
-    "Message": "Load is aborted, reason: There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: http://127.0.0.1:11912/api/_load_error_log?file=error_log_19badb6f0787d08_9e6a85c0e21ff10c. Tracking SQL: SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=11530"
+    "Message": "Load is aborted, reason: There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: http://172.26.200.160:8040/api/_load_error_log?file=error_log_19bc4b6da1278e8_ae96ce10f5c40b0b. Tracking SQL: SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=10806"
 }
 -- !result
 sync;
@@ -98,7 +98,7 @@ select count(*) from t2;
 -- !result
 select STATE, TYPE, (DB_NAME = 'db_${uuid1}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, SINK_ROWS, UNSELECTED_ROWS, PROGRESS from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
 -- result:
-CANCELLED	MERGE_COMMIT	1	t2	1	default_warehouse	1	65	1	0	0	Merge Window 100.00%
+CANCELLED	MERGE_COMMIT	1	t2	1		1	65	1	0	0	Merge Window 100.00%
 -- !result
 SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
 -- result:
@@ -126,7 +126,7 @@ select (TRACKING_SQL = concat('SELECT tracking_log FROM information_schema.load_
 -- !result
 [UC]JOB_ID=select JOB_ID from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
 -- result:
-11530
+10806
 -- !result
 SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID = ${JOB_ID};
 -- result:

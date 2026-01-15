@@ -1,4 +1,4 @@
--- name: test_merge_commit_observability
+-- name: test_merge_commit_observability @native
 -- Test merge commit stream load observability in information_schema.loads
 
 -- ============================================================================
