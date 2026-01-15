@@ -101,7 +101,7 @@ public class RemoteFileOperations {
             pathKeyToPartition.put(key, partition);
         }
 
-        int cacheMissSize = partitions.size();
+        int cacheMissSize = pathKeyToPartition.size();
         if (enableCatalogLevelCache && params.isUseCache()) {
             cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
                     Lists.newArrayList(pathKeyToPartition.keySet())).size();
