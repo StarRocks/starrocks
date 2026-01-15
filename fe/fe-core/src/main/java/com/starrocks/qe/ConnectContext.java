@@ -988,6 +988,7 @@ public class ConnectContext {
         SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(currentCatalog));
         try {
             globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+            modifiedSessionVariables.put(variable.getVariable(), variable);
         } catch (DdlException e) {
             LOG.warn("failed to set catalog {}", currentCatalog, e);
         }
