@@ -106,9 +106,17 @@ class StarRocksTranslator:
                 config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.0),
                 contents=current_human_prompt
             )
+            
+            # Access text inside the try block and handle empty/blocked responses
+            if not response.text:
+                print(f"⚠️ Warning: Gemini returned an empty response for {input_file}. This usually happens if content is blocked by safety filters.")
+                return
+                
+            translated_text = response.text.strip()
+
         except Exception as e:
             error_message = str(e)
-            print("❌ Gemini API request failed:")
+            print(f"❌ Gemini API request failed for {input_file}:")
             print(f"   Details: {error_message}")
             lower_msg = error_message.lower()
             if "429" in error_message or "rate" in lower_msg:
