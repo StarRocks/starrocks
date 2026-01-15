@@ -20,6 +20,7 @@ rm docusaurus/docs/administration/stargo.md
 rm docusaurus/docs/administration/administration.mdx
 rm -rf docusaurus/docs/integrations/other_integrations
 rm docusaurus/docs/integrations/streaming.mdx
+rm docusaurus/docs/integrations/airflow.md
 rm docusaurus/docs/loading/Json_loading.md
 rm docusaurus/docs/loading/loading.mdx
 rm docusaurus/docs/loading/loading_introduction/loading_overview.mdx
