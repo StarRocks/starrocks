@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
@@ -42,7 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-
 public class SplitWindowSkewToUnionRule extends TransformationRule {
     private static final SplitWindowSkewToUnionRule INSTANCE = new SplitWindowSkewToUnionRule();
 
@@ -56,8 +56,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (input.getOp() instanceof LogicalWindowOperator) {
-            LogicalWindowOperator lwo = (LogicalWindowOperator) input.getOp();
+        if (input.getOp() instanceof LogicalWindowOperator lwo) {
             List<ScalarOperator> partitionExprs = lwo.getPartitionExpressions();
 
             // Rule only applies if there is exactly one partition expression,
@@ -104,7 +103,11 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             unskewedPredicate = new IsNullPredicateOperator(true, skewedColumn);
         } else {
             skewedPredicate = new BinaryPredicateOperator(BinaryType.EQ, skewedColumn, skewedInfo.get(0).value);
-            unskewedPredicate = new BinaryPredicateOperator(BinaryType.NE, skewedColumn, skewedInfo.get(0).value);
+            // In the unskewed branch, we need to include NULL values if the skewed value is NOT NULL.
+            // Since standard SQL inequality (col != value) filters out NULLs, we must explicitly add 'OR col IS NULL'.
+            unskewedPredicate = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                    List.of(new BinaryPredicateOperator(BinaryType.NE, skewedColumn, skewedInfo.get(0).value),
+                            new IsNullPredicateOperator(false, skewedColumn)));
         }
         // 2. Build Skewed Branch (where p == skewed_value)
         // In this branch, we remove the partitioning to handle the skewed data separately.
@@ -217,8 +220,11 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             return Collections.emptyList();
         }
         var op = partitionExprs.get(0);
-        if (op instanceof ColumnRefOperator) {
-            ColumnRefOperator col = (ColumnRefOperator) op;
+        if (op instanceof ColumnRefOperator col) {
+            if (!statistics.getColumnStatistics().containsKey(col)) {
+                return Collections.emptyList();
+            }
+
             ColumnStatistic colStat = statistics.getColumnStatistic(col);
             var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat);
             if (skewInfo.isSkewed()) {
