@@ -242,7 +242,8 @@ public class ConnectProcessor {
                 .setCNGroup(ctx.getCurrentComputeResourceName())
                 .setQuerySource(ctx.getQuerySource().toString())
                 .setCommand(ctx.getCommandStr())
-                .setPreparedStmtId(executor == null ? null : executor.getPreparedStmtId());
+                .setPreparedStmtId(executor == null ? null : executor.getPreparedStmtId())
+                .setErrorMsg(ctx.getState().getErrorMessage());
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
