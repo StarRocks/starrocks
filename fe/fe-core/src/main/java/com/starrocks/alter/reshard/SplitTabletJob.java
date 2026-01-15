@@ -180,7 +180,7 @@ public class SplitTabletJob extends TabletReshardJob {
         // 1. Publish the split transaction, update new tablet ranges
         boolean allPartitionFinished = true;
         ThreadPoolExecutor publishThreadPool = GlobalStateMgr.getCurrentState().getPublishVersionDaemon()
-                .getLakeTaskExecutor();
+                .getTaskExecutor();
 
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
