@@ -160,9 +160,7 @@ public class JDBCScanNode extends ScanNode {
             return "`";
         }
         if (jdbcUri.startsWith("jdbc:postgresql") ||
-                jdbcUri.startsWith("jdbc:postgres") ||
-                jdbcUri.startsWith("jdbc:oracle") ||
-                jdbcUri.startsWith("jdbc:sqlserver")) {
+                jdbcUri.startsWith("jdbc:postgres")) {
             return "\"";
         }
         return "";
