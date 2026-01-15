@@ -461,6 +461,7 @@ public class ExecutionDAG {
             if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("CTE consumer fragment cannot be bucket shuffle join");
             } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
                 // add destination host to this fragment's destination
                 for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
@@ -589,6 +590,7 @@ public class ExecutionDAG {
             if (needScheduleByLocalBucketShuffleJoin(destExecFragment, sink)) {
                 throw new NonRecoverableException("Split fragment cannot be bucket shuffle join");
             } else {
+                Preconditions.checkArgument(!destExecFragment.getInstances().isEmpty());
                 // add destination host to this fragment's destination
                 for (FragmentInstance destInstance : destExecFragment.getInstances()) {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
