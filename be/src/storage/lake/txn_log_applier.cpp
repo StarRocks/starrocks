@@ -604,16 +604,22 @@ private:
             } else {
                 auto old_rowsets = std::move(*_metadata->mutable_rowsets());
                 _metadata->mutable_rowsets()->Clear();
+                // Clear delvec_meta and add to orphan files.
+                for (const auto& [version, file] : _metadata->delvec_meta().version_to_file()) {
+                    FileMetaPB file_meta;
+                    file_meta.set_name(file.name());
+                    file_meta.set_size(file.size());
+                    file_meta.set_shared(file.shared());
+                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+                }
                 _metadata->mutable_delvec_meta()->Clear();
 
-                // Clear sstable_meta for cloud native persistent index.
-                // The SST files contain old segment id mappings that are no longer valid
-                // after full replication replaces all rowsets with new ones.
+                // Clear sstable_meta and add to orphan files.
                 for (const auto& sstable : _metadata->sstable_meta().sstables()) {
                     FileMetaPB file_meta;
                     file_meta.set_name(sstable.filename());
                     file_meta.set_size(sstable.filesize());
-                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+                    file_meta.set_shared(sstable.shared()) _metadata->mutable_orphan_files()->Add(std::move(file_meta));
                 }
                 _metadata->clear_sstable_meta();
 
