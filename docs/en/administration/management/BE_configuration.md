@@ -47,10 +47,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### lake_replication_slow_log_ms
 
 - Default: 30000
-- Type: long
+- Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Threshold in milliseconds for emitting slow-log entries during lake replication. After each file copy the code measures elapsed time in microseconds and marks the operation as slow when elapsed_time &gt;= `lake_replication_slow_log_ms` * 1000. When triggered, StarRocks writes an INFO log with file size, cost and trace metrics for that replicated file. Increase the value to reduce noisy slow logs for large/slow transfers; decrease it to detect and surface smaller slow-copy events sooner.
+- Description: Threshold for emitting slow-log entries during lake replication. After each file copy the code measures elapsed time in microseconds and marks the operation as slow when elapsed time is greater than or equal to `lake_replication_slow_log_ms * 1000`. When triggered, StarRocks writes an INFO log with file size, cost and trace metrics for that replicated file. Increase the value to reduce noisy slow logs for large/slow transfers; decrease it to detect and surface smaller slow-copy events sooner.
 - Introduced in: -
 
 ##### load_rpc_slow_log_frequency_threshold_seconds
@@ -377,10 +377,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### max_transmit_batched_bytes
 
 - Default: 262144
-- Type: Long
+- Type: Int
 - Unit: Bytes
 - Is mutable: No
-- Description: Maximum number of serialized bytes to accumulate in a single transmit request before it is flushed to the network. Sender implementations (e.g., `ExchangeSinkOperator::Channel` and `DataStreamSender::Channel`) add serialized ChunkPB payloads into a PTransmitChunkParams request and send the request once the accumulated bytes exceed `max_transmit_batched_bytes` or when EOS is reached. Increase this value to reduce RPC frequency and improve throughput at the cost of higher per-request latency and memory use; reduce it to lower latency and memory but increase RPC rate.
+- Description: Maximum number of serialized bytes to accumulate in a single transmit request before it is flushed to the network. Sender implementations add serialized ChunkPB payloads into a PTransmitChunkParams request and send the request once the accumulated bytes exceed `max_transmit_batched_bytes` or when EOS is reached. Increase this value to reduce RPC frequency and improve throughput at the cost of higher per-request latency and memory use; reduce it to lower latency and memory but increase RPC rate.
 - Introduced in: v3.2.0
 
 ##### mem_limit
@@ -430,11 +430,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### plugin_path
 
-- Default: ${STARROCKS_HOME}/plugin
-- Type: string
-- Unit: Path
+- Default: `${STARROCKS_HOME}/plugin`
+- Type: String
+- Unit: -
 - Is mutable: No
-- Description: Filesystem directory where StarRocks loads external plugins (dynamic libraries, connector artifacts, UDF binaries, etc.). `plugin_path` should point to a directory accessible by the BE process (read and execute permissions) and must exist before plugins are loaded; test code (be/src/testutil/init_config.h) creates this directory at startup. Changing `plugin_path` requires restarting the process for the new path to take effect. Ensure correct ownership and that plugin files use the platform's native binary extension (for example, .so on Linux).
+- Description: Filesystem directory where StarRocks loads external plugins (dynamic libraries, connector artifacts, UDF binaries, etc.). `plugin_path` should point to a directory accessible by the BE process (read and execute permissions) and must exist before plugins are loaded. Ensure correct ownership and that plugin files use the platform's native binary extension (for example, .so on Linux).
 - Introduced in: v3.2.0
 
 ##### priority_networks
@@ -625,16 +625,16 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Number of lock-map shards used by the transaction manager to partition transaction locks and reduce contention. `txn_map_shard_size` should be a power of two (2^n); increasing it increases concurrency and reduces lock contention at the cost of additional memory and marginal bookkeeping overhead. StarRocks passes this value to the `TxnManager` (see `txn_shard_size` used alongside it in StorageEngine), so choose a shard count sized for expected concurrent transactions and available memory. Changing this value requires a restart.
+- Description: Number of lock-map shards used by the transaction manager to partition transaction locks and reduce contention. Its value should be a power of two (2^n); increasing it augments concurrency and reduces lock contention at the cost of additional memory and marginal bookkeeping overhead. Choose a shard count sized for expected concurrent transactions and available memory.
 - Introduced in: v3.2.0
 
 ##### txn_shard_size
 
 - Default: 1024
 - Type: Int
-- Unit: shards
+- Unit: -
 - Is mutable: No
-- Description: Controls the number of lock shards used by the transaction manager. This value is passed as the second argument to `TxnManager` in StorageEngine and determines the shard size for txn locks. It must be a power of two; choosing a larger power-of-two value reduces lock contention and improves concurrent commit/publish throughput at the expense of additional memory and finer-grained internal bookkeeping. Changes require process restart to take effect. Use powers of two appropriate for workload concurrency (for example 64, 256, 1024).
+- Description: Controls the number of lock shards used by the transaction manager. This value determines the shard size for txn locks. It must be a power of two; Setting it to a larger value reduces lock contention and improves concurrent COMMIT/PUBLISH throughput at the expense of additional memory and finer-grained internal bookkeeping.
 - Introduced in: v3.2.0
 
 ##### update_schema_worker_count
@@ -903,7 +903,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &lt;= 0) disables late materialization; `1000` (or &gt;= 1000) forces late materialization for all reads. Values &gt; 0 and &lt; 1000 enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
+- Description: Integer ratio in range [0-1000] that controls the use of late materialization in the SegmentIterator (vector query engine). A value of `0` (or &le; 0) disables late materialization; `1000` (or &ge; 1000) forces late materialization for all reads. Values &gt; 0 and &lt; 1000 enable a conditional strategy where both late and early materialization contexts are prepared and the iterator selects behavior based on predicate filter ratios (higher values favor late materialization). When a segment contains complex metric types, StarRocks uses `metric_late_materialization_ratio` instead. If `lake_io_opts.cache_file_only` is set, late materialization is disabled.
 - Introduced in: v3.2.0
 
 ##### max_hdfs_file_handle
@@ -1090,7 +1090,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - Default: 1048576
 - Type: Int
-- Unit: Tasks
+- Unit: -
 - Is mutable: Yes
 - Description: Sets the maximum queue size (number of pending tasks) for the "cloud_native_pk_index_get" thread pool used by PK index parallel get operations in shared-data (cloud-native/lake) mode. The actual thread count for that pool is controlled by `pk_index_parallel_get_threadpool_max_threads`; this setting only limits how many tasks may be queued awaiting execution. The very large default (2^20) effectively makes the queue unbounded; lowering it prevents excessive memory growth from queued tasks but may cause task submissions to block or fail when the queue is full. Tune together with `pk_index_parallel_get_threadpool_max_threads` based on workload concurrency and memory constraints.
 - Introduced in: -
@@ -1209,7 +1209,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Type: Int
 - Unit: Rows
 - Is mutable: No
-- Description: The number of rows per vectorized chunk (batch) used throughout the execution and storage code paths. This value controls Chunk and RuntimeState batch_size creation, affects operator throughput, memory footprint per operator, spill and sort buffer sizing, and I/O heuristics (for example ORC writer natural write size). Increasing it can improve CPU and I/O efficiency for wide/CPU-bound workloads but raises peak memory usage and can increase latency for small-result queries. Tune only when profiling shows batch-size is a bottleneck; otherwise keep the default for balanced memory and performance.
+- Description: The number of rows per vectorized chunk (batch) used throughout the execution and storage code paths. This value controls Chunk and RuntimeState batch_size creation, affects operator throughput, memory footprint per operator, spill and sort buffer sizing, and I/O heuristics (for example, ORC writer natural write size). Increasing it can improve CPU and I/O efficiency for wide/CPU-bound workloads but raises peak memory usage and can increase latency for small-result queries. Tune only when profiling shows batch-size is a bottleneck; otherwise keep the default for balanced memory and performance.
 - Introduced in: v3.2.0
 
 ### Loading
@@ -1476,7 +1476,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: When `false` (default), DataDir::load will treat any tablet header load failures (non-NotFound and non-AlreadyExist errors returned by _tablet_manager-&gt;load_tablet_from_meta) as fatal: the code logs the error and calls LOG(FATAL) to stop the BE process. When `true`, the BE continues startup despite such per-tablet load errors — failed tablet IDs are recorded and skipped while successful tablets are still loaded. Note that this flag does NOT suppress fatal errors from the RocksDB meta scan itself (walk errors via TabletMetaManager::walk...), which always cause the process to quit.
+- Description: When this item is set to `false`, the system will treat any tablet header load failures (non-NotFound and non-AlreadyExist errors) as fatal: the code logs the error and calls LOG(FATAL) to stop the BE process. When it is set to `true`, the BE continues startup despite such per-tablet load errors — failed tablet IDs are recorded and skipped while successful tablets are still loaded. Note that this parameter does NOT suppress fatal errors from the RocksDB meta scan itself, which always cause the process to quit.
 - Introduced in: v3.2.0
 
 ##### load_channel_abort_clean_up_delay_seconds
@@ -1485,7 +1485,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Controls how long (in seconds) LoadChannelMgr keeps the load IDs of aborted load channels before removing them from `_aborted_load_channels`. When a load job is cancelled or fails, the load ID stays recorded so any late-arriving load RPCs can be rejected immediately; once the delay expires, the entry is cleaned during the periodic background sweep (minimum sweep interval is 60 seconds). Setting the delay too low risks accepting stray RPCs after an abort, while setting it too high may retain state and consume resources longer than necessary. Tune this to balance correctness of late-request rejection and resource retention for aborted loads.
+- Description: Controls how long (in seconds) the system keeps the load IDs of aborted load channels before removing them from `_aborted_load_channels`. When a load job is cancelled or fails, the load ID stays recorded so any late-arriving load RPCs can be rejected immediately; once the delay expires, the entry is cleaned during the periodic background sweep (minimum sweep interval is 60 seconds). Setting the delay too low risks accepting stray RPCs after an abort, while setting it too high may retain state and consume resources longer than necessary. Tune this to balance correctness of late-request rejection and resource retention for aborted loads.
 - Introduced in: v3.5.11, v4.0.4
 
 ##### load_channel_rpc_thread_pool_num
@@ -2242,10 +2242,10 @@ When this value is set to less than `0`, the system uses the product of its abso
 ##### max_tablet_write_chunk_bytes
 
 - Default: 536870912
-- Type: long
+- Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: Maximum allowed memory (in bytes) for the current in-memory tablet write chunk before it is treated as full and enqueued for sending. In NodeChannel::add_chunk and add_chunks the chunk is considered "not full" when _cur_chunk-&gt;num_rows() &lt; `chunk_size` AND _cur_chunk_mem_usage &lt; config::max_tablet_write_chunk_bytes; otherwise the chunk is pushed to the request queue. Increase this value to reduce the frequency of RPCs when loading wide tables (many columns), which can improve throughput at the cost of higher memory usage and larger RPC payloads. Tune to balance fewer RPCs against memory and serialization/BRPC limits.
+- Description: Maximum allowed memory (in bytes) for the current in-memory tablet write chunk before it is treated as full and enqueued for sending. Increase this value to reduce the frequency of RPCs when loading wide tables (many columns), which can improve throughput at the cost of higher memory usage and larger RPC payloads. Tune to balance fewer RPCs against memory and serialization/BRPC limits.
 - Introduced in: v3.2.12
 
 ##### max_update_compaction_num_singleton_deltas
@@ -2396,9 +2396,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 - Default: 4096
 - Type: Int
-- Unit: Count
+- Unit: -
 - Is mutable: No
-- Description: Number of shards used by the primary-key index shard map in the lake UpdateManager. UpdateManager allocates a vector of `PkIndexShard` of this size and maps a tablet id to a shard via a bitmask (tablet_id & (`pk_index_map_shard_size` - 1)). Increasing `pk_index_map_shard_size` reduces lock contention among tablets that would otherwise share the same shard, at the cost of more mutex objects and slightly higher memory usage. The value must be a power of two because the code relies on bitmask indexing. For sizing guidance see `tablet_map_shard_size` heuristic: total_num_of_tablets_in_BE / 512.
+- Description: Number of shards used by the Primary Key index shard map in the lake UpdateManager. UpdateManager allocates a vector of `PkIndexShard` of this size and maps a tablet ID to a shard via a bitmask. Increasing this value reduces lock contention among tablets that would otherwise share the same shard, at the cost of more mutex objects and slightly higher memory usage. The value must be a power of two because the code relies on bitmask indexing. For sizing guidance see `tablet_map_shard_size` heuristic: `total_num_of_tablets_in_BE / 512`.
 - Introduced in: v3.2.0
 
 ##### pk_index_memtable_flush_threadpool_max_threads
@@ -2414,9 +2414,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 - Default: 1048576
 - Type: Int
-- Unit: Count
+- Unit: -
 - Is mutable: Yes
-- Description: Controls the maximum queue size (number of pending tasks) for the PK-index memtable flush thread pool used in shared-data (cloud-native / lake) mode. The thread pool is created as "cloud_native_pk_index_flush" in ExecEnv; its max thread count is governed by `pk_index_memtable_flush_threadpool_max_threads`. Increasing this value permits more memtable-flush tasks to be buffered before execution, which can reduce immediate backpressure but increases memory consumed by queued task objects. Decreasing it limits buffered tasks and can cause earlier backpressure or task rejections depending on thread-pool behavior. Tune according to available memory and expected concurrent flush workload.
+- Description: Controls the maximum queue size (number of pending tasks) for the Primary Key index memtable flush thread pool used in shared-data (cloud-native / lake) mode. The thread pool is created as "cloud_native_pk_index_flush" in ExecEnv; its max thread count is governed by `pk_index_memtable_flush_threadpool_max_threads`. Increasing this value permits more memtable flush tasks to be buffered before execution, which can reduce immediate backpressure but increases memory consumed by queued task objects. Decreasing it limits buffered tasks and can cause earlier backpressure or task rejections depending on thread-pool behavior. Tune according to available memory and expected concurrent flush workload.
 - Introduced in: -
 
 ##### pk_index_memtable_max_count
@@ -2450,9 +2450,9 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 - Default: 1048576
 - Type: Int
-- Unit: Count
+- Unit: -
 - Is mutable: Yes
-- Description: The maximum queue size (number of pending tasks) for the thread pool used by cloud-native primary-key (PK) index parallel compaction in shared-data mode. This setting controls how many compaction tasks can be enqueued before the thread pool rejects new submissions; it is used by LakePersistentIndexParallelCompactMgr via ThreadPool::set_max_queue_size. The effective parallelism is bounded by `pk_index_parallel_compaction_threadpool_max_threads`; increase this value to avoid task rejections when you expect many concurrent compaction tasks, but be aware larger queues can increase memory and latency for queued work.
+- Description: The maximum queue size (number of pending tasks) for the thread pool used by cloud-native Primary Key index parallel compaction in shared-data mode. This setting controls how many Compaction tasks can be enqueued before the thread pool rejects new submissions. The effective parallelism is bounded by `pk_index_parallel_compaction_threadpool_max_threads`; increase this value to avoid task rejections when you expect many concurrent Compaction tasks, but be aware larger queues can increase memory and latency for queued work.
 - Introduced in: -
 
 ##### pk_index_parallel_get_min_rows
@@ -3211,11 +3211,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### lake_replication_read_buffer_size
 
-- Default: 16777216 (16 * 1024 * 1024)
+- Default: 16777216
 - Type: Long
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The read buffer size used when downloading lake segment files during lake replication. In ReplicationUtils::download_lake_segment_file this value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more IO calls. Tune according to network bandwidth, storage IO characteristics, and the number of parallel replication threads.
+- Description: The read buffer size used when downloading lake segment files during lake replication. This value determines the per-read allocation for reading remote files; the implementation uses the larger of this setting and a 1 MB minimum. A larger value reduces the number of read calls and can improve throughput but increases memory used per concurrent download; a smaller value lowers memory usage at the cost of more I/O calls. Tune according to network bandwidth, storage I/O characteristics, and the number of parallel replication threads.
 - Introduced in: -
 
 ##### lake_service_max_concurrency
