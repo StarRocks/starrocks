@@ -20,8 +20,9 @@ public interface ExtensionContext {
     
     /**
      * Register and resolve which constructor to use for dependency injection.
-     * @param clazz the class to resolve constructor for
+     * @param keyClass the interface or abstract class to register for
+     * @param valueClass the concrete class to resolve constructor for
      * @return constructor metadata containing the resolved constructor
      */
-    ConstructorMetadata registerConstructor(Class<?> clazz);
+    <T> ConstructorMetadata registerConstructor(Class<T> keyClass, Class<? extends T> valueClass);
 }

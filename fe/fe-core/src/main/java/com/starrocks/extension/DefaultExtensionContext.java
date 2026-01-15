@@ -99,9 +99,9 @@ public class DefaultExtensionContext implements ExtensionContext {
      * 4. Throw an exception for ambiguity
      */
     @Override
-    public ConstructorMetadata registerConstructor(Class<?> clazz) {
-        ConstructorMetadata metadata = resolveConstructorInternal(clazz);
-        constructorMetadataMap.put(clazz, metadata);
+    public <T> ConstructorMetadata registerConstructor(Class<T> keyClass, Class<? extends T> valueClass) {
+        ConstructorMetadata metadata = resolveConstructorInternal(valueClass);
+        constructorMetadataMap.put(keyClass, metadata);
         return metadata;
     }
 
@@ -168,7 +168,7 @@ public class DefaultExtensionContext implements ExtensionContext {
      */
     public void registerDefault() {
         // Register constructor for ResourceUsageMonitor to enable dependency injection
-        registerConstructor(ResourceUsageMonitor.class);
+        registerConstructor(ResourceUsageMonitor.class, ResourceUsageMonitor.class);
         
         // Create and register instances using dependency injection where applicable
         ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
@@ -177,7 +177,7 @@ public class DefaultExtensionContext implements ExtensionContext {
         register(WarehouseManager.class, new WarehouseManager());
         
         // Register constructor for BaseSlotManager to enable dependency injection
-        registerConstructor(SlotManager.class);
+        registerConstructor(BaseSlotManager.class, SlotManager.class);
         register(BaseSlotManager.class, new SlotManager(resourceUsageMonitor));
         
         register(IGsonBuilderFactory.class, new DefaultGsonBuilderFactory());

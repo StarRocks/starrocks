@@ -255,7 +255,7 @@ public class DefaultExtensionContextTest {
     @Test
     public void testRegisterConstructor() {
         // Test registerConstructor method
-        ConstructorMetadata metadata = context.registerConstructor(SimpleService.class);
+        ConstructorMetadata metadata = context.registerConstructor(SimpleService.class, SimpleService.class);
         Assert.assertNotNull(metadata);
         Assert.assertNotNull(metadata.getConstructor());
         Assert.assertEquals(0, metadata.getParameterTypes().length);
@@ -264,7 +264,7 @@ public class DefaultExtensionContextTest {
     @Test
     public void testRegisterConstructorWithDependencies() {
         // Test registerConstructor for class with dependencies
-        ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class);
+        ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class, ServiceWithDependency.class);
         Assert.assertNotNull(metadata);
         Assert.assertNotNull(metadata.getConstructor());
         Assert.assertEquals(1, metadata.getParameterTypes().length);
@@ -274,7 +274,7 @@ public class DefaultExtensionContextTest {
     @Test
     public void testRegisterConstructorWithInject() {
         // Test registerConstructor respects @Inject annotation
-        ConstructorMetadata metadata = context.registerConstructor(ServiceWithInject.class);
+        ConstructorMetadata metadata = context.registerConstructor(ServiceWithInject.class, ServiceWithInject.class);
         Assert.assertNotNull(metadata);
         Assert.assertNotNull(metadata.getConstructor());
         // Should select the @Inject constructor which has 1 parameter
@@ -285,7 +285,7 @@ public class DefaultExtensionContextTest {
     @Test
     public void testRegisterConstructorCachesMetadata() {
         // First call to registerConstructor
-        ConstructorMetadata metadata1 = context.registerConstructor(SimpleService.class);
+        ConstructorMetadata metadata1 = context.registerConstructor(SimpleService.class, SimpleService.class);
         
         // Get should use cached metadata
         SimpleService service1 = context.get(SimpleService.class);
@@ -307,7 +307,7 @@ public class DefaultExtensionContextTest {
         Assert.assertNotNull(service);
         
         // Now call registerConstructor - it should still work and cache the metadata
-        ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class);
+        ConstructorMetadata metadata = context.registerConstructor(ServiceWithDependency.class, ServiceWithDependency.class);
         Assert.assertNotNull(metadata);
         
         // Subsequent get() calls should use the cached metadata
