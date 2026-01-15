@@ -618,8 +618,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         // Didn't find PhysicalDistributionOperator in the single-child path
-        // This should not happen for shuffle join
-        throw new IllegalStateException("PhysicalDistributionOperator not found in shuffle join child tree");
+        // Although it's logically a shuffle join, there's no actual data redistribution in the physical plan
+        // (e.g., single BE node scenario), so data distribution won't be changed
+        return false;
     }
 
     @Override
