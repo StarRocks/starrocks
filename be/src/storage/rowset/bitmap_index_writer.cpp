@@ -395,7 +395,7 @@ private:
 
     Status _write_dictionary(const std::vector<CppType>& sorted_dicts, WritableFile* wfile, IndexedColumnMetaPB* meta) {
         IndexedColumnWriterOptions options;
-        options.write_ordinal_index = true;
+        options.write_ordinal_index = _gram_num > 0;
         options.write_value_index = true;
         options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
         options.compression = _dictionary_compression;

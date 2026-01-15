@@ -210,26 +210,62 @@ Status BitmapIndexIterator::seek_dict_by_ngram(const void* value, roaring::Roari
 
 StatusOr<Buffer<rowid_t>> BitmapIndexIterator::filter_dict_by_predicate(
         const roaring::Roaring* rowids, const std::function<bool(const Slice*)>& predicate) const {
-    BitmapRangeIterator it(*rowids);
-    uint32_t from, to;
-    const auto max_range = rowids->cardinality();
     Buffer<rowid_t> hit_rowids;
-    while (it.next_range(max_range, &from, &to)) {
+
+    // Check if dictionary column has ordinal index
+    // Old indexes or indexes without ngram support don't have ordinal index on dictionary column
+    if (!_reader->_dict_column_reader->support_ordinal_seek()) {
+        // Fallback to sequential scan for old indexes without ordinal index
+        // Use value seek to start from the beginning (empty slice is the minimum value for strings)
+        Slice min_value("", 0);
+        bool exact_match = false;
+        RETURN_IF_ERROR(_dict_column_iter->seek_at_or_after(&min_value, &exact_match));
+
+        const auto num_dicts = num_dictionaries();
         auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
-        RETURN_IF_ERROR(_dict_column_iter->seek_to_ordinal(from));
-        size_t num_to_read = to - from;
-        size_t read = num_to_read;
+
+        // Read all dictionaries starting from current position
+        rowid_t start_ordinal = _dict_column_iter->get_current_ordinal();
+        size_t to_read = num_dicts - start_ordinal;
+        size_t read = to_read;
         RETURN_IF_ERROR(_dict_column_iter->next_batch(&read, col.get()));
-        if (num_to_read != read) {
+        if (to_read != read) {
             return Status::InternalError(
-                    fmt::format("read dict column failed, expect {} rows, but got {} rows.", num_to_read, read));
+                    fmt::format("read dict column failed, expect {} rows, but got {} rows.", to_read, read));
         }
 
         ColumnViewer<TYPE_VARCHAR> viewer(std::move(col));
-        for (int i = 0; i < viewer.size(); ++i) {
-            auto value = viewer.value(i);
-            if (predicate(&value)) {
-                hit_rowids.push_back(from + i);
+        for (uint32_t i = 0; i < viewer.size(); ++i) {
+            rowid_t dict_ordinal = start_ordinal + i;
+            if (rowids->contains(dict_ordinal)) {
+                auto value = viewer.value(i);
+                if (predicate(&value)) {
+                    hit_rowids.push_back(dict_ordinal);
+                }
+            }
+        }
+    } else {
+        // Fast path: use seek_to_ordinal for indexes with ordinal index
+        BitmapRangeIterator it(*rowids);
+        uint32_t from, to;
+        const auto max_range = rowids->cardinality();
+        while (it.next_range(max_range, &from, &to)) {
+            auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+            RETURN_IF_ERROR(_dict_column_iter->seek_to_ordinal(from));
+            size_t num_to_read = to - from;
+            size_t read = num_to_read;
+            RETURN_IF_ERROR(_dict_column_iter->next_batch(&read, col.get()));
+            if (num_to_read != read) {
+                return Status::InternalError(
+                        fmt::format("read dict column failed, expect {} rows, but got {} rows.", num_to_read, read));
+            }
+
+            ColumnViewer<TYPE_VARCHAR> viewer(std::move(col));
+            for (int i = 0; i < viewer.size(); ++i) {
+                auto value = viewer.value(i);
+                if (predicate(&value)) {
+                    hit_rowids.push_back(from + i);
+                }
             }
         }
     }
