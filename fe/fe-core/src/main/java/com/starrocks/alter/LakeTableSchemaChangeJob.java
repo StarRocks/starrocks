@@ -28,6 +28,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -839,15 +840,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 // For indexes whose schema have not changed, we still need to upgrade the version
-                List<MaterializedIndex> originMaterializedIndex;
+                List<MaterializedIndex> originMaterializedIndices;
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
                     OlapTable table = getTableOrThrow(db, tableId);
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
-                    originMaterializedIndex = physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    originMaterializedIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                 }
 
-                for (MaterializedIndex index : originMaterializedIndex) {
+                for (MaterializedIndex index : originMaterializedIndices) {
                     allOtherPartitionTablets.addAll(index.getTablets());
                 }
 
@@ -1015,7 +1016,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             Preconditions.checkNotNull(partition, physicalPartitionId);
             partition.setMinRetainVersion(0);
             for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
-                partition.deleteRollupIndex(shadowIdx.getMetaId());
+                partition.deleteMaterializedIndexByMetaId(shadowIdx.getMetaId());
             }
         }
         for (String shadowIndexName : indexMetaIdToName.values()) {
@@ -1035,7 +1036,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     @NotNull
     List<MaterializedIndex> visualiseShadowIndex(@NotNull OlapTable table) {
-        List<MaterializedIndex> droppedIndexes = new ArrayList<>();
+        List<MaterializedIndex> droppedIndices = new ArrayList<>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Column column : table.getColumns()) {
@@ -1066,15 +1067,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
                 // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                 // in globalStateMgr.
-                MaterializedIndex shadowIdx = physicalPartition.getIndex(shadowIdxMetaId);
+                MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(shadowIdxMetaId);
                 Preconditions.checkNotNull(shadowIdx, shadowIdxMetaId);
-                MaterializedIndex droppedIdx;
-                if (originIdxMetaId == physicalPartition.getBaseIndex().getMetaId()) {
-                    droppedIdx = physicalPartition.getBaseIndex();
-                } else {
-                    droppedIdx = physicalPartition.deleteRollupIndex(originIdxMetaId);
-                }
-                Preconditions.checkNotNull(droppedIdx, originIdxMetaId + " vs. " + shadowIdxMetaId);
+                List<MaterializedIndex> partDroppedIndices = physicalPartition.deleteMaterializedIndexByMetaId(originIdxMetaId);
+                Preconditions.checkState(!partDroppedIndices.isEmpty(), originIdxMetaId + " vs. " + shadowIdxMetaId);
 
                 // Add Tablet to TabletInvertedIndex.
                 TabletMeta shadowTabletMeta =
@@ -1083,15 +1079,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                 }
 
-                physicalPartition.visualiseShadowIndex(
-                        shadowIdxMetaId, originIdxMetaId == physicalPartition.getBaseIndex().getMetaId());
+                physicalPartition.visualiseShadowIndex(shadowIdx.getId(), originIdxMetaId == table.getBaseIndexMetaId());
 
                 // the origin tablet created by old schema can be deleted from FE metadata
-                for (Tablet originTablet : droppedIdx.getTablets()) {
-                    invertedIndex.deleteTablet(originTablet.getId());
+                for (MaterializedIndex droppedIdx : partDroppedIndices) {
+                    for (Tablet originTablet : droppedIdx.getTablets()) {
+                        invertedIndex.deleteTablet(originTablet.getId());
+                    }
                 }
 
-                droppedIndexes.add(droppedIdx);
+                droppedIndices.addAll(partDroppedIndices);
             }
         }
 
@@ -1125,7 +1122,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         table.setState(OlapTable.OlapTableState.NORMAL);
 
-        return droppedIndexes;
+        return droppedIndices;
     }
 
     @Override

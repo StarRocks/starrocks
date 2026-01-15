@@ -16,6 +16,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -221,7 +222,7 @@ public class CompactionMgrTest {
                 PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
                 Database db = new Database();
                 Table table = new LakeTable();
-                PhysicalPartition partition = new PhysicalPartition(123, 123, null);
+                PhysicalPartition partition = new PhysicalPartition(123, 123,  new MaterializedIndex());
                 CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "");
                 r.put(partitionIdentifier, job);
                 return r;

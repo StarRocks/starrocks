@@ -1287,7 +1287,7 @@ public class UtFrameUtils {
 
     public static void setPartitionVersion(Partition partition, long version) {
         partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
