@@ -18,14 +18,12 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -36,6 +34,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -98,10 +100,10 @@ public enum ScalarOperatorEvaluator {
                                   Method method, ConstantFunction annotation) {
         if (annotation != null) {
             String name = annotation.name().toUpperCase();
-            Type returnType = ScalarType.createType(annotation.returnType());
+            Type returnType = TypeFactory.createType(annotation.returnType());
             List<Type> argTypes = new ArrayList<>();
             for (PrimitiveType type : annotation.argTypes()) {
-                argTypes.add(ScalarType.createType(type));
+                argTypes.add(TypeFactory.createType(type));
             }
 
             FunctionSignature signature = new FunctionSignature(name, argTypes, returnType);
@@ -113,13 +115,13 @@ public enum ScalarOperatorEvaluator {
     public Function getMetaFunction(FunctionName name, Type[] args) {
         String nameStr = name.getFunction().toUpperCase();
         // NOTE: only support VARCHAR as return type
-        FunctionSignature signature = new FunctionSignature(nameStr, Lists.newArrayList(args), Type.VARCHAR);
+        FunctionSignature signature = new FunctionSignature(nameStr, Lists.newArrayList(args), VarcharType.VARCHAR);
         FunctionInvoker invoker = functions.get(signature);
         if (invoker == null || !invoker.isMetaFunction) {
             return null;
         }
 
-        Function function = new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+        Function function = new Function(name, Lists.newArrayList(args), VarcharType.VARCHAR, false);
         function.setMetaFunction(true);
         return function;
     }
@@ -198,6 +200,12 @@ public enum ScalarOperatorEvaluator {
                     operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
+                if (operator.getType().isDecimal256()) {
+                    Optional<ConstantOperator> res = operator.castTo(fn.getReturnType());
+                    if (res.isPresent() && res.get().isConstantNull()) {
+                        return root;
+                    }
+                }
                 operator.setType(fn.getReturnType());
             }
             return operator;
@@ -251,11 +259,16 @@ public enum ScalarOperatorEvaluator {
             return false;
         }
 
-        if ((FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())
-                || FunctionSet.STR_TO_DATE.equalsIgnoreCase(invoker.getSignature().getName())
-                || FunctionSet.STR2DATE.equalsIgnoreCase(invoker.getSignature().getName())
-                || FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(invoker.getSignature().getName()))
-                && operator.getChildren().size() == 2) {
+        final ImmutableSet<String> SUPPORTED = ImmutableSet.of(
+                FunctionSet.DATE_FORMAT,
+                FunctionSet.STR_TO_DATE,
+                FunctionSet.STR2DATE,
+                FunctionSet.FROM_UNIXTIME,
+                FunctionSet.FROM_UNIXTIME_MS,
+                FunctionSet.TO_DATETIME
+        );
+
+        if (SUPPORTED.contains(invoker.getSignature().getName().toLowerCase()) && operator.getChildren().size() == 2) {
             String pattern = operator.getChild(1).toString();
             if (pattern.isEmpty()) {
                 return true;

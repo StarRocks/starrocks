@@ -198,7 +198,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
         if (!has_source && !has_fields) {
             for (size_t col_idx = 0; col_idx < slots.size(); ++col_idx) {
                 SlotDescriptor* slot_desc = slot_descs[col_idx];
-                ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
                 if (slot_desc->is_nullable()) {
                     column->append_default();
                 } else {
@@ -213,7 +213,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 
         for (size_t col_idx = 0; col_idx < slots.size(); ++col_idx) {
             SlotDescriptor* slot_desc = slot_descs[col_idx];
-            ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+            auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
 
             // _id field must exists in every document, this is guaranteed by ES
             // if _id was found in tuple, we would get `_id` value from inner-hit node
@@ -238,7 +238,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 
                 const auto& _id = obj[FIELD_ID];
                 Slice slice(_id.GetString(), _id.GetStringLength());
-                _append_data<TYPE_VARCHAR>(column.get(), slice);
+                _append_data<TYPE_VARCHAR>(column, slice);
 
                 continue;
             }
@@ -256,19 +256,19 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
                 bool is_null = col.IsNull() || (pure_doc_value && col.IsArray() && (col.Empty() || col[0].IsNull()));
                 if (!is_null) {
                     // append value from ES to column
-                    RETURN_IF_ERROR(_append_value_from_json_val(column.get(), slot_desc->type(), col, pure_doc_value));
+                    RETURN_IF_ERROR(_append_value_from_json_val(column, slot_desc->type(), col, pure_doc_value));
                     continue;
                 }
                 // handle null col
                 if (slot_desc->is_nullable()) {
-                    _append_null(column.get());
+                    _append_null(column);
                 } else {
                     return Status::DataQualityError(
                             fmt::format("col `{}` is not null, but value from ES is null", slot_desc->col_name()));
                 }
             } else {
                 // if don't has col in ES , append a default value
-                _append_null(column.get());
+                _append_null(column);
             }
         }
     }
@@ -300,7 +300,7 @@ void ScrollParser::_append_data(Column* column, CppType& value) {
 
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto* data_column = nullable_column->data_column().get();
+        auto* data_column = nullable_column->data_column_raw_ptr();
         NullData& null_data = nullable_column->null_column_data();
         null_data.push_back(0);
         appender(data_column, value);
@@ -553,7 +553,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
-        auto* data_column = nullable_column->data_column().get();
+        auto* data_column = nullable_column->data_column_raw_ptr();
         NullData& null_data = nullable_column->null_column_data();
         null_data.push_back(0);
         array = down_cast<ArrayColumn*>(data_column);
@@ -561,8 +561,8 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
         array = down_cast<ArrayColumn*>(column);
     }
 
-    auto* offsets = array->offsets_column().get();
-    auto* elements = array->elements_column().get();
+    auto* offsets = array->offsets_column_raw_ptr();
+    auto* elements = array->elements_column_raw_ptr();
 
     if (pure_doc_value) {
         RETURN_IF_ERROR(_append_array_val_from_docvalue(col, child_type, elements));

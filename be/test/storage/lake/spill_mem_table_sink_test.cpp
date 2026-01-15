@@ -27,10 +27,11 @@
 #include "exec/spill/spiller.h"
 #include "fs/fs.h"
 #include "storage/lake/general_tablet_writer.h"
-#include "storage/lake/load_spill_block_manager.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/load_spill_block_manager.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "util/raw_container.h"
@@ -38,7 +39,12 @@
 
 namespace starrocks::lake {
 
-class SpillMemTableSinkTest : public TestBase {
+struct SpillMemTableSinkTestParams {
+    bool enable_load_spill_parallel_merge = false;
+    int64_t load_spill_max_merge_bytes = 1073741824;
+};
+
+class SpillMemTableSinkTest : public TestBase, testing::WithParamInterface<SpillMemTableSinkTestParams> {
 public:
     SpillMemTableSinkTest() : TestBase(kTestDir) {
         _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
@@ -48,13 +54,21 @@ public:
     }
 
     void SetUp() override {
+        _old_enable_load_spill_parallel_merge = config::enable_load_spill_parallel_merge;
+        _old_load_spill_max_merge_bytes = config::load_spill_max_merge_bytes;
+        config::enable_load_spill_parallel_merge = GetParam().enable_load_spill_parallel_merge;
+        config::load_spill_max_merge_bytes = GetParam().load_spill_max_merge_bytes;
         (void)FileSystem::Default()->create_dir_recursive(kTestDir);
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestDir, lake::kTxnLogDirectoryName)));
     }
 
-    void TearDown() override { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
+    void TearDown() override {
+        (void)FileSystem::Default()->delete_dir_recursive(kTestDir);
+        config::enable_load_spill_parallel_merge = _old_enable_load_spill_parallel_merge;
+        config::load_spill_max_merge_bytes = _old_load_spill_max_merge_bytes;
+    }
 
     ChunkPtr gen_data(int64_t chunk_size, int shift) {
         std::vector<int> v0(chunk_size);
@@ -82,13 +96,15 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     RuntimeProfile _dummy_runtime_profile{"dummy"};
+    bool _old_enable_load_spill_parallel_merge = false;
+    int64_t _old_load_spill_max_merge_bytes = 1073741824;
 };
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
@@ -121,14 +137,14 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk) {
         }
     }
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->segments().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
@@ -159,44 +175,45 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_deletes) {
             EXPECT_EQ((j + i * kChunkSize) * 3, result_chunk->get(j)[1].get_int32());
         }
     }
-    ASSERT_EQ(3, tablet_writer->files().size());
+    ASSERT_EQ(3, tablet_writer->dels().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk2) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk2) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
     SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
-    ASSERT_OK(sink.flush_chunk(*chunk, &segment, true));
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment, true, nullptr, 0));
+    ASSERT_EQ(1, tablet_writer->segments().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_delete2) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
     SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
     auto chunk = gen_data(kChunkSize, 0);
     starrocks::SegmentPB segment;
-    ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true));
-    ASSERT_EQ(2, tablet_writer->files().size());
+    ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, true, nullptr, 0));
+    ASSERT_EQ(1, tablet_writer->segments().size());
+    ASSERT_EQ(1, tablet_writer->dels().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
@@ -232,14 +249,14 @@ TEST_F(SpillMemTableSinkTest, test_flush_chunk_with_limit) {
         config::load_spill_max_chunk_bytes = old_val;
     }
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->segments().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_merge) {
+TEST_P(SpillMemTableSinkTest, test_merge) {
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
@@ -250,10 +267,10 @@ TEST_F(SpillMemTableSinkTest, test_merge) {
     starrocks::SegmentPB segment1;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->segments().size());
 }
 
-TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
+TEST_P(SpillMemTableSinkTest, test_out_of_disk_space) {
     TEST_ENABLE_ERROR_POINT("PosixFileSystem::pre_allocate",
                             Status::CapacityLimitExceed("injected pre_allocate error"));
     SyncPoint::GetInstance()->EnableProcessing();
@@ -263,8 +280,8 @@ TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
     });
     int64_t tablet_id = 1;
     int64_t txn_id = 1;
-    std::unique_ptr<LoadSpillBlockManager> block_manager =
-            std::make_unique<LoadSpillBlockManager>(TUniqueId(), tablet_id, txn_id, kTestDir);
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
     ASSERT_OK(block_manager->init());
     std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
             _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
@@ -275,7 +292,134 @@ TEST_F(SpillMemTableSinkTest, test_out_of_disk_space) {
     starrocks::SegmentPB segment1;
     ASSERT_OK(sink.flush_chunk(*chunk, &segment1, true));
     ASSERT_OK(sink.merge_blocks_to_segments());
-    ASSERT_EQ(1, tablet_writer->files().size());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 2 : 1, tablet_writer->segments().size());
 }
+
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_slot_idx) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush chunks with different slot_idx
+    for (int i = 0; i < 3; i++) {
+        auto chunk = gen_data(kChunkSize, i);
+        starrocks::SegmentPB segment;
+        // Pass slot_idx to flush_chunk
+        ASSERT_OK(sink.flush_chunk(*chunk, &segment, false, nullptr, i));
+    }
+
+    // Verify block groups were created with correct slot_idx
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(3, groups.size());
+    ASSERT_EQ(0, groups[0].slot_idx);
+    ASSERT_EQ(1, groups[1].slot_idx);
+    ASSERT_EQ(2, groups[2].slot_idx);
+
+    ASSERT_OK(sink.merge_blocks_to_segments());
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 3 : 1, tablet_writer->segments().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_flush_chunk_with_deletes_and_slot_idx) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalPkTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, nullptr, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush chunks with deletes and different slot_idx
+    for (int i = 0; i < 3; i++) {
+        auto chunk = gen_data(kChunkSize, i);
+        starrocks::SegmentPB segment;
+        // Pass slot_idx to flush_chunk_with_deletes
+        ASSERT_OK(sink.flush_chunk_with_deletes(*chunk, *(chunk->columns()[0]), &segment, false, nullptr, i));
+    }
+
+    // Verify block groups were created with correct slot_idx
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(3, groups.size());
+    ASSERT_EQ(0, groups[0].slot_idx);
+    ASSERT_EQ(1, groups[1].slot_idx);
+    ASSERT_EQ(2, groups[2].slot_idx);
+}
+
+TEST_P(SpillMemTableSinkTest, test_slot_idx_ordering_after_merge) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    // Flush chunks in non-sequential slot_idx order
+    auto chunk0 = gen_data(kChunkSize, 0);
+    auto chunk1 = gen_data(kChunkSize, 1);
+    auto chunk2 = gen_data(kChunkSize, 2);
+    auto chunk3 = gen_data(kChunkSize, 3);
+
+    starrocks::SegmentPB segment;
+    ASSERT_OK(sink.flush_chunk(*chunk0, &segment, false, nullptr, 5));
+    ASSERT_OK(sink.flush_chunk(*chunk1, &segment, false, nullptr, 2));
+    ASSERT_OK(sink.flush_chunk(*chunk2, &segment, false, nullptr, 8));
+    ASSERT_OK(sink.flush_chunk(*chunk3, &segment, false, nullptr, 1));
+
+    // Before merge, groups are in insertion order
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(4, groups.size());
+    ASSERT_EQ(5, groups[0].slot_idx);
+    ASSERT_EQ(2, groups[1].slot_idx);
+    ASSERT_EQ(8, groups[2].slot_idx);
+    ASSERT_EQ(1, groups[3].slot_idx);
+
+    // Merge blocks to segments - this should sort by slot_idx
+    ASSERT_OK(sink.merge_blocks_to_segments());
+
+    // After merge, groups should be sorted by slot_idx
+    ASSERT_EQ(1, groups[0].slot_idx);
+    ASSERT_EQ(2, groups[1].slot_idx);
+    ASSERT_EQ(5, groups[2].slot_idx);
+    ASSERT_EQ(8, groups[3].slot_idx);
+
+    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 4 : 1, tablet_writer->segments().size());
+}
+
+TEST_P(SpillMemTableSinkTest, test_flush_data_size_with_slot_idx) {
+    int64_t tablet_id = 1;
+    int64_t txn_id = 1;
+    std::unique_ptr<LoadSpillBlockManager> block_manager = std::make_unique<LoadSpillBlockManager>(
+            TUniqueId(), UniqueId(tablet_id, txn_id).to_thrift(), kTestDir, nullptr);
+    ASSERT_OK(block_manager->init());
+    std::unique_ptr<TabletWriter> tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(
+            _tablet_mgr.get(), tablet_id, _tablet_schema, txn_id, false);
+    SpillMemTableSink sink(block_manager.get(), tablet_writer.get(), &_dummy_runtime_profile);
+
+    auto chunk = gen_data(kChunkSize, 0);
+    starrocks::SegmentPB segment;
+    int64_t flush_data_size = 0;
+
+    // Test with slot_idx and flush_data_size parameter
+    ASSERT_OK(sink.flush_chunk(*chunk, &segment, false, &flush_data_size, 10));
+
+    // Verify flush_data_size was set
+    ASSERT_GT(flush_data_size, 0);
+
+    // Verify block group was created with correct slot_idx
+    auto& groups = block_manager->block_container()->block_groups();
+    ASSERT_EQ(1, groups.size());
+    ASSERT_EQ(10, groups[0].slot_idx);
+}
+
+INSTANTIATE_TEST_SUITE_P(SpillMemTableSinkTest, SpillMemTableSinkTest,
+                         ::testing::Values(SpillMemTableSinkTestParams{false, 1073741824},
+                                           SpillMemTableSinkTestParams{true, 1024}));
 
 } // namespace starrocks::lake

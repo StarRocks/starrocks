@@ -50,15 +50,14 @@
 #include "storage/convert_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
+#include "storage/metadata_util.h"
 #include "storage/rowset/rowset_factory.h"
-#include "storage/rowset/rowset_id_generator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/failpoint/fail_point.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -188,7 +187,7 @@ Status HeapChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* ro
     Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
-        _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
+        ASSIGN_OR_RETURN(_aggregator, ChunkAggregator::create(&new_schema, config::vector_chunk_size, 0));
     }
 
     StorageEngine* storage_engine = StorageEngine::instance();
@@ -521,6 +520,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
     auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink, max_buffer_size,
                                                 CurrentThread::mem_tracker());
+    RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -548,6 +548,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
             VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -592,6 +593,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
+            RETURN_IF_ERROR_WITH_WARN(mem_table->prepare(), alter_msg_header() + "failed to prepare mem table");
         }
 
         mem_pool->clear();
@@ -721,7 +723,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
     // Create a new tablet schema, should merge with dropped columns in light schema change
     TabletSchemaCSPtr base_tablet_schema;
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
-        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
+        auto columns_copy = request.columns;
+
+        Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_copy);
+        if (!preprocess_status.ok()) {
+            LOG(WARNING) << "Failed to preprocess default_expr in SchemaChange: " << preprocess_status.to_string();
+        }
+
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), columns_copy);
     } else {
         base_tablet_schema = base_tablet->tablet_schema();
     }

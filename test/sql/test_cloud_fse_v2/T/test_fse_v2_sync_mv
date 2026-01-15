@@ -1,0 +1,41 @@
+-- name: test_fse_v2_sync_mv @cloud
+create database test_sync_mv_${uuid0};
+use test_sync_mv_${uuid0};
+
+CREATE TABLE `t` (
+    k1 int,
+    v0 int,
+    v1 int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+INSERT INTO t VALUES (1, 1, 1);
+
+ALTER TABLE t ADD COLUMN v2 int;
+
+ALTER TABLE t DROP COLUMN v0;
+
+ALTER TABLE t ADD COLUMN v0 string;
+
+-- Verify table structure and data after schema changes
+SELECT * FROM t ORDER BY k1;
+
+-- Create materialized view using k1, v0, v1
+CREATE MATERIALIZED VIEW mv AS
+SELECT k1, v0, v1 FROM t;
+function: wait_materialized_view_finish()
+
+-- Verify the materialized view can be queried
+SELECT * FROM mv [_SYNC_MV_] ORDER BY k1;
+
+-- Insert more data to verify MV works correctly
+-- After schema changes, column order is: k1, v1, v2, v0
+INSERT INTO t (k1, v1, v0) VALUES (2, 2, 'test');
+SELECT * FROM t ORDER BY k1;
+SELECT * FROM mv [_SYNC_MV_] ORDER BY k1;
+
+-- Verify data correctness: original row should have NULL for v0 (string type)
+-- and new row should have 'test' for v0
+SELECT k1, v0, v1 FROM t ORDER BY k1;

@@ -5,9 +5,11 @@ keywords: ['Stream Load']
 
 # Stream Load トランザクションインターフェースを使用したデータのロード
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 バージョン 2.4 以降、StarRocks は Stream Load トランザクションインターフェースを提供し、Apache Flink® や Apache Kafka® などの外部システムからデータをロードするために実行されるトランザクションに対して、2 フェーズコミット (2PC) を実装します。Stream Load トランザクションインターフェースは、高度に並行したストリームロードのパフォーマンスを向上させます。
+
+バージョン 4.0 以降、Stream Load トランザクションインターフェースは複数テーブルトランザクションをサポートします。つまり、同一データベース内の複数のテーブルにデータをロードすることが可能です。
 
 このトピックでは、Stream Load トランザクションインターフェースと、このインターフェースを使用して StarRocks にデータをロードする方法について説明します。
 
@@ -25,21 +27,33 @@ Stream Load トランザクションインターフェースは、トランザ�
 
 - `/api/transaction/begin`: 新しいトランザクションを開始します。
 
+- `/api/transaction/prepare`: 現在のトランザクションを事前コミットし、データ変更を一時的に永続化します。トランザクションを事前コミットした後、コミットまたはロールバックを実行できます。トランザクションが事前コミットされた後にクラスターがクラッシュした場合でも、クラスターが復旧した後、トランザクションをコミットし続けることができます。
+
 - `/api/transaction/commit`: 現在のトランザクションをコミットしてデータの変更を永続化します。
 
 - `/api/transaction/rollback`: 現在のトランザクションをロールバックしてデータの変更を中止します。
-
-### トランザクションの事前コミット
-
-Stream Load トランザクションインターフェースは、現在のトランザクションを事前コミットし、データの変更を一時的に永続化するための `/api/transaction/prepare` 操作を提供します。トランザクションを事前コミットした後、トランザクションをコミットまたはロールバックすることができます。トランザクションが事前コミットされた後に StarRocks クラスターがダウンした場合でも、StarRocks クラスターが正常に復旧した後にトランザクションをコミットすることができます。
 
 > **NOTE**
 >
 > トランザクションが事前コミットされた後は、そのトランザクションを使用してデータを書き続けないでください。トランザクションを使用してデータを書き続けると、書き込みリクエストがエラーを返します。
 
+以下の図は、トランザクションの状態と操作の関係を示しています：
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> PREPARE : begin
+    PREPARE --> PREPARED : prepare
+    PREPARE --> ABORTED : rollback
+    PREPARED --> COMMITTED : commit
+    PREPARED --> ABORTED : rollback
+```
+
 ### データ書き込み
 
 Stream Load トランザクションインターフェースは、データを書き込むための `/api/transaction/load` 操作を提供します。この操作は、1 つのトランザクション内で複数回呼び出すことができます。
+
+バージョン 4.0 以降、異なるテーブルに対して `/api/transaction/load` 操作を呼び出すことで、同一データベース内の複数テーブルにデータをロードできます。
 
 ### トランザクションの重複排除
 
@@ -47,11 +61,11 @@ Stream Load トランザクションインターフェースは、StarRocks の�
 
 ### トランザクションのタイムアウト管理
 
-各 FE の設定ファイルで `stream_load_default_timeout_second` パラメータを使用して、その FE のデフォルトのトランザクションタイムアウト期間を指定できます。
+トランザクションを開始する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、`PREPARE` 状態から `PREPARED` 状態へのトランザクションのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションが準備完了状態に達しない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second)によって決定されます（デフォルト：600 秒）。
 
-トランザクションを作成する際、HTTP リクエストヘッダーの `timeout` フィールドを使用して、トランザクションのタイムアウト期間を指定できます。
+トランザクションを開始する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態のまま保持できるタイムアウト期間（秒単位）を指定できます。この期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
 
-トランザクションを作成する際、HTTP リクエストヘッダーの `idle_transaction_timeout` フィールドを使用して、トランザクションがアイドル状態でいられるタイムアウト期間を指定することもできます。タイムアウト期間内にデータが書き込まれない場合、トランザクションは自動的にロールバックされます。
+トランザクションを準備する際、HTTP リクエストヘッダーの `prepared_timeout` フィールドを使用して、トランザクションが `PREPARED` 状態から `COMMITTED` 状態に移行するまでのタイムアウト期間（秒単位）を指定できます。この期間内にトランザクションがコミットされない場合、自動的に中止されます。このフィールドが指定されていない場合、デフォルト値は FE 設定の [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト：86400秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 ## 利点
 
@@ -69,11 +83,11 @@ Stream Load トランザクションインターフェースは、次の利点�
 
 Stream Load トランザクションインターフェースには、次の制限があります。
 
-- **単一データベース単一テーブル** トランザクションのみがサポートされています。**複数データベース複数テーブル** トランザクションのサポートは開発中です。
+- **単一データベース複数テーブル**トランザクションは v4.0 以降でサポートされています。**複数データベース複数テーブル**トランザクションのサポートは開発中です。
 
 - **1 クライアントからの並行データ書き込み** のみがサポートされています。**複数クライアントからの並行データ書き込み** のサポートは開発中です。
 
-- `/api/transaction/load` 操作は、1 つのトランザクション内で複数回呼び出すことができます。この場合、呼び出されたすべての `/api/transaction/load` 操作に指定されたパラメータ設定は同じでなければなりません。
+- `/api/transaction/load` 操作は、1 つのトランザクション内で複数回呼び出すことができます。この場合、呼び出されたすべての `/api/transaction/load` 操作に指定されたパラメータ設定（`table` を除く）は同じでなければなりません。
 
 - Stream Load トランザクションインターフェースを使用して CSV 形式のデータをロードする場合、データファイル内の各データレコードが行区切り文字で終わるようにしてください。
 
@@ -81,7 +95,8 @@ Stream Load トランザクションインターフェースには、次の制�
 
 - 呼び出した `/api/transaction/begin`、`/api/transaction/load`、または `/api/transaction/prepare` 操作がエラーを返した場合、トランザクションは失敗し、自動的にロールバックされます。
 - 新しいトランザクションを開始するために `/api/transaction/begin` 操作を呼び出す際、ラベルを指定する必要があります。なお、後続の `/api/transaction/load`、`/api/transaction/prepare`、および `/api/transaction/commit` 操作は、`/api/transaction/begin` 操作と同じラベルを使用する必要があります。
-- 以前のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出して新しいトランザクションを開始すると、以前のトランザクションは失敗し、ロールバックされます。
+- 進行中のトランザクションのラベルを使用して `/api/transaction/begin` 操作を呼び出し新しいトランザクションを開始すると、以前のトランザクションは失敗しロールバックされます。
+- 複数のテーブルにデータをロードするためにマルチテーブルトランザクションを使用する場合、トランザクションに関連するすべての操作に対してパラメータ `-H "transaction_type:multi"` を指定する必要があります。
 - StarRocks が CSV 形式のデータに対してサポートするデフォルトのカラムセパレータと行区切り文字は `\t` と `\n` です。データファイルがデフォルトのカラムセパレータまたは行区切り文字を使用していない場合、`/api/transaction/load` 操作を呼び出す際に、データファイルで実際に使用されているカラムセパレータまたは行区切り文字を `"column_separator: <column_separator>"` または `"row_delimiter: <row_delimiter>"` を使用して指定する必要があります。
 
 ## 始める前に
@@ -130,9 +145,14 @@ Stream Load トランザクションインターフェースには、次の制�
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルのトランザクションを開始します。
     -H "db:<database_name>" -H "table:<table_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
+
+> **NOTE**
+>
+> トランザクション内で異なるテーブルにデータをロードしたい場合は、コマンドに `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 
@@ -187,6 +207,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。マルチテーブルトランザクションを介してデータをロードします。
     -H "db:<database_name>" -H "table:<table_name>" \
     -T <file_path> \
     -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
@@ -194,7 +215,8 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 
 > **NOTE**
 >
-> `/api/transaction/load` 操作を呼び出す際、`<file_path>` を使用してロードしたいデータファイルの保存パスを指定する必要があります。
+> - `/api/transaction/load` 操作を呼び出す際、`<file_path>` を使用してロードしたいデータファイルの保存パスを指定する必要があります。
+> - `/api/transaction/load` 操作を異なる `table` パラメータ値で呼び出すことで、同じデータベース内の異なるテーブルにデータをロードできます。この場合、コマンドで `-H "transaction_type:multi"` を指定する必要があります。
 
 #### 例
 
@@ -273,9 +295,15 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルトランザクションを事前コミットします。
     -H "db:<database_name>" \
+    [-H "prepared_timeout:<timeout_seconds>"] \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> 事前コミットしたいトランザクションがマルチテーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 
@@ -283,8 +311,13 @@ curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
 curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_table1" \
     -H "Expect:100-continue" \
     -H "db:test_db" \
+    -H "prepared_timeout:300" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
 ```
+
+> **NOTE**
+>
+> `prepared_timeout` フィールドはオプションです。指定されない場合、デフォルト値は FE 設定 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) によって決定されます（デフォルト: 86400 秒）。`prepared_timeout` は v3.5.4 以降でサポートされています。
 
 #### 戻り結果
 
@@ -349,9 +382,14 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # オプション。複数テーブルのトランザクションをコミットします。
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
+
+> **NOTE**
+>
+> コミットしたいトランザクションが複数テーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 
@@ -448,9 +486,14 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:<label_name>" \
     -H "Expect:100-continue" \
+    [-H "transaction_type:multi"]\  # Optional. Rolls back a multi-table transaction.
     -H "db:<database_name>" \
     -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
+
+> **NOTE**
+>
+> ロールバックしたいトランザクションが複数テーブルトランザクションの場合は、コマンドで `-H "transaction_type:multi"` を指定してください。
 
 #### 例
 

@@ -16,9 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
@@ -28,22 +25,25 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.FunctionArgsDef;
+import com.starrocks.sql.ast.FunctionRef;
+import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.pipe.PipeName;
 
 import java.util.ArrayList;
@@ -56,26 +56,12 @@ public class AuthorizationAnalyzer {
         new AuthorizationAnalyzerVisitor().analyze(statement, session);
     }
 
-    public static class AuthorizationAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
-        private AuthenticationMgr authenticationManager = null;
+    public static class AuthorizationAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private AuthorizationMgr authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
-            authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
             authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
             visit(statement, session);
-        }
-
-        /**
-         * analyse user identity + check if user exists in UserPrivTable
-         */
-        private void analyseUser(UserIdentity userIdent, boolean checkExist) {
-            userIdent.analyze();
-
-            // check if user exists
-            if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
-                throw new SemanticException("cannot find user " + userIdent + "!");
-            }
         }
 
         /**
@@ -133,8 +119,9 @@ public class AuthorizationAnalyzer {
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
             // validate user/role
-            if (stmt.getUserIdentity() != null) {
-                analyseUser(stmt.getUserIdentity(), true);
+            if (stmt.getUser() != null) {
+                AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
             } else {
                 validRoleName(stmt.getRole(), "Can not grant/revoke to role", true);
             }
@@ -145,12 +132,16 @@ public class AuthorizationAnalyzer {
 
                 List<PEntryObject> objectList = new ArrayList<>();
                 if (objectType.equals(ObjectType.USER)) {
-                    List<UserIdentity> userIdentities = analyzeUserPrivToken(stmt);
-                    for (UserIdentity userIdentity : userIdentities) {
+                    List<UserRef> users = analyzeUserPrivToken(stmt);
+                    for (UserRef user : users) {
+                        UserIdentity userIdentity = null;
+                        if (user != null) {
+                            userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
+                        }
                         objectList.add(authorizationManager.generateUserObject(ObjectType.USER, userIdentity));
                     }
                 } else if (objectType.equals(ObjectType.FUNCTION) || objectType.equals(ObjectType.GLOBAL_FUNCTION)) {
-                    List<Pair<Long, Long>> funcPrivTokenList = analyzeFuncPrivToken(stmt, objectType);
+                    List<Pair<Long, Long>> funcPrivTokenList = analyzeFuncPrivToken(stmt, objectType, session);
                     for (Pair<Long, Long> funcPrivToken : funcPrivTokenList) {
                         objectList.add(authorizationManager.generateFunctionObject(objectType,
                                 funcPrivToken.first, funcPrivToken.second));
@@ -188,8 +179,8 @@ public class AuthorizationAnalyzer {
             return null;
         }
 
-        public List<UserIdentity> analyzeUserPrivToken(BaseGrantRevokePrivilegeStmt stmt) {
-            List<UserIdentity> userIdentities = new ArrayList<>();
+        public List<UserRef> analyzeUserPrivToken(BaseGrantRevokePrivilegeStmt stmt) {
+            List<UserRef> userIdentities = new ArrayList<>();
             if (stmt.isGrantOnALL()) {
                 Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
                 Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
@@ -201,15 +192,17 @@ public class AuthorizationAnalyzer {
                 }
                 userIdentities.add(null);
             } else {
-                for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
-                    analyseUser(userIdentity, true);
-                    userIdentities.add(userIdentity);
+                for (UserRef userRef : stmt.getUserPrivilegeObjectList()) {
+                    AuthenticationAnalyzer.analyzeUser(userRef);
+                    AuthenticationAnalyzer.checkUserExist(userRef, true);
+                    userIdentities.add(userRef);
                 }
             }
             return userIdentities;
         }
 
-        public List<Pair<Long, Long>> analyzeFuncPrivToken(BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType)
+        public List<Pair<Long, Long>> analyzeFuncPrivToken(BaseGrantRevokePrivilegeStmt stmt, ObjectType objectType,
+                                                           ConnectContext session)
                 throws AnalysisException {
             List<Pair<Long, Long>> funcPrivTokenList = new ArrayList<>();
 
@@ -246,44 +239,41 @@ public class AuthorizationAnalyzer {
                 }
             } else {
                 if (ObjectType.FUNCTION.equals(objectType)) {
-                    for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
-                        FunctionName functionName = f.first;
-                        if (functionName.getDb() == null) {
-                            String dbName = ConnectContext.get().getDatabase();
-                            if (dbName.equals("")) {
-                                throw new SemanticException("database not selected");
-                            }
-                            functionName.setDb(dbName);
-                        }
+                    List<FunctionRef> functionRefs = stmt.getFunctionRefs();
+                    List<FunctionArgsDef> functionArgs = stmt.getFunctionArgsDefs();
+                    for (int i = 0; i < functionRefs.size(); i++) {
+                        FunctionRef functionRef = functionRefs.get(i);
+                        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, session.getDatabase());
+                        FunctionArgsDef argsDef = functionArgs.get(i);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                                functionRef, argsDef, session.getDatabase());
 
-                        FunctionArgsDef argsDef = f.second;
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(), argsDef.isVariadic());
-
-                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(searchDesc.getName().getDb());
                         long databaseID = db.getId();
                         Function function = db.getFunction(searchDesc);
 
                         if (function == null) {
-                            throw new SemanticException("cannot find function " + functionName + "!");
+                            throw new SemanticException("cannot find function " + searchDesc.getName() + "!");
                         } else {
                             funcPrivTokenList.add(new Pair<>(databaseID, function.getFunctionId()));
                         }
                     }
                 } else if (ObjectType.GLOBAL_FUNCTION.equals(objectType)) {
-                    for (Pair<FunctionName, FunctionArgsDef> f : stmt.getFunctions()) {
-                        FunctionName functionName = f.first;
-                        FunctionArgsDef argsDef = f.second;
-                        argsDef.analyze();
-                        FunctionSearchDesc searchDesc = new FunctionSearchDesc(functionName,
-                                argsDef.getArgTypes(), argsDef.isVariadic());
+                    List<FunctionRef> functionRefs = stmt.getFunctionRefs();
+                    List<FunctionArgsDef> functionArgs = stmt.getFunctionArgsDefs();
+                    for (int i = 0; i < functionRefs.size(); i++) {
+                        FunctionRef functionRef = functionRefs.get(i);
+                        FunctionRefAnalyzer.analyzeFunctionRef(functionRef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
+                        FunctionArgsDef argsDef = functionArgs.get(i);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
+                                functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
 
-                        Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr()
-                                .getFunction(searchDesc);
+                        Function function = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().getFunction(searchDesc);
 
                         if (function == null) {
-                            throw new SemanticException("cannot find function " + functionName + "!");
+                            throw new SemanticException("cannot find function " + searchDesc.getName() + "!");
                         } else {
                             funcPrivTokenList.add(new Pair<>(PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID,
                                     function.getFunctionId()));
@@ -445,16 +435,20 @@ public class AuthorizationAnalyzer {
                         "set default role statement is not supported for ephemeral user " + currentUser);
             }
 
-            analyseUser(stmt.getUserIdentity(), true);
+            AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+            AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
+
+            UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(),
+                    stmt.getUser().isDomain());
             try {
                 for (String roleName : stmt.getRoles()) {
                     validRoleName(roleName, "Cannot set role", true);
 
                     Long roleId = authorizationManager.getRoleIdByNameAllowNull(roleName);
-                    Set<Long> roleIdsForUser = authorizationManager.getRoleIdsByUser(stmt.getUserIdentity());
+                    Set<Long> roleIdsForUser = authorizationManager.getRoleIdsByUser(userIdentity);
                     if (roleId == null || !roleIdsForUser.contains(roleId)) {
                         throw new SemanticException("Role " + roleName + " is not granted to " +
-                                stmt.getUserIdentity().toString());
+                                stmt.getUser().toString());
                     }
                 }
             } catch (PrivilegeException e) {
@@ -472,16 +466,20 @@ public class AuthorizationAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdentity() != null) {
-                analyseUser(stmt.getUserIdentity(), true);
-                if (needProtectAdminUser(stmt.getUserIdentity(), session)) {
+            if (stmt.getGrantType() == GrantType.USER) {
+                AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
+                if (AuthenticationAnalyzer.needProtectAdminUser(stmt.getUser(), session)) {
                     throw new SemanticException("roles of 'admin' user cannot be changed because of " +
                             "'authorization_enable_admin_user_protection' configuration is enabled");
                 }
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
-            } else {
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getRoleOrGroup(), "Can not granted/revoke role to/from role", true);
+                stmt.getGranteeRole().forEach(role ->
+                        validRoleName(role, "Can not granted/revoke role to/from user", true));
+            } else if (stmt.getGrantType() == GrantType.GROUP) {
                 stmt.getGranteeRole().forEach(role ->
                         validRoleName(role, "Can not granted/revoke role to/from user", true));
             }
@@ -490,21 +488,16 @@ public class AuthorizationAnalyzer {
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
-            if (stmt.getUserIdent() != null) {
-                analyseUser(stmt.getUserIdent(), true);
-            } else if (stmt.getGroupOrRole() != null) {
+            if (stmt.getGrantType() == GrantType.USER) {
+                if (stmt.getUser() != null) {
+                    AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                    AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
+                }
+            } else if (stmt.getGrantType() == GrantType.ROLE) {
                 validRoleName(stmt.getGroupOrRole(), "There is no such grant defined for role " + stmt.getGroupOrRole(), true);
-            } else {
-                stmt.setUserIdent(session.getCurrentUserIdentity());
             }
 
             return null;
-        }
-
-        private boolean needProtectAdminUser(UserIdentity userIdentity, ConnectContext context) {
-            return Config.authorization_enable_admin_user_protection &&
-                    userIdentity.getUser().equalsIgnoreCase("admin") &&
-                    !context.getCurrentUserIdentity().equals(UserIdentity.ROOT);
         }
     }
 }

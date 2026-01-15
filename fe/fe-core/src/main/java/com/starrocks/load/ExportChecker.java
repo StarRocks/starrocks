@@ -63,7 +63,7 @@ public final class ExportChecker extends FrontendDaemon {
     private static LeaderTaskExecutor exportingSubTaskExecutor;
 
     private ExportChecker(JobState jobState, long intervalMs) {
-        super("export checker " + jobState.name().toLowerCase(), intervalMs);
+        super("export-checker-" + jobState.name().toLowerCase(), intervalMs);
         this.jobState = jobState;
     }
 

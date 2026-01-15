@@ -75,6 +75,7 @@ public class ProfileManager implements MemoryTrackable {
     public static final String QUERY_TYPE = "Query Type";
     public static final String QUERY_STATE = "Query State";
     public static final String SQL_STATEMENT = "Sql Statement";
+    public static final String SQL_DIALECT = "Sql Dialect";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
@@ -89,7 +90,7 @@ public class ProfileManager implements MemoryTrackable {
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
-                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP));
+                    START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP, SQL_DIALECT));
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
@@ -178,15 +179,19 @@ public class ProfileManager implements MemoryTrackable {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
+        String removedQueryId = null;
         writeLock.lock();
         try {
             profileMap.put(queryId, element);
             if (profileMap.size() > Config.profile_info_reserved_num) {
-                profileMap.remove(profileMap.keySet().iterator().next());
+                removedQueryId = profileMap.keySet().iterator().next();
+                profileMap.remove(removedQueryId);
             }
         } finally {
             writeLock.unlock();
         }
+
+        LOG.debug("push profile for query: {}, remove profile for query: {}", queryId, removedQueryId);
 
         return profileString;
     }

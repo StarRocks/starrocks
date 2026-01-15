@@ -38,7 +38,7 @@ public class LockChecker extends FrontendDaemon {
     private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
 
     public LockChecker() {
-        super("DeadlockChecker", 1000 * Config.lock_checker_interval_second);
+        super("deadlock-checker", 1000 * Config.lock_checker_interval_second);
     }
 
     @Override

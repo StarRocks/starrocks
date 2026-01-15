@@ -25,6 +25,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
@@ -36,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +83,8 @@ public class QueryMaterializationContext {
     private Set<MaterializationContext> rewrittenSuccessMVContexts = Sets.newHashSet();
 
     private MvRewriteStrategy.MVRewriteStage currentRewriteStage = MvRewriteStrategy.MVRewriteStage.PHASE0;
+
+    private final Set<String> queryDistEqCols = Sets.newHashSet();
 
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
@@ -197,10 +201,10 @@ public class QueryMaterializationContext {
 
     /**
      * Add related mvs about this query.
-     * @param mvs: related mvs
+     * @param mv: related mvs
      */
-    public void addRelatedMVs(Set<MaterializedView> mvs) {
-        relatedMVs.addAll(mvs);
+    public void addRelatedMV(MaterializedView mv) {
+        relatedMVs.add(mv);
     }
 
     /**
@@ -212,17 +216,31 @@ public class QueryMaterializationContext {
     }
 
     /**
+     * Register query opt expression and do something:
+     * - collect dist keys which are used for BestMvSelector
+     */
+    public void registerQueryOptExpression(OptExpression queryExpression) {
+        Set<String> distEqCols = BestMvSelector.collectDistKeys(queryExpression);
+        queryDistEqCols.addAll(distEqCols);
+    }
+
+    public Set<String> getQueryDistEqCols() {
+        return queryDistEqCols;
+    }
+
+    /**
      * Get or init the cached timeliness update info for the materialized view.
      * @param mv intput mv
      * @return MvUpdateInfo of the mv, null if mv is null or initialize fail
      */
-    public MvUpdateInfo getOrInitMVTimelinessInfos(MaterializedView mv) {
+    public MvUpdateInfo getOrInitMVTimelinessInfos(MaterializedView mv,
+                                                   MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         if (mv == null) {
             return null;
         }
         if (!mvTimelinessInfos.containsKey(mv)) {
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
-            MvUpdateInfo result = mvTimelinessMgr.getMVTimelinessInfo(mv);
+            MvUpdateInfo result = mvTimelinessMgr.getMVTimelinessInfo(mv, queryRewriteParams);
             mvTimelinessInfos.put(mv, result);
             return result;
         } else {

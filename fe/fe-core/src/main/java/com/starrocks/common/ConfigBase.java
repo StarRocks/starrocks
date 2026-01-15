@@ -36,6 +36,7 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
@@ -77,8 +78,6 @@ import java.util.regex.Pattern;
 
 public class ConfigBase {
     private static final Logger LOG = LogManager.getLogger(ConfigBase.class);
-
-    public static final String AUTHENTICATION_CHAIN_MECHANISM_NATIVE = "native";
 
     @Retention(RetentionPolicy.RUNTIME)
     public @interface ConfField {
@@ -230,15 +229,23 @@ public class ConfigBase {
 
     private static void validateConfValue(Field f, String[] arrayArgs, String confVal)
             throws InvalidConfException {
+        // TODO: refactor to allow register custom validator for each config field
         switch (f.getName()) {
             case "authentication_chain":
                 Set<String> argsSet = new HashSet<>(Arrays.asList(arrayArgs));
                 if (!f.getType().equals(String[].class)
                         || argsSet.size() != arrayArgs.length
-                        || !argsSet.contains(AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                        || !argsSet.contains(SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
                     throw new InvalidConfException("'authentication_chain' configuration invalid, " +
                             "'native' must be in the list, and cannot have duplicates, current value: "
                             + confVal);
+                }
+                break;
+            case "db_used_data_quota_update_interval_secs":
+                int intVal = Integer.parseInt(confVal);
+                if (intVal < 30) {
+                    throw new InvalidConfException("'db_used_data_quota_update_interval_secs' configuration " +
+                            "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
             default:

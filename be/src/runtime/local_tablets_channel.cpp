@@ -31,6 +31,7 @@
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
@@ -91,6 +92,50 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     _tablets_profile = std::make_unique<RuntimeProfile>("TabletsProfile");
 }
 
+DeltaWriterOptions LocalTabletsChannel::_build_delta_writer_options(const PTabletWriterOpenRequest& params,
+                                                                    const PTabletWithPartition& tablet,
+                                                                    int32_t schema_hash,
+                                                                    const std::vector<SlotDescriptor*>* index_slots) {
+    DeltaWriterOptions options;
+    options.tablet_id = tablet.tablet_id();
+    options.schema_hash = schema_hash;
+    options.txn_id = _txn_id;
+    options.partition_id = tablet.partition_id();
+    options.load_id = params.id();
+    options.slots = index_slots;
+    options.global_dicts = &_global_dicts;
+    options.parent_span = _load_channel->get_span();
+    options.index_id = _index_id;
+    options.node_id = _node_id;
+    options.sink_id = params.sink_id();
+    options.timeout_ms = params.timeout_ms();
+    options.write_quorum = params.write_quorum();
+    options.miss_auto_increment_column = params.miss_auto_increment_column();
+    options.ptable_schema_param = &(params.schema());
+    options.column_to_expr_value = &(_column_to_expr_value);
+    options.merge_condition = params.merge_condition();
+    options.partial_update_mode = params.partial_update_mode();
+    options.immutable_tablet_size = params.immutable_tablet_size();
+
+    if (params.is_replicated_storage()) {
+        for (auto& replica : tablet.replicas()) {
+            options.replicas.emplace_back(replica);
+            if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
+                _node_id_to_endpoint[replica.node_id()] = replica;
+            }
+        }
+        if (!options.replicas.empty() && options.replicas[0].node_id() == options.node_id) {
+            options.replica_state = Primary;
+        } else {
+            options.replica_state = Secondary;
+        }
+    } else {
+        options.replica_state = Peer;
+    }
+
+    return options;
+}
+
 LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
     _mem_pool.reset();
@@ -141,7 +186,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
 }
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     ClosureGuard closure_guard(done);
     auto it = _delta_writers.find(request->tablet_id());
@@ -163,7 +208,7 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     closure_guard.release();
 }
 
-static bool is_delta_writer_finished(AsyncDeltaWriter* delta_writer) {
+static bool is_delta_writer_finished(const AsyncDeltaWriter* delta_writer) {
     auto state = delta_writer->get_state();
     return state == kCommitted || state == kAborted || state == kUninitialized;
 }
@@ -196,6 +241,17 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     if (UNLIKELY(!request.has_packet_seq())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("no packet_seq in PTabletWriterAddChunkRequest");
+        return;
+    }
+    if (UNLIKELY(!request.has_timeout_ms())) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("missing timeout_ms in PTabletWriterAddChunkRequest");
+        return;
+    }
+    if (UNLIKELY(request.timeout_ms() < 0)) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("negtive timeout_ms {} in PTabletWriterAddChunkRequest", request.timeout_ms()));
         return;
     }
 
@@ -268,6 +324,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     auto start_submit_write_task_ts = watch.elapsed_time();
     int64_t wait_memtable_flush_time_us = 0;
     int32_t total_row_num = 0;
+
+    // NOTE: don't try to do early return, there might be delta_writer write requests on the fly.
     for (int i = 0; i < channel_size; ++i) {
         size_t from = channel_row_idx_start_points[i];
         size_t size = channel_row_idx_start_points[i + 1] - from;
@@ -277,14 +335,12 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         total_row_num += size;
         auto tablet_id = tablet_ids[row_indexes[from]];
         auto it = _delta_writers.find(tablet_id);
-        if (it == _delta_writers.end()) {
-            LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                         << " not found tablet_id: " << tablet_id;
-            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-            response->mutable_status()->add_error_msgs(
-                    fmt::format("Failed to add_chunk since tablet_id {} not exists, txn_id: {}, load_id: {}", tablet_id,
-                                _txn_id, print_id(request.id())));
-            return;
+        // The tablet ids are already checked in _create_write_context() when chunk != nullptr.
+        DCHECK(it != _delta_writers.end());
+        if (UNLIKELY(it == _delta_writers.end())) {
+            auto st = log_and_error_tablet_not_found(tablet_id, request.id(), "add_chunk");
+            context->update_status(st);
+            break;
         }
         auto& delta_writer = it->second;
 
@@ -361,7 +417,8 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         int64_t start_wait_time = MonotonicMillis();
         for (auto& [node_id, delta_writers] : unfinished_replicas_grouped_by_primary_node) {
-            int64_t left_timeout_ms = std::max((uint64_t)0, request.timeout_ms() - watch.elapsed_time() / 1000000);
+            int64_t elapsed_ms = static_cast<int64_t>(watch.elapsed_time() / NANOSECS_PER_MILLIS);
+            int64_t left_timeout_ms = std::max<int64_t>(0, request.timeout_ms() - elapsed_ms);
             SecondaryReplicasWaiter waiter(request.id(), _txn_id, request.sink_id(), left_timeout_ms, start_wait_time,
                                            delta_writers);
             Status status = waiter.wait();
@@ -390,7 +447,13 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     std::set<long> immutable_tablet_ids;
     for (auto tablet_id : request.tablet_ids()) {
-        auto& writer = _delta_writers[tablet_id];
+        auto it = _delta_writers.find(tablet_id);
+        if (it == _delta_writers.end()) {
+            auto st = log_and_error_tablet_not_found(tablet_id, request.id(), "add_chunk");
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
+        auto& writer = it->second;
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
@@ -462,11 +525,15 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     COUNTER_UPDATE(_submit_commit_task_timer, finish_submit_commit_task_ts - finish_submit_write_task_ts);
     COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
+}
 
-    // remove tablets channel and load channel after all things done
-    if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
-    }
+Status LocalTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id,
+                                                           std::string_view signature) const {
+    auto msg = fmt::format(
+            "Failed in {} because the channel for the tablet is not found, txn_id: {}, load_id: {}, tablet_id: {}",
+            signature, _txn_id, print_id(id), tablet_id);
+    LOG(WARNING) << msg;
+    return Status::InternalError(msg);
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
@@ -587,7 +654,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
                     << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
                     << ", tablets: " << ctx.tablets;
         });
-        closure->addFailedHandler([](const Context& ctx, std::string_view rpc_error_msg) {
+        closure->addFailureHandler([](const Context& ctx, std::string_view rpc_error_msg) {
             LOG(ERROR) << "Failed to cancel secondary replicas, txn_id: " << ctx.txn_id
                        << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
                        << ", error: " << rpc_error_msg << ", tablets: " << ctx.tablets;
@@ -703,46 +770,12 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     tablet_ids.reserve(params.tablets_size());
     std::vector<int64_t> failed_tablet_ids;
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        DeltaWriterOptions options;
-        options.tablet_id = tablet.tablet_id();
-        options.schema_hash = schema_hash;
-        options.txn_id = _txn_id;
-        options.partition_id = tablet.partition_id();
-        options.load_id = params.id();
-        options.slots = index_slots;
-        options.global_dicts = &_global_dicts;
-        options.parent_span = _load_channel->get_span();
-        options.index_id = _index_id;
-        options.node_id = _node_id;
-        options.sink_id = params.sink_id();
-        options.timeout_ms = params.timeout_ms();
-        options.write_quorum = params.write_quorum();
-        options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = &(params.schema());
-        options.column_to_expr_value = &(_column_to_expr_value);
-        if (params.is_replicated_storage()) {
-            for (auto& replica : tablet.replicas()) {
-                options.replicas.emplace_back(replica);
-                if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
-                    _node_id_to_endpoint[replica.node_id()] = replica;
-                }
-            }
-            if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
-                options.replica_state = Primary;
-            } else {
-                options.replica_state = Secondary;
-            }
-        } else {
-            options.replica_state = Peer;
-        }
-        options.merge_condition = params.merge_condition();
-        options.partial_update_mode = params.partial_update_mode();
-        options.immutable_tablet_size = params.immutable_tablet_size();
+        DeltaWriterOptions options = _build_delta_writer_options(params, tablet, schema_hash, index_slots);
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
             auto writer = std::move(res).value();
-            _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
+            mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
             tablet_ids.emplace_back(tablet.tablet_id());
         } else {
             if (options.replica_state == Secondary) {
@@ -799,7 +832,7 @@ void LocalTabletsChannel::abort() {
     }
     string tablet_id_list_str;
     JoinInts(tablet_ids, ",", &tablet_id_list_str);
-    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
+    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(_key.id)
               << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
               << " tablet_ids:" << tablet_id_list_str;
 }
@@ -814,17 +847,17 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
             it->second->abort(abort_with_exception);
         } else {
             LOG(WARNING) << "tablet_id: " << tablet_id << " not found in LocalTabletsChannel txn_id: " << _txn_id
-                         << " load_id: " << _key.id << " index_id: " << _key.index_id;
+                         << " load_id: " << print_id(_key.id) << " index_id: " << _key.index_id;
         }
     }
     string tablet_id_list_str;
     JoinInts(tablet_ids, ",", &tablet_id_list_str);
-    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
+    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(_key.id)
               << " index_id: " << _key.index_id << " tablet_ids:" << tablet_id_list_str << ", reason: " << reason;
 }
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
-        Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+        const Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) const {
     if (chunk == nullptr && !request.eos() && !request.wait_all_sender_close()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
@@ -846,10 +879,17 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
     auto& row_indexes = context->_row_indexes;
     auto& channel_row_idx_start_points = context->_channel_row_idx_start_points;
 
+    auto tablet_ids = request.tablet_ids().data();
+    auto tablet_ids_size = request.tablet_ids_size();
+
     // compute row indexes for each channel
-    for (uint32_t i = 0; i < request.tablet_ids_size(); ++i) {
-        uint32_t channel_index = _tablet_id_to_sorted_indexes[request.tablet_ids(i)];
-        channel_row_idx_start_points[channel_index]++;
+    for (uint32_t i = 0; i < tablet_ids_size; ++i) {
+        auto tablet_id = tablet_ids[i];
+        auto it = _tablet_id_to_sorted_indexes.find(tablet_id);
+        if (UNLIKELY(it == _tablet_id_to_sorted_indexes.end())) {
+            return log_and_error_tablet_not_found(tablet_id, request.id(), "create_write_context");
+        }
+        channel_row_idx_start_points[it->second]++;
     }
 
     // NOTE: we make the last item equal with number of rows of this chunk
@@ -857,15 +897,12 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
         channel_row_idx_start_points[i] += channel_row_idx_start_points[i - 1];
     }
 
-    auto tablet_ids = request.tablet_ids().data();
-    auto tablet_ids_size = request.tablet_ids_size();
     for (int i = tablet_ids_size - 1; i >= 0; --i) {
         const auto& tablet_id = tablet_ids[i];
-        auto it = _tablet_id_to_sorted_indexes.find(tablet_id);
-        if (UNLIKELY(it == _tablet_id_to_sorted_indexes.end())) {
-            return Status::InternalError("invalid tablet id");
-        }
-        uint32_t channel_index = it->second;
+        // Already checked in the previous for-loop, so use DCHECK just in case.
+        auto iter = _tablet_id_to_sorted_indexes.find(tablet_id);
+        DCHECK(iter != _tablet_id_to_sorted_indexes.end());
+        uint32_t channel_index = iter->second;
         row_indexes[channel_row_idx_start_points[channel_index] - 1] = i;
         channel_row_idx_start_points[channel_index]--;
     }
@@ -901,45 +938,13 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         }
         incremental_tablet_num++;
 
-        DeltaWriterOptions options;
-        options.tablet_id = tablet.tablet_id();
-        options.schema_hash = schema_hash;
-        options.txn_id = _txn_id;
-        options.partition_id = tablet.partition_id();
-        options.load_id = params.id();
-        options.slots = index_slots;
-        options.global_dicts = &_global_dicts;
-        options.parent_span = _load_channel->get_span();
-        options.index_id = _index_id;
-        options.node_id = _node_id;
-        options.sink_id = params.sink_id();
-        options.timeout_ms = params.timeout_ms();
-        options.write_quorum = params.write_quorum();
-        options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.ptable_schema_param = &(params.schema());
-        options.immutable_tablet_size = params.immutable_tablet_size();
-        options.column_to_expr_value = &(_column_to_expr_value);
-        if (params.is_replicated_storage()) {
-            for (auto& replica : tablet.replicas()) {
-                options.replicas.emplace_back(replica);
-                if (_node_id_to_endpoint.count(replica.node_id()) == 0) {
-                    _node_id_to_endpoint[replica.node_id()] = replica;
-                }
-            }
-            if (options.replicas.size() > 0 && options.replicas[0].node_id() == options.node_id) {
-                options.replica_state = Primary;
-            } else {
-                options.replica_state = Secondary;
-            }
-        } else {
-            options.replica_state = Peer;
-        }
+        DeltaWriterOptions options = _build_delta_writer_options(params, tablet, schema_hash, index_slots);
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());
         auto writer = std::move(res).value();
         ss << "[" << tablet.tablet_id() << ":" << writer->replica_state() << "]";
-        _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
+        mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
 
@@ -1083,8 +1088,8 @@ void LocalTabletsChannel::update_profile() {
     if (!peer_or_primary_replica_profiles.empty()) {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, peer_or_primary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child(replicated_storage ? "PrimaryReplicas" : "PeerReplicas");
-        auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_SET(tablets_counter, static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
+        COUNTER_SET(ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT),
+                    static_cast<int64_t>(peer_or_primary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
@@ -1092,8 +1097,8 @@ void LocalTabletsChannel::update_profile() {
     if (!secondary_replica_profiles.empty()) {
         auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, secondary_replica_profiles);
         RuntimeProfile* final_profile = _profile->create_child("SecondaryReplicas");
-        auto* tablets_counter = ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT);
-        COUNTER_SET(tablets_counter, static_cast<int64_t>(secondary_replica_profiles.size()));
+        COUNTER_SET(ADD_COUNTER(final_profile, "TabletsNum", TUnit::UNIT),
+                    static_cast<int64_t>(secondary_replica_profiles.size()));
         final_profile->copy_all_info_strings_from(merged_profile);
         final_profile->copy_all_counters_from(merged_profile);
     }
@@ -1101,7 +1106,7 @@ void LocalTabletsChannel::update_profile() {
 
 void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
                                                   const PLoadReplicaStatusRequest* request,
-                                                  PLoadReplicaStatusResult* response) {
+                                                  PLoadReplicaStatusResult* response) const {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     for (int64_t tablet_id : request->tablet_ids()) {
         LoadReplicaStatePB replica_state;
@@ -1144,45 +1149,45 @@ void LocalTabletsChannel::get_load_replica_status(const std::string& remote_ip,
     }
 }
 
-#define ADD_AND_SET_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->set(val)
-#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) (ADD_COUNTER(profile, name, type))->update(val)
-#define ADD_AND_UPDATE_TIMER(profile, name, val) (ADD_TIMER(profile, name))->update(val)
+#define ADD_AND_SET_COUNTER(profile, name, type, val) \
+    COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
+#define ADD_AND_SET_TIMER(profile, name, val) COUNTER_SET(ADD_TIMER(profile, name), static_cast<int64_t>(val))
 
 void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
     const DeltaWriterStat& writer_stat = writer->get_writer_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "WriterTaskCount", TUnit::UNIT, writer_stat.task_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriterTaskPendingTime", writer_stat.pending_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "WriteCount", TUnit::UNIT, writer_stat.write_count);
-    ADD_AND_UPDATE_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteTime", writer_stat.write_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.close_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
+    ADD_AND_SET_COUNTER(profile, "WriterTaskCount", TUnit::UNIT, writer_stat.task_count.load());
+    ADD_AND_SET_TIMER(profile, "WriterTaskPendingTime", writer_stat.pending_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "WriteCount", TUnit::UNIT, writer_stat.write_count.load());
+    ADD_AND_SET_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count.load());
+    ADD_AND_SET_TIMER(profile, "WriteTime", writer_stat.write_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count.load());
+    ADD_AND_SET_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count.load());
+    ADD_AND_SET_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CloseTime", writer_stat.close_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     const FlushStatistic& flush_stat = writer->get_flush_stats();
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
-    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
-    ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
+    ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num.load());
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
     auto& memtable_stat = flush_stat.memtable_stats;
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableFinalizeTime", memtable_stat.finalize_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableSortCount", TUnit::UNIT, memtable_stat.sort_count);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableSortTime", memtable_stat.sort_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size);
+    ADD_AND_SET_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count.load());
+    ADD_AND_SET_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "MemtableFinalizeTime", memtable_stat.finalize_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableSortCount", TUnit::UNIT, memtable_stat.sort_count.load());
+    ADD_AND_SET_TIMER(profile, "MemtableSortTime", memtable_stat.sort_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableAggCount", TUnit::UNIT, memtable_stat.agg_count.load());
+    ADD_AND_SET_TIMER(profile, "MemtableAggTime", memtable_stat.agg_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "MemtableFlushTime", memtable_stat.flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "MemtableIOTime", memtable_stat.io_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES, memtable_stat.flush_memory_size.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES, memtable_stat.flush_disk_size.load());
 }
 
 void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
@@ -1193,36 +1198,36 @@ void LocalTabletsChannel::_update_primary_replica_profile(DeltaWriter* writer, R
     }
     auto& replicate_stat = replicate_token->get_stat();
     ADD_AND_SET_COUNTER(profile, "ReplicatePendingTaskCount", TUnit::UNIT,
-                        static_cast<int64_t>(replicate_stat.num_pending_tasks));
+                        static_cast<int64_t>(replicate_stat.num_pending_tasks.load()));
     ADD_AND_SET_COUNTER(profile, "ReplicateExecutingTaskCount", TUnit::UNIT,
-                        static_cast<int64_t>(replicate_stat.num_running_tasks));
-    ADD_AND_UPDATE_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks);
-    ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns);
+                        static_cast<int64_t>(replicate_stat.num_running_tasks.load()));
+    ADD_AND_SET_COUNTER(profile, "ReplicateFinishedTaskCount", TUnit::UNIT, replicate_stat.num_finished_tasks.load());
+    ADD_AND_SET_TIMER(profile, "ReplicateTaskPendingTime", replicate_stat.pending_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "ReplicateTaskExecuteTime", replicate_stat.execute_time_ns.load());
 }
 
 void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile) {
     const DeltaWriterStat& writer_stat = writer->get_writer_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count);
-    ADD_AND_UPDATE_COUNTER(profile, "DataSize", TUnit::BYTES, writer_stat.add_segment_data_size);
-    ADD_AND_UPDATE_COUNTER(profile, "AddSegmentCount", TUnit::UNIT, writer_stat.add_segment_count);
-    ADD_AND_UPDATE_TIMER(profile, "AddSegmentTime", writer_stat.add_segment_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
+    ADD_AND_SET_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count.load());
+    ADD_AND_SET_COUNTER(profile, "DataSize", TUnit::BYTES, writer_stat.add_segment_data_size.load());
+    ADD_AND_SET_COUNTER(profile, "AddSegmentCount", TUnit::UNIT, writer_stat.add_segment_count.load());
+    ADD_AND_SET_TIMER(profile, "AddSegmentTime", writer_stat.add_segment_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTime", writer_stat.commit_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns.load());
 
     auto* segment_flush_token = writer->segment_flush_token();
     if (segment_flush_token == nullptr) {
         return;
     }
     auto& stat = segment_flush_token->get_stat();
-    ADD_AND_SET_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_pending_tasks));
-    ADD_AND_SET_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, static_cast<int64_t>(stat.num_running_tasks));
-    ADD_AND_UPDATE_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks);
-    ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns);
+    ADD_AND_SET_COUNTER(profile, "FlushPendingTaskCount", TUnit::UNIT, stat.num_pending_tasks.load());
+    ADD_AND_SET_COUNTER(profile, "FlushExecutingTaskCount", TUnit::UNIT, stat.num_running_tasks.load());
+    ADD_AND_SET_COUNTER(profile, "FlushFinishedTaskCount", TUnit::UNIT, stat.num_finished_tasks.load());
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime", stat.pending_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FlushTaskExecuteTime", stat.execute_time_ns.load());
 }
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
@@ -1236,7 +1241,7 @@ SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_
         : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _sink_id(sink_id),
-          _timeout_ns(timeout_ms * NANOSECS_PER_MILLIS),
+          _timeout_ns(std::max((int64_t)0, timeout_ms) * NANOSECS_PER_MILLIS),
           _delta_writers(std::move(delta_writers)),
           _eos_time_ms(eos_time_ms),
           _last_get_replica_status_time_ms(eos_time_ms) {}
@@ -1431,7 +1436,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     SET_IGNORE_OVERCROWDED(closure->cntl, load);
     PLoadDiagnoseRequest request;
     request.mutable_id()->set_hi(_load_id.hi());
-    request.mutable_id()->set_hi(_load_id.lo());
+    request.mutable_id()->set_lo(_load_id.lo());
     request.set_txn_id(_txn_id);
     request.set_stack_trace(true);
     closure->ref();

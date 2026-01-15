@@ -241,7 +241,7 @@ public class HostBlacklist {
 
     private class UpdateBlacklistThread extends FrontendDaemon {
         public UpdateBlacklistThread() {
-            super("UpdateBlacklistThread", 1000);
+            super("update-blacklist-thread", 1000);
         }
 
         @Override

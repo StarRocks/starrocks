@@ -20,7 +20,9 @@
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
@@ -1070,11 +1072,18 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
     _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
+bool PrimaryIndex::need_rebuild() const {
+    return _persistent_index != nullptr && _persistent_index->need_rebuild();
+}
+
 Status PrimaryIndex::load(Tablet* tablet) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, tablet->tablet_id());
     std::lock_guard<std::mutex> lg(_lock);
-    if (_loaded) {
+    if (_loaded && !need_rebuild()) {
         return _status;
+    }
+    if (need_rebuild()) {
+        unload_without_lock();
     }
     _status = _do_load(tablet);
     _loaded = true;
@@ -1091,6 +1100,10 @@ Status PrimaryIndex::load(Tablet* tablet) {
 
 void PrimaryIndex::unload() {
     std::lock_guard<std::mutex> lg(_lock);
+    unload_without_lock();
+}
+
+void PrimaryIndex::unload_without_lock() {
     if (!_loaded) {
         return;
     }
@@ -1130,10 +1143,10 @@ Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
     return Status::OK();
 }
 
-Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
+Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
-        return _persistent_index->commit(index_meta);
+        return _persistent_index->commit(index_meta, stat);
     }
     _calc_memory_usage();
     return Status::OK();
@@ -1246,7 +1259,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
                 } else if (!st.ok()) {
                     return st;
                 } else {
-                    Column* pkc = nullptr;
+                    const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
                         TRY_CATCH_BAD_ALLOC(
@@ -1277,8 +1290,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
               << " version:" << apply_version << " #rowset:" << rowsets.size() << " #segment:" << total_segments
               << " data_size:" << total_data_size << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size()
               << " memory:" << memory_usage() << " duration: " << timer.elapsed_time() / 1000000 << "ms";
-    span->SetAttribute("memory", memory_usage());
-    span->SetAttribute("size", size());
+    span->SetAttribute("memory", static_cast<uint64_t>(memory_usage()));
+    span->SetAttribute("size", static_cast<uint64_t>(size()));
     return Status::OK();
 }
 
@@ -1301,17 +1314,17 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
     return Status::OK();
 }
 
-const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                                                  std::vector<Slice>* key_slices) const {
+const Slice* PrimaryIndex::build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
+                                                 uint32_t idx_end, std::vector<Slice>* key_slices) {
     if (pks.is_binary() || pks.is_large_binary()) {
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
-        DCHECK(_key_size > 0);
-        const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
+        DCHECK(key_size > 0);
+        const uint8_t* keys = pks.raw_data() + idx_begin * key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
-            key_slices->emplace_back(keys, _key_size);
-            keys += _key_size;
+            key_slices->emplace_back(keys, key_size);
+            keys += key_size;
         }
         return reinterpret_cast<const Slice*>(key_slices->data());
     }
@@ -1322,38 +1335,48 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
-    const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
+    const Slice* vkeys = build_persistent_keys(pks, _key_size, 0, pks.size(), &keys);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
 }
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
-                                                   IOStat* stat) {
+                                                   uint32_t idx_begin, uint32_t idx_end, IOStat* stat,
+                                                   ParallelPublishContext* ctx) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
-    std::vector<Slice> keys;
-    std::vector<uint64_t> values;
-    values.reserve(n);
-    std::vector<uint64_t> old_values(n, NullIndexValue);
-    const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
-    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
-    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                                              reinterpret_cast<IndexValue*>(old_values.data()), stat));
-    for (unsigned long old : old_values) {
+    DCHECK(ctx->slots.size() > 0);
+    auto slot = ctx->slots.back().get();
+    slot->values.reserve(n);
+    slot->old_values.resize(n, NullIndexValue);
+    const Slice* vkeys = build_persistent_keys(pks, _key_size, idx_begin, idx_end, &slot->keys);
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &slot->values));
+    RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(slot->values.data()),
+                                              reinterpret_cast<IndexValue*>(slot->old_values.data()), stat, ctx));
+    return st;
+}
+
+Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
+                                                   uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
+                                                   IOStat* stat) {
+    ParallelPublishContext ctx;
+    ctx.extend_slots();
+    auto slot = ctx.slots.back().get();
+    RETURN_IF_ERROR(_upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, stat, &ctx));
+    for (unsigned long old : slot->old_values) {
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }
     }
-    return st;
+    return Status::OK();
 }
 
 Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes) {
     Status st;
     std::vector<Slice> keys;
     std::vector<uint64_t> old_values(key_col.size(), NullIndexValue);
-    const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
+    const Slice* vkeys = build_persistent_keys(key_col, _key_size, 0, key_col.size(), &keys);
     st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()));
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
@@ -1368,7 +1391,7 @@ Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* 
 
 Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const {
     std::vector<Slice> keys;
-    const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
+    const Slice* vkeys = build_persistent_keys(key_col, _key_size, 0, key_col.size(), &keys);
     Status st = _persistent_index->get(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
     if (!st.ok()) {
         LOG(WARNING) << "failed get value from persistent index";
@@ -1384,7 +1407,7 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
-    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
+    Status st = _persistent_index->try_replace(pks.size(), build_persistent_keys(pks, _key_size, 0, pks.size(), &keys),
                                                reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
@@ -1398,7 +1421,7 @@ Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_st
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
-    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
+    Status st = _persistent_index->try_replace(pks.size(), build_persistent_keys(pks, _key_size, 0, pks.size(), &keys),
                                                reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
@@ -1450,6 +1473,16 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     }
 }
 
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat,
+                            ParallelPublishContext* ctx) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        return _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), stat, ctx);
+    } else {
+        return Status::NotSupported("upsert with thread pool is not supported in memory primary index");
+    }
+}
+
 Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32_t rowid_start,
                                                           const std::vector<uint32_t>& replace_indexes,
                                                           const Column& pks) {
@@ -1458,7 +1491,7 @@ Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
-    Status st = _persistent_index->replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
+    Status st = _persistent_index->replace(pks.size(), build_persistent_keys(pks, _key_size, 0, pks.size(), &keys),
                                            reinterpret_cast<IndexValue*>(values.data()), replace_indexes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
@@ -1552,7 +1585,8 @@ std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const Schema& pk_schema)
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 
-Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex) {
+Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                                      IOStat* stat) {
     // `_persistent_index` could be reset when call `unload()`, so we need to fetch reference first.
     std::shared_ptr<PersistentIndex> pindex;
     {
@@ -1560,7 +1594,7 @@ Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std:
         pindex = _persistent_index;
     }
     if (pindex != nullptr) {
-        return pindex->major_compaction(data_dir, tablet_id, mutex);
+        return pindex->major_compaction(data_dir, tablet_id, mutex, stat);
     } else {
         return Status::OK();
     }

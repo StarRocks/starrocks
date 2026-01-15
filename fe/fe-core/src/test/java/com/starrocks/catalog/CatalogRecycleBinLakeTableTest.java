@@ -14,8 +14,10 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
@@ -36,23 +38,40 @@ import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 public class CatalogRecycleBinLakeTableTest {
+    private static final Logger LOG = LogManager.getLogger(CatalogRecycleBinLakeTableTest.class);
+
+    private String currentCaseName = "";
+
     @BeforeAll
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+        GlobalStateMgr.getCurrentState().getRecycleBin().setStop();
+    }
+
+    @BeforeEach
+    void setUp(TestInfo testInfo) {
+        currentCaseName = testInfo.getDisplayName();
     }
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
@@ -139,12 +158,31 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
         while (recycleBin.isDeletingTable(id)) {
-            recycleBin.eraseTable(time);
+            if (recycleBin.isDeletingTableDone(id)) {
+                recycleBin.eraseTable(time);
+            }
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {
             }
         }
+    }
+
+    private static void waitAllTablesToBeDone(CatalogRecycleBin recycleBin, List<Long> ids, long time) {
+        ids.forEach(x -> Assertions.assertTrue(recycleBin.isDeletingTable(x)));
+        long doingCount = ids.size();
+        // Note that the eraseTable() will add new async delete tasks if the deletion failed but retryable.
+        // In case of multiple tables in the recycle bin, we must wait until all tables are done before calling
+        // the eraseTable(). Otherwise the completed retryable tables will be added into the async delete tasks again.
+        while (doingCount > 0) {
+            doingCount = ids.stream().filter(x -> !recycleBin.isDeletingTableDone(x)).count();
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+                // nothing to do
+            }
+        }
+        recycleBin.eraseTable(time);
     }
 
     private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
@@ -157,8 +195,25 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
+    private static boolean containsAsyncDeleteTable(Object recycleBin, long id) {
+        Map<?, CompletableFuture<Boolean>> asyncDeleteForTables =
+                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
+
+        return asyncDeleteForTables.entrySet().stream()
+                .anyMatch(e -> ((CatalogRecycleBin.RecycleTableInfo) e.getKey()).getTable().getId() == id);
+    }
+
+    private static boolean containsAsyncDeletePartition(Object recycleBin, long id) {
+        Map<?, CompletableFuture<Boolean>> asyncDeleteForPartitions =
+                Deencapsulation.getField(recycleBin, "asyncDeleteForPartitions");
+
+        return asyncDeleteForPartitions.entrySet().stream()
+                .anyMatch(e -> ((RecyclePartitionInfo) e.getKey()).getPartition().getId() == id);
+    }
+
     @Test
     public void testRecycleLakeTable(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         // create database
@@ -201,6 +256,12 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) throws RpcException {
                 return lakeService;
+            }
+        };
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ComputeResource getCurrentComputeResource() {
+                return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
         new Expectations() {
@@ -276,6 +337,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     @Test
     public void testReplayRecycleLakeTable(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "replay_recycle_lake_table_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -297,10 +359,12 @@ public class CatalogRecycleBinLakeTableTest {
 
         recycleBin.replayEraseTable(Lists.newArrayList(table1.getId()));
         Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assertions.assertFalse(containsAsyncDeleteTable(recycleBin, table1.getId()));
     }
 
     @Test
     public void testRecycleLakeDatabase(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "recycle_lake_database_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -356,15 +420,28 @@ public class CatalogRecycleBinLakeTableTest {
         // Now the retry interval has reached
         long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
         recycleBin.eraseTable(System.currentTimeMillis() + delay);
-        waitTableToBeDone(recycleBin, table1.getId(), System.currentTimeMillis() + delay);
-        waitTableToBeDone(recycleBin, table2.getId(), System.currentTimeMillis() + delay);
+
+        List<Long> tableIds = ImmutableList.of(table1.getId(), table2.getId());
+        // both tables should be submitted for deletion, the future is saved in asyncDeleteForTables
+        Assertions.assertTrue(recycleBin.isDeletingTable(table1.getId()));
+        Assertions.assertTrue(recycleBin.isDeletingTable(table2.getId()));
+        // must wait all tables done and then do the cleanup with eraseTable()
+        waitAllTablesToBeDone(recycleBin, tableIds, System.currentTimeMillis() + delay);
+
         Assertions.assertThrows(DdlException.class, () -> recoverDatabase(connectContext, recoverDbSql));
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
+
+        // NOTE: the tables are still in recycle bin because the deletion failed, may affect other cases running
+        // after this one, so here we clear them directly from RecycleBin.
+        recycleBin.removeTableFromRecycleBin(tableIds);
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assertions.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
     }
 
     @Test
     public void testRecycleLakePartition(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "recycle_lake_partition_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -481,7 +558,9 @@ public class CatalogRecycleBinLakeTableTest {
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis() + delay);
         Assertions.assertNull(recycleBin.getPartition(p1.getId()));
+        Assertions.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
         Assertions.assertNull(recycleBin.getPartition(p2.getId()));
+        Assertions.assertFalse(containsAsyncDeletePartition(recycleBin, p2.getId()));
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
 
@@ -523,11 +602,13 @@ public class CatalogRecycleBinLakeTableTest {
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
         waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         Assertions.assertNull(recycleBin.getPartition(p1.getId()));
+        Assertions.assertFalse(containsAsyncDeletePartition(recycleBin, p1.getId()));
         checkPartitionTablet(p1, false);
     }
 
     @Test
     public void testRecycleLakePartitionWithSharedDirectory(@Mocked LakeService lakeService) throws Exception {
+        LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "recycle_partition_shared_directory_test";
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();

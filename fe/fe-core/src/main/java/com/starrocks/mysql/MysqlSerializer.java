@@ -35,7 +35,7 @@
 package com.starrocks.mysql;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.Type;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -128,7 +128,7 @@ public class MysqlSerializer {
     }
 
     public void writeField(String db, String table, Column column, boolean sendDefault) {
-        MysqlCodec.writeField(out, db, table, column, sendDefault);
+        MysqlCodec.writeField(out, db, table, column.getName(), column.getType(), sendDefault, column.getDefaultValue());
     }
 
     public void writeField(String colName, Type type) {

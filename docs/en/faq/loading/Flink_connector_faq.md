@@ -90,3 +90,28 @@ If this parameter is set as 15s with checkpoint interval being equal to 5 mins, 
 **Solution:**
 
 Whichever of the three thresholds is reached first, that one will take effect first. This is not affected by the checkpoint interval value which only works for exactly once. Interval-ms is used by at_least_once.
+
+## Why does Partial Updates with Flink Connector fail with “NULL value in non-nullable column”?
+
+Configure the following properties:
+
+```SQL
+sink.properties.partial_update=true
+sink.properties.columns=<primary_key,columns_to_update>
+```
+
+## How to handle the Flink import error with JSON data “The size of this batch exceed the max size [104857600]”?
+
+Reduce batch frequency, or set `sink.properties.ignore_json_size` to `true` (which may cause higher memory usage).
+
+## How to handle if a bigint unsigned field in Flink CDC turned into a string and changed its values?
+
+Add the following configuration:
+
+```SQL
+'debezium.bigint.unsigned.handling.mode' = 'precise'
+```
+
+## Why do I get “None of hosts in load_url could be connected” when using Flink connector to import data?
+
+The `load_url` is unreachable or experiencing timeout. Increase the value of the property `sink.connect.timeout-ms` (Range: [100, 60000]).

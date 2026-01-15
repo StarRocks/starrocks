@@ -25,29 +25,29 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchedule;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,8 +67,8 @@ public class TabletSchedCtxTest {
     private static int PH_PART_ID = 6;
 
     private static String TB_NAME = "test";
-    private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1", ScalarType
-            .createType(PrimitiveType.TINYINT), true, null, "", "key1"));
+    private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1",
+            IntegerType.TINYINT, true, null, "", "key1"));
 
     private static int TABLET_ID_1 = 50000;
     private static int TABLET_ID_2 = 51000;
@@ -117,13 +117,12 @@ public class TabletSchedCtxTest {
                 addReplica(TABLET_ID_1, new Replica(50001, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
         // mock catalog
-        MaterializedIndex baseIndex = new MaterializedIndex(TB_ID, MaterializedIndex.IndexState.NORMAL);
+        MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
         Partition partition = new Partition(PART_ID, PH_PART_ID, TB_NAME, baseIndex, distributionInfo);
         baseIndex.addTablet(tablet, tabletMeta);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PART_ID, (short) 3);
-        partitionInfo.setIsInMemory(PART_ID, false);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         partitionInfo.setDataProperty(PART_ID, dataProperty);
         OlapTable olapTable =
@@ -143,7 +142,7 @@ public class TabletSchedCtxTest {
 
         // mock tabletScheduler
         tabletScheduler = new TabletScheduler(stat);
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+        tabletScheduler.setClusterLoadStatistic(clusterLoadStatistic);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
@@ -159,7 +158,7 @@ public class TabletSchedCtxTest {
         clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex());
         clusterLoadStatistic.init();
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+        tabletScheduler.setClusterLoadStatistic(clusterLoadStatistic);
 
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
@@ -172,7 +171,8 @@ public class TabletSchedCtxTest {
         Config.recover_with_empty_tablet = false;
         SchedException schedException = Assertions.assertThrows(SchedException.class, () -> tabletScheduler
                 .handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask));
-        Assertions.assertEquals("unable to find source replica", schedException.getMessage());
+        Assertions.assertEquals("unable to find source replica. replicas: 10001:-1/-1/-1/0:NORMAL:NIL,",
+                schedException.getMessage());
 
         Config.recover_with_empty_tablet = true;
         tabletScheduler.handleTabletByTypeAndStatus(LocalTablet.TabletHealthStatus.REPLICA_MISSING, ctx, agentBatchTask);
@@ -181,10 +181,6 @@ public class TabletSchedCtxTest {
         AgentTask recoverTask = agentBatchTask.getAllTasks().get(0);
         Assertions.assertEquals(be2.getId(), recoverTask.getBackendId());
         Assertions.assertEquals(TABLET_ID_1, recoverTask.getTabletId());
-
-        TTabletSchedule res = ctx.toTabletScheduleThrift();
-        Assertions.assertNotNull(res);
-        Assertions.assertEquals(TABLET_ID_1, res.getTablet_id());
     }
 
     @Test
@@ -289,18 +285,94 @@ public class TabletSchedCtxTest {
         TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, 1, 2, 3, 4, 1000, System.currentTimeMillis());
         ctx.setOrigPriority(Priority.NORMAL);
         ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
+        Deencapsulation.setField(ctx, "copySize", 1048576L);
+        Deencapsulation.setField(ctx, "copyTimeMs", 1000L);
         List<String> results = ctx.getBrief();
         Assertions.assertEquals(25, results.size());
         Assertions.assertEquals("1000", results.get(0));
         Assertions.assertEquals("REPAIR", results.get(1));
         Assertions.assertEquals("VERSION_INCOMPLETE", results.get(3));
+        Assertions.assertEquals("1.0", results.get(16));
 
         ctx = new TabletSchedCtx(Type.BALANCE, 1, 2, 3, 4, 1001, System.currentTimeMillis());
         ctx.setOrigPriority(Priority.NORMAL);
-        ctx.setBalanceType(DiskAndTabletLoadReBalancer.BalanceType.TABLET_BETWEEN_BACKENDS);
+        ctx.setBalanceType(BalanceStat.BalanceType.INTER_NODE_TABLET_DISTRIBUTION);
         results = ctx.getBrief();
         Assertions.assertEquals("1001", results.get(0));
         Assertions.assertEquals("BALANCE", results.get(1));
-        Assertions.assertEquals("TABLET_BETWEEN_BACKENDS", results.get(3));
+        Assertions.assertEquals("INTER_NODE_TABLET_DISTRIBUTION", results.get(3));
+        Assertions.assertFalse(ctx.isIntraNodeBalance());
+    }
+
+    @Test
+    public void testToTabletScheduleThrift() {
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, 1L, 2L, 3L, 4L, 1000L, System.currentTimeMillis());
+        ctx.setOrigPriority(Priority.NORMAL);
+        ctx.setTabletStatus(LocalTablet.TabletHealthStatus.VERSION_INCOMPLETE);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+
+        Replica replica = new Replica(1001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        replica.setPathHash(123456789L);
+        ctx.setSrc(replica);
+        ctx.setDest(be2.getId(), 123456780L);
+
+        Deencapsulation.setField(ctx, "copySize", 1048576L);
+        Deencapsulation.setField(ctx, "copyTimeMs", 1000L);
+
+        ctx.setVersionInfo(1L, 2L, 3L, 0L);
+
+        TTabletSchedule res = ctx.toTabletScheduleThrift();
+
+        Assertions.assertNotNull(res);
+        Assertions.assertEquals(1000L, res.getTablet_id());
+        Assertions.assertEquals("REPAIR", res.getType());
+        Assertions.assertEquals("VERSION_INCOMPLETE", res.getSchedule_reason());
+        Assertions.assertEquals(be1.getId(), res.getSrc_be_id());
+        Assertions.assertEquals("123456789", res.getSrc_path());
+        Assertions.assertEquals(be2.getId(), res.getDest_be_id());
+        Assertions.assertEquals("123456780", res.getDest_path());
+        Assertions.assertEquals(1048576, res.getClone_bytes());
+        Assertions.assertEquals(1, res.getClone_duration(), 0.01);
+        Assertions.assertEquals(1, res.getClone_rate(), 0.01);
+        Assertions.assertEquals("HDD", res.getMedium());
+        Assertions.assertEquals("NORMAL", res.getOrig_priority());
+        Assertions.assertEquals(0L, res.getLast_priority_adjust_time());
+        Assertions.assertEquals(1L, res.getVisible_version());
+        Assertions.assertEquals(2L, res.getCommitted_version());
+        Assertions.assertEquals(0L, res.getFailed_schedule_count());
+        Assertions.assertEquals(0L, res.getFailed_running_count());
+    }
+
+    @Test
+    public void testChooseSrcReplica() {
+        Replica replicaNormalIncomplete = new Replica(70001L, be1.getId(), 0, Replica.ReplicaState.NORMAL);
+        replicaNormalIncomplete.setPathHash(2001L);
+        replicaNormalIncomplete.updateVersionInfo(90L, 90L, 0L);
+
+        Replica replicaDecommissionHealthy = new Replica(70002L, be2.getId(), 0, Replica.ReplicaState.DECOMMISSION);
+        replicaDecommissionHealthy.setPathHash(2002L);
+        replicaDecommissionHealthy.updateVersionInfo(100L, 100L, 0L);
+
+        LocalTablet tablet = new LocalTablet(30001L, Lists.newArrayList(replicaNormalIncomplete, replicaDecommissionHealthy));
+
+        TabletSchedCtx ctx = new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
+                30001L, System.currentTimeMillis(),
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        ctx.setTablet(tablet);
+        ctx.setStorageMedium(TStorageMedium.HDD);
+        ctx.setVersionInfo(100L, 100L, 0L, 0L);
+
+        Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
+        backendsWorkingSlots.put(be1.getId(), new PathSlot(Lists.newArrayList(2001L), 1));
+        backendsWorkingSlots.put(be2.getId(), new PathSlot(Lists.newArrayList(2002L), 1));
+
+        try {
+            ctx.chooseSrcReplica(backendsWorkingSlots);
+        } catch (Exception e) {
+            Assertions.fail(e);
+        }
+
+        Assertions.assertEquals(be2.getId(), ctx.getSrcBackendId());
+        Assertions.assertEquals(2002L, ctx.getSrcPathHash());
     }
 }

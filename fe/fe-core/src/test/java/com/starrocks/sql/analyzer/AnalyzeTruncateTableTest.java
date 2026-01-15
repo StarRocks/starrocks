@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -33,7 +38,14 @@ public class AnalyzeTruncateTableTest {
     }
 
     @Test
-    public void normalTest() {
+    public void normalTest(@Mocked Table mockTable) {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+                return mockTable;
+            }
+        };
+
         TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE example_db.tbl;");
         Assertions.assertEquals("tbl", stmt.getTblName());
         Assertions.assertEquals("example_db", stmt.getDbName());
@@ -41,7 +53,7 @@ public class AnalyzeTruncateTableTest {
         stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
         Assertions.assertEquals("tbl", stmt.getTblName());
         Assertions.assertEquals("test", stmt.getDbName());
-        Assertions.assertEquals(stmt.getTblRef().getPartitionNames().getPartitionNames().toString(), "[p1, p2]");
+        Assertions.assertEquals("[p1, p2]", stmt.getTblRef().getPartitionDef().getPartitionNames().toString());
     }
 
     @Test

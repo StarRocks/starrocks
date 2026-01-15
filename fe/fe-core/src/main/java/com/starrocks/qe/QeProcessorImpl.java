@@ -46,6 +46,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -61,6 +62,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -167,7 +169,28 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             if (info.sql == null || context == null) {
                 continue;
             }
+
+            if (context.getEndTime() != null && Instant.now().isBefore(context.getEndTime())) {
+                LOG.warn("query {} end time is {}, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getEndTime());
+                continue;
+            }
+            if (!context.getState().isRunning()) {
+                LOG.warn("query {} is not running, context state: {}, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()), context.getState());
+                continue;
+            }
+            if (info.coord != null && info.coord.isDone()) {
+                LOG.warn("query {} is done, but doesn't clean from coordinator",
+                        DebugUtil.printId(entry.getKey()));
+                continue;
+            }
+
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
+            String execState = (
+                    info.getConnectContext().isPending() ?
+                            LogicalSlot.State.REQUIRING :
+                            LogicalSlot.State.ALLOCATED).toQueryStateString();
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
                     .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
@@ -181,6 +204,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .profile(info.getCoord().getQueryProfile())
                     .warehouseName(info.coord.getWarehouseName())
                     .resourceGroupName(info.coord.getResourceGroupName())
+                    .execState(execState)
                     .build();
 
             querySet.put(queryIdStr, item);
@@ -194,7 +218,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             LOG.debug("ReportExecStatus(): fragment_instance_id={}, query_id={}, backend num: {}, ip: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id),
                     params.backend_num, beAddr);
-            LOG.debug("params: {}", params);
+            LOG.trace("params: {}", params);
         }
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);

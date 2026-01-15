@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -25,21 +29,40 @@ import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
-    private final Map<Integer, String> aggColumnIdToNames;
-    private final List<String> selectPartitionNames;
+    private Map<Integer, Pair<String, Column>> aggColumnIdToColumns;
+    private List<String> selectPartitionNames;
+    private List<Long> hintsTabletIds;
+    private long selectedIndexId = -1;
+
+    public PhysicalMetaScanOperator() {
+        super(OperatorType.PHYSICAL_META_SCAN);
+        this.aggColumnIdToColumns = ImmutableMap.of();
+        this.selectPartitionNames = ImmutableList.of();
+        this.hintsTabletIds = ImmutableList.of();
+    }
 
     public PhysicalMetaScanOperator(LogicalMetaScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
-        this.aggColumnIdToNames = scanOperator.getAggColumnIdToNames();
+        this.aggColumnIdToColumns = scanOperator.getAggColumnIdToColumns();
         this.selectPartitionNames = scanOperator.getSelectPartitionNames();
+        this.hintsTabletIds = scanOperator.getHintsTabletIds();
+        this.selectedIndexId = scanOperator.getSelectedIndexId();
     }
 
-    public Map<Integer, String> getAggColumnIdToNames() {
-        return aggColumnIdToNames;
+    public Map<Integer, Pair<String, Column>> getAggColumnIdToColumns() {
+        return aggColumnIdToColumns;
     }
 
     public List<String> getSelectPartitionNames() {
         return selectPartitionNames;
+    }
+
+    public long getSelectedIndexId() {
+        return selectedIndexId;
+    }
+
+    public List<Long> getHintsTabletIds() {
+        return hintsTabletIds;
     }
 
     @Override
@@ -63,12 +86,37 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         }
 
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
-        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
-                Objects.equals(selectPartitionNames, that.selectPartitionNames);
+        return Objects.equals(aggColumnIdToColumns, that.aggColumnIdToColumns) &&
+                Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
+                selectedIndexId == that.selectedIndexId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), aggColumnIdToNames);
+        return Objects.hash(super.hashCode(), aggColumnIdToColumns, selectPartitionNames, hintsTabletIds, selectedIndexId);
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder
+            extends PhysicalScanOperator.Builder<PhysicalMetaScanOperator, PhysicalScanOperator.Builder> {
+
+        @Override
+        protected PhysicalMetaScanOperator newInstance() {
+            return new PhysicalMetaScanOperator();
+        }
+
+        @Override
+        public PhysicalMetaScanOperator.Builder withOperator(PhysicalMetaScanOperator operator) {
+            super.withOperator(operator);
+            builder.aggColumnIdToColumns = ImmutableMap.copyOf(operator.aggColumnIdToColumns);
+            builder.selectPartitionNames = ImmutableList.copyOf(operator.selectPartitionNames);
+            builder.hintsTabletIds = ImmutableList.copyOf(operator.hintsTabletIds);
+            builder.selectedIndexId = operator.selectedIndexId;
+            return this;
+        }
     }
 }

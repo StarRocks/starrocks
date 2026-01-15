@@ -19,13 +19,10 @@ package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
 import java.io.IOException;
 
 public class TableStorageInfo implements Writable, GsonPreProcessable, GsonPostProcessable {
@@ -63,7 +60,4 @@ public class TableStorageInfo implements Writable, GsonPreProcessable, GsonPostP
         }
     }
 
-    public static TableStorageInfo read(DataInput in) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(in), TableStorageInfo.class);
-    }
 }

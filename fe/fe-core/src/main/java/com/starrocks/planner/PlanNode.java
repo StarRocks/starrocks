@@ -38,18 +38,19 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.TreeNode;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.TreeNode;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PermutationGenerator;
+import com.starrocks.sql.formatter.ExprExplainVisitor;
+import com.starrocks.sql.formatter.ExprVerboseVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -66,6 +67,7 @@ import org.apache.commons.collections.MapUtils;
 import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -169,7 +171,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.limit = node.limit;
         this.tupleIds = Lists.newArrayList(node.tupleIds);
         this.nullableTupleIds = Sets.newHashSet(node.nullableTupleIds);
-        this.conjuncts = Expr.cloneList(node.conjuncts, null);
+        this.conjuncts = ExprUtils.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
     }
@@ -301,15 +303,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     public void setReplicated(boolean replicated) {
         isReplicated = replicated;
-    }
-
-    /**
-     * Call computeMemLayout() for all materialized tuples.
-     */
-    protected void computeMemLayout(Analyzer analyzer) {
-        for (TupleId id : tupleIds) {
-            analyzer.getDescTbl().getTupleDesc(id).computeMemLayout();
-        }
     }
 
     public String getExplainString() {
@@ -535,7 +528,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             msg.addToNullable_tuples(nullableTupleIds.contains(tid));
         }
         for (Expr e : conjuncts) {
-            msg.addToConjuncts(e.treeToThrift());
+            msg.addToConjuncts(ExprToThrift.treeToThrift(e));
         }
         toThrift(msg);
         container.addToNodes(msg);
@@ -560,11 +553,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         for (PlanNode child : children) {
-            child.finalizeStats(analyzer);
+            child.finalizeStats();
         }
-        computeStats(analyzer);
+        computeStats();
     }
 
     /**
@@ -575,7 +568,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * from finalize() (to facilitate inserting additional nodes during plan
      * partitioning w/o the need to call finalize() recursively on the whole tree again).
      */
-    protected void computeStats(Analyzer analyzer) {
+    protected void computeStats() {
         avgRowSize = 0.0F;
         for (TupleId tid : tupleIds) {
             avgRowSize += 4;
@@ -591,58 +584,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 mapToDouble(columnStatistic -> columnStatistic.getAverageRowSize()).sum();
         columnStatistics = statistics.getColumnStatistics();
         multiColumnCombinedStats = statistics.getMultiColumnCombinedStats();
-    }
-
-    public ExprSubstitutionMap getOutputSmap() {
-        return outputSmap;
-    }
-
-    public void init(Analyzer analyzer) throws StarRocksException {
-    }
-
-    /**
-     * Assign remaining unassigned conjuncts.
-     */
-    protected void assignConjuncts(Analyzer analyzer) {
-        List<Expr> unassigned = analyzer.getUnassignedConjuncts(this.getTupleIds());
-        conjuncts.addAll(unassigned);
-        analyzer.markConjunctsAssigned(unassigned);
-    }
-
-    /**
-     * Returns an smap that combines the childrens' smaps.
-     */
-    protected ExprSubstitutionMap getCombinedChildSmap() {
-        if (getChildren().size() == 0) {
-            return new ExprSubstitutionMap();
-        }
-
-        if (getChildren().size() == 1) {
-            return getChild(0).getOutputSmap();
-        }
-
-        ExprSubstitutionMap result = ExprSubstitutionMap.combine(
-                getChild(0).getOutputSmap(), getChild(1).getOutputSmap());
-
-        for (int i = 2; i < getChildren().size(); ++i) {
-            result = ExprSubstitutionMap.combine(result, getChild(i).getOutputSmap());
-        }
-
-        return result;
-    }
-
-    /**
-     * Sets outputSmap_ to compose(existing smap, combined child smap). Also
-     * substitutes conjuncts_ using the combined child smap.
-     *
-     * @throws AnalysisException
-     */
-    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
-        ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
-        outputSmap =
-                ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);
-
-        conjuncts = Expr.substituteList(conjuncts, outputSmap, analyzer, false);
     }
 
     public void setHasNullableGenerateChild() {
@@ -681,30 +622,34 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return output;
     }
 
-    protected String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
+    protected String getExplainString(List<? extends Expr> exprs) {
         if (exprs == null) {
             return "";
         }
-        StringBuilder output = new StringBuilder();
-        for (int i = 0; i < exprs.size(); ++i) {
-            if (i > 0) {
-                output.append(", ");
-            }
-            if (level.equals(TExplainLevel.NORMAL)) {
-                output.append(exprs.get(i).toSql());
-            } else {
-                output.append(exprs.get(i).explain());
-            }
+        return exprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
+    }
+
+    protected String explainExpr(Expr... exprs) {
+        return explainExpr(TExplainLevel.NORMAL, Arrays.stream(exprs).toList());
+    }
+
+    protected String explainExpr(List<? extends Expr> exprs) {
+        return explainExpr(TExplainLevel.NORMAL, exprs);
+    }
+
+    protected String explainExpr(TExplainLevel level, List<? extends Expr> exprs) {
+        ConnectContext context = ConnectContext.get();
+        FormatOptions options = FormatOptions.allEnable();
+        if (context == null || !context.getSessionVariable().isEnableDesensitizeExplain()) {
+            options.setEnableDigest(false);
         }
-        return output.toString();
-    }
-
-    protected String getExplainString(List<? extends Expr> exprs) {
-        return getVerboseExplain(exprs, TExplainLevel.NORMAL);
-    }
-
-    protected String getVerboseExplain(List<? extends Expr> exprs) {
-        return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
+        if (TExplainLevel.VERBOSE.equals(level)) {
+            ExprVerboseVisitor v = new ExprVerboseVisitor(options);
+            return exprs.stream().map(v::visit).collect(Collectors.joining(", "));
+        } else {
+            ExprExplainVisitor v = new ExprExplainVisitor(options);
+            return exprs.stream().map(v::visit).collect(Collectors.joining(", "));
+        }
     }
 
     public void appendTrace(StringBuilder sb) {
@@ -852,7 +797,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
-        return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
+        return (Expr expr) -> ExprUtils.isBoundByTupleIds(expr, getTupleIds());
     }
 
     private RoaringBitmap cachedSlotIds = null;
@@ -881,12 +826,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             return false;
         } else {
-            return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
+            return getSlotIds(descTbl).contains(ExprUtils.getUsedSlotIds(probeExpr));
         }
     }
 
     protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
-        if (expr.isBound(slot.getId())) {
+        if (ExprUtils.isBound(expr, slot.getId())) {
             ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
             ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
                     "any", true);
@@ -944,8 +889,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean accept = tryPushdownRuntimeFilterToChild(context, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
         RoaringBitmap slotIds = getSlotIds(descTbl);
-        boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
-                partitionByExprs.stream().allMatch(expr -> slotIds.contains(expr.getUsedSlotIds()));
+        boolean isBound = slotIds.contains(ExprUtils.getUsedSlotIds(probeExpr)) &&
+                partitionByExprs.stream().allMatch(expr -> slotIds.contains(ExprUtils.getUsedSlotIds(expr)));
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }

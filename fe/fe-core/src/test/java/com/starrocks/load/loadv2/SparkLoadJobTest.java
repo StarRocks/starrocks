@@ -36,8 +36,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -50,8 +48,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -63,16 +60,15 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
-import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
-import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.ResourceDesc;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -83,6 +79,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -91,12 +88,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -212,7 +203,6 @@ public class SparkLoadJobTest {
 
         try {
             Assertions.assertTrue(resource.getSparkConfigs().isEmpty());
-            resourceDesc.analyze();
             BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
@@ -224,13 +214,13 @@ public class SparkLoadJobTest {
             Assertions.assertEquals(-1L, sparkLoadJob.getEtlStartTimestamp());
 
             // check update spark resource properties
-            Assertions.assertEquals(broker, bulkLoadJob.brokerDesc.getName());
-            Assertions.assertEquals("user0", bulkLoadJob.brokerDesc.getProperties().get("username"));
-            Assertions.assertEquals("password0", bulkLoadJob.brokerDesc.getProperties().get("password"));
+            Assertions.assertEquals(broker, bulkLoadJob.brokerPersistInfo.getName());
+            Assertions.assertEquals("user0", bulkLoadJob.brokerPersistInfo.getProperties().get("username"));
+            Assertions.assertEquals("password0", bulkLoadJob.brokerPersistInfo.getProperties().get("password"));
             SparkResource sparkResource = Deencapsulation.getField(sparkLoadJob, "sparkResource");
             Assertions.assertTrue(sparkResource.getSparkConfigs().containsKey("spark.executor.memory"));
             Assertions.assertEquals("1g", sparkResource.getSparkConfigs().get("spark.executor.memory"));
-        } catch (DdlException | AnalysisException e) {
+        } catch (DdlException e) {
             Assertions.fail(e.getMessage());
         }
     }
@@ -297,7 +287,8 @@ public class SparkLoadJobTest {
         Deencapsulation.setField(job, "etlOutputPath", etlOutputPath);
         Deencapsulation.setField(job, "sparkResource", resource);
         BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
-        job.brokerDesc = brokerDesc;
+        job.brokerPersistInfo =
+                new com.starrocks.persist.BrokerPropertiesPersistInfo(brokerDesc.getName(), brokerDesc.getProperties());
         return job;
     }
 
@@ -390,7 +381,7 @@ public class SparkLoadJobTest {
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
-        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+        partitionInfo.addPartition(partitionId, null, (short) 1, null);
 
         new Expectations() {
             {
@@ -407,13 +398,15 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
-                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
+                result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
+                result = indexId;
+                index.getMetaId();
                 result = indexId;
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
@@ -457,9 +450,9 @@ public class SparkLoadJobTest {
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
         Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
-        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Map<Long, Integer> indexMetaIdToSchemaHash = Deencapsulation.getField(job, "indexMetaIdToSchemaHash");
+        Assertions.assertTrue(indexMetaIdToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexMetaIdToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(replicaId, tabletId, backendId);
@@ -489,7 +482,7 @@ public class SparkLoadJobTest {
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
-        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+        partitionInfo.addPartition(partitionId, null, (short) 1, null);
 
         List<Replica> allQueryableReplicas = Lists.newArrayList();
         allQueryableReplicas.add(replica);
@@ -510,13 +503,15 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
-                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
+                result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
                 physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
+                result = indexId;
+                index.getMetaId();
                 result = indexId;
 
                 index.getTablets();
@@ -552,9 +547,9 @@ public class SparkLoadJobTest {
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
         Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
-        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Map<Long, Integer> indexMetaIdToSchemaHash = Deencapsulation.getField(job, "indexMetaIdToSchemaHash");
+        Assertions.assertTrue(indexMetaIdToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexMetaIdToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(tableId, tabletId, backendId);
@@ -578,81 +573,6 @@ public class SparkLoadJobTest {
     }
 
     @Test
-    public void testStateUpdateInfoPersist() throws IOException {
-        String fileName = "./testStateUpdateInfoPersistFile";
-        File file = new File(fileName);
-
-        // etl state
-        long id = 1L;
-        JobState state = JobState.ETL;
-        long etlStartTimestamp = 1592366666L;
-        long loadStartTimestamp = -1;
-        Map<String, Pair<String, Long>> tabletMetaToFileInfo = Maps.newHashMap();
-
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
-                id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
-                loadStartTimestamp, tabletMetaToFileInfo);
-        info.write(out);
-        out.flush();
-        out.close();
-
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        SparkLoadJobStateUpdateInfo replayedInfo = (SparkLoadJobStateUpdateInfo) LoadJobStateUpdateInfo.read(in);
-        Assertions.assertEquals(id, replayedInfo.getJobId());
-        Assertions.assertEquals(state, replayedInfo.getState());
-        Assertions.assertEquals(transactionId, replayedInfo.getTransactionId());
-        Assertions.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
-        Assertions.assertEquals(etlStartTimestamp, replayedInfo.getEtlStartTimestamp());
-        Assertions.assertEquals(appId, replayedInfo.getAppId());
-        Assertions.assertEquals(etlOutputPath, replayedInfo.getEtlOutputPath());
-        Assertions.assertTrue(replayedInfo.getTabletMetaToFileInfo().isEmpty());
-        in.close();
-
-        // loading state
-        state = JobState.LOADING;
-        loadStartTimestamp = 1592388888L;
-        String tabletMeta = String.format("%d.%d.%d.0.%d", tableId, partitionId, indexId, schemaHash);
-        String filePath =
-                String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
-                        tableId, partitionId, indexId, schemaHash);
-        long fileSize = 6L;
-        tabletMetaToFileInfo.put(tabletMeta, Pair.create(filePath, fileSize));
-
-        if (file.exists()) {
-            file.delete();
-        }
-        file.createNewFile();
-        out = new DataOutputStream(new FileOutputStream(file));
-        info = new SparkLoadJobStateUpdateInfo(id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp,
-                appId, etlOutputPath, loadStartTimestamp, tabletMetaToFileInfo);
-        info.write(out);
-        out.flush();
-        out.close();
-
-        in = new DataInputStream(new FileInputStream(file));
-        replayedInfo = (SparkLoadJobStateUpdateInfo) LoadJobStateUpdateInfo.read(in);
-        Assertions.assertEquals(state, replayedInfo.getState());
-        Assertions.assertEquals(loadStartTimestamp, replayedInfo.getLoadStartTimestamp());
-        Map<String, Pair<String, Long>> replayedTabletMetaToFileInfo = replayedInfo.getTabletMetaToFileInfo();
-        Assertions.assertEquals(1, replayedTabletMetaToFileInfo.size());
-        Assertions.assertTrue(replayedTabletMetaToFileInfo.containsKey(tabletMeta));
-        Pair<String, Long> replayedFileInfo = replayedTabletMetaToFileInfo.get(tabletMeta);
-        Assertions.assertEquals(filePath, replayedFileInfo.first);
-        Assertions.assertEquals(fileSize, (long) replayedFileInfo.second);
-        in.close();
-
-        // delete file
-        if (file.exists()) {
-            file.delete();
-        }
-    }
-
-    @Test
     public void testNoPartitionsHaveDataLoad(@Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
                                              @Injectable Database db) throws Exception {
         new Expectations() {
@@ -665,7 +585,7 @@ public class SparkLoadJobTest {
         SparkLoadJob job = getEtlStateJob(originStmt);
         job.state = JobState.LOADING;
         Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
-        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No partitions have data available for loading",
+        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No rows were imported from upstream",
                 () -> Deencapsulation.invoke(job, "submitPushTasks"));
     }
 }

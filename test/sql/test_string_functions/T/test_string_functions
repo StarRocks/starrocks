@@ -169,7 +169,6 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`rowkey`) BUCKETS 64
 PROPERTIES (
     "replication_num" = "1",
-    "bucket_size" = "4294967296",
     "storage_volume" = "builtin_storage_volume",
     "enable_persistent_index" = "true",
     "compression" = "LZ4"
@@ -293,4 +292,47 @@ create table t_strpos(c0 varchar(20), c1 varchar(20), c2 int)
 insert into t_strpos values ('hello world', 'world', 1), ('hello world', 'world', -1), ('abcabc', 'abc', 2);
 select c0, c1, strpos(c0, c1) from t_strpos;
 select c0, c1, c2, strpos(c0, c1, c2) from t_strpos;
+
+-- function: format_bytes
+-- Test basic examples from specification
+select format_bytes(0);
+select format_bytes(123);
+select format_bytes(1023);
+select format_bytes(1024);
+select format_bytes(4096);
+select format_bytes(123456789);
+select format_bytes(10737418240);
+
+-- Test edge cases
+select format_bytes(-1);
+select format_bytes(-1024);
+select format_bytes(null);
+
+-- Test all unit ranges
+select format_bytes(1);  -- 1 B
+select format_bytes(512);  -- 512 B
+select format_bytes(1536);  -- 1.50 KB
+select format_bytes(2048);  -- 2.00 KB
+select format_bytes(1048576);  -- 1.00 MB
+select format_bytes(1572864);  -- 1.50 MB
+select format_bytes(1073741824);  -- 1.00 GB
+select format_bytes(2147483648);  -- 2.00 GB
+select format_bytes(1099511627776);  -- 1.00 TB
+select format_bytes(1125899906842624);  -- 1.00 PB
+select format_bytes(1152921504606846976);  -- 1.00 EB
+
+-- Test precision and rounding
+select format_bytes(1024 + 1);  -- ~1.00 KB (rounded)
+select format_bytes(1024 + 512);  -- 1.50 KB
+select format_bytes(1024 + 256);  -- 1.25 KB
+select format_bytes(1048576 + 52429);  -- ~1.05 MB
+
+-- Test with table data
+create table t_format_bytes(bytes bigint)
+        DUPLICATE KEY(bytes)
+        DISTRIBUTED BY HASH(bytes)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+insert into t_format_bytes values (0), (123), (1024), (1048576), (1073741824), (-1), (null);
+select bytes, format_bytes(bytes) from t_format_bytes order by bytes;
 

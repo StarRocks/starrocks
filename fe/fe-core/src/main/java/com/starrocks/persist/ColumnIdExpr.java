@@ -14,15 +14,15 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.parser.SqlParser;
 
 import java.util.List;
@@ -132,7 +132,11 @@ public class ColumnIdExpr {
         return this.expr.equals(((ColumnIdExpr) obj).expr);
     }
 
-    private static class ExprSerializeVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
+    private static class ExprSerializeVisitor extends AST2StringVisitor {
+        ExprSerializeVisitor() {
+            options.setColumnWithTableName(false);
+        }
+
         @Override
         public String visitSlot(SlotRef node, Void context) {
             if (node.getTblNameWithoutAnalyzed() != null) {

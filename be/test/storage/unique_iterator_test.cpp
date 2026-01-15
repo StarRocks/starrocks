@@ -41,7 +41,7 @@ protected:
                 return Status::EndOfFile("eof");
             }
             size_t n = std::min<size_t>(4, _numbers.size() - _idx);
-            ColumnPtr c = chunk->get_column_by_index(0);
+            Column* c = chunk->get_column_raw_ptr_by_index(0);
             (void)c->append_numbers(_numbers.data() + _idx, n * sizeof(int32_t));
             _idx += n;
             return Status::OK();
@@ -87,9 +87,10 @@ TEST_F(UniqueIteratorTest, single_int) {
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
         while (iter->get_next(chunk.get()).ok()) {
-            auto c = reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk->get_column_by_index(0).get());
+            auto c = const_cast<FixedLengthColumn<int32_t>*>(
+                    reinterpret_cast<const FixedLengthColumn<int32_t>*>(chunk->get_column_raw_ptr_by_index(0)));
             for (size_t i = 0; i < c->size(); i++) {
-                fetched.push_back(c->get(i).get_int32());
+                fetched.emplace_back(c->get(i).get_int32());
             }
             chunk->reset();
         }
@@ -107,9 +108,10 @@ TEST_F(UniqueIteratorTest, single_int) {
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
         while (iter->get_next(chunk.get()).ok()) {
-            auto c = reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk->get_column_by_index(0).get());
+            auto c = const_cast<FixedLengthColumn<int32_t>*>(
+                    reinterpret_cast<const FixedLengthColumn<int32_t>*>(chunk->get_column_raw_ptr_by_index(0)));
             for (size_t i = 0; i < c->size(); i++) {
-                fetched.push_back(c->get(i).get_int32());
+                fetched.emplace_back(c->get(i).get_int32());
             }
             chunk->reset();
         }
@@ -127,9 +129,10 @@ TEST_F(UniqueIteratorTest, single_int) {
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
         while (iter->get_next(chunk.get()).ok()) {
-            auto c = reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk->get_column_by_index(0).get());
+            auto c = const_cast<FixedLengthColumn<int32_t>*>(
+                    reinterpret_cast<const FixedLengthColumn<int32_t>*>(chunk->get_column_raw_ptr_by_index(0)));
             for (size_t i = 0; i < c->size(); i++) {
-                fetched.push_back(c->get(i).get_int32());
+                fetched.emplace_back(c->get(i).get_int32());
             }
             chunk->reset();
         }
@@ -147,9 +150,10 @@ TEST_F(UniqueIteratorTest, single_int) {
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
         while (iter->get_next(chunk.get()).ok()) {
-            auto c = reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk->get_column_by_index(0).get());
+            auto c = const_cast<FixedLengthColumn<int32_t>*>(
+                    reinterpret_cast<const FixedLengthColumn<int32_t>*>(chunk->get_column_raw_ptr_by_index(0)));
             for (size_t i = 0; i < c->size(); i++) {
-                fetched.push_back(c->get(i).get_int32());
+                fetched.emplace_back(c->get(i).get_int32());
             }
             chunk->reset();
         }
@@ -167,9 +171,10 @@ TEST_F(UniqueIteratorTest, single_int) {
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
         while (iter->get_next(chunk.get()).ok()) {
-            auto c = reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk->get_column_by_index(0).get());
+            auto c = const_cast<FixedLengthColumn<int32_t>*>(
+                    reinterpret_cast<const FixedLengthColumn<int32_t>*>(chunk->get_column_raw_ptr_by_index(0)));
             for (size_t i = 0; i < c->size(); i++) {
-                fetched.push_back(c->get(i).get_int32());
+                fetched.emplace_back(c->get(i).get_int32());
             }
             chunk->reset();
         }
@@ -187,9 +192,10 @@ TEST_F(UniqueIteratorTest, single_int) {
         ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
         std::vector<int32_t> fetched;
         while (iter->get_next(chunk.get()).ok()) {
-            auto c = reinterpret_cast<FixedLengthColumn<int32_t>*>(chunk->get_column_by_index(0).get());
+            auto c = const_cast<FixedLengthColumn<int32_t>*>(
+                    reinterpret_cast<const FixedLengthColumn<int32_t>*>(chunk->get_column_raw_ptr_by_index(0)));
             for (size_t i = 0; i < c->size(); i++) {
-                fetched.push_back(c->get(i).get_int32());
+                fetched.emplace_back(c->get(i).get_int32());
             }
             chunk->reset();
         }

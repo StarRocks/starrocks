@@ -72,7 +72,7 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, data.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int pos = start_pos; pos < end_pos; pos++) {
             const DatumTuple& row = data[pos];
             DatumTuple tmp_row;
@@ -128,12 +128,12 @@ public:
     }
 
     void build_multi_get_request(DatumTuple& tuple, Chunk* key_chunk, std::vector<bool>& found, Chunk* value_chunk) {
-        key_chunk->get_column_by_index(0)->append_datum(tuple.get(0));
-        key_chunk->get_column_by_index(1)->append_datum(tuple.get(1));
-        key_chunk->get_column_by_index(2)->append_datum(tuple.get(2));
-        found.push_back(true);
-        value_chunk->get_column_by_index(0)->append_datum(tuple.get(3));
-        value_chunk->get_column_by_index(1)->append_datum(tuple.get(4));
+        key_chunk->get_column_raw_ptr_by_index(0)->append_datum(tuple.get(0));
+        key_chunk->get_column_raw_ptr_by_index(1)->append_datum(tuple.get(1));
+        key_chunk->get_column_raw_ptr_by_index(2)->append_datum(tuple.get(2));
+        found.emplace_back(true);
+        value_chunk->get_column_raw_ptr_by_index(0)->append_datum(tuple.get(3));
+        value_chunk->get_column_raw_ptr_by_index(1)->append_datum(tuple.get(4));
     }
 
     void build_eq_predicates(Schema& scan_key_schema, DatumTuple& tuple,
@@ -157,7 +157,7 @@ public:
             DatumTuple tuple = tuples[i];
             for (int j = 0; j < value_column_index.size(); j++) {
                 Datum datum = tuple.get(value_column_index[j]);
-                result->get_column_by_index(j)->append_datum(datum);
+                result->get_column_raw_ptr_by_index(j)->append_datum(datum);
             }
         }
     }
@@ -199,7 +199,7 @@ void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr>& status_or, Chunk&
         ASSERT_TRUE(status_or.status().is_end_of_file());
     }
     ChunkIteratorPtr iterator = status_or.value();
-    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(iterator->schema(), 2);
+    ChunkPtr chunk = ChunkHelper::new_chunk(iterator->schema(), 2);
     Status status = iterator->get_next(chunk.get());
     result.reset();
     while (status.ok()) {
@@ -268,10 +268,10 @@ TEST_F(TableReaderTest, test_basic_read) {
     build_multi_get_request(rows[1], key_chunk.get(), expected_found, expected_value_chunk.get());
 
     // key (1, 1, 4) not found
-    key_chunk->get_column_by_index(0)->append_datum(Datum((int64_t)1));
-    key_chunk->get_column_by_index(1)->append_datum(Datum((int32_t)1));
-    key_chunk->get_column_by_index(2)->append_datum(Datum((int32_t)4));
-    expected_found.push_back(false);
+    key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum((int64_t)1));
+    key_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum((int32_t)1));
+    key_chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum((int32_t)4));
+    expected_found.emplace_back(false);
 
     // key (2, 1, 3), value (3, 1)
     build_multi_get_request(rows[5], key_chunk.get(), expected_found, expected_value_chunk.get());
@@ -280,13 +280,13 @@ TEST_F(TableReaderTest, test_basic_read) {
     build_multi_get_request(rows[6], key_chunk.get(), expected_found, expected_value_chunk.get());
 
     // key (5, 8, 9) not found
-    key_chunk->get_column_by_index(0)->append_datum(Datum((int64_t)5));
-    key_chunk->get_column_by_index(1)->append_datum(Datum((int32_t)8));
-    key_chunk->get_column_by_index(2)->append_datum(Datum((int32_t)9));
-    expected_found.push_back(false);
+    key_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum((int64_t)5));
+    key_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum((int32_t)8));
+    key_chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum((int32_t)9));
+    expected_found.emplace_back(false);
 
     std::vector<bool> found;
-    ChunkPtr value_chunk = ChunkHelper::new_chunk(_value_schema, 10);
+    const ChunkPtr& value_chunk = ChunkHelper::new_chunk(_value_schema, 10);
     Status status = table_reader->multi_get(*key_chunk, {"v1", "v2"}, found, *value_chunk);
     ASSERT_OK(status);
     ASSERT_EQ(expected_found.size(), found.size());
@@ -299,8 +299,8 @@ TEST_F(TableReaderTest, test_basic_read) {
     Schema scan_key_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {0, 1});
     Schema scan_value_schema = ChunkHelper::convert_schema(_tablets[0]->tablet_schema(), {2, 3, 4});
 
-    ChunkPtr expect_scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
-    ChunkPtr scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
+    const ChunkPtr& expect_scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
+    const ChunkPtr& scan_result = ChunkHelper::new_chunk(scan_value_schema, 0);
     std::vector<const ColumnPredicate*> predicates;
 
     // scan prefix key (1, 1)

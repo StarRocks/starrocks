@@ -191,7 +191,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
         }
         DCHECK(ptr != nullptr);
         if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant() && (dummy_chunk.get() == nullptr)) {
-            ptr->resize(chunk->num_rows());
+            ptr->as_mutable_raw_ptr()->resize(chunk->num_rows());
         }
         return ptr;
     } catch (std::runtime_error& e) {

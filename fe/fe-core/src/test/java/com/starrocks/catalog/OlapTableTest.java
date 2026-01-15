@@ -37,16 +37,22 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.type.DateType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -61,6 +67,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class OlapTableTest {
@@ -81,7 +88,8 @@ public class OlapTableTest {
             if (table.getType() != TableType.OLAP) {
                 continue;
             }
-            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3, new MvRestoreContext());
+            RestoreJob restoreJob = new RestoreJob();
+            restoreJob.resetIdsForRestore(GlobalStateMgr.getCurrentState(), (OlapTable) table, db, 3, new MvRestoreContext());
         }
     }
 
@@ -155,11 +163,11 @@ public class OlapTableTest {
         PeriodDuration duration1 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().toString(), Type.DATE), PrimitiveType.DATE);
+        p2.pushColumn(LiteralExprFactory.create(LocalDate.now().toString(), DateType.DATE), PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
         OlapTable olapTable = new OlapTable(1, "test", partitionColumns, KeysType.AGG_KEYS,
@@ -191,11 +199,11 @@ public class OlapTableTest {
         PeriodDuration duration2 = TimeUtils.parseHumanReadablePeriodOrDuration("2 day");
 
         PartitionKey p1 = new PartitionKey();
-        p1.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration1).toString(), Type.DATE),
+        p1.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration1).toString(), DateType.DATE),
                 PrimitiveType.DATE);
 
         PartitionKey p2 = new PartitionKey();
-        p2.pushColumn(LiteralExpr.create(LocalDate.now().minus(duration2).toString(), Type.DATE),
+        p2.pushColumn(LiteralExprFactory.create(LocalDate.now().minus(duration2).toString(), DateType.DATE),
                 PrimitiveType.DATE);
         rangePartitionInfo.setRange(1, false, Range.openClosed(p1, p2));
 
@@ -395,17 +403,6 @@ public class OlapTableTest {
     }
 
     @Test
-    public void testGetPhysicalPartitionByName() {
-        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
-        List<Table> tables = db.getTables();
-        for (Table table : tables) {
-            OlapTable olapTable = (OlapTable) table;
-            PhysicalPartition partition = olapTable.getPhysicalPartition("not_existed_name");
-            Assertions.assertNull(partition);
-        }
-    }
-
-    @Test
     public void testGetIndexesBySchema() {
         List<Index> indexesInTable = Lists.newArrayList();
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.VARCHAR), true, null, "", "");
@@ -417,13 +414,13 @@ public class OlapTableTest {
         schema.add(k3);
 
         Index index1 = new Index(1L, "index1", Lists.newArrayList(ColumnId.create("k1"), ColumnId.create("k2")),
-                                 IndexDef.IndexType.BITMAP, "comment", null);
+                IndexDef.IndexType.BITMAP, "comment", null);
 
         Index index2 = new Index(2L, "index2", Lists.newArrayList(ColumnId.create("k2"), ColumnId.create("k3")),
-                                 IndexDef.IndexType.BITMAP, "comment", null);
+                IndexDef.IndexType.BITMAP, "comment", null);
 
         Index index3 = new Index(3L, "index3", Lists.newArrayList(ColumnId.create("k4")), IndexDef.IndexType.BITMAP,
-                                 "comment", null);
+                "comment", null);
         indexesInTable.add(index1);
         indexesInTable.add(index2);
         indexesInTable.add(index3);
@@ -433,4 +430,84 @@ public class OlapTableTest {
         Assertions.assertTrue(result.get(0).getIndexName().equals("index1"));
         Assertions.assertTrue(result.get(1).getIndexName().equals("index2"));
     }
+
+    @Test
+    public void testGetUniquePropertiesWithFlatJsonConfig() {
+        // Test case 1: Flat JSON enabled with all properties set
+        OlapTable table1 = new OlapTable();
+        TableProperty tableProperty1 = new TableProperty();
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.1");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.8");
+        properties1.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "50");
+        tableProperty1.modifyTableProperties(properties1);
+        table1.setTableProperty(tableProperty1);
+
+        Map<String, String> result1 = table1.getUniqueProperties();
+        Assertions.assertEquals("true", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertEquals("0.1", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertEquals("0.8", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertEquals("50", result1.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 2: Flat JSON enabled but only some properties set
+        OlapTable table2 = new OlapTable();
+        TableProperty tableProperty2 = new TableProperty();
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties2.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.2");
+        // Don't set sparsity factor and column max
+        tableProperty2.modifyTableProperties(properties2);
+        table2.setTableProperty(tableProperty2);
+
+        Map<String, String> result2 = table2.getUniqueProperties();
+        Assertions.assertEquals("true", result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertEquals("0.2", result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(result2.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 3: Flat JSON disabled - other properties should not be included
+        OlapTable table3 = new OlapTable();
+        TableProperty tableProperty3 = new TableProperty();
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "false");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "0.3");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, "0.9");
+        properties3.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, "100");
+        tableProperty3.modifyTableProperties(properties3);
+        table3.setTableProperty(tableProperty3);
+
+        Map<String, String> result3 = table3.getUniqueProperties();
+        Assertions.assertEquals("false", result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(result3.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 4: No flat JSON properties set
+        OlapTable table4 = new OlapTable();
+        TableProperty tableProperty4 = new TableProperty();
+        table4.setTableProperty(tableProperty4);
+
+        Map<String, String> result4 = table4.getUniqueProperties();
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+        Assertions.assertNull(result4.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX));
+
+        // Test case 5: Flat JSON enabled with null/empty values
+        OlapTable table5 = new OlapTable();
+        TableProperty tableProperty5 = new TableProperty();
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE, "true");
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR, "");
+        properties5.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, null);
+        tableProperty5.modifyTableProperties(properties5);
+        table5.setTableProperty(tableProperty5);
+
+        Map<String, String> result5 = table5.getUniqueProperties();
+        Assertions.assertEquals("true", result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
+        Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
+        Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+    }
+
 }

@@ -14,8 +14,8 @@
 
 package com.starrocks.qe.feedback.skeleton;
 
-import com.starrocks.common.TreeNode;
 import com.starrocks.qe.feedback.NodeExecStats;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;

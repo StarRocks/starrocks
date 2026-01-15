@@ -17,7 +17,6 @@
 
 package com.starrocks.fs;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
@@ -66,13 +65,13 @@ public class HdfsUtilTest {
         };
 
         Assertions.assertThrows(StarRocksException.class, () ->
-                HdfsUtil.deletePath("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+                HdfsUtil.deletePath("hdfs://abc/dbf", new HashMap<>()));
 
         Assertions.assertThrows(StarRocksException.class, () ->
-                HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new BrokerDesc(new HashMap<>()), 1000));
+                HdfsUtil.rename("hdfs://abc/dbf", "hdfs://abc/dba", new HashMap<>(), 1000));
 
         Assertions.assertThrows(StarRocksException.class, () ->
-                HdfsUtil.checkPathExist("hdfs://abc/dbf", new BrokerDesc(new HashMap<>())));
+                HdfsUtil.checkPathExist("hdfs://abc/dbf", new HashMap<>()));
 
         HdfsFsManager fileSystemManager = new HdfsFsManager();
         Assertions.assertThrows(StarRocksException.class, () ->

@@ -30,6 +30,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 #include "util/json.h"
+#include "velocypack/vpack.h"
 
 namespace starrocks {
 
@@ -242,6 +243,36 @@ PARALLEL_TEST(JsonColumnTest, test_compare_array) {
     EXPECT_LT(array1.compare(array2), 0);
 }
 
+PARALLEL_TEST(JsonColumnTest, test_compare_array_large_integers) {
+    // Test comparison with large integers to avoid overflow issues
+    // This tests the bug where comparing [1] < [9223372036854775807] would incorrectly return false
+    auto small_int_array = JsonValue::parse("[1]").value();
+    auto large_int_array = JsonValue::parse("[9223372036854775807]").value(); // INT64_MAX
+    auto medium_large_int_array = JsonValue::parse("[922337203685477580]").value();
+    auto medium_int_array = JsonValue::parse("[92233720368547758]").value();
+
+    // Small integer should be less than large integer
+    EXPECT_LT(small_int_array.compare(large_int_array), 0);
+    EXPECT_LT(small_int_array.compare(medium_large_int_array), 0);
+    EXPECT_LT(small_int_array.compare(medium_int_array), 0);
+
+    // Large integer should be greater than small integer
+    EXPECT_GT(large_int_array.compare(small_int_array), 0);
+    EXPECT_GT(medium_large_int_array.compare(small_int_array), 0);
+    EXPECT_GT(medium_int_array.compare(small_int_array), 0);
+
+    // Test with negative numbers
+    auto neg_small_int_array = JsonValue::parse("[-1]").value();
+    auto neg_large_int_array = JsonValue::parse("[-9223372036854775808]").value(); // INT64_MIN
+
+    EXPECT_GT(neg_small_int_array.compare(neg_large_int_array), 0);
+    EXPECT_LT(neg_large_int_array.compare(neg_small_int_array), 0);
+
+    // Compare positive and negative
+    EXPECT_GT(small_int_array.compare(neg_small_int_array), 0);
+    EXPECT_LT(neg_small_int_array.compare(small_int_array), 0);
+}
+
 PARALLEL_TEST(JsonColumnTest, test_compare_object) {
     auto obj0 = JsonValue::parse("{}").value();
     auto obj1 = JsonValue::parse(R"( {"a": 1} )").value();
@@ -266,7 +297,7 @@ PARALLEL_TEST(JsonColumnTest, test_hash) {
 PARALLEL_TEST(JsonColumnTest, test_filter) {
     // TODO(mofei)
     const int N = 100;
-    JsonColumn::Ptr json_column = JsonColumn::create();
+    auto json_column = JsonColumn::create();
     for (int i = 0; i < N; i++) {
         std::string json_str = strings::Substitute("{\"a\": $0}", i);
         json_column->append(JsonValue::parse(json_str).value());
@@ -279,7 +310,7 @@ PARALLEL_TEST(JsonColumnTest, test_filter) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(JsonColumnTest, put_mysql_buffer) {
-    JsonColumn::Ptr json_column = JsonColumn::create();
+    auto json_column = JsonColumn::create();
     json_column->append(JsonValue::parse("{\"a\": 0}").value());
 
     MysqlRowBuffer rowBuffer;
@@ -315,14 +346,14 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
         builder.append(&json);
         auto result = builder.build(false);
 
-        JsonColumn::Ptr json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(std::move(result));
-        JsonColumn* json_column = json_column_ptr.get();
+        JsonColumn::MutablePtr json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(std::move(result));
+        auto json_column = ColumnHelper::as_raw_column<JsonColumn>(json_column_ptr.get());
         ASSERT_EQ(1, json_column->size());
         ASSERT_EQ(0, json_column->get_object(0)->compare(json));
     }
     // clone
     {
-        JsonColumn::Ptr column = JsonColumn::create();
+        auto column = JsonColumn::create();
         column->append(JsonValue::parse("1").value());
 
         {
@@ -350,12 +381,12 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
         // clone json_column by helper
         {
             TypeDescriptor desc = TypeDescriptor::create_json_type();
-            ColumnPtr copy = ColumnHelper::clone_column(desc, false, column, column->size());
+            auto copy = ColumnHelper::clone_column(desc, false, column, column->size());
             ASSERT_EQ(1, copy->size());
             ASSERT_EQ(0, copy->compare_at(0, 0, *column, 0));
             ASSERT_FALSE(copy->is_nullable());
 
-            JsonColumn::Ptr json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(copy);
+            auto json_column_ptr = ColumnHelper::cast_to<TYPE_JSON>(copy);
             ASSERT_EQ(1, json_column_ptr->size());
             ASSERT_EQ(0, json_column_ptr->compare_at(0, 0, *column, 0));
 

@@ -37,7 +37,7 @@ public class OperatorBuilderFactory {
             return (T) c.newInstance();
         } catch (Exception e) {
             throw new StarRocksPlannerException("not implement builder: " + operator.getOpType(),
-                    ErrorType.INTERNAL_ERROR);
+                    ErrorType.INTERNAL_ERROR, e);
         }
     }
 }

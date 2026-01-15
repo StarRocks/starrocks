@@ -34,11 +34,11 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Enums;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -48,11 +48,14 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.sql.ast.ShowDataDistributionStmt;
-import com.starrocks.system.Backend;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.ReplicaStatus;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 
@@ -63,9 +66,41 @@ import java.util.Map;
 
 public class MetadataViewer {
 
-    public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt) throws DdlException {
-        return getTabletStatus(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions(),
-                stmt.getStatusFilter(), stmt.getOp());
+    public static List<List<String>> getTabletStatus(AdminShowReplicaStatusStmt stmt, ConnectContext context)
+            throws DdlException {
+        ReplicaStatus statusFilter = null;
+        BinaryType op = null; // Default to null instead of stmt.getOp()
+        Expr where = stmt.getWhere();
+
+        // Analyze where clause to extract statusFilter and op directly in this method
+        if (where != null) {
+            if (where instanceof BinaryPredicate binaryPredicate) {
+                op = binaryPredicate.getOp();
+                Expr leftChild = binaryPredicate.getChild(0);
+                Expr rightChild = binaryPredicate.getChild(1);
+                String leftKey = ((SlotRef) leftChild).getColumnName();
+                if (rightChild instanceof StringLiteral && leftKey.equalsIgnoreCase("status")) {
+                    statusFilter = Enums.getIfPresent(ReplicaStatus.class,
+                            ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
+                }
+            }
+        }
+
+        // Get partitions from PartitionRef instead of the removed partitions field
+        List<String> partitions = Lists.newArrayList();
+        PartitionRef partitionRef = stmt.getPartitionRef();
+        if (partitionRef != null) {
+            partitions.addAll(partitionRef.getPartitionNames());
+        }
+
+        // Resolve database name from TableRef or context
+        String dbName = stmt.getDbName();
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = context.getDatabase();
+        }
+
+        return getTabletStatus(dbName, stmt.getTblName(), partitions,
+                statusFilter, op);
     }
 
     private static List<List<String>> getTabletStatus(String dbName, String tblName, List<String> partitions,
@@ -77,7 +112,7 @@ public class MetadataViewer {
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -110,7 +145,7 @@ public class MetadataViewer {
                     long visibleVersion = physicalPartition.getVisibleVersion();
 
                     for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             int count = replicationNum;
@@ -118,17 +153,7 @@ public class MetadataViewer {
                                 --count;
                                 List<String> row = Lists.newArrayList();
 
-                                ReplicaStatus status = ReplicaStatus.OK;
-                                Backend be = infoService.getBackend(replica.getBackendId());
-                                if (be == null || !be.isAvailable() || replica.isBad()) {
-                                    status = ReplicaStatus.DEAD;
-                                } else if (replica.getVersion() < visibleVersion
-                                        || replica.getLastFailedVersion() > 0) {
-                                    status = ReplicaStatus.VERSION_ERROR;
-
-                                } else if (replica.getSchemaHash() != -1 && replica.getSchemaHash() != schemaHash) {
-                                    status = ReplicaStatus.SCHEMA_ERROR;
-                                }
+                                ReplicaStatus status = replica.computeReplicaStatus(infoService, visibleVersion, schemaHash);
 
                                 if (filterReplica(status, statusFilter, op)) {
                                     continue;
@@ -192,12 +217,7 @@ public class MetadataViewer {
         }
     }
 
-    public static List<List<String>> getTabletDistribution(AdminShowReplicaDistributionStmt stmt) throws DdlException {
-        return getTabletDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
-    }
-
-    private static List<List<String>> getTabletDistribution(String dbName, String tblName,
-                                                            PartitionNames partitionNames)
+    public static List<List<String>> getTabletDistribution(String dbName, String tblName, PartitionNames partitionNames)
             throws DdlException {
         DecimalFormat df = new DecimalFormat("##.00 %");
 
@@ -206,7 +226,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -299,12 +319,8 @@ public class MetadataViewer {
         return allComputeNodeIds;
     }
 
-    public static List<List<String>> getDataDistribution(ShowDataDistributionStmt stmt) throws DdlException {
-        return getDataDistribution(stmt.getDbName(), stmt.getTblName(), stmt.getPartitionNames());
-    }
-
     public static List<List<String>> getDataDistribution(
-            String dbName, String tblName, PartitionNames partitionNames) throws DdlException {
+            String dbName, String tblName, PartitionRef partitionNames) throws DdlException {
 
         DecimalFormat df = new DecimalFormat("00.00 %");
         List<List<String>> result = Lists.newArrayList();
@@ -312,7 +328,7 @@ public class MetadataViewer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
-            throw new DdlException("Database " + dbName + " does not exsit");
+            throw new DdlException("Database " + dbName + " does not exist");
         }
 
         Locker locker = new Locker();
@@ -371,8 +387,7 @@ public class MetadataViewer {
                             List<String> row = Lists.newArrayList();
                             row.add(partition.getName());
                             row.add(String.valueOf(physicalPartition.getId()));
-                            row.add(olapTable.getIndexNameById(index.getId()));
-                            row.add(index.getVirtualBucketsByTabletId(tablets.get(i).getId()).toString());
+                            row.add(olapTable.getIndexNameByMetaId(index.getMetaId()));
                             row.add(String.valueOf(rowCountStatistics.get(i)));
                             row.add(totalRowCount == 0L ? "0.00 %"
                                     : df.format((double) rowCountStatistics.get(i) / totalRowCount));

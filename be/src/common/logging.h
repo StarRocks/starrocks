@@ -78,11 +78,11 @@
 #define VLOG_OPERATOR VLOG(3)
 #define VLOG_ROW VLOG(10)
 #define VLOG_PROGRESS VLOG(2)
-#define VLOG_CACHE VLOG(1)
+#define VLOG_CACHE VLOG(3)
 
-#define VLOG_CONNECTION_IS_ON VLOG_IS_ON(1)
+#define VLOG_CONNECTION_IS_ON VLOG_IS_ON(2)
 #define VLOG_RPC_IS_ON VLOG_IS_ON(2)
-#define VLOG_QUERY_IS_ON VLOG_IS_ON(1)
+#define VLOG_QUERY_IS_ON VLOG_IS_ON(2)
 #define VLOG_FILE_IS_ON VLOG_IS_ON(2)
 #define VLOG_OPERATOR_IS_ON VLOG_IS_ON(3)
 #define VLOG_ROW_IS_ON VLOG_IS_ON(10)
@@ -90,7 +90,8 @@
 
 namespace starrocks {
 class TUniqueId;
-}
+void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds);
+} // namespace starrocks
 
 // Print log with query id.
 #define QUERY_LOG(level) LOG(level) << "[" << tls_thread_status.query_id() << "] "

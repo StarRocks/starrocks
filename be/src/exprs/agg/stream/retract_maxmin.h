@@ -151,8 +151,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -195,11 +195,11 @@ public:
     T get_row_value(const Column* column, size_t row_num) const {
         if constexpr (lt_is_string<LT>) {
             DCHECK(column->is_binary());
-            return column->get(row_num).get_slice();
+            return down_cast<const InputColumnType&>(*column).get_slice(row_num);
         } else {
             DCHECK(!column->is_nullable() && !column->is_binary());
             const auto& col = down_cast<const InputColumnType&>(*column);
-            return col.get_data()[row_num];
+            return col.immutable_data()[row_num];
         }
     }
 
@@ -278,8 +278,8 @@ public:
             DCHECK((*to[0]).is_numeric());
         }
         DCHECK((*to[1]).is_numeric());
-        auto* column0 = down_cast<InputColumnType*>(to[0].get());
-        auto* column1 = down_cast<Int64Column*>(to[1].get());
+        auto* column0 = down_cast<InputColumnType*>(to[0]->as_mutable_raw_ptr());
+        auto* column1 = down_cast<Int64Column*>(to[1]->as_mutable_raw_ptr());
         auto& detail_state = this->data(state).detail_state();
         for (auto iter = detail_state.cbegin(); iter != detail_state.cend(); iter++) {
             // is it possible that count is negative?

@@ -604,11 +604,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.prepareLoadTask(anyString, anyInt, (HttpHeaders) any, (TransactionResult) any);
+                    streamLoadMgr.prepareLoadTask(anyString, anyString, anyInt, (HttpHeaders) any, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
                         public void prepareLoadTask(String label,
+                                                    String tableName,
                                                     int channelId,
                                                     HttpHeaders headers,
                                                     TransactionResult resp) throws StarRocksException {
@@ -636,11 +637,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.prepareLoadTask(anyString, anyInt, (HttpHeaders) any, (TransactionResult) any);
+                    streamLoadMgr.prepareLoadTask(anyString, anyString, anyInt, (HttpHeaders) any, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
                         public void prepareLoadTask(String label,
+                                                    String tableName,
                                                     int channelId,
                                                     HttpHeaders headers,
                                                     TransactionResult resp) throws StarRocksException {
@@ -649,7 +651,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     };
 
-                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
+                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, anyLong, (TransactionResult) any);
                     times = 1;
                     result = new StarRocksException("try prepare load task txn error");
                 }
@@ -672,11 +674,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.prepareLoadTask(anyString, anyInt, (HttpHeaders) any, (TransactionResult) any);
+                    streamLoadMgr.prepareLoadTask(anyString, anyString, anyInt, (HttpHeaders) any, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
                         public void prepareLoadTask(String label,
+                                                    String tableName,
                                                     int channelId,
                                                     HttpHeaders headers,
                                                     TransactionResult resp) throws StarRocksException {
@@ -685,11 +688,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     };
 
-                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
+                    streamLoadMgr.tryPrepareLoadTaskTxn(anyString, anyLong, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws
+                        public void tryPrepareLoadTaskTxn(String label, long preparedTimeoutMs, TransactionResult resp) throws
                                 StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
@@ -800,7 +803,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     );
 
                     globalTransactionMgr.prepareTransaction(
-                            anyLong, anyLong,
+                            anyLong, anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any, anyLong);
@@ -834,7 +837,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     );
 
                     globalTransactionMgr.prepareTransaction(
-                            anyLong, anyLong,
+                            anyLong, anyLong, anyLong,
                             (List<TabletCommitInfo>) any,
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any, anyLong);
@@ -864,7 +867,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.commitLoadTask(anyString, (TransactionResult) any);
+                    streamLoadMgr.commitLoadTask(anyString, (HttpHeaders) any, (TransactionResult) any);
                     times = 1;
                     result = new StarRocksException("commit load task error");
                 }
@@ -887,11 +890,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         {
             new Expectations() {
                 {
-                    streamLoadMgr.commitLoadTask(anyString, (TransactionResult) any);
+                    streamLoadMgr.commitLoadTask(anyString, (HttpHeaders) any, (TransactionResult) any);
                     times = 1;
                     result = new Delegate<Void>() {
 
-                        public void commitLoadTask(String label, TransactionResult resp) throws StarRocksException {
+                        public void commitLoadTask(String label, HttpHeaders h, TransactionResult resp)
+                                throws StarRocksException {
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -1268,7 +1272,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 result = txnId;
 
                 globalTransactionMgr.prepareTransaction(
-                        anyLong, anyLong,
+                        anyLong, anyLong, anyLong,
                         (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any,
                         (TxnCommitAttachment) any, anyLong);
@@ -1790,6 +1794,251 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             Map<String, Object> body = parseResponseBody(response);
             assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
             assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY)).contains("mock redirect to BE"));
+        }
+    }
+
+    @Test
+    public void multiStatementTransactionBeginTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginMultiStatementLoadTask(
+                            anyString, anyString, anyString, anyString, anyLong,
+                            (TransactionResult) any, (ComputeResource) any);
+                    times = 1;
+                    result = new Delegate<Void>() {
+                        public void beginMultiStatementLoadTask(String dbName, String label,
+                                                               String user, String clientIp,
+                                                               long timeoutMillis,
+                                                               TransactionResult resp,
+                                                               ComputeResource computeResource) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                        }
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(WAREHOUSE_KEY, "default_warehouse");
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, body.get(TransactionResult.LABEL_KEY));
+            }
+        }
+
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginMultiStatementLoadTask(
+                            anyString, anyString, anyString, anyString, anyLong,
+                            (TransactionResult) any, (ComputeResource) any);
+                    times = 1;
+                    result = new StarRocksException("begin multi statement load task error");
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(WAREHOUSE_KEY, "default_warehouse");
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("begin multi statement load task error"));
+            }
+        }
+    }
+
+    @Test
+    public void multiStatementTransactionCommitTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.commitLoadTask(anyString, (HttpHeaders) any, (TransactionResult) any);
+                    times = 1;
+                    result = new StarRocksException("commit multi statement load task error");
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_COMMIT, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                uriBuilder.addParameter(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("commit multi statement load task error"));
+            }
+        }
+
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.commitLoadTask(anyString, (HttpHeaders) any, (TransactionResult) any);
+                    times = 1;
+                    result = new Delegate<Void>() {
+                        public void commitLoadTask(String label, HttpHeaders h, TransactionResult resp) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                        }
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_COMMIT, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, body.get(TransactionResult.LABEL_KEY));
+            }
+        }
+    }
+
+    @Test
+    public void multiStatementTransactionRollbackTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.rollbackLoadTask(anyString, (TransactionResult) any);
+                    times = 1;
+                    result = new StarRocksException("rollback multi statement load task error");
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_ROLLBACK, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("rollback multi statement load task error"));
+            }
+        }
+
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.rollbackLoadTask(anyString, (TransactionResult) any);
+                    times = 1;
+                    result = new Delegate<Void>() {
+                        public void rollbackLoadTask(String label, TransactionResult resp) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                        }
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_ROLLBACK, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, body.get(TransactionResult.LABEL_KEY));
+            }
+        }
+    }
+
+    @Test
+    public void multiStatementTransactionLoadTest() throws Exception {
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.executeLoadTask(
+                            anyString, anyInt, (HttpHeaders) any, (TransactionResult) any,
+                            anyString, anyString);
+                    times = 1;
+                    result = new Delegate<TNetworkAddress>() {
+                        public TNetworkAddress executeLoadTask(String label,
+                                                               int channelId,
+                                                               HttpHeaders headers,
+                                                               TransactionResult resp,
+                                                               String dbName,
+                                                               String tableName) {
+                            resp.setErrorMsg("execute multi statement load task error");
+                            return null;
+                        }
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_LOAD, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("execute multi statement load task error"));
+            }
+        }
+
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.executeLoadTask(
+                            anyString, anyInt, (HttpHeaders) any, (TransactionResult) any,
+                            anyString, anyString);
+                    times = 1;
+                    result = new TNetworkAddress("localhost", 8040);
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_LOAD, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(
+                        SOURCE_TYPE, Objects.toString(LoadJobSourceType.MULTI_STATEMENT_STREAMING.getFlag()));
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
+                        .contains("mock redirect to BE"));
+            }
         }
     }
 

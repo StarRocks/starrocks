@@ -72,11 +72,13 @@ public:
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto col0 = chunk->get_column_raw_ptr_by_index(0);
+        auto col1 = chunk->get_column_raw_ptr_by_index(1);
+        auto col2 = chunk->get_column_raw_ptr_by_index(2);
         for (long key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+            col0->append_datum(Datum(key));
+            col1->append_datum(Datum((int16_t)(key % 100 + 1)));
+            col2->append_datum(Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -102,19 +104,19 @@ public:
         k1.column_name = "pk";
         k1.__set_is_key(true);
         k1.column_type.type = TPrimitiveType::BIGINT;
-        request.tablet_schema.columns.push_back(k1);
+        request.tablet_schema.columns.emplace_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
         k2.__set_is_key(false);
         k2.column_type.type = TPrimitiveType::SMALLINT;
-        request.tablet_schema.columns.push_back(k2);
+        request.tablet_schema.columns.emplace_back(k2);
 
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
         k3.column_type.type = TPrimitiveType::INT;
-        request.tablet_schema.columns.push_back(k3);
+        request.tablet_schema.columns.emplace_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         CHECK(st.ok()) << st.to_string();
         return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
@@ -147,7 +149,7 @@ public:
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (long key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
@@ -219,6 +221,21 @@ static uint32_t calc_update_row_cnt(const ColumnPartialUpdateState& state) {
     return total;
 }
 
+static bool is_rowid_pairs_ordered(const std::map<uint32_t, std::vector<RowidPairs>>& rss_rowid_to_update_rowid) {
+    for (const auto& each_rss : rss_rowid_to_update_rowid) {
+        const auto& rowid_pairs = each_rss.second;
+        if (rowid_pairs.size() < 2) {
+            continue;
+        }
+        for (size_t i = 1; i < rowid_pairs.size(); i++) {
+            if (rowid_pairs[i].first <= rowid_pairs[i - 1].first) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static uint32_t find_upt_row_id(const ColumnPartialUpdateState& state, uint64_t src_rss_id) {
     std::map<uint64_t, uint32_t> m;
     for (const auto& each_rss : state.rss_rowid_to_update_rowid) {
@@ -288,6 +305,8 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
         ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), 0);
+        // check rowid pairs ordered
+        ASSERT_TRUE(is_rowid_pairs_ordered(parital_update_states[0].rss_rowid_to_update_rowid));
     }
 }
 
@@ -334,6 +353,10 @@ TEST_F(RowsetColumnUpdateStateTest, partial_update_states_batch_get_index) {
         for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
             uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
             ASSERT_EQ(find_upt_row_id(parital_update_states[0], src_rss_rowid), upt_id);
+        }
+        // check rowid pairs ordered
+        for (const auto& each : parital_update_states) {
+            ASSERT_TRUE(is_rowid_pairs_ordered(each.rss_rowid_to_update_rowid));
         }
         // check upserts
         std::vector<BatchPKsPtr> upserts = state.upserts();

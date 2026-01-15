@@ -84,6 +84,13 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
                 slot_desc->type().type = TYPE_DOUBLE;
             }
         }
+    } else if (schema_table->schema_table_type() == TSchemaTableType::SCH_PARTITIONS_META) {
+        for (auto* slot_desc : dest_slot_descs) {
+            const auto& col_name = slot_desc->col_name();
+            if (slot_desc->type().type == TYPE_VARCHAR && boost::iequals(col_name, "DATA_SIZE")) {
+                slot_desc->type().type = TYPE_BIGINT;
+            }
+        }
     }
 
     int slot_num = dest_slot_descs.size();
@@ -180,8 +187,8 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
         for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
             int j = _index_map[i];
-            ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
-            ColumnPtr& dst_column = chunk_dst->get_column_by_slot_id(dest_slot_descs[i]->id());
+            const ColumnPtr& src_column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
+            auto* dst_column = chunk_dst->get_column_raw_ptr_by_slot_id(dest_slot_descs[i]->id());
             dst_column->append(*src_column);
         }
 

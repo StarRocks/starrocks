@@ -31,12 +31,31 @@ public abstract class Tablet extends MetaObject implements Writable {
     @SerializedName(value = JSON_KEY_ID)
     protected long id;
 
+    @SerializedName(value = "range")
+    protected TabletRange range = new TabletRange();
+
+    public Tablet() {
+    }
+
     public Tablet(long id) {
         this.id = id;
     }
 
+    public Tablet(long id, TabletRange range) {
+        this.id = id;
+        this.range = range;
+    }
+
     public long getId() {
         return id;
+    }
+
+    public TabletRange getRange() {
+        return range;
+    }
+
+    public void setRange(TabletRange range) {
+        this.range = range;
     }
 
     public abstract long getDataSize(boolean singleReplica);
@@ -56,7 +75,7 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                               long visibleVersion, long localBeId, int schemaHash,
-                                              ComputeResource computeResource);
+                                              ComputeResource computeResource, List<Long> locations);
 
     @Override
     public String toString() {

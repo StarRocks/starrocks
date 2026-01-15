@@ -16,19 +16,11 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.proc.LoadProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,15 +33,11 @@ public class ShowLoadStmt extends ShowStmt {
 
     private String dbName;
     private final Expr whereClause;
-    private final LimitElement limitElement;
-    private final List<OrderByElement> orderByElements;
 
     private boolean all = false;
     private String labelValue;
     private String stateValue;
     private boolean isAccurateMatch;
-
-    private ArrayList<OrderByPair> orderByPairs;
 
     public ShowLoadStmt(String db, Expr labelExpr, List<OrderByElement> orderByElements, LimitElement limitElement) {
         this(db, labelExpr, orderByElements, limitElement, NodePosition.ZERO);
@@ -74,22 +62,6 @@ public class ShowLoadStmt extends ShowStmt {
 
     public Expr getWhereClause() {
         return whereClause;
-    }
-
-    public List<OrderByElement> getOrderByElements() {
-        return orderByElements;
-    }
-
-    public LimitElement getLimitElement() {
-        return limitElement;
-    }
-
-    public ArrayList<OrderByPair> getOrderByPairs() {
-        return this.orderByPairs;
-    }
-
-    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
-        this.orderByPairs = orderByPairs;
     }
 
     public long getLimit() {
@@ -148,20 +120,6 @@ public class ShowLoadStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowLoadStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : LoadProcDir.TITLE_NAMES) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowLoadStatement(this, context);
     }
 }

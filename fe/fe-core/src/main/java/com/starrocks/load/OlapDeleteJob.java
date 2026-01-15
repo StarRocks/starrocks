@@ -39,7 +39,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -67,6 +66,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -145,11 +145,11 @@ public class OlapDeleteJob extends DeleteJob {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : physicalPartition
                                 .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-                        long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                        long indexMetaId = index.getMetaId();
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexMetaId);
 
                         List<TColumn> columnsDesc = new ArrayList<>();
-                        for (Column column : olapTable.getSchemaByIndexId(indexId)) {
+                        for (Column column : olapTable.getSchemaByIndexMetaId(indexMetaId)) {
                             columnsDesc.add(column.toThrift());
                         }
 
@@ -167,7 +167,7 @@ public class OlapDeleteJob extends DeleteJob {
                                 // create push task for each replica
                                 PushTask pushTask = new PushTask(null,
                                             replica.getBackendId(), db.getId(), olapTable.getId(),
-                                            physicalPartition.getId(), indexId,
+                                            physicalPartition.getId(), index.getId(),
                                             tabletId, replicaId, schemaHash,
                                             -1, 0,
                                             -1, type, conditions,

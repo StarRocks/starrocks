@@ -16,15 +16,18 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AuditLog;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.formatter.FormatOptions;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
@@ -54,22 +57,56 @@ public class SimpleExecutor {
 
     private final TResultSinkType queryResultProtocol;
 
+    private int dop = 0;
+
     public SimpleExecutor(String name, TResultSinkType queryResultProtocol) {
         this.name = name;
         this.queryResultProtocol = queryResultProtocol;
     }
 
+    private String formatSQL(String sql, StatementBase stmt) {
+        if (!Config.enable_internal_sql) {
+            return "?";
+        }
+        if (Config.enable_sql_desensitize_in_log) {
+            return AstToSQLBuilder.toSQL(stmt, FormatOptions.allEnable().setColumnSimplifyTableName(false))
+                    .orElse("this is statistic desensitize sql");
+        }
+        return sql;
+    }
+
+    /**
+     * Set the execution DOP of this executor
+     *
+     * @param dop
+     */
+    public void setDop(int dop) {
+        this.dop = dop;
+    }
+
     public void executeDML(String sql) {
+        executeDMLOrControl(sql, SqlType.DML);
+    }
+
+    public void executeControl(String sql) {
+        executeDMLOrControl(sql, SqlType.CONTROL);
+    }
+
+    private void executeDMLOrControl(String sql, SqlType type) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
+            sql = formatSQL(sql, parsedStmt);
+            if (type == SqlType.DML) {
+                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be DML statement");
+            }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
-            AuditLog.getInternalAudit().info(name + " execute SQL | Query_id {} | SQL {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
+            context.getSessionVariable().setPipelineDop(dop);
+            AuditLog.getInternalAudit().info("{} execute SQL | Query_id {} | {} {}",
+                    name, DebugUtil.printId(context.getQueryId()), type.name(), sql);
             executor.execute();
         } catch (Exception e) {
             LOG.error(name + " execute SQL {} failed: {}", sql, e.getMessage(), e);
@@ -98,12 +135,14 @@ public class SimpleExecutor {
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
         try {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            sql = formatSQL(sql, parsedStmt);
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
-            AuditLog.getInternalAudit().info(name + " execute SQL | Query_id {} | SQL {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
+            context.getSessionVariable().setPipelineDop(dop);
+            AuditLog.getInternalAudit()
+                    .info("{} execute SQL | Query_id {} | DQL {}", name, DebugUtil.printId(context.getQueryId()), sql);
             Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
             if (!sqlResult.second.ok()) {
                 throw new SemanticException(name + "execute sql failed with status: " + sqlResult.second.getErrorMsg());
@@ -123,8 +162,9 @@ public class SimpleExecutor {
             for (var parsedStmt : ListUtils.emptyIfNull(parsedStmts)) {
                 Analyzer.analyze(parsedStmt, context);
                 DDLStmtExecutor.execute(parsedStmt, context);
+                sql = formatSQL(sql, parsedStmts.get(0));
             }
-            AuditLog.getInternalAudit().info(name + " execute DDL | SQL {}", sql);
+            AuditLog.getInternalAudit().info("{} execute DDL | DDL {}", name, sql);
         } catch (Exception e) {
             LOG.error(name + "execute DDL error: {}", sql, e);
             throw new RuntimeException(e);
@@ -139,5 +179,10 @@ public class SimpleExecutor {
         context.setNeedQueued(false);
         context.setStartTime();
         return context;
+    }
+
+    private enum SqlType {
+        DML,
+        CONTROL
     }
 }

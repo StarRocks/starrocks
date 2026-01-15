@@ -54,6 +54,7 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::SCHEMA_CHANGE, "schema_change"},
         {MemTrackerType::JEMALLOC, "jemalloc_metadata"},
         {MemTrackerType::PASSTHROUGH, "passthrough"},
+        {MemTrackerType::BRPC_IOBUF, "brpc_iobuf"},
         {MemTrackerType::CONNECTOR_SCAN, "connector_scan"},
         {MemTrackerType::METADATA, "metadata"},
         {MemTrackerType::TABLET_METADATA, "tablet_metadata"},
@@ -72,7 +73,6 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::UPDATE, "update"},
         {MemTrackerType::CLONE, "clone"},
         {MemTrackerType::DATACACHE, "datacache"},
-        {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},
         {MemTrackerType::REPLICATION, "replication"},
         {MemTrackerType::ROWSET_UPDATE_STATE, "rowset_update_state"},
         {MemTrackerType::INDEX_CACHE, "index_cache"},
@@ -199,6 +199,21 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+
+#ifdef DEBUG
+    {
+        std::unique_lock<std::mutex> lock(_child_trackers_lock);
+        for (const auto& child : _child_trackers) {
+            LOG(WARNING) << "MemTracker '" << _label << "' is being destroyed without releasing child tracker "
+                         << child->label();
+        }
+        DCHECK(_child_trackers.empty()) << err_msg("Child mem trackers have not been released, may cause corruption");
+    }
+#endif
+
+    // When the mem_tracker is destroyed, manually setting _consumption to null can easily
+    // trigger a use-after-free bug in MemTracker.
+    _consumption = nullptr;
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {
@@ -218,7 +233,7 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     item->level = _level;
     item->limit = _limit;
     item->cur_consumption = _consumption->current_value();
-    item->peak_consumption = _consumption->value();
+    item->peak_consumption = COUNTER_VALUE(_consumption);
 
     if (_level < upper_level) {
         std::lock_guard<std::mutex> l(_child_trackers_lock);
@@ -269,6 +284,9 @@ std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) con
             str << "Mem usage has exceed the limit of the resource group [" << label() << "]. "
                 << "You can change the limit by modifying [mem_limit] of this group";
         }
+        break;
+    case MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL:
+        str << "Mem usage has exceed the limit of resource group memory pool [" << label() << "]. ";
         break;
     case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
         str << "Mem usage has exceed the big query limit of the resource group [" << label() << "]. "

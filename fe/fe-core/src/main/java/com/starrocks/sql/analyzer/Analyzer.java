@@ -15,9 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -42,11 +44,12 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CallProcedureStatement;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelCompactionStmt;
@@ -102,6 +105,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -191,7 +195,7 @@ public class Analyzer {
         GlobalStateMgr.getCurrentState().getAnalyzer().analyzerVisitor.visit(statement, context);
     }
 
-    public static class AnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    public static class AnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         private static final Analyzer.AnalyzerVisitor INSTANCE = new Analyzer.AnalyzerVisitor();
 
         public static Analyzer.AnalyzerVisitor getInstance() {
@@ -259,13 +263,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeAlterResourceGroupStmt(statement);
             return null;
         }
 
         @Override
         public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeDropResourceGroupStmt(statement);
             return null;
         }
 
@@ -397,7 +401,7 @@ public class Analyzer {
 
         @Override
         public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
-            statement.analyze();
+            ResourceGroupAnalyzer.analyzeCreateResourceGroupStmt(statement);
             return null;
         }
 
@@ -533,7 +537,13 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
-            AlterDbQuotaAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDatabaseSetStatement(AlterDatabaseSetStmt statement, ConnectContext context) {
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -551,7 +561,7 @@ public class Analyzer {
 
         @Override
         public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
-            AlterDatabaseRenameStatementAnalyzer.analyze(statement, context);
+            AlterDatabaseAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -617,6 +627,13 @@ public class Analyzer {
         @Override
         public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
                                                                ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt statement,
+                                                                      ConnectContext context) {
             ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
@@ -965,8 +982,12 @@ public class Analyzer {
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
-            statement.analyze();
             return null;
+        }
+
+        @Override
+        public Void visitAddSqlDigestBlackListStatement(AddSqlDigestBlackListStmt statement, ConnectContext context) {
+            return AstVisitorExtendInterface.super.visitAddSqlDigestBlackListStatement(statement, context);
         }
 
         // ------------------------------------------- Export Statement ------------------------------------------------
@@ -1237,6 +1258,13 @@ public class Analyzer {
         @Override
         public Void visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, ConnectContext context) {
             ShowStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Procedure Statement -------------------------------------------------
+        @Override
+        public Void visitCallProcedureStatement(CallProcedureStatement statement, ConnectContext context) {
+            CallProcedureAnalyzer.analyze(statement, context);
             return null;
         }
     }

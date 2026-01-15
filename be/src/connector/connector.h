@@ -75,7 +75,7 @@ public:
     void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
-    Status parse_runtime_filters(RuntimeState* state);
+    virtual Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
@@ -102,7 +102,7 @@ protected:
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
         return Status::OK();
     }
 
@@ -157,6 +157,7 @@ public:
     virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+    const std::vector<TBucketProperty>& get_bucket_properties() const { return _bucket_properties; }
 
     virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
@@ -184,6 +185,7 @@ public:
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
+    std::vector<TBucketProperty> _bucket_properties;
     int64_t scan_dop = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
@@ -225,6 +227,11 @@ public:
     //                                                         const std::string& table_handle) const;
 
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
+
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const {
         CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();
     }

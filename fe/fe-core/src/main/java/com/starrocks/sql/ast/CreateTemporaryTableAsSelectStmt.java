@@ -24,4 +24,9 @@ public class CreateTemporaryTableAsSelectStmt extends CreateTableAsSelectStmt {
                                             List<String> columnNames, QueryStatement queryStatement, NodePosition pos) {
         super(createTemporaryTableStmt, columnNames, queryStatement, pos);
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateTemporaryTableAsSelectStatement(this, context);
+    }
 }

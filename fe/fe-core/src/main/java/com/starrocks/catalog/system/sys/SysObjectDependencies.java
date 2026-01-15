@@ -14,12 +14,12 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -28,13 +28,14 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TObjectDependencyItem;
 import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,17 +51,17 @@ public class SysObjectDependencies {
     public static SystemTable create() {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("object_id", ScalarType.BIGINT)
-                        .column("object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("object_type", ScalarType.createVarcharType(64))
+                        .column("object_id", IntegerType.BIGINT)
+                        .column("object_name", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_database", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_catalog", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_type", TypeFactory.createVarcharType(64))
 
-                        .column("ref_object_id", ScalarType.BIGINT)
-                        .column("ref_object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
-                        .column("ref_object_type", ScalarType.createVarcharType(64))
+                        .column("ref_object_id", IntegerType.BIGINT)
+                        .column("ref_object_name", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_database", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_catalog", TypeFactory.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_type", TypeFactory.createVarcharType(64))
                         .build(),
                 TSchemaTableType.STARROCKS_OBJECT_DEPENDENCIES);
     }
@@ -69,12 +70,8 @@ public class SysObjectDependencies {
         TAuthInfo auth = req.getAuth_info();
         TObjectDependencyRes response = new TObjectDependencyRes();
 
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
 
         // list dependencies of mv
         Locker locker = new Locker();
@@ -91,9 +88,6 @@ public class SysObjectDependencies {
                     }
                     // Only show tables with privilege
                     try {
-                        ConnectContext context = new ConnectContext();
-                        context.setCurrentUserIdentity(currentUser);
-                        context.setCurrentRoleIds(currentUser);
                         Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                     } catch (AccessDeniedException e) {
                         continue;

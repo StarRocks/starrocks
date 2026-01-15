@@ -45,8 +45,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -78,33 +76,44 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         }
     }
 
-    public Status addAndInitRepoIfNotExist(Repository repo, boolean isReplay) {
+    public Status addAndInitRepoIfNotExist(Repository repo) {
         lock.lock();
         try {
             if (!repoNameMap.containsKey(repo.getName())) {
-                if (!isReplay) {
-                    // create repository path and repo info file in remote storage
-                    Status st = repo.initRepository();
-                    if (!st.ok()) {
-                        return st;
-                    }
-                }
-                repoNameMap.put(repo.getName(), repo);
-                repoIdMap.put(repo.getId(), repo);
-
-                if (!isReplay) {
-                    // write log
-                    GlobalStateMgr.getCurrentState().getEditLog().logCreateRepository(repo);
+                // create repository path and repo info file in remote storage
+                Status st = repo.initRepository();
+                if (!st.ok()) {
+                    return st;
                 }
 
-                LOG.info("successfully adding repo {} to repository mgr. is replay: {}",
-                        repo.getName(), isReplay);
+                // write log
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateRepository(repo, wal -> {
+                    addRepoWithoutLock(repo);
+                });
                 return Status.OK;
+            } else {
+                return new Status(ErrCode.COMMON_ERROR, "repository with same name already exist: " + repo.getName());
             }
-            return new Status(ErrCode.COMMON_ERROR, "repository with same name already exist: " + repo.getName());
         } finally {
             lock.unlock();
         }
+    }
+
+    public void replayAddRepo(Repository repo) {
+        lock.lock();
+        try {
+            if (!repoNameMap.containsKey(repo.getName())) {
+                addRepoWithoutLock(repo);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void addRepoWithoutLock(Repository repo) {
+        repoNameMap.put(repo.getName(), repo);
+        repoIdMap.put(repo.getId(), repo);
+        LOG.info("successfully adding repo {} to repository mgr. ", repo.getName());
     }
 
     public Repository getRepo(String repoName) {
@@ -115,18 +124,15 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         return repoIdMap.get(repoId);
     }
 
-    public Status removeRepo(String repoName, boolean isReplay) {
+    public Status removeRepo(String repoName) {
         lock.lock();
         try {
-            Repository repo = repoNameMap.remove(repoName);
+            Repository repo = repoNameMap.get(repoName);
             if (repo != null) {
-                repoIdMap.remove(repo.getId());
-
-                if (!isReplay) {
-                    // log
-                    GlobalStateMgr.getCurrentState().getEditLog().logDropRepository(repoName);
-                }
-                LOG.info("successfully removing repo {} from repository mgr", repoName);
+                // log
+                GlobalStateMgr.getCurrentState().getEditLog().logDropRepository(repoName, wal -> {
+                    removeRepoWithoutLock(repo);
+                });
                 return Status.OK;
             }
             return new Status(ErrCode.NOT_FOUND, "repository does not exist");
@@ -135,35 +141,30 @@ public class RepositoryMgr extends Daemon implements Writable, GsonPostProcessab
         }
     }
 
+    public void replayRemoveRepo(String repoName) {
+        lock.lock();
+        try {
+            Repository repo = repoNameMap.get(repoName);
+            if (repo != null) {
+                removeRepoWithoutLock(repo);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void removeRepoWithoutLock(Repository repo) {
+        repoIdMap.remove(repo.getId());
+        repoNameMap.remove(repo.getName());
+        LOG.info("successfully removing repo {} from repository mgr", repo.getName());
+    }
+
     public List<List<String>> getReposInfo() {
         List<List<String>> infos = Lists.newArrayList();
         for (Repository repo : repoIdMap.values()) {
             infos.add(repo.getInfo());
         }
         return infos;
-    }
-
-    public static RepositoryMgr read(DataInput in) throws IOException {
-        RepositoryMgr mgr = new RepositoryMgr();
-        mgr.readFields(in);
-        return mgr;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(repoNameMap.size());
-        for (Repository repo : repoNameMap.values()) {
-            repo.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            Repository repo = Repository.read(in);
-            repoNameMap.put(repo.getName(), repo);
-            repoIdMap.put(repo.getId(), repo);
-        }
     }
 
     @Override

@@ -16,17 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
-import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
@@ -49,30 +40,23 @@ public class ShowPartitionsStmt extends ShowStmt {
             .add(FILTER_REPLICATION_NUM)
             .add(FILTER_LAST_CONSISTENCY_CHECK_TIME).build();
 
-    private TableName tbl;
-    private String dbName;
-    private final String tableName;
+    private TableRef tableRef;
     private final Expr whereClause;
-    private final List<OrderByElement> orderByElements;
-    private final LimitElement limitElement;
     private boolean isTempPartition;
 
-    private List<OrderByPair> orderByPairs;
     private Map<String, Expr> filterMap;
 
-    private ProcNodeInterface node;
+    private String procPath;
 
-    public ShowPartitionsStmt(TableName tableName, Expr whereClause, List<OrderByElement> orderByElements,
+    public ShowPartitionsStmt(TableRef tableRef, Expr whereClause, List<OrderByElement> orderByElements,
                               LimitElement limitElement, boolean isTempPartition) {
-        this(tableName, whereClause, orderByElements, limitElement, isTempPartition, NodePosition.ZERO);
+        this(tableRef, whereClause, orderByElements, limitElement, isTempPartition, NodePosition.ZERO);
     }
 
-    public ShowPartitionsStmt(TableName tableName, Expr whereClause, List<OrderByElement> orderByElements,
+    public ShowPartitionsStmt(TableRef tableRef, Expr whereClause, List<OrderByElement> orderByElements,
                               LimitElement limitElement, boolean isTempPartition, NodePosition pos) {
         super(pos);
-        this.tbl = tableName;
-        this.dbName = tableName.getDb();
-        this.tableName = tableName.getTbl();
+        this.tableRef = tableRef;
         this.whereClause = whereClause;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -94,37 +78,24 @@ public class ShowPartitionsStmt extends ShowStmt {
         return filterMap;
     }
 
-    public ProcNodeInterface getNode() {
-        return node;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-
-        ProcResult result = null;
-        try {
-            result = node.fetchResult();
-        } catch (AnalysisException e) {
-            return builder.build();
-        }
-
-        for (String col : result.getColumnNames()) {
-            builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
-    public TableName getTbl() {
-        return tbl;
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return dbName;
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public Expr getWhereClause() {
@@ -139,20 +110,20 @@ public class ShowPartitionsStmt extends ShowStmt {
         return isTempPartition;
     }
 
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
-    }
-
     public void setOrderByPairs(List<OrderByPair> orderByPairs) {
         this.orderByPairs = orderByPairs;
     }
 
-    public void setNode(ProcNodeInterface node) {
-        this.node = node;
+    public String getProcPath() {
+        return procPath;
+    }
+
+    public void setProcPath(String procPath) {
+        this.procPath = procPath;
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowPartitionsStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowPartitionsStatement(this, context);
     }
 }

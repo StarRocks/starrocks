@@ -15,17 +15,17 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -34,7 +34,10 @@ import com.starrocks.thrift.TAnalyzeStatusItem;
 import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
@@ -45,11 +48,26 @@ import java.util.Optional;
  */
 public class AnalyzeStatusSystemTable extends SystemTable {
 
+    private static final Logger LOG = LogManager.getLogger(AnalyzeStatusSystemTable.class);
     private static final String NAME = "analyze_status";
     private static final List<Column> COLUMNS;
 
+    public static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Id", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Columns", TypeFactory.createVarcharType(200)))
+                    .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Schedule", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Status", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("StartTime", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("EndTime", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
+                    .addColumn(new Column("Reason", TypeFactory.createVarcharType(100)))
+                    .build();
     static {
-        COLUMNS = Lists.newArrayList(ShowAnalyzeStatusStmt.META_DATA.getColumns());
+        COLUMNS = Lists.newArrayList(META_DATA.getColumns());
         COLUMNS.add(1, new Column("Catalog", createNameType()));
     }
 
@@ -86,7 +104,6 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                 }
             }
             TAnalyzeStatusItem item = new TAnalyzeStatusItem();
-            itemList.add(item);
             item.setCatalog_name("");
             item.setDatabase_name("");
             item.setTable_name("");
@@ -103,6 +120,14 @@ public class AnalyzeStatusSystemTable extends SystemTable {
                     continue;
                 }
             } catch (MetaNotFoundException ignored) {
+                continue;
+            } catch (Throwable e) {
+                // TODO: change the exception into an checked exception in MetadataMgr.getTable
+                // The underlying SDK might throw an deep exception with this message
+                if (!(e.getMessage() != null && e.getMessage().contains("table not found"))) {
+                    LOG.warn("failed to get table meta", e);
+                }
+                continue;
             }
 
             String columnStr = "ALL";
@@ -120,6 +145,7 @@ public class AnalyzeStatusSystemTable extends SystemTable {
             item.setEnd_time(DateUtils.formatDateTimeUnix(analyze.getEndTime()));
             item.setProperties(analyze.getProperties() == null ? "{}" : analyze.getProperties().toString());
             item.setReason(analyze.getReason());
+            itemList.add(item);
         }
 
         return res;

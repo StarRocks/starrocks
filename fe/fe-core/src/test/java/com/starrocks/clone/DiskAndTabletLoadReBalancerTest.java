@@ -17,13 +17,14 @@ package com.starrocks.clone;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -35,9 +36,12 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.clone.BalanceStat.BalanceType;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BackendBalanceState;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -121,66 +125,36 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
+
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, materializedIndex);
+        partition.addSubPartition(physicalPartition);
+
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
+
         Database database = new Database(dbId, "database");
         database.registerTableUnlocked(table);
 
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                materializedIndex);
+        LocalMetastore metastore = new LocalMetastore(globalStateMgr, new CatalogRecycleBin(), new ColocateTableIndex());
+        metastore.unprotectCreateDb(database);
 
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
-                result = Lists.newArrayList(dbId);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-                result = database;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTableIncludeRecycleBin((Database) any, anyLong);
-                result = table;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin((Database) any);
-                result = Lists.newArrayList(table);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, anyLong);
-                result = physicalPartition;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getAllPartitionsIncludeRecycleBin((OlapTable) any);
-                result = Lists.newArrayList(partition);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = (short) 1;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = dataProperty;
-                minTimes = 0;
+                GlobalStateMgr.getCurrentState().getLocalMetastore();
+                result = metastore;
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = infoService;
-                minTimes = 0;
 
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
-                minTimes = 0;
             }
         };
 
@@ -201,6 +175,10 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId1)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcBackendId() == beId2)));
+
+        // check balance stat
+        Assertions.assertFalse(materializedIndex.isTabletBalanced());
+        Assertions.assertEquals(BalanceType.INTER_NODE_TABLET_DISTRIBUTION, materializedIndex.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -289,66 +267,33 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(3, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, materializedIndex);
+        partition.addSubPartition(physicalPartition);
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
         Database database = new Database(dbId, "database");
         database.registerTableUnlocked(table);
 
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                materializedIndex);
+        LocalMetastore metastore = new LocalMetastore(globalStateMgr, new CatalogRecycleBin(), new ColocateTableIndex());
+        metastore.unprotectCreateDb(database);
 
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
-                result = Lists.newArrayList(dbId);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-                result = database;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTableIncludeRecycleBin((Database) any, anyLong);
-                result = table;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin((Database) any);
-                result = Lists.newArrayList(table);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, anyLong);
-                result = physicalPartition;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionsIncludeRecycleBin((OlapTable) any);
-                result = Lists.newArrayList(partition);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = (short) 1;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = dataProperty;
-                minTimes = 0;
+                GlobalStateMgr.getCurrentState().getLocalMetastore();
+                result = metastore;
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = infoService;
-                minTimes = 0;
 
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
-                minTimes = 0;
             }
         };
 
@@ -474,84 +419,46 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty1 = new DataProperty(TStorageMedium.HDD);
-        partitionInfo.addPartition(partitionId1, dataProperty1, (short) 1, false);
+        partitionInfo.addPartition(partitionId1, dataProperty1, (short) 1, null);
         DataProperty dataProperty2 = new DataProperty(TStorageMedium.SSD);
-        partitionInfo.addPartition(partitionId2, dataProperty2, (short) 1, false);
+        partitionInfo.addPartition(partitionId2, dataProperty2, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition1 = new Partition(partitionId1, physicalPartitionId1,
                 "partition1", materializedIndex, distributionInfo);
+        PhysicalPartition physicalPartition1 = new PhysicalPartition(physicalPartitionId1, partitionId1,
+                materializedIndex);
+        partition1.addSubPartition(physicalPartition1);
+
         Partition partition2 = new Partition(partitionId2, physicalPartitionId2,
                 "partition2", materializedIndex, distributionInfo);
+        PhysicalPartition physicalPartition2 = new PhysicalPartition(physicalPartitionId2, partitionId2,
+                materializedIndex);
+        partition2.addSubPartition(physicalPartition2);
+
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition1);
         table.addPartition(partition2);
+
         Database database = new Database(dbId, "database");
         database.registerTableUnlocked(table);
 
-        PhysicalPartition physicalPartition1 = new PhysicalPartition(physicalPartitionId1, "partition1", partitionId1,
-                materializedIndex);
-        PhysicalPartition physicalPartition2 = new PhysicalPartition(physicalPartitionId2, "partition2", partitionId2,
-                materializedIndex);
+        LocalMetastore metastore = new LocalMetastore(globalStateMgr, new CatalogRecycleBin(), new ColocateTableIndex());
+        metastore.unprotectCreateDb(database);
 
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
-                result = Lists.newArrayList(dbId);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-                result = database;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTableIncludeRecycleBin((Database) any, anyLong);
-                result = table;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin((Database) any);
-                result = Lists.newArrayList(table);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, physicalPartitionId1);
-                result = physicalPartition1;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, physicalPartitionId2);
-                result = physicalPartition2;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getAllPartitionsIncludeRecycleBin((OlapTable) any);
-                result = Lists.newArrayList(partition1, partition2);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = (short) 1;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId1);
-                result = dataProperty1;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getDataPropertyIncludeRecycleBin((PartitionInfo) any, partitionId2);
-                result = dataProperty2;
-                minTimes = 0;
+                GlobalStateMgr.getCurrentState().getLocalMetastore();
+                result = metastore;
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = infoService;
-                minTimes = 0;
 
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
-                minTimes = 0;
             }
         };
 
@@ -570,6 +477,14 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
 
+        // check balance stat
+        BalanceStat stat0 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.HDD, beId1);
+        Assertions.assertFalse(stat0.isBalanced());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat0.getBalanceType());
+        BalanceStat stat1 = clusterLoadStatistic.getBackendDiskBalanceStat(TStorageMedium.SSD, beId1);
+        Assertions.assertFalse(stat1.isBalanced());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_DISK_USAGE, stat1.getBalanceType());
+
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger backend tablet distribution balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
         tablets = rebalancer.selectAlternativeTablets();
@@ -580,6 +495,11 @@ public class DiskAndTabletLoadReBalancerTest {
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getDestPathHash() == pathHash14)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash10)));
         Assertions.assertTrue(tablets.stream().anyMatch(t -> (t.getSrcPathHash() == pathHash13)));
+
+        // check balance stat
+        BalanceStat stat2 = materializedIndex.getBalanceStat();
+        Assertions.assertFalse(stat2.isBalanced());
+        Assertions.assertEquals(BalanceType.INTRA_NODE_TABLET_DISTRIBUTION, stat2.getBalanceType());
 
         // set table state to schema_change, balance should be ignored
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
@@ -680,66 +600,35 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", materializedIndex, distributionInfo);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, materializedIndex);
+        partition.addSubPartition(physicalPartition);
+
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
+
         Database database = new Database(dbId, "database");
         database.registerTableUnlocked(table);
 
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "partition", partitionId,
-                materializedIndex);
+        LocalMetastore metastore = new LocalMetastore(globalStateMgr, new CatalogRecycleBin(), new ColocateTableIndex());
+        metastore.unprotectCreateDb(database);
 
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                minTimes = 0;
 
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
-                result = Lists.newArrayList(dbId);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-                result = database;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTableIncludeRecycleBin((Database) any, anyLong);
-                result = table;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin((Database) any);
-                result = Lists.newArrayList(table);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getPhysicalPartitionIncludeRecycleBin((OlapTable) any, anyLong);
-                result = physicalPartition;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getAllPartitionsIncludeRecycleBin((OlapTable) any);
-                result = Lists.newArrayList(partition);
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getReplicationNumIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = (short) 1;
-                minTimes = 0;
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getDataPropertyIncludeRecycleBin((PartitionInfo) any, anyLong);
-                result = dataProperty;
-                minTimes = 0;
+                GlobalStateMgr.getCurrentState().getLocalMetastore();
+                result = metastore;
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = infoService;
-                minTimes = 0;
 
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
-                minTimes = 0;
             }
         };
 
@@ -761,6 +650,11 @@ public class DiskAndTabletLoadReBalancerTest {
 
         Assertions.assertEquals(4, be1SourceCnt);
         Assertions.assertEquals(4, be2SourceCnt);
+
+        // check balance stat
+        BalanceStat stat = clusterLoadStatistic.getClusterDiskBalanceStat(TStorageMedium.HDD);
+        Assertions.assertFalse(stat.isBalanced());
+        Assertions.assertEquals(BalanceType.INTER_NODE_DISK_USAGE, stat.getBalanceType());
     }
 
     @Test

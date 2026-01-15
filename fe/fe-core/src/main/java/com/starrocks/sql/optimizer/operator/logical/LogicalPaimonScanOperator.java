@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -34,8 +36,15 @@ public class LogicalPaimonScanOperator extends LogicalScanOperator {
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                      long limit, ScalarOperator predicate) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TvrTableSnapshot.empty());
+    }
+
+    public LogicalPaimonScanOperator(Table table,
+                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                     Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                     long limit, ScalarOperator predicate, TvrVersionRange versionRange) {
         super(OperatorType.LOGICAL_PAIMON_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit,
-                predicate, null);
+                predicate, null, versionRange);
         Preconditions.checkState(table instanceof PaimonTable);
     }
 

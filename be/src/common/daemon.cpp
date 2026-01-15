@@ -41,9 +41,15 @@
 #include "common/minidump.h"
 #include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
+#include "util/system_metrics.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
+#include "service/staros_worker.h"
 #endif
+#include <fmt/ranges.h>
+
+#include <csignal>
+
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
@@ -58,6 +64,7 @@
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/memory_lock.h"
 #include "util/misc.h"
 #include "util/monotime.h"
 #include "util/network_util.h"
@@ -69,6 +76,8 @@
 
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
+
+std::string dump_memory_tracker();
 
 /*
  * This thread will calculate some metrics at a fix interval(15 sec)
@@ -134,20 +143,7 @@ void calculate_metrics(void* arg_this) {
                                                                                 &lst_net_receive_bytes);
         }
 
-        auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
-
-        LOG(INFO) << fmt::format(
-                "Current memory statistics: process({}), query_pool({}), load({}), "
-                "metadata({}), compaction({}), schema_change({}), "
-                "page_cache({}), update({}), passthrough({}), clone({}), consistency({}), "
-                "datacache({}), jit({})",
-                mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
-                mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
-                mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
-                mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
-                mem_metrics->passthrough_mem_bytes.value(), mem_metrics->clone_mem_bytes.value(),
-                mem_metrics->consistency_mem_bytes.value(), mem_metrics->datacache_mem_bytes.value(),
-                mem_metrics->jit_cache_mem_bytes.value());
+        LOG(INFO) << dump_memory_tracker();
 
         StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
@@ -164,6 +160,12 @@ struct JemallocStats {
 };
 
 static void retrieve_jemalloc_stats(JemallocStats* stats) {
+    // On macOS, jemalloc may define je_mallctl as mallctl via macro in jemalloc.h
+#ifdef __APPLE__
+#ifndef je_mallctl
+#define je_mallctl mallctl
+#endif
+#endif
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
     je_mallctl("epoch", &epoch, &sz, &epoch, sz);
@@ -190,6 +192,7 @@ static void retrieve_jemalloc_stats(JemallocStats* stats) {
     }
 }
 
+#ifndef __APPLE__
 // Tracker the memory usage of jemalloc
 void jemalloc_tracker_daemon(void* arg_this) {
     auto* daemon = static_cast<Daemon*>(arg_this);
@@ -207,9 +210,42 @@ void jemalloc_tracker_daemon(void* arg_this) {
         nap_sleep(1, [daemon] { return daemon->stopped(); });
     }
 }
+#endif
+
+#define DUMP_METRIC(name, value_expr) fmt::format_to(std::back_inserter(buffer), " " #name "({})", value_expr);
+std::string dump_memory_tracker() {
+    auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+
+    fmt::memory_buffer buffer;
+    fmt::format_to(std::back_inserter(buffer), "Current memory statistics:");
+
+    DUMP_METRIC(process, mem_metrics->process_mem_bytes.value())
+    DUMP_METRIC(query_pool, mem_metrics->query_mem_bytes.value())
+    DUMP_METRIC(load, mem_metrics->load_mem_bytes.value())
+    DUMP_METRIC(metadata, mem_metrics->metadata_mem_bytes.value())
+    DUMP_METRIC(compaction, mem_metrics->compaction_mem_bytes.value())
+    DUMP_METRIC(schema_change, mem_metrics->schema_change_mem_bytes.value())
+    DUMP_METRIC(page_cache, mem_metrics->storage_page_cache_mem_bytes.value())
+    DUMP_METRIC(update, mem_metrics->update_mem_bytes.value())
+    DUMP_METRIC(passthrough, mem_metrics->passthrough_mem_bytes.value())
+    DUMP_METRIC(clone, mem_metrics->clone_mem_bytes.value())
+    DUMP_METRIC(consistency, mem_metrics->consistency_mem_bytes.value())
+    DUMP_METRIC(datacache, mem_metrics->datacache_mem_bytes.value())
+    DUMP_METRIC(jit, mem_metrics->jit_cache_mem_bytes.value())
+    DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
+    DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
+
+    DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
+    DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())
+    DUMP_METRIC(jemalloc_metadata, mem_metrics->jemalloc_metadata_bytes.value())
+    DUMP_METRIC(jemalloc_rss, mem_metrics->jemalloc_resident_bytes.value())
+
+    return fmt::to_string(buffer);
+}
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     bool init_system_metrics = config::enable_system_metrics;
+    bool init_jvm_metrics = config::enable_jvm_metrics;
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
@@ -229,15 +265,55 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
             return;
         }
     }
-    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, disk_devices, network_interfaces);
+    StarRocksMetrics::instance()->initialize(paths, init_system_metrics, init_jvm_metrics, disk_devices,
+                                             network_interfaces);
 }
 
+Slice get_process_comm(pid_t pid, char* buffer, int max_size) {
+    std::string path = fmt::format("/proc/{}/comm", static_cast<int>(pid));
+
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return {};
+    }
+
+    ssize_t n = read(fd, buffer, max_size - 1);
+    close(fd);
+
+    if (n <= 0) {
+        buffer[0] = '\0';
+        return {};
+    }
+
+    buffer[n] = '\0';
+
+    // trim '\n'
+    if (n > 0 && buffer[n - 1] == '\n') {
+        buffer[--n] = '\0';
+    }
+
+    return Slice(buffer, static_cast<size_t>(n));
+}
+
+// Ideally, we should avoid calling any non-signal-safe functions within signal handler, such as malloc, open, or log.
+// This could potentially cause deadlocks or unexpected recursion.
+// Typically, the main thread receives SIGTERM, and under normal circumstances,
+// the main thread remains in a sleep state. Therefore, the current implementation is safe.
 void sigterm_handler(int signo, siginfo_t* info, void* context) {
     if (info == nullptr) {
         LOG(ERROR) << "got signal: " << strsignal(signo) << "from unknown pid, is going to exit";
     } else {
-        LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << ", is going to exit";
+        char buffer[1024];
+        Slice process_comm = get_process_comm(info->si_pid, buffer, sizeof(buffer));
+        LOG(ERROR) << "got signal: " << strsignal(signo) << " from pid: " << info->si_pid << "(" << process_comm << ")"
+                   << ", is going to exit";
+
+        StarRocksMetrics::instance()->system_metrics()->update_memory_metrics();
+        LOG(ERROR) << dump_memory_tracker();
     }
+#ifdef USE_STAROS
+    set_starlet_in_shutdown();
+#endif
     set_process_exit();
 }
 
@@ -245,6 +321,7 @@ int install_signal(int signo, void (*handler)(int sig, siginfo_t* info, void* co
     struct sigaction sa;
     memset(&sa, 0, sizeof(struct sigaction));
     sa.sa_sigaction = handler;
+    sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
     auto ret = sigaction(signo, &sa, nullptr);
     if (ret != 0) {
@@ -286,6 +363,10 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     LOG(INFO) << get_version_string(false);
 
+#if !defined(BE_TEST) && !defined(__APPLE__)
+    starrocks::mlock_modules();
+#endif
+
     init_thrift_logging();
     CpuInfo::init();
     DiskInfo::init();
@@ -312,6 +393,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
 
     init_starrocks_metrics(paths);
 
+#ifndef __APPLE__
     if (config::enable_metric_calculator) {
         std::thread calculate_metrics_thread(calculate_metrics, this);
         Thread::set_thread_name(calculate_metrics_thread, "metrics_daemon");
@@ -323,16 +405,19 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths) {
         Thread::set_thread_name(jemalloc_tracker_thread, "jemalloc_tracker_daemon");
         _daemon_threads.emplace_back(std::move(jemalloc_tracker_thread));
     }
+#endif
 
     init_signals();
     init_minidump();
 #if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
 #else
+#ifndef __APPLE__
     // Don't bother set the limit if the process is running with very limited memory capacity
     if (MemInfo::physical_mem() > 1024 * 1024 * 1024) {
         // set mem hook to reject the memory allocation if large than available physical memory detected.
         set_large_memory_alloc_failure_threshold(MemInfo::physical_mem());
     }
+#endif
 #endif
 }
 

@@ -23,7 +23,15 @@ class ColumnTestHelper {
 public:
     template <class T>
     static MutableColumnPtr build_column(const std::vector<T>& values) {
-        if constexpr (std::is_same_v<T, uint8_t>) {
+        if constexpr (std::is_same_v<T, int8_t>) {
+            auto data = Int8Column::create();
+            data->append_numbers(values.data(), values.size() * sizeof(T));
+            return data;
+        } else if constexpr (std::is_same_v<T, int16_t>) {
+            auto data = Int16Column::create();
+            data->append_numbers(values.data(), values.size() * sizeof(T));
+            return data;
+        } else if constexpr (std::is_same_v<T, uint8_t>) {
             auto data = UInt8Column::create();
             data->append_numbers(values.data(), values.size() * sizeof(T));
             return data;
@@ -39,8 +47,12 @@ public:
             auto data = BinaryColumn::create();
             data->append_strings(values.data(), values.size());
             return data;
+        } else if constexpr (std::is_same_v<T, float>) {
+            auto data = FloatColumn::create();
+            data->append_numbers(values.data(), values.size() * sizeof(T));
+            return data;
         } else if constexpr (std::is_same_v<T, double>) {
-            auto data = DoubleColumn ::create();
+            auto data = DoubleColumn::create();
             data->append_numbers(values.data(), values.size() * sizeof(T));
             return data;
         } else {

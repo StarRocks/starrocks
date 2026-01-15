@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
@@ -89,7 +90,7 @@ public class CompactionScheduler extends Daemon {
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
                         @NotNull String disableIdsStr) {
-        super("COMPACTION_DISPATCH", LOOP_INTERVAL_MS);
+        super("compaction-dispatch", LOOP_INTERVAL_MS);
         this.compactionManager = compactionManager;
         this.systemInfoService = systemInfoService;
         this.transactionMgr = transactionMgr;
@@ -104,6 +105,10 @@ public class CompactionScheduler extends Daemon {
 
     @Override
     protected void runOneCycle() {
+        if (FeConstants.runningUnitTest)  {
+            return;
+        }
+
         List<PartitionIdentifier> deletedPartitionIdentifiers = cleanPhysicalPartition();
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
@@ -352,13 +357,13 @@ public class CompactionScheduler extends Daemon {
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
-                        partitionStatisticsSnapshot.getPriority(), info.computeResource);
+                        partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table);
                 task.sendRequest();
                 job.setAggregateTask(task);
                 LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
-                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
+                        job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), table);
                 for (CompactionTask task : tasks) {
                     task.sendRequest();
                 }
@@ -380,9 +385,14 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
             throws StarRocksException, RpcException {
         List<CompactionTask> tasks = new ArrayList<>();
+
+        // Get parallel compaction configuration from table property
+        // maxParallel > 0 means parallel compaction is enabled
+        int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
@@ -400,6 +410,18 @@ public class CompactionScheduler extends Daemon {
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
 
+            // Set parallel compaction configuration if enabled via table property
+            // maxParallel > 0 means parallel compaction is enabled
+            if (maxParallel > 0) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = maxParallel;
+                // maxBytesPerSubtask is controlled by BE config lake_compaction_max_bytes_per_subtask
+                // Set to 0 to let BE use its own config
+                parallelConfig.maxBytesPerSubtask = 0L;
+                request.parallelConfig = parallelConfig;
+            }
+
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
         }
@@ -408,12 +430,17 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private CompactionTask createAggregateCompactionTask(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
-            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource)
-            throws StarRocksException, RpcException {
+            PartitionStatistics.CompactionPriority priority, ComputeResource computeResource, long partitionId,
+            OlapTable table) throws StarRocksException, RpcException {
         // 1. build AggregateCompactRequest
         AggregateCompactRequest aggRequest = new AggregateCompactRequest();
         aggRequest.requests = Lists.newArrayList();
         aggRequest.computeNodes = Lists.newArrayList();
+        aggRequest.partitionId = partitionId;
+
+        // Get parallel compaction configuration from table property
+        // maxParallel > 0 means parallel compaction is enabled
+        int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
 
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -435,14 +462,24 @@ public class CompactionScheduler extends Daemon {
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             request.skipWriteTxnlog = true;
 
+            // Set parallel compaction configuration if enabled via table property
+            // maxParallel > 0 means parallel compaction is enabled
+            if (maxParallel > 0) {
+                com.starrocks.proto.TabletParallelConfig parallelConfig = new com.starrocks.proto.TabletParallelConfig();
+                parallelConfig.enableParallel = true;
+                parallelConfig.maxParallelPerTablet = maxParallel;
+                // maxBytesPerSubtask is controlled by BE config lake_compaction_max_bytes_per_subtask
+                // Set to 0 to let BE use its own config
+                parallelConfig.maxBytesPerSubtask = 0L;
+                request.parallelConfig = parallelConfig;
+            }
+
             aggRequest.requests.add(request);
             aggRequest.computeNodes.add(nodePB);
         }
 
-        // 2. pick aggregator node and build lake serivce
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        LakeAggregator aggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
+        // 2. pick aggregator node and build lake service
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }
@@ -453,7 +490,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
+    protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
 

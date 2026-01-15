@@ -68,7 +68,7 @@ public class LikePredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLikePredicateOperator(this, context);
+        return  visitor.visitLikePredicateOperator(this, context);
     }
 
     @Override
@@ -86,6 +86,15 @@ public class LikePredicateOperator extends PredicateOperator {
             return false;
         }
         LikePredicateOperator that = (LikePredicateOperator) o;
+        return likeType == that.likeType;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        LikePredicateOperator that = (LikePredicateOperator) obj;
         return likeType == that.likeType;
     }
 

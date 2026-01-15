@@ -81,20 +81,25 @@ SET runtime_profile_report_interval = 30;
 
 ```sql
 -- プロファイリング機能を有効にします。
-set enable_profile = true;
--- シンプルなクエリを実行します。
-select 1;
+SET enable_profile = true;
+
+-- スキャンと集計を実行して、詳細なプロファイルを生成するクエリを実行します。
+-- （システムテーブルを使用することで、どのクラスタでも動作します）
+SELECT count(*) FROM information_schema.columns;
+
 -- クエリの query_id を取得します。
-select last_query_id();
+SELECT last_query_id();
 +--------------------------------------+
 | last_query_id()                      |
 +--------------------------------------+
-| bd3335ce-8dde-11ee-92e4-3269eb8da7d1 |
+| 019b364f-10c4-704c-b79a-af2cc3a77b89 |
 +--------------------------------------+
+
 -- プロファイルのリストを取得します。
-show profilelist;
+SHOW PROFILELIST;
+
 -- クエリプロファイルを取得します。
-select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
+SELECT get_query_profile('019b364f-10c4-704c-b79a-af2cc3a77b89')\G
 ```
 
 ### マネージドバージョンで

@@ -61,8 +61,8 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
                 uint16_t selection = validate_select_idx[j];
                 const auto* partition = partitions[selection];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
-                _index_tablet_ids[i][selection] = virtual_buckets[record_hashes[selection] % virtual_buckets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _index_tablet_ids[i][selection] = tablet_ids[record_hashes[selection] % tablet_ids.size()];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -75,8 +75,8 @@ Status TabletSinkColocateSender::send_chunk(const OlapTableSchemaParam* schema,
             for (size_t j = 0; j < num_rows; ++j) {
                 const auto* partition = partitions[j];
                 index_id_partition_id[index->index_id].emplace(partition->id);
-                const auto& virtual_buckets = partition->indexes[i].virtual_buckets;
-                _index_tablet_ids[i][j] = virtual_buckets[record_hashes[j] % virtual_buckets.size()];
+                const auto& tablet_ids = partition->indexes[i].tablet_ids;
+                _index_tablet_ids[i][j] = tablet_ids[record_hashes[j] % tablet_ids.size()];
             }
         }
         return _send_chunks(schema, chunk, _index_tablet_ids, validate_select_idx);
@@ -201,7 +201,7 @@ Status TabletSinkColocateSender::open_wait() {
     });
 
     if (_has_intolerable_failure()) {
-        LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+        LOG(WARNING) << "Open channel failed. load_id: " << print_id(_load_id) << ", error: " << err_st.to_string();
         return err_st;
     }
 
@@ -316,8 +316,8 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
         ss << "{" << pair.first << ":(" << (pair.second.add_batch_execution_time_us / 1000) << ")("
            << (pair.second.add_batch_wait_lock_time_us / 1000) << ")(" << pair.second.add_batch_num << ")} ";
     }
-    ts_profile->server_rpc_timer->update(total_server_rpc_time_us * 1000);
-    ts_profile->server_wait_flush_timer->update(total_server_wait_memtable_flush_time_us * 1000);
+    COUNTER_UPDATE(ts_profile->server_rpc_timer, total_server_rpc_time_us * 1000);
+    COUNTER_UPDATE(ts_profile->server_wait_flush_timer, total_server_wait_memtable_flush_time_us * 1000);
     LOG(INFO) << ss.str();
 
     Expr::close(_output_expr_ctxs, state);

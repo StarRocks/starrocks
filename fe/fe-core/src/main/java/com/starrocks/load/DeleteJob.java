@@ -34,7 +34,6 @@
 
 package com.starrocks.load;
 
-import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -44,6 +43,7 @@ import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -120,10 +120,12 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         if (!txnOperated) {
             return;
         }
-        setState(DeleteState.FINISHED);
-        GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
-        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo, wal -> {
+            setState(DeleteState.FINISHED);
+            GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        });
     }
 
     @Override

@@ -32,7 +32,7 @@ public:
     MysqlTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                            std::shared_ptr<MysqlTableSinkIOBuffer> mysql_table_sink_buffer)
             : Operator(factory, id, "mysql_table_sink", plan_node_id, false, driver_sequence),
-              _mysql_table_sink_buffer(std::move(std::move(mysql_table_sink_buffer))) {}
+              _mysql_table_sink_buffer(std::move(mysql_table_sink_buffer)) {}
 
     ~MysqlTableSinkOperator() override = default;
 
@@ -79,10 +79,14 @@ private:
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
     TMysqlTableSink _t_mysql_table_sink;
+#ifndef __APPLE__
     int32_t _num_sinkers;
+#endif
 
     std::shared_ptr<MysqlTableSinkIOBuffer> _mysql_table_sink_buffer;
+#ifndef __APPLE__
     FragmentContext* _fragment_ctx = nullptr;
+#endif
 };
 } // namespace pipeline
 } // namespace starrocks

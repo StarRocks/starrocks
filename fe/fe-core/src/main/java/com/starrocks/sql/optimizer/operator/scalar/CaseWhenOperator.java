@@ -16,9 +16,9 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;
@@ -76,11 +76,14 @@ public class CaseWhenOperator extends CallOperator {
         incrDepth(arguments);
     }
 
-    private void checkMaxFlatChildren() {
+    @Override
+    public void checkMaxFlatChildren(boolean useCache) {
         if (Config.max_scalar_operator_flat_children > 0 &&
                 getNumFlatChildren() > Config.max_scalar_operator_flat_children) {
             throw new SemanticException(
-                    "The flat children of the case when statement exceeds the FE Config.max_scalar_operator_flat_children");
+                    String.format("Expression CaseWhen too complex, limit: %d. " +
+                                    "Please simplify your expression or increase Config.max_scalar_operator_flat_children.",
+                            Config.max_scalar_operator_flat_children));
         }
     }
 
@@ -232,6 +235,6 @@ public class CaseWhenOperator extends CallOperator {
     }
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCaseWhenOperator(this, context);
+        return  visitor.visitCaseWhenOperator(this, context);
     }
 }

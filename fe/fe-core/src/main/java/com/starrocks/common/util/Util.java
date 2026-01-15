@@ -36,20 +36,22 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.http.WebUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -73,6 +75,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
 import java.util.zip.DeflaterOutputStream;
+
+import static com.starrocks.authorization.ObjectType.CASE_INSENSITIVE_NAMES;
 
 public class Util {
     private static final Logger LOG = LogManager.getLogger(Util.class);
@@ -108,6 +112,7 @@ public class Util {
         TYPE_STRING_MAP.put(PrimitiveType.PERCENTILE, "percentile");
         TYPE_STRING_MAP.put(PrimitiveType.JSON, "json");
         TYPE_STRING_MAP.put(PrimitiveType.VARBINARY, "varbinary(%d)");
+        TYPE_STRING_MAP.put(PrimitiveType.VARIANT, "variant");
     }
 
     private static class CmdWorker extends Thread {
@@ -508,5 +513,37 @@ public class Util {
 
     public static boolean isRunningInContainer() {
         return new File("/.dockerenv").exists();
+    }
+
+    public static String normalizeName(String name) {
+        return GlobalVariable.enableTableNameCaseInsensitive && name != null ? name.toLowerCase() : name;
+    }
+
+    public static GrantRevokePrivilegeObjects normalizeNames(String objectType, GrantRevokePrivilegeObjects objectsUnResolved) {
+        if (!GlobalVariable.enableTableNameCaseInsensitive || !CASE_INSENSITIVE_NAMES.contains(objectType) ||
+                objectsUnResolved == null || objectType == null) {
+            return objectsUnResolved;
+        }
+
+        List<List<String>> privilegeObjectNameTokensList = objectsUnResolved.getPrivilegeObjectNameTokensList().stream()
+                .map(nameList -> nameList.stream().map(String::toLowerCase).toList())
+                .toList();
+        objectsUnResolved.setPrivilegeObjectNameTokensList(privilegeObjectNameTokensList);
+        return objectsUnResolved;
+    }
+
+    /**
+     * To align with BE's string_to_bool function, the following string values are considered as true.
+     */
+    public static boolean stringToBool(String str) {
+        if (str == null) {
+            return false;
+        }
+        str = str.trim().toLowerCase();
+        if ("true".equals(str) || "1".equals(str) || "true".equals(str.stripTrailing())) {
+            return true;
+        } else {
+            return false;
+        }
     }
 }

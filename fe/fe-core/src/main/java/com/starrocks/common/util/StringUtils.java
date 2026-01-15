@@ -36,6 +36,7 @@ package com.starrocks.common.util;
 
 import com.starrocks.catalog.Table;
 
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 
 public class StringUtils {
@@ -79,5 +80,38 @@ public class StringUtils {
         }
 
         return columName.equalsIgnoreCase(toCheck);
+    }
+
+    /*
+     * Compare string with utf-8 byte array, same with DM,BE,StorageEngine
+     */
+    public static int compareStringWithUTF8ByteArray(String s1, String s2) {
+        byte[] s1Bytes = s1.getBytes(StandardCharsets.UTF_8);
+        byte[] s2Bytes = s2.getBytes(StandardCharsets.UTF_8);
+
+        int minLength = Math.min(s1Bytes.length, s2Bytes.length);
+        int i;
+        for (i = 0; i < minLength; i++) {
+            if (s1Bytes[i] < s2Bytes[i]) {
+                return -1;
+            } else if (s1Bytes[i] > s2Bytes[i]) {
+                return 1;
+            }
+        }
+        if (s1Bytes.length > s2Bytes.length) {
+            if (s1Bytes[i] == 0x00) {
+                return 0;
+            } else {
+                return 1;
+            }
+        } else if (s1Bytes.length < s2Bytes.length) {
+            if (s2Bytes[i] == 0x00) {
+                return 0;
+            } else {
+                return -1;
+            }
+        } else {
+            return 0;
+        }
     }
 }

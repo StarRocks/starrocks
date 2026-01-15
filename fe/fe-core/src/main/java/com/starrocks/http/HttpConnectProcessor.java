@@ -69,7 +69,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         Tracers.register(ctx);
-        Tracers.init(ctx, Tracers.Mode.TIMER, null);
+        Tracers.init(ctx, "TIMER", null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         String sql = parsedStmt.getOrigStmt().originStmt;
@@ -77,7 +77,9 @@ public class HttpConnectProcessor extends ConnectProcessor {
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
 
+        // http sql doesn't support multi stmt
         ctx.setIsLastStmt(true);
+        ctx.setSingleStmt(true);
 
         //  for http protocal, if current FE can't read, just let client talk with leader
         if (executor.isForwardToLeader()) {

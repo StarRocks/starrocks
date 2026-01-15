@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -32,14 +32,14 @@ protected:
 };
 
 void PageHandleTest::SetUp() {
-    CacheOptions options{.mem_space_size = 10 * 1024 * 1024};
+    MemCacheOptions options{.mem_space_size = 10 * 1024 * 1024};
     _cache_engine = std::make_shared<LRUCacheEngine>();
     ASSERT_OK(_cache_engine->init(options));
     _page_cache = std::make_shared<StoragePageCache>(_cache_engine.get());
 }
 
 TEST_F(PageHandleTest, test_operator_not_owner) {
-    ObjectCacheWriteOptions opts;
+    MemCacheWriteOptions opts;
 
     std::vector<uint8_t>* p1 = new std::vector<uint8_t>(2);
     (*p1)[0] = 0;

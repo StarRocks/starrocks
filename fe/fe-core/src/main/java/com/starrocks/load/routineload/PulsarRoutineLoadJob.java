@@ -23,7 +23,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -37,7 +36,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -52,6 +50,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -59,9 +58,6 @@ import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -219,7 +215,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 }
                 // change job state to running
                 if (result.size() != 0) {
-                    unprotectUpdateState(JobState.RUNNING, null, false);
+                    unprotectUpdateState(JobState.RUNNING, null);
                 }
             } else {
                 LOG.debug("Ignore to divide routine load job while job state {}", state);
@@ -271,12 +267,12 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         }
 
         // For compatible reason, the default behavior of empty load is still returning
-        // "No partitions have data available for loading" and abort transaction.
+        // "No rows were imported from upstream" and abort transaction.
         // In this situation, we also need update commit info.
-        if (txnStatusChangeReason == TxnStatusChangeReason.NO_PARTITIONS) {
+        if (txnStatusChangeReason == TxnStatusChangeReason.NO_ROWS_IMPORTED) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "No partitions have data available for loading" may only be returned.
+            // If no data is imported, the error "No rows were imported from upstream" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the position to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
@@ -354,8 +350,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                             .build(), e);
                     if (this.state == JobState.NEED_SCHEDULE) {
                         unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
+                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                     }
                     return false;
                 }
@@ -472,7 +467,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
                 // check file
                 if (!smallFileMgr.containsFile(dbId, PULSAR_FILE_CATALOG, file)) {
                     throw new DdlException("File " + file + " does not exist in db "
-                            + dbId + " with globalStateMgr: " + PULSAR_FILE_CATALOG);
+                            + dbId + " with catalog: " + PULSAR_FILE_CATALOG);
                 }
             }
         }
@@ -530,40 +525,45 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, serviceUrl);
-        Text.writeString(out, topic);
-        Text.writeString(out, subscription);
+    protected void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
+        if (!dataSourceProperties.hasAnalyzedProperties()) {
+            return;
+        }
+        Map<String, String> properties = dataSourceProperties.getCustomPulsarProperties();
+        List<Pair<String, Long>> positions = dataSourceProperties.getPulsarPartitionInitialPositions();
 
-        out.writeInt(customPulsarPartitions.size());
-        for (String partition : customPulsarPartitions) {
-            Text.writeString(out, partition);
+        // check file existence
+        if (!properties.isEmpty()) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getValue().startsWith("FILE:")) {
+                    String file = entry.getValue().substring(entry.getValue().indexOf(":") + 1);
+                    SmallFileMgr smallFileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
+                    // check file
+                    if (!smallFileMgr.containsFile(dbId, PULSAR_FILE_CATALOG, file)) {
+                        throw new DdlException("File " + file + " does not exist in db "
+                                + dbId + " with catalog: " + PULSAR_FILE_CATALOG);
+                    }
+                }
+            }
         }
 
-        out.writeInt(customProperties.size());
-        for (Map.Entry<String, String> property : customProperties.entrySet()) {
-            Text.writeString(out, "property." + property.getKey());
-            Text.writeString(out, property.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        serviceUrl = Text.readString(in);
-        topic = Text.readString(in);
-        subscription = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            customPulsarPartitions.add(Text.readString(in));
+        // check defaultInitialPosition
+        if (properties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
+            try {
+                CreateRoutineLoadStmt.getPulsarPosition(
+                        properties.get(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
         }
 
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            if (propertyKey.startsWith("property.")) {
-                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
+        // check partition positions
+        if (positions != null && !positions.isEmpty()) {
+            for (Pair<String, Long> pair : positions) {
+                if (!customPulsarPartitions.contains(pair.first)) {
+                    throw new DdlException("The partition " +
+                            pair.first + " is not specified in the create statement");
+                }
             }
         }
     }

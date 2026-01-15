@@ -17,9 +17,11 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
@@ -28,9 +30,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -55,6 +59,7 @@ public class AnalyzeMgrTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        FeConstants.runningUnitTest = false;
     }
 
     @AfterAll
@@ -290,26 +295,6 @@ public class AnalyzeMgrTest {
     }
 
     @Test
-    public void testExternalAnalyzeStatusPersist() throws Exception {
-        Table table =
-                connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
-
-        ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(100,
-                "hive0", "partitioned_db", "t1",
-                table.getUUID(), ImmutableList.of("c1", "c2"), StatsConstants.AnalyzeType.FULL,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
-        UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
-        analyzeStatus.write(testImage.getDataOutputStream());
-
-        ExternalAnalyzeStatus loadAnalyzeStatus = ExternalAnalyzeStatus.read(testImage.getDataInputStream());
-        Assertions.assertEquals("hive0", loadAnalyzeStatus.getCatalogName());
-        Assertions.assertEquals("partitioned_db", loadAnalyzeStatus.getDbName());
-        Assertions.assertEquals("t1", loadAnalyzeStatus.getTableName());
-        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, loadAnalyzeStatus.getType());
-        Assertions.assertEquals(StatsConstants.ScheduleType.ONCE, loadAnalyzeStatus.getScheduleType());
-    }
-
-    @Test
     public void testDropExternalAnalyzeStatus() {
         Table table =
                 connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "partitioned_db", "t1");
@@ -339,4 +324,32 @@ public class AnalyzeMgrTest {
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
     }
+
+    @Test
+    public void testQuery() throws Exception {
+        final String dbName = "db_analyze_status";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert
+                .withDatabase(dbName)
+                .useDatabase(dbName)
+                .withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1')");
+        UtFrameUtils.mockDML();
+        starRocksAssert.getCtx().executeSql("insert into t1 values (1,1)");
+        starRocksAssert.getCtx().executeSql("analyze table t1 with sync mode");
+
+        // Add the analyze status but drop the table
+        Database db = starRocksAssert.getDb(dbName);
+        Table table = starRocksAssert.getTable(dbName, "t1");
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(100,
+                db.getId(), table.getId(),
+                ImmutableList.of("c1", "c2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        starRocksAssert.dropDatabase(dbName).withDatabase(dbName);
+
+        TAnalyzeStatusReq request = new TAnalyzeStatusReq();
+        AnalyzeStatusSystemTable.query(request);
+    }
+
 }

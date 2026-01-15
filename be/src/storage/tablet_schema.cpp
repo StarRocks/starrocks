@@ -103,6 +103,7 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_HLL:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_VARBINARY:
         return string_length + sizeof(get_olap_string_max_length());
     case TYPE_ARRAY:
@@ -136,6 +137,7 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
           _index_length(rhs._index_length),
           _precision(rhs._precision),
           _scale(rhs._scale),
+          _extended_info(rhs._extended_info ? std::make_unique<ExtendedColumnInfo>(*rhs._extended_info) : nullptr),
           _flags(rhs._flags) {
     if (rhs._extra_fields != nullptr) {
         _extra_fields = new ExtraFields(*rhs._extra_fields);
@@ -154,13 +156,13 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _index_length(rhs._index_length),
           _precision(rhs._precision),
           _scale(rhs._scale),
+          _extended_info(std::move(rhs._extended_info)),
           _flags(rhs._flags),
           _extra_fields(rhs._extra_fields),
           _agg_state_desc(rhs._agg_state_desc) {
     rhs._extra_fields = nullptr;
     rhs._agg_state_desc = nullptr;
 }
-
 TabletColumn::TabletColumn(const ColumnPB& column) {
     init_from_pb(column);
 }
@@ -187,6 +189,7 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_flags, rhs->_flags);
     swap(_extra_fields, rhs->_extra_fields);
     swap(_agg_state_desc, rhs->_agg_state_desc);
+    swap(_extended_info, rhs->_extended_info);
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {

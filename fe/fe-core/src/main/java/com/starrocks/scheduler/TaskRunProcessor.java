@@ -20,7 +20,7 @@ public interface TaskRunProcessor {
      * Before task run, prepare the context.
      * @param context: task run context
      */
-    void prepare(TaskRunContext context) throws Exception;
+    TaskRunContext prepare(TaskRunContext context) throws Exception;
 
     /**
     * Process a task run with the given context.

@@ -19,6 +19,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 
 from datetime import datetime
 
@@ -85,11 +86,19 @@ def get_build_arch():
 
 def get_java_version():
     java_home = os.getenv("JAVA_HOME")
-    java_res = subprocess.Popen([java_home + "/bin/java", "-fullversion"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    out, err = java_res.communicate()
-
-    if java_res.returncode == 0:
-        return out.decode('utf-8').replace("\"", "\\\"").strip()
+    java_cmd = None
+    if java_home:
+        java_cmd = java_home + "/bin/java"
+    else:
+        # Fallback to system java on PATH
+        java_cmd = "java"
+    try:
+        java_res = subprocess.Popen([java_cmd, "-fullversion"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out, _ = java_res.communicate()
+        if java_res.returncode == 0:
+            return out.decode('utf-8').replace("\"", "\\\"").strip()
+    except Exception:
+        pass
     return "unknown jdk"
 
 def get_fingerprint(items):
@@ -199,9 +208,13 @@ const char* STARROCKS_BUILD_ARCH = "{BUILD_ARCH}";
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cpp", dest='cpp_path', default="./version.cpp", help="Path of generated cpp file", type=str)
-    parser.add_argument("--java", dest='java_path', default="./Version.java", help="Path of generated java file", type=str)
+    parser.add_argument("--cpp", dest='cpp_path', default="", help="Path of generated cpp file", type=str)
+    parser.add_argument("--java", dest='java_path', default="", help="Path of generated java file", type=str)
     args = parser.parse_args()
+
+    if not args.cpp_path and not args.java_path:
+        print("Neither --cpp nor --java provided, do nothing!", file=sys.stderr)
+        return False
 
     version = get_version()
     commit_hash = get_commit_hash()
@@ -217,8 +230,10 @@ def main():
 
     java_version = get_java_version()
 
-    generate_cpp_file(args.cpp_path, version, commit_hash, build_type, build_time, user, hostname, build_distro_id, build_arch)
-    generate_java_file(args.java_path, version, commit_hash, build_type, build_time, user, hostname, java_version, build_distro_id, build_arch)
+    if args.cpp_path:
+        generate_cpp_file(args.cpp_path, version, commit_hash, build_type, build_time, user, hostname, build_distro_id, build_arch)
+    if args.java_path:
+        generate_java_file(args.java_path, version, commit_hash, build_type, build_time, user, hostname, java_version, build_distro_id, build_arch)
 
 if __name__ == '__main__':
     main()

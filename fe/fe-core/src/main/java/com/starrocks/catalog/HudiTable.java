@@ -22,17 +22,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hudi.HudiRemoteFileDesc;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
@@ -265,7 +265,9 @@ public class HudiTable extends Table {
             tPartition.setFile_format(hudiPartitions.get(i).getFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+            tPartition.setPartition_key_exprs(keys.stream()
+                    .map(ExprToThrift::treeToThrift)
+                    .collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);
@@ -366,6 +368,11 @@ public class HudiTable extends Table {
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
                 Objects.equal(hiveDbName, otherTable.hiveDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 
     public static Builder builder() {

@@ -15,11 +15,15 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.LoadStmt;
 
+import java.util.HashSet;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Utility class to redact sensitive credentials from SQL strings.
@@ -29,6 +33,7 @@ import java.util.regex.Pattern;
 public class SqlCredentialRedactor {
 
     // Set of credential keys that should be redacted
+    // some of them are taken from common.util.PrintableMap
     private static final Set<String> CREDENTIAL_KEYS = ImmutableSet.<String>builder()
             .add(CloudConfigurationConstants.AWS_S3_ACCESS_KEY)
             .add(CloudConfigurationConstants.AWS_S3_SECRET_KEY)
@@ -38,6 +43,7 @@ public class SqlCredentialRedactor {
             .add(CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN)
             .add(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY)
             .add(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)
+            .add(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET)
             .add(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL)
             .add(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY)
             .add(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)
@@ -54,12 +60,37 @@ public class SqlCredentialRedactor {
             .add(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY)
             .add(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY)
             .add(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY)
+            .add(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL)
+            .add(HdfsFsManager.FS_S3A_ACCESS_KEY)
+            .add(HdfsFsManager.FS_S3A_SECRET_KEY)
+            .add(HdfsFsManager.FS_KS3_ACCESS_KEY)
+            .add(HdfsFsManager.FS_KS3_SECRET_KEY)
+            .add(HdfsFsManager.FS_OSS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_OSS_SECRET_KEY)
+            .add(HdfsFsManager.FS_COS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_COS_SECRET_KEY)
+            .add(HdfsFsManager.FS_OBS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_OBS_SECRET_KEY)
+            .add(HdfsFsManager.FS_TOS_ACCESS_KEY)
+            .add(HdfsFsManager.FS_TOS_SECRET_KEY)
+            .add(LoadStmt.BOS_SECRET_ACCESSKEY)
             .add("password")
             .add("passwd")
             .add("pwd")
+            .add("property.sasl.password")
+            .add("broker.password")
             .build();
 
-    // Pattern to match key-value pairs in SQL
+    // Lowercase set for O(1) lookup (case-insensitive matching)
+    private static final Set<String> CREDENTIAL_KEYS_LOWERCASE = new HashSet<>();
+
+    static {
+        for (String key : CREDENTIAL_KEYS) {
+            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase());
+        }
+    }
+
+    // Simplified pattern to match any key-value pair in SQL
     // This pattern handles cases like:
     // "key"="value"
     // 'key'='value'
@@ -73,13 +104,16 @@ public class SqlCredentialRedactor {
     // key'='value
     // key"="value
     // Values can contain spaces and span multiple lines, separated by commas
+    private static final int MAX_KEY_LENGTH =
+            CREDENTIAL_KEYS.stream().map(String::length).max(Integer::compareTo).orElse(1);
+    // NOTE: MAX_KEY_LENGTH is used to avoid matching too many characters of a long string
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile(
-            "(?:([\"']?)(" + String.join("|", CREDENTIAL_KEYS.stream()
-                    .map(Pattern::quote)
-                    .toArray(String[]::new)) + ")([\"']?))\\s*=\\s*" +
-            "(?:([\"'])((?:[^\\\\]|\\\\.)*?)\\4|([^,]*?))" +
-            "(?=\\s*,|\\s*$|\\s*\\)|\\s*\\n)",
-            Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
+            "([\"'])" +                                    // quote
+                    "([^\"'=\\s,()]{1," + MAX_KEY_LENGTH + "})" + // key
+                    "([\"'])" +                                  // quote
+                    "\\s*=\\s*" +                                 // =
+                    "(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\"|([^,()\\n]*))",
+            Pattern.DOTALL | Pattern.MULTILINE
     );
 
     private static final String REDACTED_VALUE = "***";
@@ -96,28 +130,39 @@ public class SqlCredentialRedactor {
         }
 
         Matcher matcher = KEY_VALUE_PATTERN.matcher(sql);
-        StringBuffer result = new StringBuffer();
+        StringBuilder result = new StringBuilder(sql.length() + 100);
 
+        int lastEnd = 0;
         while (matcher.find()) {
-            String replacement;
             String keyPrefix = matcher.group(1) != null ? matcher.group(1) : "";
             String key = matcher.group(2);
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
-            // Determine if value is quoted or unquoted
-            if (matcher.group(4) != null && matcher.group(5) != null) {
-                // Quoted value case
-                String valueQuote = matcher.group(4);
-                replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
-            } else {
-                // Unquoted value case
-                replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
-            }
+            // Check if this key should be redacted (case-insensitive)
+            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase())) {
+                // Append text before the match
+                result.append(sql, lastEnd, matcher.start());
 
-            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+                // Build replacement for redacted value
+                String replacement;
+                if (matcher.group(4) != null && matcher.group(5) != null) {
+                    // Quoted value case
+                    String valueQuote = matcher.group(4);
+                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
+                } else {
+                    // Unquoted value case
+                    replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
+                }
+                result.append(replacement);
+            } else {
+                // Not a credential key, append original match
+                result.append(sql, lastEnd, matcher.end());
+            }
+            lastEnd = matcher.end();
         }
 
-        matcher.appendTail(result);
+        // Append remaining text
+        result.append(sql, lastEnd, sql.length());
         return result.toString();
     }
 }

@@ -50,11 +50,11 @@ public class DeltaLakeCatalogProperties {
         this.enableDeltaLakeCheckpointMetaCache =
                 PropertyUtil.propertyAsBoolean(properties, ENABLE_DELTA_LAKE_CHECKPOINT_META_CACHE, true);
         this.deltaLakeJsonMetaCacheTtlSec =
-                PropertyUtil.propertyAsLong(properties, DELTA_LAKE_JSON_META_CACHE_TTL, 48 * 60 * 60);
+                PropertyUtil.propertyAsLong(properties, DELTA_LAKE_JSON_META_CACHE_TTL, 24 * 60 * 60);
         this.deltaLakeJsonMetaCacheMemoryUsageRatio =
                 PropertyUtil.propertyAsDouble(properties, DELTA_LAKE_JSON_META_CACHE_MEMORY_USAGE_RATIO, 0.1);
         this.deltaLakeCheckpointMetaCacheTtlSec =
-                PropertyUtil.propertyAsLong(properties, DELTA_LAKE_CHECKPOINT_META_CACHE_TTL, 48 * 60 * 60);
+                PropertyUtil.propertyAsLong(properties, DELTA_LAKE_CHECKPOINT_META_CACHE_TTL, 24 * 60 * 60);
         this.deltaLakeCheckpointMetaCacheMemoryUsageRatio =
                 PropertyUtil.propertyAsDouble(properties, DELTA_LAKE_CHECKPOINT_META_CACHE_MEMORY_USAGE_RATIO, 0.1);
     }

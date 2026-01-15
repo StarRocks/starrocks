@@ -1,0 +1,120 @@
+-- name: test_create_mv_with_generate_column
+
+CREATE TABLE `user_events` (
+  `user_id` varchar(128) NULL COMMENT "",
+  `event_ts` bigint(20) NULL COMMENT "",
+  `event_name` varchar(128) NULL COMMENT "",
+  `session_id` varchar(128) NULL COMMENT "",
+  `event_type` varchar(64) NULL COMMENT "",
+  `event_level` varchar(64) NULL COMMENT "",
+  `properties` json NULL COMMENT "",
+  `dt` datetime NULL AS date_trunc('day', from_unixtime(`event_ts` / 1000)) COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`user_id`, `event_ts`, `event_name`)
+COMMENT "OLAP"
+PARTITION BY (`dt`)
+DISTRIBUTED BY HASH(`user_id`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
+('user_001', unix_timestamp('2024-01-14 10:00:00') * 1000, 'product_view', 'session_001', 'view_event', 'view', 
+ '{"category_id": "cat_101", "product_id": "prod_201"}'),
+('user_001', unix_timestamp('2024-01-14 10:00:01') * 1000, 'product_click', 'session_001', 'click_event', 'click',
+ '{"category_id": "cat_101", "product_id": "prod_202"}'),
+('user_002', unix_timestamp('2024-01-13 10:00:00') * 1000, 'category_view', 'session_002', 'view_event', 'view',
+ '{"category_id": "cat_102"}'),
+('user_002', unix_timestamp('2024-01-13 10:00:02') * 1000, 'product_click', 'session_002', 'click_event', 'click',
+ '{"category_id": "cat_102", "product_id": "prod_203"}'),
+('user_003', unix_timestamp('2024-01-12 10:00:00') * 1000, 'product_view', 'session_003', 'view_event', 'view',
+ '{"product_id": "prod_301", "resource_id": "res_401", "resource_type": "1"}'),
+('user_003', unix_timestamp('2024-01-12 10:00:03') * 1000, 'product_click', 'session_004', 'click_event', 'click',
+ '{"product_id": "prod_302", "resource_id": "res_402", "resource_type": "category"}'),
+('user_004', unix_timestamp('2024-01-10 10:00:00') * 1000, 'item_view', 'session_005', 'view_event', 'view',
+ '{"product_id": "prod_303"}');
+
+
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY dt
+REFRESH ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES (
+  "partition_refresh_number" = "1"
+)
+AS
+WITH filtered_events AS (
+  SELECT
+    dt,
+    user_id,
+    session_id,
+    event_ts,
+    properties,
+    CAST(properties->'$.category_id' AS VARCHAR) as category_id,
+    CAST(properties->'$.product_id' AS VARCHAR) as product_id,
+    CAST(properties->'$.resource_id' AS VARCHAR) as resource_id,
+    properties->'$.resource_type' as resource_type_code,
+    CASE 
+      WHEN resource_type_code IN (1, '1', 'category') THEN 'category'
+      WHEN resource_type_code IN (2, '2', 'product') THEN 'product'
+      WHEN resource_type_code IN (3, '3', 'brand') THEN 'brand'
+      ELSE NULL
+    END as resource_type
+  FROM user_events
+),
+resource_interests AS (
+  SELECT
+    dt,
+    user_id,
+    session_id,
+    event_ts,
+    'category' as resource_type,
+    category_id as resource_id
+  FROM filtered_events
+
+  UNION ALL
+
+  SELECT
+    dt,
+    user_id,
+    session_id,
+    event_ts,
+    'product' as resource_type,
+    product_id as resource_id
+  FROM filtered_events
+
+  UNION ALL
+
+  SELECT
+    dt,
+    user_id,
+    session_id,
+    event_ts,
+    resource_type,
+    resource_id
+  FROM filtered_events
+)
+SELECT
+  dt,
+  user_id,
+  resource_type,
+  resource_id,
+  COUNT(DISTINCT session_id) AS session_count,
+  COUNT(*) AS event_count
+FROM resource_interests
+GROUP BY dt, user_id, resource_type, resource_id;
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY 1,2,3,4,5,6 LIMIT 5;
+
+INSERT INTO user_events (user_id, event_ts, event_name, session_id, event_type, event_level, properties) VALUES
+('user_005', unix_timestamp('2024-01-08 10:00:00') * 1000, 'brand_view', 'session_006', 'view_event', 'view',
+ '{"resource_id": "brand_501", "resource_type": "3"}'),
+('user_005', unix_timestamp('2024-01-08 10:00:05') * 1000, 'brand_click', 'session_006', 'click_event', 'click',
+ '{"resource_id": "brand_502", "resource_type": "brand"}'),
+('user_006', unix_timestamp('2024-01-05 10:00:00') * 1000, 'product_view', 'session_007', 'view_event', 'view',
+ '{"resource_id": "prod_601", "resource_type": "2", "category_id": "cat_201"}');
+
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT COUNT(1) FROM test_mv1;
+SELECT * FROM test_mv1 ORDER BY 1,2,3,4,5,6 LIMIT 5;

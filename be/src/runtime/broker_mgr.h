@@ -44,11 +44,9 @@
 
 namespace starrocks {
 
-class ExecEnv;
-
 class BrokerMgr {
 public:
-    BrokerMgr(ExecEnv* exec_env);
+    BrokerMgr();
     ~BrokerMgr();
     void init();
     const std::string& get_client_id(const TNetworkAddress& address);
@@ -56,8 +54,6 @@ public:
 private:
     void ping(const TNetworkAddress& addr);
     void ping_worker();
-
-    ExecEnv* _exec_env;
     std::string _client_id;
     std::mutex _mutex;
     std::unordered_set<TNetworkAddress> _broker_set;

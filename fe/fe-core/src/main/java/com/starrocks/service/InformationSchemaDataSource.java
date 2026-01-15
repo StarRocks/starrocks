@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
@@ -27,7 +28,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -36,6 +36,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
@@ -47,14 +48,13 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -118,7 +118,7 @@ public class InformationSchemaDataSource {
 
         UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(authInfo.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
@@ -321,7 +321,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
-        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
         if (index.getSortKeyIdxes() == null) {
             tableConfigInfo.setSort_key(pkSb);
         } else {
@@ -356,7 +356,7 @@ public class InformationSchemaDataSource {
             public String dbName;
             public long dbId;
             public Table table;
-        };
+        }
         long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
         TreeSet<Element> sortedElements = new TreeSet<>(Comparator.comparing(Element::getTableId));
         for (String dbName : result.authorizedDbs) {
@@ -455,8 +455,10 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
-        partitionMetaInfo.setData_size(byteSizeValue.toString());
+        // DATA_SIZE in PARTITIONS_META is string before, and bigint is more programmer-friendly and change it to bigint
+        // We do not change the field type in `TPartitionMetaInfo` for compatibility and BE will finished the type 
+        // convertion.
+        partitionMetaInfo.setData_size(String.valueOf(physicalPartition.storageDataSize()));
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
         partitionMetaInfo.setStorage_medium(dataProperty.getStorageMedium().name());
@@ -464,8 +466,6 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setCooldown_time(dataProperty.getCooldownTimeMs() / 1000);
         // LAST_CONSISTENCY_CHECK_TIME
         partitionMetaInfo.setLast_consistency_check_time(partition.getLastCheckTime() / 1000);
-        // IS_IN_MEMORY
-        partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
         partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
         // IS_TEMP
@@ -477,10 +477,11 @@ public class InformationSchemaDataSource {
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION
-            partitionMetaInfo.setCompact_version(statistics != null ? statistics.getCompactionVersion().getVersion() : 0);
+            partitionMetaInfo.setCompact_version(statistics != null && statistics.getCompactionVersion() != null ?
+                    statistics.getCompactionVersion().getVersion() : 0);
             DataCacheInfo cacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
             // ENABLE_DATACACHE
-            partitionMetaInfo.setEnable_datacache(cacheInfo.isEnabled());
+            partitionMetaInfo.setEnable_datacache(cacheInfo != null && cacheInfo.isEnabled());
             // AVG_CS
             partitionMetaInfo.setAvg_cs(compactionScore != null ? compactionScore.getAvg() : 0.0);
             // P50_CS
@@ -499,6 +500,8 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
         // STORAGE_SIZE
         partitionMetaInfo.setStorage_size(physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize());
+        // TABLET_BALANCED
+        partitionMetaInfo.setTablet_balanced(physicalPartition.isTabletBalanced());
     }
 
     // tables
@@ -511,6 +514,16 @@ public class InformationSchemaDataSource {
         ConnectContext context = new ConnectContext();
         context.setCurrentUserIdentity(result.currentUser);
         context.setCurrentRoleIds(result.currentUser);
+
+        PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
+        if (request.isSetTable_name()) {
+            try {
+                matcher = PatternMatcher.createMysqlPattern(request.getTable_name(), caseSensitive);
+            } catch (SemanticException e) {
+                throw new TException("Pattern is in bad format: " + request.getTable_name());
+            }
+        }
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -526,37 +539,29 @@ public class InformationSchemaDataSource {
             }
 
             List<BasicTable> tables = new ArrayList<>();
-            Locker locker = new Locker();
-            try {
-                locker.lockDatabase(db.getId(), LockType.READ);
-                List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
-                for (String tableName : tableNames) {
-                    if (request.isSetTable_name()) {
-                        if (!tableName.equals(request.getTable_name())) {
-                            continue;
-                        }
-                    }
-
-                    BasicTable table = null;
-                    try {
-                        table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
-                    } catch (Exception e) {
-                        LOG.warn(e.getMessage(), e);
-                    }
-                    if (table == null) {
-                        continue;
-                    }
-
-                    try {
-                        Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    tables.add(table);
+            List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
+            for (String tableName : tableNames) {
+                if (request.isSetTable_name() &&
+                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                    continue;
                 }
-            } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+
+                BasicTable table = null;
+                try {
+                    table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage(), e);
+                }
+                if (table == null) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+                tables.add(table);
             }
 
             for (BasicTable table : tables) {
@@ -752,7 +757,6 @@ public class InformationSchemaDataSource {
         response.setTables_infos(tableInfos);
         return response;
     }
-
 
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 

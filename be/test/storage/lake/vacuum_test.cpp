@@ -28,6 +28,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/vacuum_full.h"
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
@@ -149,6 +150,296 @@ TEST_P(LakeVacuumTest, test_vacuum_1) {
         EXPECT_TRUE(file_exist("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
         EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     }
+}
+
+// Check that vacuum_full cleans up the expected metadata files
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full) {
+    create_data_file("0000000000000001_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("000000000000FFFF_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat");
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66600);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.add_retain_versions(3);
+    request.set_min_check_version(0);
+    request.set_max_check_version(5);
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66601,
+        "version": 5,
+        "rowsets": [],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 6,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000000001_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 99,
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 5,
+        "rowsets": [],
+        "commit_time": 99,
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 4,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 98,
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 3,
+        "rowsets": [],
+        "commit_time": 97,
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66601, 5)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 6)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 5)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 4)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 3)));
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_EQ(1 + 2, response.vacuumed_files()); // 1 metadata, 2 data
+
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66601, 5)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 6)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 5)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(66600, 4)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66600, 3)));
+
+    EXPECT_TRUE(file_exist("0000000000000001_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    EXPECT_FALSE(file_exist("0000000000000001_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_TRUE(file_exist("000000000000FFFF_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000000002_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+// Ensure full vacuum does not fail when initial metadata 0_1.meta exists and
+// there is at least one expired metadata. Previously, trying to read 0_1.meta
+// would cause NotFound and fail the whole vacuum. Now it should succeed.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_with_initial_meta_no_failure) {
+    // Create a physically present but invalid 0_1.meta so that any attempt to read it fails.
+    // This ensures pre-fix implementation (which reads 0_1.meta) will fail, while the fixed
+    // implementation will skip reading it and succeed.
+    {
+        auto initial_meta_path =
+                join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_initial_metadata_filename());
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(initial_meta_path));
+        ASSERT_OK(f->append("not-a-valid-protobuf"));
+        ASSERT_OK(f->close());
+    }
+
+    // Create an expired normal metadata which will be deleted by vacuum_full
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 77001,
+        "version": 2,
+        "rowsets": [],
+        "commit_time": 1
+        }
+        )DEL")));
+
+    // Sanity: files exist before vacuum
+    EXPECT_TRUE(file_exist(tablet_initial_metadata_filename()));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(77001, 2)));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(77000);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(10);
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    // The expired normal metadata must be deleted
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(77001, 2)));
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
+    create_data_file("0000000000000005_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("0000000000000005_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("0000000000000004_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    create_data_file("0000000000000004_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat");
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66600);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(7);
+
+    auto tablet_66601_v8 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66601,
+        "version": 8,
+        "rowsets": [],
+        "commit_time": 10010
+        }
+        )DEL");
+
+    auto tablet_66600_v8 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 8,
+        "rowsets": [],
+        "commit_time": 10010
+        }
+        )DEL");
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v8;
+    tablet_metas_v8[66601] = *tablet_66601_v8;
+    tablet_metas_v8[66600] = *tablet_66600_v8;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v8));
+
+    auto tablet_66601_v7 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66601,
+        "version": 7,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000000005_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 11,
+        "prev_garbage_version": 3
+        }
+        )DEL");
+
+    auto tablet_66600_v7 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 7,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000000005_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 11,
+        "prev_garbage_version": 3
+        }
+        )DEL");
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v7;
+    tablet_metas_v7[66601] = *tablet_66601_v7;
+    tablet_metas_v7[66600] = *tablet_66600_v7;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v7));
+
+    auto tablet_66601_v6 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66601,
+        "version": 6,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000000004_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 10,
+        "prev_garbage_version": 3
+        }
+        )DEL");
+
+    auto tablet_66600_v6 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66600,
+        "version": 6,
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000000004_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "commit_time": 10,
+        "prev_garbage_version": 3
+        }
+        )DEL");
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v6;
+    tablet_metas_v6[66601] = *tablet_66601_v6;
+    tablet_metas_v6[66600] = *tablet_66600_v6;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v6));
+
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 6)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 7)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 8)));
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_EQ(3, response.vacuumed_files()); // 1 metadata, 2 data
+
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 6)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 7)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 8)));
+
+    EXPECT_TRUE(file_exist("0000000000000005_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    EXPECT_TRUE(file_exist("0000000000000005_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000000004_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_FALSE(file_exist("0000000000000004_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
 }
 
 // NOLINTNEXTLINE
@@ -2652,6 +2943,36 @@ TEST_P(LakeVacuumTest, test_vacuum_shared_data_files) {
     tablet_metas_v4[601] = *t601_v4;
     ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
 
+    // enable_file_bundling is false, shared files will not be deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(false);
+        request.add_tablet_ids(600);
+        request.add_tablet_ids(601);
+        TabletInfoPB tablet_info1;
+        tablet_info1.set_tablet_id(600);
+        tablet_info1.set_min_version(3);
+        TabletInfoPB tablet_info2;
+        tablet_info2.set_tablet_id(601);
+        tablet_info2.set_min_version(3);
+        request.add_tablet_infos()->CopyFrom(tablet_info1);
+        request.add_tablet_infos()->CopyFrom(tablet_info2);
+        request.set_min_retain_version(4);
+        request.set_grace_timestamp(grace_timestamp + 1);
+        request.set_min_active_txn_id(12345);
+        // If enable_file_bundling is false, we need to clear the bundle_file_deleter.
+        request.set_enable_file_bundling(false);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+        EXPECT_TRUE(file_exist("00000000000259e4_a542395a-bff5-48a7-a3a7-2ed05691b58d.dat"));
+    }
+
     // shared files will be deleted.
     {
         VacuumRequest request;
@@ -2721,6 +3042,101 @@ TEST_P(LakeVacuumTest, test_garbage_file_check) {
     auto res = garbage_file_check(kTestDir);
     ASSERT_TRUE(res.ok()) << res.status();
     EXPECT_EQ(1, res.value());
+}
+
+// Test for the fix that skips deleting txnlog files for tablets being deleted
+TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets) {
+    // Create data files referenced by different tablets
+    create_data_file("00000000001359e4_tablet1_file.dat");
+    create_data_file("00000000002359e4_tablet2_file.dat");
+    create_data_file("00000000003359e4_tablet3_file.dat");
+
+    // Create combined txn log containing multiple tablets
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+                {
+                    "tablet_id": 1000,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000001359e4_tablet1_file.dat"]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 1001,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000002359e4_tablet2_file.dat"]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 1002,
+                    "txn_id": 5000,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000003359e4_tablet3_file.dat"]
+                        }
+                    }
+                }
+            ]
+        }
+        )DEL")));
+
+    // Verify combined txn log and all data files exist
+    EXPECT_TRUE(file_exist(combined_txn_log_filename(5000)));
+    EXPECT_TRUE(file_exist("00000000001359e4_tablet1_file.dat"));
+    EXPECT_TRUE(file_exist("00000000002359e4_tablet2_file.dat"));
+    EXPECT_TRUE(file_exist("00000000003359e4_tablet3_file.dat"));
+
+    {
+        // Delete only tablets 1000 and 1001, leaving 1002 alive
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(1000);
+        request.add_tablet_ids(1001);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Combined txn log should still exist because tablet 1002 is alive
+        EXPECT_TRUE(file_exist(combined_txn_log_filename(5000)));
+
+        // Files for deleted tablets (1000, 1001) should be deleted
+        // But file for alive tablet (1002) should be preserved
+        // Note: The fix ensures that delete_files_under_txnlog is NOT called for tablets being deleted
+        // So files for tablets 1000 and 1001 should actually be preserved
+        // because they are in the deletion list
+        EXPECT_FALSE(file_exist("00000000001359e4_tablet1_file.dat"));
+        EXPECT_FALSE(file_exist("00000000002359e4_tablet2_file.dat"));
+        EXPECT_TRUE(file_exist("00000000003359e4_tablet3_file.dat"));
+    }
+
+    {
+        // Now delete the remaining tablet 1002
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(1000);
+        request.add_tablet_ids(1001);
+        request.add_tablet_ids(1002);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Now combined txn log should be deleted since all tablets are deleted
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(5000)));
+
+        // All data files should be deleted now
+        EXPECT_FALSE(file_exist("00000000001359e4_tablet1_file.dat"));
+        EXPECT_FALSE(file_exist("00000000002359e4_tablet2_file.dat"));
+        EXPECT_FALSE(file_exist("00000000003359e4_tablet3_file.dat"));
+    }
 }
 
 } // namespace starrocks::lake

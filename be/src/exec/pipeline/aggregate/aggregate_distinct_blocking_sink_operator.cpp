@@ -21,15 +21,20 @@ namespace starrocks::pipeline {
 
 Status AggregateDistinctBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-    RETURN_IF_ERROR(_aggregator->open(state));
     _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateDistinctBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
+    RETURN_IF_ERROR(_aggregator->open(state));
     return Status::OK();
 }
 
 void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
     auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    counter->set(_aggregator->hash_set_memory_usage());
+    COUNTER_SET(counter, _aggregator->hash_set_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }

@@ -5,7 +5,7 @@ displayed_sidebar: docs
 
 # AutoMQ Kafka
 
-import Replicanum from '../_assets/commonMarkdown/replicanum.md'
+import Replicanum from '../_assets/commonMarkdown/replicanum.mdx'
 
 [AutoMQ for Kafka](https://www.automq.com/docs) は、クラウド環境向けに再設計された Kafka のクラウドネイティブバージョンです。AutoMQ Kafka は [オープンソース](https://github.com/AutoMQ/automq-for-kafka) であり、Kafka プロトコルと完全に互換性があり、クラウドの利点を最大限に活用しています。自己管理型の Apache Kafka と比較して、AutoMQ Kafka はクラウドネイティブなアーキテクチャにより、容量の自動スケーリング、ネットワークトラフィックの自己バランス、パーティションの数秒での移動などの機能を提供します。これらの機能は、ユーザーにとっての総所有コスト (TCO) を大幅に削減します。
 

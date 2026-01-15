@@ -29,8 +29,8 @@ public class DropFunctionStmtTest {
                 dropFunctionSql, 32).get(0);
         // com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
-        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertEquals("ABC", stmt.getFunctionRef().getDbName());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionRef().getFunctionName());
     }
 
     @Test
@@ -39,8 +39,8 @@ public class DropFunctionStmtTest {
         DropFunctionStmt stmt = (DropFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 dropFunctionSql, 32).get(0);
 
-        Assertions.assertEquals("ABC", stmt.getFunctionName().getDb());
-        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
+        Assertions.assertEquals("ABC", stmt.getFunctionRef().getDbName());
+        Assertions.assertEquals("my_udf_json_get", stmt.getFunctionRef().getFunctionName());
         Assertions.assertTrue(stmt.dropIfExists());
     }
 }

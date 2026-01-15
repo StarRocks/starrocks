@@ -55,6 +55,7 @@ import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -67,6 +68,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
@@ -79,8 +81,6 @@ import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -297,7 +297,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 throw new StarRocksException("Unknown data source type: " + type);
         }
 
-        routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
+        OriginStatement originStatement = createRoutineLoadStmt.getOrigStmt();
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(originStatement.getOrigStmt(), originStatement.getIdx()));
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
@@ -347,8 +348,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                         + "But we only support " + nodeNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
                         + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
             }
-            unprotectedAddJob(routineLoadJob);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(routineLoadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateRoutineLoadJob(routineLoadJob,
+                    wal -> unprotectedAddJob((RoutineLoadJob) wal));
             LOG.info("create routine load job: id: {}, name: {}", routineLoadJob.getId(), routineLoadJob.getName());
         } catch (MetaNotFoundException e) {
             throw new DdlException(e.getMessage());
@@ -360,16 +361,10 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private void unprotectedAddJob(RoutineLoadJob routineLoadJob) {
         idToRoutineLoadJob.put(routineLoadJob.getId(), routineLoadJob);
 
-        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId());
-        if (nameToRoutineLoadJob == null) {
-            nameToRoutineLoadJob = Maps.newConcurrentMap();
-            dbToNameToRoutineLoadJob.put(routineLoadJob.getDbId(), nameToRoutineLoadJob);
-        }
-        List<RoutineLoadJob> routineLoadJobList = nameToRoutineLoadJob.get(routineLoadJob.getName());
-        if (routineLoadJobList == null) {
-            routineLoadJobList = Lists.newArrayList();
-            nameToRoutineLoadJob.put(routineLoadJob.getName(), routineLoadJobList);
-        }
+        Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob =
+                dbToNameToRoutineLoadJob.computeIfAbsent(routineLoadJob.getDbId(), k -> Maps.newConcurrentMap());
+        List<RoutineLoadJob> routineLoadJobList =
+                nameToRoutineLoadJob.computeIfAbsent(routineLoadJob.getName(), k -> Lists.newArrayList());
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
@@ -412,8 +407,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
         routineLoadJob.updateState(RoutineLoadJob.JobState.PAUSED,
                 new ErrorReason(InternalErrorCode.MANUAL_PAUSE_ERR,
-                        "User " + ConnectContext.get().getQualifiedUser() + " pauses routine load job"),
-                false /* not replay */);
+                        "User " + ConnectContext.get().getQualifiedUser() + " pauses routine load job"));
+
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId()).add("current_state",
                 routineLoadJob.getState()).add("user", ConnectContext.get().getQualifiedUser()).add("msg",
                 "routine load job has been paused by user").build());
@@ -426,7 +421,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         routineLoadJob.autoResumeCount = 0;
         routineLoadJob.firstResumeTimestamp = 0;
         routineLoadJob.autoResumeLock = false;
-        routineLoadJob.updateState(RoutineLoadJob.JobState.NEED_SCHEDULE, null, false /* not replay */);
+        routineLoadJob.updateState(RoutineLoadJob.JobState.NEED_SCHEDULE, null);
         routineLoadJob.clearOtherMsg();
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                 .add("current_state", routineLoadJob.getState())
@@ -441,8 +436,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 stopRoutineLoadStmt.getName());
         routineLoadJob.updateState(RoutineLoadJob.JobState.STOPPED,
                 new ErrorReason(InternalErrorCode.MANUAL_STOP_ERR,
-                        "User  " + ConnectContext.get().getQualifiedUser() + " stop routine load job"),
-                false /* not replay */);
+                        "User  " + ConnectContext.get().getQualifiedUser() + " stop routine load job"));
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                 .add("current_state", routineLoadJob.getState())
                 .add("user", ConnectContext.get().getQualifiedUser())
@@ -693,11 +687,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     public void replayChangeRoutineLoadJob(RoutineLoadOperation operation) {
         RoutineLoadJob job = getJob(operation.getId());
-        try {
-            job.updateState(operation.getJobState(), null, true /* is replay */);
-        } catch (StarRocksException e) {
-            LOG.error("should not happened", e);
-        }
+        job.replayUpdateState(operation.getJobState(), null);
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, operation.getId())
                 .add("current_state", operation.getJobState())
                 .add("msg", "replay change routine load job")
@@ -733,8 +723,12 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 && !stmt.getDataSourceProperties().getType().equalsIgnoreCase(job.dataSourceType.name())) {
             throw new DdlException("The specified job type is not: " + stmt.getDataSourceProperties().getType());
         }
+        OriginStatement originStatement = stmt.getOrigStmt();
+        OriginStatementInfo originStatementInfo =
+                new OriginStatementInfo(originStatement.getOrigStmt(), originStatement.getIdx());
+
         job.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
-                stmt.getDataSourceProperties(), stmt.getOrigStmt(), false);
+                stmt.getDataSourceProperties(), originStatementInfo);
     }
 
     public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws StarRocksException, IOException {
@@ -747,29 +741,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             routineLoadDesc = CreateRoutineLoadStmt.getLoadDesc(
                     log.getOriginStatement(), job.getSessionVariables());
         }
-        job.modifyJob(routineLoadDesc, log.getJobProperties(),
-                log.getDataSourceProperties(), log.getOriginStatement(), true);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(idToRoutineLoadJob.size());
-        for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
-            routineLoadJob.write(out);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            RoutineLoadJob routineLoadJob = RoutineLoadJob.read(in);
-            if (routineLoadJob.needRemove()) {
-                LOG.info("discard expired job [{}]", routineLoadJob.getId());
-                continue;
-            }
-
-            putJob(routineLoadJob);
-        }
+        job.replayModifyJob(routineLoadDesc, log.getJobProperties(), log.getDataSourceProperties());
     }
 
     private void putJob(RoutineLoadJob routineLoadJob) {

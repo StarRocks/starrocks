@@ -600,4 +600,222 @@ TEST_F(MetaFileTest, test_error_state) {
     EXPECT_TRUE(StarRocksMetrics::instance()->primary_key_table_error_state_total.value() > 0);
 }
 
+TEST_F(MetaFileTest, test_batch_apply_opwrite_set_final_rowset_basic) {
+    const int64_t tablet_id = 30001;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(110);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Batch 1: add two segments a.dat / b.dat
+    TxnLogPB_OpWrite op_write1;
+    RowsetMetadataPB rowset_meta1;
+    rowset_meta1.add_segments("a.dat");
+    rowset_meta1.add_segments("b.dat");
+    op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
+    builder.batch_apply_opwrite(op_write1, /*replace_segments*/ {}, /*orphan_files*/ {});
+
+    // Batch 2: append one segment c.dat (no cross-batch replacement to avoid OOB)
+    TxnLogPB_OpWrite op_write2;
+    RowsetMetadataPB rowset_meta2;
+    rowset_meta2.add_segments("c.dat");
+    op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
+    builder.batch_apply_opwrite(op_write2, /*replace_segments*/ {}, /*orphan_files*/ {});
+
+    // Update delete stats before finalizing; predicted segment ids start from next_rowset_id
+    std::map<uint32_t, size_t> segid_to_add_dels;
+    segid_to_add_dels[110] = 5; // a.dat
+    segid_to_add_dels[111] = 3; // b.dat
+    segid_to_add_dels[112] = 2; // c.dat
+    ASSERT_TRUE(builder.update_num_del_stat(segid_to_add_dels).ok());
+
+    // Seal pending rowset
+    builder.set_final_rowset();
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    EXPECT_EQ(110, final_rowset.id());
+    ASSERT_EQ(3, final_rowset.segments_size());
+    EXPECT_EQ("a.dat", final_rowset.segments(0));
+    EXPECT_EQ("b.dat", final_rowset.segments(1));
+    EXPECT_EQ("c.dat", final_rowset.segments(2));
+    EXPECT_EQ(10, final_rowset.num_dels()); // 5 + 3 + 2
+    EXPECT_EQ(113, metadata->next_rowset_id());
+
+    // Persist metadata
+    metadata->set_version(11);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 11));
+    ASSERT_EQ(1, persisted->rowsets_size());
+    EXPECT_EQ(10, persisted->rowsets(0).num_dels());
+    EXPECT_EQ("b.dat", persisted->rowsets(0).segments(1));
+}
+
+TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_dels) {
+    const int64_t tablet_id = 30002;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(20);
+    metadata->set_next_rowset_id(500);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // batch 1: two segments + two del files
+    TxnLogPB_OpWrite op_write1;
+    RowsetMetadataPB rowset_meta1;
+    rowset_meta1.add_segments("s1.dat");
+    rowset_meta1.add_segments("s2.dat");
+    op_write1.mutable_rowset()->CopyFrom(rowset_meta1);
+    op_write1.add_dels("d1.del");
+    op_write1.add_dels("d2.del");
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // batch 2: one segment + one del file
+    TxnLogPB_OpWrite op_write2;
+    RowsetMetadataPB rowset_meta2;
+    rowset_meta2.add_segments("s3.dat");
+    op_write2.mutable_rowset()->CopyFrom(rowset_meta2);
+    op_write2.add_dels("d3.del");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    builder.set_final_rowset();
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& final_rowset = metadata->rowsets(0);
+    EXPECT_EQ(500, final_rowset.id());
+    ASSERT_EQ(3, final_rowset.segments_size());
+    EXPECT_EQ("s1.dat", final_rowset.segments(0));
+    EXPECT_EQ("s2.dat", final_rowset.segments(1));
+    EXPECT_EQ("s3.dat", final_rowset.segments(2));
+    ASSERT_EQ(3, final_rowset.del_files_size());
+    std::set<std::string> del_names;
+    for (int i = 0; i < final_rowset.del_files_size(); ++i) {
+        del_names.insert(final_rowset.del_files(i).name());
+        EXPECT_EQ(final_rowset.id(), final_rowset.del_files(i).origin_rowset_id());
+    }
+    EXPECT_TRUE(del_names.count("d1.del") > 0);
+    EXPECT_TRUE(del_names.count("d2.del") > 0);
+    EXPECT_TRUE(del_names.count("d3.del") > 0);
+
+    metadata->set_version(21);
+    ASSERT_TRUE(builder.finalize(next_id()).ok());
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 21));
+    ASSERT_EQ(1, persisted->rowsets_size());
+    ASSERT_EQ(3, persisted->rowsets(0).del_files_size());
+}
+
+TEST_F(MetaFileTest, test_sstable_delvec_integration) {
+    // Test SSTable delvec integration: test new get_del_vec(DelvecPagePB) function and
+    // version reference collection from SSTable delvecs during finalization
+    const int64_t tablet_id = 40001;
+    const uint32_t segment_id = 1001;
+    const int64_t version1 = 11;
+    const int64_t version2 = 12;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version1);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+    metadata->set_enable_persistent_index(true);
+    metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    // 1. Create and write delvec first
+    MetaFileBuilder builder1(*tablet, metadata);
+    DelVector dv1;
+    dv1.set_empty();
+    std::shared_ptr<DelVector> ndv1;
+    std::vector<uint32_t> dels1 = {1, 3, 5, 7, 100};
+    dv1.add_dels_as_new_version(dels1, version1, &ndv1);
+    std::string original_delvec = ndv1->save();
+    builder1.append_delvec(ndv1, segment_id);
+    Status st = builder1.finalize(next_id());
+    EXPECT_TRUE(st.ok());
+
+    // 2. Get the delvec page info for creating SSTable delvec
+    ASSIGN_OR_ABORT(auto metadata1, _tablet_manager->get_tablet_metadata(tablet_id, version1));
+    auto iter = metadata1->delvec_meta().delvecs().find(segment_id);
+    EXPECT_TRUE(iter != metadata1->delvec_meta().delvecs().end());
+    DelvecPagePB delvec_page = iter->second;
+
+    // 3. Test new get_del_vec function with DelvecPagePB
+    DelVector read_delvec1;
+    LakeIOOptions lake_io_opts;
+    EXPECT_TRUE(get_del_vec(_tablet_manager.get(), *metadata1, delvec_page, true, lake_io_opts, &read_delvec1).ok());
+    EXPECT_EQ(original_delvec, read_delvec1.save());
+
+    // 4. Create SSTable with delvec and write to version2
+    metadata->set_version(version2);
+    MetaFileBuilder builder2(*tablet, metadata);
+
+    PersistentIndexSstableMetaPB sstable_meta;
+    PersistentIndexSstablePB* sstable = sstable_meta.add_sstables();
+    sstable->set_filename("test_sstable.sst");
+    sstable->set_filesize(1024);
+    sstable->set_max_rss_rowid(100);
+    sstable->mutable_delvec()->CopyFrom(delvec_page); // Use DelvecPagePB instead of has_delvec
+
+    builder2.finalize_sstable_meta(sstable_meta);
+    st = builder2.finalize(next_id());
+    EXPECT_TRUE(st.ok());
+
+    // 5. Verify SSTable contains delvec information
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version2));
+    EXPECT_EQ(1, metadata2->sstable_meta().sstables_size());
+    const auto& saved_sstable = metadata2->sstable_meta().sstables(0);
+    EXPECT_TRUE(saved_sstable.has_delvec());
+    EXPECT_EQ(delvec_page.version(), saved_sstable.delvec().version());
+    EXPECT_EQ(delvec_page.offset(), saved_sstable.delvec().offset());
+    EXPECT_EQ(delvec_page.size(), saved_sstable.delvec().size());
+
+    // 6. Test reading delvec via SSTable's delvec page
+    DelVector read_delvec2;
+    EXPECT_TRUE(
+            get_del_vec(_tablet_manager.get(), *metadata2, saved_sstable.delvec(), true, lake_io_opts, &read_delvec2)
+                    .ok());
+    EXPECT_EQ(original_delvec, read_delvec2.save());
+
+    // 7. Test version reference collection: create new metadata without regular delvec but with SSTable delvec
+    auto metadata3 = std::make_shared<TabletMetadataPB>(*metadata2);
+    metadata3->set_version(version2 + 1);
+    metadata3->mutable_delvec_meta()->mutable_delvecs()->clear(); // Clear regular delvecs
+
+    MetaFileBuilder builder3(*tablet, metadata3);
+    st = builder3.finalize(next_id());
+    EXPECT_TRUE(st.ok());
+
+    // 8. Verify that delvec file version is preserved due to SSTable reference
+    ASSIGN_OR_ABORT(auto metadata4, _tablet_manager->get_tablet_metadata(tablet_id, version2 + 1));
+    auto version_to_file_map = metadata4->delvec_meta().version_to_file();
+
+    // The delvec file with version1 should still exist because SSTable references it
+    auto version_iter = version_to_file_map.find(version1);
+    EXPECT_TRUE(version_iter != version_to_file_map.end());
+
+    // 9. Verify we can still read delvec from SSTable after cleanup
+    DelVector read_delvec3;
+    EXPECT_TRUE(
+            get_del_vec(_tablet_manager.get(), *metadata4, saved_sstable.delvec(), true, lake_io_opts, &read_delvec3)
+                    .ok());
+    EXPECT_EQ(original_delvec, read_delvec3.save());
+
+    // 10. Remove SSTable delvec reference and verify delvec file cleanup
+    auto metadata5 = std::make_shared<TabletMetadataPB>(*metadata4);
+    metadata5->set_version(version2 + 2);
+    metadata5->mutable_sstable_meta()->clear_sstables(); // Remove SSTable that references delvec
+
+    MetaFileBuilder builder4(*tablet, metadata5);
+    st = builder4.finalize(next_id());
+    EXPECT_TRUE(st.ok());
+
+    // 11. Verify that delvec file version is now removed since no SSTable references it
+    ASSIGN_OR_ABORT(auto metadata6, _tablet_manager->get_tablet_metadata(tablet_id, version2 + 2));
+    auto final_version_to_file_map = metadata6->delvec_meta().version_to_file();
+
+    // The delvec file with version1 should be removed because no SSTable references it anymore
+    auto final_version_iter = final_version_to_file_map.find(version1);
+    EXPECT_TRUE(final_version_iter == final_version_to_file_map.end());
+}
 } // namespace starrocks::lake

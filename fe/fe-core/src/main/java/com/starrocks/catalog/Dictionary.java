@@ -18,13 +18,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -154,6 +150,11 @@ public class Dictionary implements Writable {
 
     public long getNextSchedulableTime() {
         return nextSchedulableTime.get();
+    }
+
+    // Only for test
+    public void setNextSchedulableTime(long nextSchedulableTime) {
+        this.nextSchedulableTime.set(nextSchedulableTime);
     }
 
     public void updateNextSchedulableTime(long refreshInterval) {
@@ -290,7 +291,6 @@ public class Dictionary implements Writable {
                     throw new DdlException("unknown property for dictionary: " + key);
             }
         }
-        return;
     }
 
     public String buildQuery() {
@@ -323,10 +323,11 @@ public class Dictionary implements Writable {
         this.setLastSuccessVersion(0);
     }
 
-    public synchronized void setRefreshing() {
+    public synchronized void setRefreshing(long ts) {
         this.stateBeforeRefresh = this.state;
         this.state = DictionaryState.REFRESHING;
-        this.lastSuccessRefreshTime = System.currentTimeMillis();
+        this.lastSuccessRefreshTime = ts;
+        this.nextSchedulableTime.set(ts + refreshInterval);
         this.setErrorMsg("");
     }
 
@@ -335,10 +336,11 @@ public class Dictionary implements Writable {
         this.stateBeforeRefresh = null;
     }
 
-    public synchronized void setFinished() {
+    public synchronized void setFinished(long ts, long version) {
         this.state = DictionaryState.FINISHED;
-        this.lastSuccessFinishedTime = System.currentTimeMillis();
+        this.lastSuccessFinishedTime = ts;
         this.stateBeforeRefresh = null;
+        this.lastSuccessVersion = version;
     }
 
     public synchronized void setCancelled() {
@@ -372,6 +374,10 @@ public class Dictionary implements Writable {
             this.state = this.stateBeforeRefresh;
             this.stateBeforeRefresh = null;
         }
+    }
+    
+    protected String getRuntimeErrMsg() {
+        return runtimeErrMsg;
     }
 
     public List<String> getInfo() {
@@ -423,8 +429,5 @@ public class Dictionary implements Writable {
         return info;
     }
 
-    public static Dictionary read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Dictionary.class);
-    }
+
 }

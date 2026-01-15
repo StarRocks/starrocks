@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -32,10 +31,11 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static com.starrocks.sql.ast.expression.BinaryType.EQ_FOR_NULL;
 
 // Rewrite ScalarOperator as DictMappingOperator
 // if a ScalarOperator support dictionary optimization, we will rewrite it to DictMappingOperator

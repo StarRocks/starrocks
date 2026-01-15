@@ -70,7 +70,6 @@ set(SRC_FILES
     #$${GEN_CPP_DIR}/opcode/functions.cc
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc
-    ${GEN_CPP_DIR}/opcode/builtin_functions.cpp
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
     ${GEN_CPP_DIR}/version.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
@@ -81,7 +80,7 @@ set(SRC_FILES
 
 # keep everything in one library, the object files reference
 # each other
-add_library(StarRocksGen STATIC ${SRC_FILES})
+ADD_BE_LIB(StarRocksGen STATIC ${SRC_FILES})
 
 # Setting these files as code-generated lets make clean and incremental builds work
 # correctly

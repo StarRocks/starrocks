@@ -14,13 +14,19 @@
 
 package com.starrocks.replication;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.ProcResult;
+import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -58,14 +64,14 @@ import java.util.List;
 import java.util.Map;
 
 public class ReplicationJobTest {
-    private static StarRocksAssert starRocksAssert;
+    protected static StarRocksAssert starRocksAssert;
 
-    private static Database db;
-    private static OlapTable table;
-    private static OlapTable srcTable;
-    private static Partition partition;
-    private static Partition srcPartition;
-    private ReplicationJob job;
+    protected static Database db;
+    protected static OlapTable table;
+    protected static OlapTable srcTable;
+    protected static Partition partition;
+    protected static Partition srcPartition;
+    protected ReplicationJob job;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -334,7 +340,7 @@ public class ReplicationJobTest {
         MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
         MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
         indexInfo.index_id = index.getId();
-        indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
+        indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexMetaId(srcIndex.getMetaId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);
 
         indexInfo.tablet_replication_infos = new HashMap<Long, TTabletReplicationInfo>();
@@ -369,5 +375,23 @@ public class ReplicationJobTest {
         tSnapshotInfo.setSnapshot_path(snapshotPath);
         tSnapshotInfo.setIncremental_snapshot(incrementalSnapshot);
         return tSnapshotInfo;
+    }
+
+    @Test
+    public void testProcNodeFetchResultWithRunningJob() throws AnalysisException, AlreadyExistsException {
+        ReplicationJob jobProc = new ReplicationJob(null, "test_proc_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        GlobalStateMgr.getCurrentState().getReplicationMgr().addReplicationJob(jobProc);
+        ReplicationsProcNode node = new ReplicationsProcNode();
+        ProcResult result = node.fetchResult();
+
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result instanceof BaseProcResult);
+        Assertions.assertEquals(1, result.getRows().size());
+        Assertions.assertEquals(
+                Lists.newArrayList("JobID", "DatabaseID", "TableID", "TxnID", "CreatedTime",
+                        "FinishedTime", "State", "Progress", "Error"),
+                result.getColumnNames());
+        GlobalStateMgr.getCurrentState().getReplicationMgr().removeRunningJob(jobProc);
     }
 }

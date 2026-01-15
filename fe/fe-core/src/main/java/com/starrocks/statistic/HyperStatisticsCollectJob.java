@@ -15,28 +15,31 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StatisticsType;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.hyper.HyperQueryJob;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,7 +73,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
-                                     List<StatsConstants.StatisticsType> statisticsTypes, List<List<String>> columnGroups,
+                                     List<StatisticsType> statisticsTypes, List<List<String>> columnGroups,
                                      boolean isManualJob) {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties, statisticsTypes, columnGroups);
         this.partitionIdList = partitionIdList;
@@ -107,6 +110,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         long insertFailures = 0;
 
         for (int i = 0; i < queryJobs.size(); i++) {
+            // Calculate and set remaining timeout for this query job
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
+
             HyperQueryJob queryJob = queryJobs.get(i);
             try {
                 queryJob.queryStatistics();
@@ -129,7 +135,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             try {
-                flushInsertStatisticsData(context);
+                flushInsertStatisticsData(context, analyzeStatus);
             } catch (Exception e) {
                 insertFailures++;
                 if (insertFailures > Config.statistic_full_statistics_failure_tolerance_ratio * queryJobs.size()) {
@@ -150,7 +156,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private void flushInsertStatisticsData(ConnectContext context) throws Exception {
+    private void flushInsertStatisticsData(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         if (rowsBuffer.isEmpty()) {
             return;
         }
@@ -159,6 +165,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         int maxRetryTimes = 5;
         StatementBase insertStmt = createInsertStmt();
         do {
+            // Calculate and set remaining timeout for this insert task
+            calculateAndSetRemainingTimeout(context, analyzeStatus);
+
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
 
@@ -192,7 +201,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
                 ") values " + String.join(", ", sqlBuffer) + ";";
         QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
-        InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("_statistics_", "column_statistics")),
+                null, NodePosition.ZERO);
+        InsertStmt insert = new InsertStmt(tableRef, qs);
         insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;

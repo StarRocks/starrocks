@@ -19,9 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PaimonTable;
@@ -42,6 +39,9 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -356,7 +356,7 @@ public class OptExternalPartitionPruner {
                 for (int i = 0; i < literals.size(); i++) {
                     ColumnRefOperator columnRefOperator = partitionColumnRefOperators.get(i);
                     LiteralExpr literal = literals.get(i);
-                    if (Expr.IS_NULL_LITERAL.apply(literal)) {
+                    if (ExprUtils.IS_NULL_LITERAL.apply(literal)) {
                         columnToNullPartitions.get(columnRefOperator).add(partitionId);
                         continue;
                     }
@@ -410,6 +410,7 @@ public class OptExternalPartitionPruner {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
@@ -431,7 +432,8 @@ public class OptExternalPartitionPruner {
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
             GetRemoteFilesParams params =
-                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames)
+                            .setTableVersionRange(operator.getTvrVersionRange()).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;

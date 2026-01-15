@@ -79,7 +79,7 @@ public class CompoundPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitCompoundPredicate(this, context);
+        return  visitor.visitCompoundPredicate(this, context);
     }
 
     public enum CompoundType {
@@ -159,6 +159,15 @@ public class CompoundPredicateOperator extends PredicateOperator {
             return false;
         }
         CompoundPredicateOperator that = (CompoundPredicateOperator) o;
+        return type == that.type;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        CompoundPredicateOperator that = (CompoundPredicateOperator) obj;
         return type == that.type;
     }
 

@@ -45,7 +45,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -56,7 +55,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -70,6 +68,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -77,6 +76,9 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -169,9 +171,9 @@ public abstract class StarRocksHttpTestCase {
 
     public static OlapTable newEmptyTable(String name) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.DOUBLE);
-        Column k3 = new Column("k3", Type.DATETIME);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", FloatType.DOUBLE);
+        Column k3 = new Column("k3", DateType.DATETIME);
         List<Column> columns = new ArrayList<>();
         columns.add(k1);
         columns.add(k2);
@@ -191,12 +193,11 @@ public abstract class StarRocksHttpTestCase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 3);
-        partitionInfo.setIsInMemory(testPartitionId, false);
         OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexId(testIndexId);
+        table.setBaseIndexMetaId(testIndexId);
         return table;
     }
 
@@ -206,8 +207,8 @@ public abstract class StarRocksHttpTestCase {
 
     public static OlapTable newTable(String name, long replicaDataSize) {
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.DOUBLE);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", FloatType.DOUBLE);
         List<Column> columns = new ArrayList<>();
         columns.add(k1);
         columns.add(k2);
@@ -249,19 +250,18 @@ public abstract class StarRocksHttpTestCase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(testPartitionId, (short) 3);
-        partitionInfo.setIsInMemory(testPartitionId, false);
         OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
         table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexId(testIndexId);
+        table.setBaseIndexMetaId(testIndexId);
         return table;
     }
 
     private static EsTable newEsTable(String name) {
-        Column k1 = new Column("k1", Type.BIGINT);
-        Column k2 = new Column("k2", Type.DOUBLE);
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        Column k2 = new Column("k2", FloatType.DOUBLE);
         List<Column> columns = new ArrayList<>();
         columns.add(k1);
         columns.add(k2);
@@ -446,7 +446,13 @@ public abstract class StarRocksHttpTestCase {
             }
         }
 
-        httpServer = new HttpServer(HTTP_PORT);
+        try {
+            httpServer = new HttpServer(HTTP_PORT);
+        } catch (Exception e) {
+            System.err.println("Failed to initialize HttpServer: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("HttpServer initialization failed", e);
+        }
         httpServer.setup();
         httpServer.start();
         // must ensure the http server started before any unit test
@@ -539,7 +545,8 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
-        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "", 0);
+        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
+        frontend.setAlive(true);
         new Expectations(nodeMgr) {
             {
                 nodeMgr.getClusterInfo();

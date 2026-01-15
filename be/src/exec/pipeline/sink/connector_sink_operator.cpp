@@ -41,6 +41,7 @@ Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));
 #endif
+    _connector_chunk_sink->set_profile(_unique_metrics.get());
     RETURN_IF_ERROR(_connector_chunk_sink->init());
     return Status::OK();
 }
@@ -60,6 +61,9 @@ bool ConnectorSinkOperator::need_input() const {
     }
 
     auto [status, _] = _io_poller->poll();
+    if (status.ok()) {
+        status = _connector_chunk_sink->status();
+    }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
@@ -74,12 +78,15 @@ bool ConnectorSinkOperator::is_finished() const {
     }
 
     auto [status, finished] = _io_poller->poll();
+    if (status.ok()) {
+        status = _connector_chunk_sink->status();
+    }
     if (!status.ok()) {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
     }
-
-    return finished;
+    bool ret = finished && _connector_chunk_sink->is_finished();
+    return ret;
 }
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
@@ -102,7 +109,7 @@ StatusOr<ChunkPtr> ConnectorSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    RETURN_IF_ERROR(_connector_chunk_sink->add(chunk.get()));
+    RETURN_IF_ERROR(_connector_chunk_sink->add(chunk));
     return Status::OK();
 }
 

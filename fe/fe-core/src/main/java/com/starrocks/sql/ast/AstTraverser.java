@@ -14,12 +14,11 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Subquery;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
-public class AstTraverser<R, C> implements AstVisitor<R, C> {
+public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 
@@ -175,6 +174,10 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
 
     @Override
     public R visitCTE(CTERelation node, C context) {
+        if (node.isRecursive() && !node.isAnchor()) {
+            // For recursive CTE, only traverse the non-recursive part (anchor member)
+            return null;
+        }
         return visit(node.getCteQueryStatement(), context);
     }
 

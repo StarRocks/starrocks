@@ -16,10 +16,11 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,7 +47,7 @@ public class ValuesRelation extends QueryRelation {
 
     public static ValuesRelation newDualRelation(NodePosition pos) {
         ImmutableList.Builder<Expr> row = ImmutableList.builder();
-        row.add(NullLiteral.create(Type.NULL));
+        row.add(NullLiteral.create(NullType.NULL));
         ImmutableList.Builder<List<Expr>> rows = ImmutableList.builder();
         rows.add(row.build());
         ValuesRelation valuesRelation = new ValuesRelation(rows.build(), Collections.singletonList(""), pos);
@@ -103,7 +104,7 @@ public class ValuesRelation extends QueryRelation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitValues(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitValues(this, context);
     }
 
     @Override

@@ -114,8 +114,8 @@ public class DistinctAggTest extends PlanTestBase {
                         "  |  output: group_concat(4: group_concat, ',')\n" +
                         "  |  group by: "));
         argumentsList.add(Arguments.of("select count(distinct v1, v2) from (select * from t0 limit 2) t group by 1 + 1",
-                "5:AGGREGATE (merge finalize)\n" +
-                        "  |  output: count(5: count)\n" +
+                "  4:AGGREGATE (update finalize)\n" +
+                        "  |  output: count(if(1: v1 IS NULL, NULL, 2: v2))\n" +
                         "  |  group by: 4: expr"));
         argumentsList.add(Arguments.of("select group_concat(distinct v1, v2) from (select * from t0 limit 2) t group by v3",
                 "3:AGGREGATE (update finalize)\n" +

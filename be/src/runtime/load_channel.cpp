@@ -84,7 +84,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _root_profile->add_info_string("TxnId", std::to_string(txn_id));
     _profile = _root_profile->create_child(fmt::format("Channel (host={})", BackendOptions::get_localhost()), true);
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
-    ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
+    COUNTER_SET(ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES), _mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
     _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
     _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
@@ -96,7 +96,7 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
 }
 
 LoadChannel::~LoadChannel() {
-    _span->SetAttribute("num_chunk", _num_chunk);
+    _span->SetAttribute("num_chunk", static_cast<uint64_t>(_num_chunk));
     _span->End();
 }
 
@@ -144,12 +144,19 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
         auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
             if (is_lake_tablet) {
+#ifdef __APPLE__
+                channel = nullptr;
+                st = Status::NotSupported("lake tablet is not supported on MacOS");
+#else
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
+#endif
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
-            if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
-                _tablets_channels.insert({key, std::move(channel)});
+            if (st.ok()) {
+                if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
+                    _tablets_channels.insert({key, std::move(channel)});
+                }
             }
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
@@ -180,14 +187,17 @@ void LoadChannel::_add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, cons
                 fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
-    bool close_channel;
+    bool close_channel = false;
     channel->add_chunk(chunk, request, response, &close_channel);
-    if (close_channel &&
-        (_should_enable_profile() || (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
-        // If close_channel is true, the channel has been removed from _tablets_channels
-        // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
-        // update the profile later. So update the profile here
-        channel->update_profile();
+    if (close_channel) {
+        _remove_tablets_channel(key);
+        if ((_should_enable_profile() ||
+             (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
+            // If close_channel is true, the channel is removed from _tablets_channels,
+            // there will be no chance to get the channel to update the profile later.
+            // So update the profile here.
+            channel->update_profile();
+        }
     }
 }
 
@@ -215,7 +225,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     MonotonicStopWatch watch;
     watch.start();
     faststring uncompressed_buffer;
-    std::unique_ptr<Chunk> chunk;
+    ChunkUniquePtr chunk;
     int eos_count = 0;
     int64_t timeout_ms = -1;
     for (int i = 0; i < req.requests_size(); i++) {
@@ -281,11 +291,20 @@ void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegm
     closure_guard.release();
 }
 
-void LoadChannel::cancel() {
+void LoadChannel::cancel(const std::string& reason) {
+    bool print_cancel_msg = false;
+    DeferOp defer([&]() {
+        if (print_cancel_msg) {
+            LOG(INFO) << "Cancel load channel, txn_id=" << _txn_id << ", load_id=" << print_id(_load_id)
+                      << ", reason=" << reason;
+        }
+    });
     std::lock_guard l(_lock);
     for (auto& it : _tablets_channels) {
         it.second->cancel();
     }
+    print_cancel_msg = !_cancelled.load(std::memory_order_acquire);
+    _cancelled.store(true, std::memory_order_release);
 }
 
 void LoadChannel::abort() {
@@ -305,14 +324,13 @@ void LoadChannel::abort(const TabletsChannelKey& key, const std::vector<int64_t>
     }
 }
 
-void LoadChannel::remove_tablets_channel(const TabletsChannelKey& key) {
+void LoadChannel::_remove_tablets_channel(const TabletsChannelKey& key) {
     std::unique_lock l(_lock);
     _tablets_channels.erase(key);
     if (_tablets_channels.empty()) {
         l.unlock();
         _closed.store(true);
         _load_mgr->remove_load_channel(_load_id);
-        // Do NOT touch |this| since here, it could have been deleted.
     }
 }
 
@@ -499,13 +517,13 @@ Status LoadChannel::_update_and_serialize_profile(std::string* result, bool prin
     ThriftSerializer ser(false, 4096);
     Status st = ser.serialize(&thrift_profile, &len, &buf);
     if (!st.ok()) {
-        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
-                   << ", status: " << st;
+        LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << print_id(_load_id)
+                   << ", txn_id: " << _txn_id << ", status: " << st;
         return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
     COUNTER_UPDATE(_profile_serialized_size, len);
     result->append((char*)buf, len);
-    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    VLOG(2) << "report profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id << ", size: " << len;
     return Status::OK();
 }
 

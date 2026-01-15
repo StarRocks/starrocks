@@ -73,6 +73,8 @@ public class FeConstants {
             "Compute node not found. Check if any compute node is down.";
     public static final String QUERY_FINISHED_ERROR = "QueryFinished";
     public static final String LIMIT_REACH_ERROR = "LimitReach";
+    public static final String SCHEDULE_FRAGMENT_ERROR =
+            "Schedule Fragment error. caused by:";
 
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
@@ -112,6 +114,8 @@ public class FeConstants {
     public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
 
     public static final int DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM = 16;
+    // When inferring bucket num from recent partitions, we will check at most 5 recent partitions
+    public static final int DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM = 5;
 
     public static final int MAX_LIST_PARTITION_NAME_LENGTH = 50;
 

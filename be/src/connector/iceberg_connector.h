@@ -17,7 +17,7 @@
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 
 namespace starrocks::connector {
 
@@ -28,6 +28,7 @@ public:
     ConnectorType connector_type() const override { return ConnectorType::ICEBERG; }
 
     std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const override;
+    std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const;
 };
 
 } // namespace starrocks::connector

@@ -15,18 +15,16 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.VectorIndexParams;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -43,6 +41,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -52,10 +52,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.BinaryType.GE;
-import static com.starrocks.analysis.BinaryType.LE;
 import static com.starrocks.catalog.FunctionSet.APPROX_COSINE_SIMILARITY;
 import static com.starrocks.catalog.FunctionSet.APPROX_L2_DISTANCE;
+import static com.starrocks.sql.ast.expression.BinaryType.GE;
+import static com.starrocks.sql.ast.expression.BinaryType.LE;
 
 public class RewriteToVectorPlanRule extends TransformationRule {
 
@@ -145,10 +145,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                                                      VectorSearchOptions opts) {
         // Add index distanceColumn to the scan operator, including table, colRefToColumnMetaMap, and columnMetaToColRefMap.
         String distanceColumnName = scanOp.getVectorSearchOptions().getDistanceColumnName();
-        Column distanceColumn = new Column(distanceColumnName, Type.FLOAT);
+        Column distanceColumn = new Column(distanceColumnName, FloatType.FLOAT);
         scanOp.getTable().addColumn(distanceColumn);
 
-        ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, Type.FLOAT, false);
+        ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, FloatType.FLOAT, false);
         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = new HashMap<>(scanOp.getColRefToColumnMetaMap());
         newColRefToColumnMetaMap.put(distanceColRef, distanceColumn);
 

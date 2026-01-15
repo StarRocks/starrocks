@@ -15,17 +15,17 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -35,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.collections4.ListUtils;
@@ -135,7 +136,9 @@ public class PredicateColumnsStorage {
     }
 
     public PredicateColumnsStorage() {
-        this.executor = SimpleExecutor.getRepoExecutor();
+        this.executor = new SimpleExecutor("predicate_column", TResultSinkType.HTTP_PROTOCAL);
+        // Set the DOP to 1 to reduce impact on normal queries
+        this.executor.setDop(1);
     }
 
     public PredicateColumnsStorage(SimpleExecutor executor) {
@@ -217,7 +220,7 @@ public class PredicateColumnsStorage {
 
             VelocityContext context = new VelocityContext();
             ColumnFullId fullId = usage.getColumnFullId();
-            context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName());
+            context.put("feId", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
             context.put("dbId", fullId.getDbId());
             context.put("tableId", fullId.getTableId());
             context.put("columnId", fullId.getColumnUniqueId());
@@ -241,7 +244,7 @@ public class PredicateColumnsStorage {
      * Restore all states
      */
     public List<ColumnUsage> restore() {
-        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        String selfName = String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
 
         VelocityContext context = new VelocityContext();
         context.put("feId", selfName);
@@ -259,9 +262,19 @@ public class PredicateColumnsStorage {
      * Remove all records if the lastUsed < ttlTime
      */
     public void vacuum(LocalDateTime ttlTime) {
+        String selfName = String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
+        vacuum(ttlTime, selfName);
+        // compatible with old version fe name
+        // previously we use the fe_name as the feId, we also need to vacuum it otherwise nobody care about it
+        String oldName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
+        vacuum(ttlTime, oldName);
+
+        LOG.info("vacuum column usage from storage before {}", ttlTime);
+    }
+
+    private void vacuum(LocalDateTime ttlTime, String feName) {
         VelocityContext context = new VelocityContext();
-        String selfName = GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName();
-        context.put("feId", selfName);
+        context.put("feId", feName);
         context.put("lastUsed", DateUtils.formatDateTimeUnix(ttlTime));
 
         StringWriter sw = new StringWriter();
@@ -269,7 +282,6 @@ public class PredicateColumnsStorage {
 
         String sql = sw.toString();
         executor.executeDML(sql);
-        LOG.info("vacuum column usage from storage before {}", ttlTime);
     }
 
     public boolean isSystemTableReady() {
@@ -305,7 +317,7 @@ public class PredicateColumnsStorage {
          * "data": [field1, field2, field3]
          * }
          */
-        public static ColumnUsageJsonRecord fromJson(String json) {
+        public static ColumnUsageJsonRecord fromJson(String json) throws MetaNotFoundException {
             JsonElement object = JsonParser.parseString(json);
             JsonArray data = object.getAsJsonObject().get("data").getAsJsonArray();
             // String feId = data.get(0).getAsString();
@@ -317,7 +329,9 @@ public class PredicateColumnsStorage {
             String created = data.get(6).getAsString();
             ColumnFullId fullId = new ColumnFullId(dbId, tableId, columnId);
             Optional<Pair<TableName, ColumnId>> names = fullId.toNames();
-            Preconditions.checkState(names.isPresent(), "unable to find column: " + fullId);
+            if (names.isEmpty()) {
+                throw new MetaNotFoundException("column not found: " + fullId);
+            }
             TableName tableName = names.get().first;
             EnumSet<ColumnUsage.UseCase> useCases = ColumnUsage.fromUseCaseString(useCase);
             ColumnUsage usage = new ColumnUsage(fullId, tableName, useCases);
@@ -342,6 +356,8 @@ public class PredicateColumnsStorage {
                     List<ColumnUsage> records =
                             ListUtils.emptyIfNull(ColumnUsageJsonRecord.fromJson(jsonString).data);
                     res.addAll(records);
+                } catch (MetaNotFoundException ignored) {
+                    // ignore if the table/column not found
                 } catch (Exception e) {
                     LOG.warn("failed to deserialize ColumnUsage record: {}", jsonString, e);
                 }

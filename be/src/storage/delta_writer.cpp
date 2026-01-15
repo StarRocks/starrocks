@@ -439,7 +439,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                     "memory limit exceeded, please reduce load frequency or increase config "
                     "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
         }
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     auto state = get_state();
     if (state != kWriting) {
@@ -467,15 +467,15 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = _flush_memtable();
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = _flush_memtable();
-        _reset_mem_table();
+        RETURN_IF_ERROR(_reset_mem_table());
     } else if (full) {
         st = flush_memtable_async();
-        _reset_mem_table();
         ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
+        RETURN_IF_ERROR(_reset_mem_table());
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
@@ -559,6 +559,7 @@ Status DeltaWriter::manual_flush() {
 }
 
 Status DeltaWriter::flush_memtable_async(bool eos) {
+    DeferOp defer([this] { _mem_table.reset(); });
     _last_write_ts = 0;
     _write_buffer_size = 0;
     // _mem_table is nullptr means write() has not been called
@@ -664,6 +665,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
             if (ptable_schema_param->indexes(i).id() == index_id) break;
         }
         if (i < ptable_schema_param->indexes_size()) {
+            _is_shadow = ptable_schema_param->indexes(i).is_shadow();
             if (ptable_schema_param->indexes_size() > 0 && ptable_schema_param->indexes(i).has_column_param() &&
                 ptable_schema_param->indexes(i).column_param().columns_desc_size() != 0 &&
                 ptable_schema_param->indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
@@ -684,7 +686,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
     return Status::OK();
 }
 
-void DeltaWriter::_reset_mem_table() {
+Status DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
@@ -696,8 +698,10 @@ void DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    RETURN_IF_ERROR(_mem_table->prepare());
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
     _write_buffer_size = _mem_table->write_buffer_size();
+    return Status::OK();
 }
 
 Status DeltaWriter::commit() {
@@ -774,7 +778,7 @@ Status DeltaWriter::commit() {
     FAIL_POINT_TRIGGER_ASSIGN_STATUS_OR_DEFAULT(
             load_commit_txn, res, COMMIT_TXN_FP_ACTION(_opt.txn_id, _opt.tablet_id),
             _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
-                                                       _cur_rowset, false));
+                                                       _cur_rowset, false, _is_shadow));
     auto commit_txn_ts = watch.elapsed_time();
 
     if (!res.ok()) {
@@ -875,7 +879,7 @@ const char* DeltaWriter::replica_state_name(ReplicaState state) {
     return "";
 }
 
-Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
+Status DeltaWriter::_fill_auto_increment_id(Chunk& chunk) {
     // 1. get pk column from chunk
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < _tablet_schema->num_key_columns(); i++) {
@@ -917,8 +921,9 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     for (int i = 0; i < _vectorized_schema.num_fields(); i++) {
         const TabletColumn& tablet_column = _tablet_schema->column(i);
         if (tablet_column.is_auto_increment()) {
-            auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
+            auto* column = chunk.get_column_raw_ptr_by_index(i);
+            auto* int64_column = down_cast<Int64Column*>(column);
+            RETURN_IF_ERROR(int64_column->fill_range(ids, filter));
             break;
         }
     }

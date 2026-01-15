@@ -28,6 +28,7 @@
 #include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -73,8 +74,8 @@ struct CompactionInfo {
 };
 
 struct ExtraFileSize {
-    int64_t pindex_size = 0;
-    int64_t col_size = 0;
+    std::atomic<int64_t> pindex_size = 0;
+    std::atomic<int64_t> col_size = 0;
 };
 
 struct EditVersionInfo {
@@ -138,6 +139,7 @@ public:
 
     // get latest version's version
     int64_t max_version() const;
+    int64_t min_readable_version() const;
 
     int64_t max_readable_version() const;
 
@@ -304,8 +306,8 @@ public:
     //   ]
     // ]
     Status get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version, bool with_default,
-                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<MutableColumnPtr>* columns, void* state, const TabletSchemaCSPtr& tablet_schema,
+                             std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid, MutableColumns* columns,
+                             void* state, const TabletSchemaCSPtr& tablet_schema,
                              const std::map<string, string>* column_to_expr_value = nullptr);
 
     Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
@@ -392,6 +394,8 @@ public:
 
     bool rowset_check_file_existence() const;
 
+    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -453,8 +457,8 @@ private:
     void _calc_compaction_score(RowsetStats* stats);
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
-                      const std::vector<MutableColumnPtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                      DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
+                      const MutableColumns& upserts, PrimaryIndex& index, int64_t tablet_id, DeletesMap* new_deletes,
+                      const TabletSchemaCSPtr& tablet_schema);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);
@@ -517,10 +521,6 @@ private:
     bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
-
-    std::shared_timed_mutex* get_index_lock() { return &_index_lock; }
-
-    StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
     bool _use_light_apply_compaction(Rowset* rowset);
 
@@ -598,6 +598,9 @@ private:
 
     std::atomic<bool> _apply_schedule{false};
     size_t _apply_failed_time = 0;
+
+    // cache of latest ExtraFileSize
+    ExtraFileSize _extra_file_size_cache;
 };
 
 } // namespace starrocks

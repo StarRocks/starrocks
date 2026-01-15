@@ -17,7 +17,7 @@
 #include <atomic>
 #include <ostream>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -84,6 +84,9 @@ public:
 
     ~MemTable();
 
+    // prepare the memtable for writing which must be called before writing any data
+    Status prepare();
+
     int64_t tablet_id() const { return _tablet_id; }
 
     // the total memory used (contain tmp chunk and aggregator chunk)
@@ -97,7 +100,8 @@ public:
     // return true suggests caller should flush this memory table
     StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr);
+    Status flush(SegmentPB* seg_info = nullptr, bool eos = false, int64_t* flush_data_size = nullptr,
+                 int64_t slot_idx = -1);
 
     Status finalize();
 
@@ -121,7 +125,6 @@ private:
     Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);

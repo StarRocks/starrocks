@@ -81,11 +81,11 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
     private void assertPlans(String query, boolean equals, String... patterns) throws Exception {
         connectContext.getSessionVariable().setEnableUKFKOpt(false);
         String planDisabled = getFragmentPlan(query);
-        System.out.println(planDisabled);
-        System.out.println("===================");
+        logSysInfo(planDisabled);
+        logSysInfo("===================");
         connectContext.getSessionVariable().setEnableUKFKOpt(true);
         String planEnabled = getFragmentPlan(query);
-        System.out.println(planEnabled);
+        logSysInfo(planEnabled);
         if (equals) {
             Assertions.assertEquals(planDisabled, planEnabled);
         } else {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+keywords: ['chuang jian']
 ---
 
 # CREATE TABLE
@@ -211,8 +212,82 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 **DEFAULT "default_value"**：列的默认值。当您将数据导入 StarRocks 时，如果映射到该列的源字段为空，StarRocks 会自动在该列中填充默认值。您可以通过以下方式之一指定默认值：
 
 - **DEFAULT current_timestamp**：使用当前时间作为默认值。有关更多信息，请参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md)。
-- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。例如，如果列的数据类型为 VARCHAR，您可以指定一个 VARCHAR 字符串，例如 beijing，作为默认值，如 `DEFAULT "beijing"` 所示。请注意，默认值不能是以下类型之一：ARRAY、BITMAP、JSON、HLL 和 BOOLEAN。
-- **DEFAULT (\<expr\>)**：使用给定函数返回的结果作为默认值。仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
+- **DEFAULT (\<expr\>)**：使用给定表达式或函数返回的结果作为默认值。支持以下表达式：
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：生成唯一标识符。
+  - ARRAY 字面量表达式（如 `[1, 2, 3]`）：用于 ARRAY 类型列。
+  - MAP 表达式（如 `map{key: value}`）：用于 MAP 类型列。
+  - row() 函数（如 `row(val1, val2)`）：用于 STRUCT 类型列。
+- **DEFAULT `<default_value>`**：使用列数据类型的给定值作为默认值。StarRocks 支持为不同类型指定默认值：
+  
+  **基础类型**：使用字符串字面量指定默认值。
+  
+  ```sql
+  -- 数值类型
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- 字符串类型
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- 日期时间类型
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- 布尔类型
+  is_active BOOLEAN DEFAULT 'true'  -- 支持 'true'/'false'/'1'/'0'
+  ```
+  
+  **JSON 类型**：使用 JSON 格式字符串指定默认值。
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY 类型**：仅支持空字符串作为默认值。
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP 和 HLL 类型**：仅支持空字符串作为默认值，仅用于 AGGREGATE KEY 表。
+  
+  ```sql
+  -- AGGREGATE KEY 表中
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **复杂类型（ARRAY/MAP/STRUCT）**：使用表达式语法指定默认值，仅支持 OLAP 表。
+  
+  :::note
+  复杂类型的默认值**仅在 `fast_schema_evolution = true` 时支持**。如果表的 `fast_schema_evolution` 属性显式设置为 `false`，为复杂类型添加默认值会报错。
+  :::
+  
+  ```sql
+  -- ARRAY 类型
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP 类型
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT 类型
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- 复杂嵌套：STRUCT 嵌套 STRUCT，包含 ARRAY 和 MAP
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **限制**：
+  
+  - TIME 和 VARIANT 类型暂不支持默认值。
+  - 复杂类型（ARRAY/MAP/STRUCT）的默认值仅支持 OLAP 表，且需要表开启 `fast_schema_evolution` 属性。
 
 **AUTO_INCREMENT**：指定一个 `AUTO_INCREMENT` 列。`AUTO_INCREMENT` 列的数据类型必须为 BIGINT。自增 ID 从 1 开始，步长为 1。有关 `AUTO_INCREMENT` 列的更多信息，请参见 [AUTO_INCREMENT](auto_increment.md)。自 v3.0 起，StarRocks 支持 `AUTO_INCREMENT` 列。
 
@@ -558,6 +633,12 @@ PROPERTIES (
 | dynamic_partition.prefix    | 否       | 添加到动态分区名称的前缀。默认值：`p`。 |
 | dynamic_partition.buckets   | 否       | 每个动态分区的桶数。默认值与保留字 `BUCKETS` 确定的桶数或 StarRocks 自动设置的桶数相同。 |
 
+:::note
+
+当分区列的类型为 INT 时，其格式必须为 `yyyyMMdd`，无论分区的时间粒度如何。
+
+:::
+
 ### 随机分桶的桶大小
 
 自 v3.2 起，对于配置了随机分桶的表，您可以在创建表时使用 `PROPERTIES` 中的 `bucket_size` 参数指定桶大小，以实现按需和动态增加桶的数量。单位：B。
@@ -664,7 +745,8 @@ PROPERTIES (
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>"
+    "datacache.partition_duration" = "<string_value>",
+    "file_bundling" = "{ true | false }"
 )
 ```
 
@@ -683,6 +765,26 @@ PROPERTIES (
 
   :::note
   此属性仅在 `datacache.enable` 设置为 `true` 时可用。
+  :::
+
+- `file_bundling`（可选）：是否为云原生表启用 File Bundling 优化功能。该功能自 v4.0 版本起支持。当启用该功能（设置为 `true`）时，系统会自动将导入、Compaction 或 Publish 操作生成的数据文件进行打包，从而减少因频繁访问外部存储系统而产生的 API 成本。
+
+  :::note
+  - File Bundling 功能仅适用于使用 StarRocks v4.0 或更高版本的存算分离集群。
+  - File Bundling 功能在 v4.0 或更高版本中创建的表格中默认启用，由 FE 配置项 `enable_file_bundling` (默认值：true) 控制。
+  - 启用 File Bundling 功能后，您只能将集群降级到 v3.5.2 或更高版本。如果您想降级到 v3.5.2 之前的版本，必须先删除已启用 File Bundling 功能的表。
+  - 对集群中已有的表，在集群升级至 v4.0 后，File Bundling 功能仍默认处于禁用状态。
+  - 您可以通过 [ALTER TABLE](ALTER_TABLE.md) 语句手动为已有的表启用 File Bundling 功能，但仍存在以下限制：
+    - 对于带有在 v4.0 版本之前创建的 Rollup Index 的表，您无法为其启用 File Bundling 功能。您可以在 v4.0 或更高版本中删除并重新创建这些索引，然后为这些表启用 File Bundling 功能。
+    - 您无法在特定时间段内**多次**修改 `file_bundling` 属性。否则，系统将返回错误。您可以通过执行以下 SQL 语句来检查 `file_bundling` 属性是否可修改：
+
+      ```SQL
+      SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
+      ```
+
+      您仅可在返回值为 `0` 时修改 `file_bundling` 属性。非零值表示与 `METADATA_SWITCH_VERSION` 对应的数据版本尚未被 GC 机制回收。您必须等待该数据版本被回收后再进行操作。
+
+      您可以通过将 FE 动态配置 `lake_autovacuum_grace_period_minutes` 的值设置为较小的数值来缩短此间隔。但在修改 `file_bundling` 属性后，请务必将该配置恢复为原始值。
   :::
 
 ### 快速模式架构演进
@@ -757,27 +859,25 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### 配置 Flat JSON 配置（目前仅支持存算一体集群）
+### 在表级别设置 Flat JSON 属性
 
-如果您想使用 Flat JSON 属性，请在 properties 中指定。有关更多信息，请参见 [Flat JSON](../../../using_starrocks/Flat_json.md)。
+在 v3.3 版本中，StarRocks 引入了 [Flat JSON](../../../using_starrocks/Flat_json.md) 功能，以提升 JSON 数据查询效率并简化 JSON 的使用复杂度。该功能通过特定的 BE 配置项和系统变量进行控制，因此只能全局启用（或禁用）。
+
+从 v4.0 开始，您可以在表级别设置与 Flat JSON 相关的属性。
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**属性**
-
-| 属性                    | 必需 | 描述                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | 否       | 是否启用 Flat JSON 功能。启用此功能后，新加载的 JSON 数据将自动扁平化，提高 JSON 查询性能。                                                                                                 |
-| `flat_json.null.factor` | 否      | Flat JSON 提取的列中 NULL 值的比例。如果列中 NULL 值的比例高于此阈值，则不会提取该列。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.3。 |
-| `flat_json.sparsity.factor`     | 否      | Flat JSON 中同名列的比例。如果同名列的比例低于此值，则不进行提取。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：0.9。    |
-| `flat_json.column.max`       | 否      | Flat JSON 可以提取的子字段的最大数量。此参数仅在 `flat_json.enable` 设置为 true 时生效。默认值：100。 |
+- `flat_json.enable`（可选）：是否启用 Flat JSON 功能。启用此功能后，新导入的 JSON 数据将自动进行扁平化处理，从而提升 JSON 查询性能。
+- `flat_json.null.factor`（可选）：列中 NULL 值的比例阈值。如果某列的 NULL 值比例高于此阈值，则该列不会被 Flat JSON 提取。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
+- `flat_json.sparsity.factor`（可选）：具有相同名称的列的比例阈值。如果具有相同名称的列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
+- `flat_json.column.max`（可选）：Flat JSON 可提取的子字段最大数量。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
 ## 示例
 
@@ -1121,11 +1221,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### 支持 Flat JSON 的表
-
-:::note
-Flat JSON 目前仅支持存算一体集群。
-:::
+### 带有 Flat JSON 属性的表
 
 ```SQL
 CREATE TABLE example_db.example_table

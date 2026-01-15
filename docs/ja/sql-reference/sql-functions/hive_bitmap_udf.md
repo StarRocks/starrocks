@@ -69,18 +69,18 @@ Hive Bitmap UDF で定義された Bitmap フォーマットは、StarRocks の�
    ./build.sh --hive-udf
    ```
 
-   `fe/hive-udf/` ディレクトリに JAR パッケージ `hive-udf-1.0.0.jar` が生成されます。
+   `fe/hive-udf/` ディレクトリに JAR パッケージ `hive-udf-*.jar` が生成されます。
 
 2. JAR パッケージを HDFS にアップロードします。
 
    ```bash
-   hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar
+   hadoop  fs -put -f ./hive-udf-*.jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-*.jar
    ```
 
 3. JAR パッケージを Hive にロードします。
 
    ```bash
-   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-1.0.0.jar;
+   hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive-udf-*.jar;
    ```
 
 4. UDF 関数をロードします。

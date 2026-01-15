@@ -24,8 +24,11 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -90,8 +93,13 @@ public class ReplaceLakePartitionTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logErasePartition(long partitionId) {
-                return;
+            public void logErasePartition(long partitionId, WALApplier walApplier) {
+                walApplier.apply(null);
+            }
+
+            @Mock
+            public void logEraseMultiTables(List<Long> tableIds, WALApplier walApplier) {
+                walApplier.apply(null);
             }
         };
     }
@@ -111,24 +119,23 @@ public class ReplaceLakePartitionTest {
         if (partitionType == PartitionType.UNPARTITIONED) {
             partitionInfo = new PartitionInfo(partitionType);
         } else if (partitionType == PartitionType.LIST) {
-            partitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", Type.BIGINT)));
+            partitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
             List<String> values = Lists.newArrayList();
             values.add("123");
             ((ListPartitionInfo) partitionInfo).setValues(partitionId, values);
         } else if (partitionType == PartitionType.RANGE) {
             PartitionKey partitionKey = new PartitionKey();
             Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
-            partitionInfo = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+            partitionInfo = new RangePartitionInfo(Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
             ((RangePartitionInfo) partitionInfo).setRange(partitionId, false, range);
         }
 
         partitionInfo.setReplicationNum(partitionId, (short) 1);
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
 
         LakeTable table = new LakeTable(
                 tableId, "t0",
-                Lists.newArrayList(new Column("c0", Type.BIGINT)),
+                Lists.newArrayList(new Column("c0", IntegerType.BIGINT)),
                 KeysType.DUP_KEYS, partitionInfo, null);
         table.addPartition(partition);
         table.addTempPartition(tempPartition);

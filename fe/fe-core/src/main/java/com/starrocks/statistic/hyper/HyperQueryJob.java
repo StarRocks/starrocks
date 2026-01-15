@@ -15,10 +15,6 @@
 package com.starrocks.statistic.hyper;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -26,9 +22,14 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.StatisticsType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.ColumnClassifier;
@@ -38,6 +39,9 @@ import com.starrocks.statistic.base.MultiColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
 import com.starrocks.statistic.sample.TabletSampleManager;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -135,6 +139,10 @@ public abstract class HyperQueryJob {
             setDefaultSessionVariable(context);
             return executor.executeStatisticDQL(context, sql);
         } catch (Exception e) {
+            if (e.getMessage().contains("USER_CANCEL")) {
+                lastFailure = e;
+                throw e;
+            }
             failures++;
             String message = "execute statistics query failed, sql: " + sql +  ", error: " + e.getMessage();
             LOG.error(message, e);
@@ -167,33 +175,33 @@ public abstract class HyperQueryJob {
 
     protected List<Expr> createInsertValueExpr(TStatisticData data, String tableName, String partitionName) {
         List<Expr> row = Lists.newArrayList();
-        row.add(new IntLiteral(table.getId(), Type.BIGINT)); // table id, 8 byte
-        row.add(new IntLiteral(data.getPartitionId(), Type.BIGINT)); // partition id, 8 byte
+        row.add(new IntLiteral(table.getId(), IntegerType.BIGINT)); // table id, 8 byte
+        row.add(new IntLiteral(data.getPartitionId(), IntegerType.BIGINT)); // partition id, 8 byte
         row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
-        row.add(new IntLiteral(db.getId(), Type.BIGINT)); // db id, 8 byte
+        row.add(new IntLiteral(db.getId(), IntegerType.BIGINT)); // db id, 8 byte
         row.add(new StringLiteral(tableName)); // table name, 50 byte
         row.add(new StringLiteral(partitionName)); // partition name, 10 byte
-        row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
-        row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+        row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
+        row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
         row.add(hllDeserialize(data.getHll())); // hll, 32 kB mock it now
-        row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
+        row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
         row.add(new StringLiteral(data.getMax())); // max, 200 byte
         row.add(new StringLiteral(data.getMin())); // min, 200 byte
         row.add(nowFn()); // update time, 8 byte
-        row.add(new IntLiteral(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize(), Type.BIGINT)); // collection size 8 byte
+        row.add(new IntLiteral(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize(), IntegerType.BIGINT)); // collection size 8 byte
         return row;
     }
 
     public static Expr hllDeserialize(byte[] hll) {
         String str = new String(hll, StandardCharsets.UTF_8);
-        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
+        Function unhex = ExprUtils.getBuiltinFunction("unhex", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
 
         FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
         unhexExpr.setFn(unhex);
         unhexExpr.setType(unhex.getReturnType());
 
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+        Function fn = ExprUtils.getBuiltinFunction("hll_deserialize", new Type[] {VarcharType.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
         fe.setFn(fn);
@@ -202,7 +210,7 @@ public abstract class HyperQueryJob {
     }
 
     public static Expr nowFn() {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
+        Function fn = ExprUtils.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
         FunctionCallExpr fe = new FunctionCallExpr("now", Lists.newArrayList());
         fe.setType(fn.getReturnType());
         return fe;
@@ -289,7 +297,7 @@ public abstract class HyperQueryJob {
     public static List<HyperQueryJob> createMultiColumnQueryJobs(ConnectContext context, Database db, Table table,
                                                                  List<List<String>> columnGroups,
                                                                  StatsConstants.AnalyzeType analyzeType,
-                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 List<StatisticsType> statisticsTypes,
                                                                  Map<String, String> properties) {
         List<ColumnStats> columnStats = columnGroups.stream()
                 .map(group -> group.stream()

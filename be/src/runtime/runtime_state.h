@@ -44,8 +44,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "cache/block_cache/block_cache.h"
 #include "cache/datacache_utils.h"
+#include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -93,7 +93,7 @@ constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
 class RuntimeState {
 public:
     // for ut only
-    RuntimeState() = default;
+    RuntimeState();
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -362,6 +362,11 @@ public:
         return _spill_options->spill_partitionwise_agg_skew_elimination;
     }
 
+    bool enable_full_sort_use_german_string() const {
+        return _query_options.__isset.enable_full_sort_use_german_string &&
+               _query_options.enable_full_sort_use_german_string;
+    }
+
     int32_t spill_mem_table_size() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
@@ -437,6 +442,16 @@ public:
                _query_options.enable_hash_join_range_direct_mapping_opt;
     }
 
+    bool enable_hash_join_linear_chained_opt() const {
+        return _query_options.__isset.enable_hash_join_linear_chained_opt &&
+               _query_options.enable_hash_join_linear_chained_opt;
+    }
+
+    bool enable_hash_join_serialize_fixed_size_string() const {
+        return _query_options.__isset.enable_hash_join_serialize_fixed_size_string &&
+               _query_options.enable_hash_join_serialize_fixed_size_string;
+    }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
@@ -488,6 +503,8 @@ public:
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
+    void set_arrow_flight_sql_version(int version) { this->_arrow_flight_sql_version = version; }
+    int arrow_flight_sql_version() const { return this->_arrow_flight_sql_version; }
 
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
@@ -562,7 +579,14 @@ public:
         return _query_options.__isset.lower_upper_support_utf8 && _query_options.lower_upper_support_utf8;
     }
 
+    bool enable_global_late_materialization() const {
+        return _query_options.__isset.enable_global_late_materialization &&
+               _query_options.enable_global_late_materialization;
+    }
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
+
+    bool fragment_prepared() const { return _fragment_prepared; }
+    void set_fragment_prepared(bool prepared) { _fragment_prepared = prepared; }
 
 private:
     // Set per-query state.
@@ -581,18 +605,15 @@ private:
 
     // An aggregation function may have multiple versions of implementation, func_version determines the chosen version.
     int _func_version = 0;
+    int _arrow_flight_sql_version = 0;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
-    // Lock protecting _error_log and _unreported_error_idx
     std::mutex _error_log_lock;
 
     std::mutex _rejected_record_lock;
     std::string _rejected_record_file_path;
     std::unique_ptr<std::ofstream> _rejected_record_file;
-
-    // _error_log[_unreported_error_idx+] has been not reported to the coordinator.
-    int _unreported_error_idx;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;
@@ -709,6 +730,8 @@ private:
     DebugActionMgr _debug_action_mgr;
 
     bool _enable_event_scheduler = false;
+
+    bool _fragment_prepared = false;
 };
 
 #define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \

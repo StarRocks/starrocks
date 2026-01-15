@@ -12,53 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
-import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
-import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-
 public class LakeTabletTest {
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
 
     @Test
-    public void testSerialization() throws Exception {
-        LakeTablet tablet = new LakeTablet(1L);
-        tablet.setDataSize(3L);
-        tablet.setRowCount(4L);
+    public void testSerialization() {
+        LakeTablet tablet = new LakeTablet(10001L);
+        tablet.setDataSize(100L);
+        tablet.setRowCount(10L);
 
-        // Serialize
-        File file = new File("./LakeTabletSerializationTest");
-        file.createNewFile();
-        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(file))) {
-            Text.writeString(dos, GsonUtils.GSON.toJson(tablet, LakeTablet.class));
-            dos.flush();
-        }
+        String json = GsonUtils.GSON.toJson(tablet);
+        LakeTablet deserializedTablet = GsonUtils.GSON.fromJson(json, LakeTablet.class);
 
-        // Deserialize
-        LakeTablet newTablet = null;
-        try (DataInputStream dis = new DataInputStream(new FileInputStream(file))) {
-            newTablet = LakeTablet.read(dis);
-        }
+        Assertions.assertEquals(tablet.getId(), deserializedTablet.getId());
+        Assertions.assertEquals(tablet.getDataSize(true), deserializedTablet.getDataSize(true));
+        Assertions.assertEquals(tablet.getRowCount(0), deserializedTablet.getRowCount(0));
+        Assertions.assertNotNull(deserializedTablet.getRange());
+    }
 
-        // Check
-        Assertions.assertNotNull(newTablet);
-        Assertions.assertEquals(1L, newTablet.getId());
-        Assertions.assertEquals(1L, newTablet.getShardId());
-        Assertions.assertEquals(3L, newTablet.getDataSize(true));
-        Assertions.assertEquals(4L, newTablet.getRowCount(0L));
-
-        file.delete();
+    @Test
+    public void testDefaultConstructor() {
+        LakeTablet tablet = new LakeTablet();
+        Assertions.assertNotNull(tablet.getRange());
     }
 }
+

@@ -41,7 +41,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "common/tracer_fwd.h"
@@ -105,7 +105,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    void cancel(const std::string& reason);
 
     void abort();
 
@@ -121,8 +121,6 @@ public:
 
     std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
 
-    void remove_tablets_channel(const TabletsChannelKey& key);
-
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     Span get_span() { return _span; }
@@ -134,6 +132,7 @@ public:
                                  PLoadReplicaStatusResult* response);
 
 private:
+    void _remove_tablets_channel(const TabletsChannelKey& key);
     void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
                     PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
@@ -167,6 +166,7 @@ private:
     bthread::Mutex _lock;
     // key -> tablets channel
     std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    std::atomic<bool> _cancelled{false};
     std::atomic<bool> _closed{false};
 
     Span _span;
@@ -193,7 +193,7 @@ private:
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {
-    os << "LoadChannel(id=" << load_channel.load_id()
+    os << "LoadChannel(id=" << print_id(load_channel.load_id())
        << ", last_update_time=" << static_cast<uint64_t>(load_channel.last_updated_time()) << ")";
     return os;
 }

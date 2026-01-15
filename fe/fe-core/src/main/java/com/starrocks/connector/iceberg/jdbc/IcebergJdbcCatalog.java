@@ -25,6 +25,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
 import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -33,7 +34,9 @@ import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.jdbc.JdbcCatalog;
@@ -73,6 +76,7 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
 
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
 
         // init catalog tables set default value false
         if (!copiedProperties.containsKey(JdbcCatalog.PROPERTY_PREFIX + "init-catalog-tables")) {
@@ -182,10 +186,12 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
             Schema schema,
             PartitionSpec partitionSpec,
             String location,
+            SortOrder sortOrder,
             Map<String, String> properties) {
         Table nativeTable = delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
+                .withSortOrder(sortOrder)
                 .withProperties(properties)
                 .create();
 
@@ -218,6 +224,20 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
             }
         } catch (Exception e) {
             LOG.error("Failed to delete uncommitted files", e);
+        }
+    }
+
+    @Override
+    public boolean registerTable(ConnectContext context, String dbName, String tableName, 
+                                 String metadataFileLocation) {
+        try {
+            TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
+            Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);
+            return table != null;
+        } catch (Exception e) {
+            LOG.error("Failed to register table {}.{} with metadata file location {}", 
+                    dbName, tableName, metadataFileLocation, e);
+            throw new StarRocksConnectorException("Failed to register table: " + e.getMessage(), e);
         }
     }
 

@@ -18,16 +18,32 @@
 #include <glog/logging.h>
 #include <glog/vlog_is_on.h>
 #include <jemalloc/jemalloc.h>
+#include <unistd.h>
 
+#include <limits>
+
+#include "common/process_exit.h"
+#include "util/uid_util.h"
+#ifdef __APPLE__
+#include <mach/mach_init.h>
+#include <mach/mach_port.h>
+#include <mach/thread_act.h>
+#include <pthread.h>
+#endif
+
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 
 #include "cache/datacache.h"
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
@@ -91,6 +107,7 @@ static void dump_trace_info() {
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         const std::string& custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        int32_t plan_node_id = CurrentThread::current().plan_node_id();
         const uint32_t MAX_BUFFER_SIZE = 512;
         char buffer[MAX_BUFFER_SIZE] = {};
 
@@ -103,6 +120,7 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
+        res = sprintf(buffer + res, ", plan_node_id:%d", plan_node_id) + res;
         res = sprintf(buffer + res, "\n") + res;
 
         // print for lake filename
@@ -123,20 +141,41 @@ static void dump_trace_info() {
     std::ignore = write(STDERR_FILENO, mbuffer.data(), mbuffer.size());                                        \
     mbuffer.clear();
 
+#ifdef __APPLE__
+#define JEMALLOC_CTL mallctl
+#else
+#define JEMALLOC_CTL je_mallctl
+#endif
+
+static int jemalloc_purge() {
+    char buffer[100];
+    int res = snprintf(buffer, sizeof(buffer), "arena.%d.purge", MALLCTL_ARENAS_ALL);
+    buffer[res] = '\0';
+    return JEMALLOC_CTL(buffer, nullptr, nullptr, nullptr, 0);
+}
+
+static int jemalloc_dontdump() {
+    char buffer[100];
+    int res = snprintf(buffer, sizeof(buffer), "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
+    buffer[res] = '\0';
+    return JEMALLOC_CTL(buffer, nullptr, nullptr, nullptr, 0);
+}
+
 static void dontdump_unused_pages() {
     size_t prev_allocate_size = CurrentThread::current().get_consumed_bytes();
     static bool start_dump = false;
     struct timeval tv;
     gettimeofday(&tv, nullptr);
+    // On macOS, pthread_t is an opaque pointer; convert to a numeric id for fmt
+#ifdef __APPLE__
+    uint64_t tid = static_cast<uint64_t>(pthread_mach_thread_np(pthread_self()));
+#else
     pthread_t tid = pthread_self();
-    const uint32_t MAX_BUFFER_SIZE = 1024;
-    char buffer[MAX_BUFFER_SIZE] = {};
+#endif
     // memory_buffer allocate 500 bytes from stack
     fmt::memory_buffer mbuffer;
     if (!start_dump) {
-        int res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.purge", MALLCTL_ARENAS_ALL);
-        buffer[res] = '\0';
-        int ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+        int ret = jemalloc_purge();
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute purge failed, errno:{}", ret);
@@ -144,9 +183,7 @@ static void dontdump_unused_pages() {
             FMT_LOG("je_mallctl execute purge success");
         }
 
-        res = snprintf(buffer, MAX_BUFFER_SIZE, "arena.%d.dontdump", MALLCTL_ARENAS_ALL);
-        buffer[res] = '\0';
-        ret = je_mallctl(buffer, nullptr, nullptr, nullptr, 0);
+        ret = jemalloc_dontdump();
 
         if (ret != 0) {
             FMT_LOG("je_mallctl execute dontdump failed, errno:{}", ret);
@@ -161,9 +198,15 @@ static void dontdump_unused_pages() {
 static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
+        set_process_is_crashing();
+
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+#ifndef __APPLE__
         DataCache::GetInstance()->try_release_resource_before_core_dump();
+#endif
+#ifndef __APPLE__
         dontdump_unused_pages();
+#endif
     }
     start_dump = true;
 }
@@ -180,6 +223,111 @@ static void failure_function() {
     std::abort();
 }
 
+std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms);
+static std::mutex gcore_mutex;
+static bool gcore_done = false;
+void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds) {
+    if (config::pipeline_gcore_timeout_threshold_sec > 0 &&
+        timeout_seconds > static_cast<size_t>(config::pipeline_gcore_timeout_threshold_sec)) {
+        std::unique_lock<std::mutex> lock(gcore_mutex);
+        if (gcore_done) {
+            return;
+        }
+
+        if (config::enable_core_file_size_optimization) {
+            jemalloc_purge();
+            jemalloc_dontdump();
+        }
+
+        std::string core_file = config::pipeline_gcore_output_dir + "/core-" + print_id(query_id);
+        LOG(WARNING) << "dump gcore via query timeout:" << timeout_seconds;
+        pid_t pid = getpid();
+        // gcore have too many verbose output. skip them
+        (void)lite_exec({"gcore", "-o", core_file, std::to_string(pid)}, std::numeric_limits<int>::max());
+        LOG(WARNING) << "gcore finished ";
+        gcore_done = true;
+    }
+}
+
+// Calculate timezone offset string dynamically with caching (thread-safe)
+static std::string get_timezone_offset_string(const google::LogMessageTime& time) {
+    // Cache the last offset and its string representation
+    static std::mutex cache_mutex;
+    static std::atomic<long> cached_offset_seconds(-1);
+    static std::shared_ptr<std::string> cached_tz_str_ptr(std::make_shared<std::string>(""));
+
+    // Get timezone offset from LogMessageTime
+    long offset_seconds = time.gmtoffset().count();
+
+    // Fast path: check atomic variables without lock
+    long cached_offset = cached_offset_seconds.load(std::memory_order_acquire);
+    if (offset_seconds == cached_offset) {
+        std::shared_ptr<std::string> tz_ptr = std::atomic_load_explicit(&cached_tz_str_ptr, std::memory_order_acquire);
+        return *tz_ptr;
+    }
+
+    // Slow path: recalculate and update cache
+    char tz_str[16] = "+0000";
+    int offset_hours = static_cast<int>(offset_seconds / 3600);
+    int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
+    if (offset_mins < 0) offset_mins = -offset_mins;
+
+    if (offset_seconds < 0) {
+        snprintf(tz_str, sizeof(tz_str), "-%02d%02d", -offset_hours, offset_mins);
+    } else {
+        snprintf(tz_str, sizeof(tz_str), "+%02d%02d", offset_hours, offset_mins);
+    }
+
+    std::string result(tz_str);
+    auto new_tz_ptr = std::make_shared<std::string>(result);
+
+    // Update cache with lock
+    std::lock_guard<std::mutex> lock(cache_mutex);
+    long expected_offset = cached_offset_seconds.load(std::memory_order_relaxed);
+    if (offset_seconds != expected_offset) {
+        // Publish the cached_str before updating the offset
+        std::atomic_store_explicit(&cached_tz_str_ptr, new_tz_ptr, std::memory_order_release);
+        cached_offset_seconds.store(offset_seconds, std::memory_order_release);
+    } else {
+        // Another thread already updated, use the cached string
+        std::shared_ptr<std::string> current_ptr =
+                std::atomic_load_explicit(&cached_tz_str_ptr, std::memory_order_acquire);
+        result = *current_ptr;
+    }
+
+    return result;
+}
+
+// Custom prefix formatter that includes timezone information
+static void custom_prefix_formatter(std::ostream& s, const google::LogMessage& message, void*) {
+    const google::LogMessageTime& time = message.time();
+
+    // Severity level (single character)
+    s << google::GetLogSeverityName(message.severity())[0];
+
+    // Date and time
+    if (FLAGS_log_year_in_prefix) {
+        // Format: YYYYMMDD HH:MM:SS.uuuuuu +HHMM
+        s << std::setfill('0') << std::setw(4) << (1900 + time.year()) << std::setw(2) << (1 + time.month())
+          << std::setw(2) << time.day() << ' ' << std::setw(2) << time.hour() << ':' << std::setw(2) << time.min()
+          << ':' << std::setw(2) << time.sec() << '.' << std::setw(6) << time.usec();
+    } else {
+        // Format: MMDD HH:MM:SS.uuuuuu +HHMM
+        s << std::setfill('0') << std::setw(2) << (1 + time.month()) << std::setw(2) << time.day() << ' '
+          << std::setw(2) << time.hour() << ':' << std::setw(2) << time.min() << ':' << std::setw(2) << time.sec()
+          << '.' << std::setw(6) << time.usec();
+    }
+
+    // Timezone offset (calculated dynamically)
+    s << ' ' << get_timezone_offset_string(time);
+
+    // Thread ID
+    s << ' ' << message.thread_id() << ' ';
+
+    // File and line
+    s << message.basename() << ':' << message.line() << "] ";
+}
+
 bool init_glog(const char* basename, bool install_signal_handler) {
     std::lock_guard<std::mutex> logging_lock(logging_mutex);
 
@@ -188,7 +336,9 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     }
 
     if (install_signal_handler) {
+#ifndef __APPLE__
         google::InstallFailureSignalHandler();
+#endif
     }
 
     // only write fatal log to stderr
@@ -199,8 +349,10 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     FLAGS_logbuflevel = 0;
     // Buffer log messages for at most this many seconds.
     FLAGS_logbufsecs = 30;
-    // Set roll num.
+    // Set roll num. Not available with Homebrew glog on macOS.
+#ifndef __APPLE__
     FLAGS_log_filenum_quota = config::sys_log_roll_num;
+#endif
 
     // Set log level.
     std::string loglevel = config::sys_log_level;
@@ -230,13 +382,19 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     std::string sizeflag = "SIZE-MB-";
     bool ok = false;
     if (rollmode.compare("TIME-DAY") == 0) {
+#ifndef __APPLE__
         FLAGS_log_split_method = "day";
+#endif
         ok = true;
     } else if (rollmode.compare("TIME-HOUR") == 0) {
+#ifndef __APPLE__
         FLAGS_log_split_method = "hour";
+#endif
         ok = true;
     } else if (rollmode.substr(0, sizeflag.length()).compare(sizeflag) == 0) {
+#ifndef __APPLE__
         FLAGS_log_split_method = "size";
+#endif
         std::string sizestr = rollmode.substr(sizeflag.size(), rollmode.size() - sizeflag.size());
         if (sizestr.size() != 0) {
             char* end = nullptr;
@@ -271,6 +429,11 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     google::InitGoogleLogging(basename);
 
+    // Install custom prefix formatter to include timezone information if enabled
+    if (config::sys_log_timezone) {
+        google::InstallPrefixFormatter(&custom_prefix_formatter, nullptr);
+    }
+
     // dump trace info may access some runtime stats
     // if runtime stats broken we won't dump stack
     // These function should be called after InitGoogleLogging.
@@ -278,7 +441,10 @@ bool init_glog(const char* basename, bool install_signal_handler) {
     if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction((google::logging_fail_func_t)failure_function);
+#ifndef __APPLE__
+        // This symbol may be unavailable on macOS builds using system glog.
         google::InstallFailureHandlerAfterOutputLog(failure_handler_after_output_log);
+#endif
     }
 
     logging_initialized = true;

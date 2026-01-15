@@ -46,7 +46,7 @@ public class OlapScanImplementationRuleTest {
         assertEquals(1, output.size());
 
         PhysicalOlapScanOperator physical = (PhysicalOlapScanOperator) output.get(0).getOp();
-        assertEquals(1, physical.getSelectedIndexId());
+        assertEquals(1, physical.getSelectedIndexMetaId());
 
         assertEquals(3, physical.getSelectedPartitionId().size());
         assertEquals(1, physical.getSelectedTabletId().size());

@@ -4,10 +4,10 @@ displayed_sidebar: docs
 
 # 基于 Azure 部署
 
-import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.md'
-import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.md'
-import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.md'
-import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.md'
+import SharedDataIntro from '../../_assets/commonMarkdown/sharedDataIntro.mdx'
+import SharedDataCNconf from '../../_assets/commonMarkdown/sharedDataCNconf.mdx'
+import SharedDataUseIntro from '../../_assets/commonMarkdown/sharedDataUseIntro.mdx'
+import SharedDataUse from '../../_assets/commonMarkdown/sharedDataUse.mdx'
 
 <SharedDataIntro />
 
@@ -138,10 +138,6 @@ StarRocks 集群的运行模式。有效值：
 
 - `true`：如果您在创建新的存算分离集群时指定此项为 `true`，StarRocks 将使用 FE 配置文件中存储相关属性创建内置存储卷 `builtin_storage_volume`，并将其设置为默认存储卷。但如果您没有指定存储相关的属性，StarRocks 将无法启动。
 - `false`（默认）：如果您在创建新的存算分离集群时指定此项为 `false`，StarRocks 将直接启动，不会创建内置存储卷。在 StarRocks 中创建任何对象之前，您必须手动创建一个存储卷并将其设置为默认存储卷。详细信息请参见[创建默认存储卷](#使用-starrocks-存算分离集群)。
-
-> **注意**
->
-> 建议您在升级现有的 v3.0 存算分离集群时，保留此项的默认配置 `true`。如果将此项修改为 `false`，升级前创建的数据库和表将变为只读，您无法向其中导入数据。
 
 #### cloud_native_storage_type
 

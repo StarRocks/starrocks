@@ -217,10 +217,11 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 
--- Unload data into Parquet files.
+-- Unload data into Parquet files, and set Parquet version to 1.0.
 INSERT INTO FILES(
   'path' = 'file:///home/ubuntu/parquetfile/',
-   'format' = 'parquet'
+  'format' = 'parquet',
+  'parquet.version' = '1.0'
 )
 SELECT * FROM sales_records;
 ```

@@ -22,13 +22,13 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.authentication.JWTSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateUserStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -162,7 +162,7 @@ public class MysqlAuthPacketTest {
         properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
-        authenticationMgr.createSecurityIntegration("oidc", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc", properties);
 
         Config.authentication_chain = new String[] {"native", "oidc"};
         authPacket = buildPacket("tina", buf, AuthPlugin.Client.MYSQL_NATIVE_PASSWORD);

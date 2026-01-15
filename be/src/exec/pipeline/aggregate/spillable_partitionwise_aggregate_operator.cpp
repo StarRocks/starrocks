@@ -34,7 +34,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _agg_op->aggregator()->spill_channel()->set_finishing_if_not_reuseable();
+        _agg_op->aggregator()->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
@@ -49,9 +49,7 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
     }
     if (!_agg_op->aggregator()->spill_channel()->has_task()) {
         if (_agg_op->aggregator()->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _agg_op->aggregator()->hash_map_variant().visit([&](auto& hash_map_with_key) {
-                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->_state_allocator.begin();
-            });
+            _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
             _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
         }
     }
@@ -87,7 +85,10 @@ void SpillablePartitionWiseAggregateSinkOperator::close(RuntimeState* state) {
 
 Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
     RETURN_IF_ERROR(_agg_op->prepare(state));
+    RETURN_IF_ERROR(_agg_op->prepare_local_state(state));
+
     DCHECK(!_agg_op->aggregator()->is_none_group_by_exprs());
     _agg_op->aggregator()->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
@@ -279,9 +280,7 @@ ChunkPtr& SpillablePartitionWiseAggregateSinkOperator::_append_hash_column(Chunk
 Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_agg_op->aggregator()->hash_map_variant().size() == 0, Status::OK());
     if (should_spill_hash_table) {
-        _agg_op->aggregator()->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->_state_allocator.begin();
-        });
+        _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
     }
     CHECK(!_agg_op->aggregator()->spill_channel()->has_task());
     RETURN_IF_ERROR(
@@ -373,6 +372,13 @@ Status SpillablePartitionWiseAggregateSourceOperator::prepare(RuntimeState* stat
     RETURN_IF_ERROR(SourceOperator::prepare(state));
     RETURN_IF_ERROR(_non_pw_agg->prepare(state));
     RETURN_IF_ERROR(_pw_agg->prepare(state));
+    return Status::OK();
+}
+
+Status SpillablePartitionWiseAggregateSourceOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_non_pw_agg->prepare_local_state(state));
+    RETURN_IF_ERROR(_pw_agg->prepare_local_state(state));
     return Status::OK();
 }
 

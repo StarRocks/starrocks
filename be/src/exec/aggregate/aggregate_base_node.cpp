@@ -14,7 +14,7 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
-#include "gutil/strings/substitute.h"
+#include "exec/aggregator.h"
 
 namespace starrocks {
 
@@ -52,7 +52,7 @@ Status AggregateBaseNode::prepare(RuntimeState* state) {
 
     // Avoid partial-prepared Aggregator, which is dangerous to close
     auto aggregator = std::make_shared<Aggregator>(std::move(params));
-    RETURN_IF_ERROR(aggregator->prepare(state, _pool, runtime_profile()));
+    RETURN_IF_ERROR(aggregator->prepare(state, runtime_profile()));
     _aggregator = std::move(aggregator);
     return Status::OK();
 }

@@ -108,6 +108,10 @@ public class SystemId {
 
     public static final long APPLICABLE_ROLES_ID = 45L;
 
+    public static final long FE_THREADS_ID = 46L;
+
+    public static final long BE_TABLET_WRITE_LOG_ID = 47L;
+
     public static final long SYS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;
@@ -121,6 +125,7 @@ public class SystemId {
     public static final long WAREHOUSE_METRICS_ID = 122L;
     public static final long WAREHOUSE_QUERIES_METRICS_ID = 123L;
     public static final long BE_DATACACHE_METRICS = 130L;
+    public static final long RECYCLEBIN_CATALOGS = 131L;
     // Remain for other datacache manage table
 
     public static final long PARTITIONS_META_ID = 140L;
@@ -132,4 +137,7 @@ public class SystemId {
     // ==================  Cluster Snapshot  ======================= //
     public static final long CLUSTER_SNAPSHOTS_ID = 160L;
     public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
+
+    // ==================  Tablet Reshard  ======================== //
+    public static final long TABLET_RESHARD_JOBS_ID = 170L;
 }

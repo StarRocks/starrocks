@@ -5,7 +5,7 @@ sidebar_position: 30
 
 # 管理用户权限
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 
 本文介绍如何在 StarRocks 中管理用户、角色和权限。
 
@@ -87,6 +87,14 @@ CREATE ROLE example_role;
 
   ```SQL
   GRANT example_role TO ROLE test_role;
+  ```
+
+- 将角色授予用户组。您可以通过 [Group Provider](../group_provider.md) 从外部验证系统识别用户组。
+
+  以下示例将角色 `example_role` 授予用户组 `analysts`：
+
+  ```SQL
+  GRANT example_role TO EXTERNAL GROUP analysts;
   ```
 
 ### 更改用户的默认角色
@@ -183,6 +191,14 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
 
   ```SQL
   GRANT SELECT ON TABLE sr_member TO ROLE example_role;
+  ```
+
+- 将权限授予用户组。您可以通过 [Group Provider](../group_provider.md) 从外部验证系统识别用户组。
+
+  以下示例将表 `sr_member` 的 SELECT 权限授予用户组 `analysts`：
+
+  ```SQL
+  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
   ```
 
 ### 撤销权限

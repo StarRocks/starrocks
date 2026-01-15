@@ -39,8 +39,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -48,14 +46,15 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 
 import java.util.LinkedList;
@@ -82,26 +81,29 @@ public class AccessTestUtil {
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         Partition partition = new Partition(20000L, 20001L,"testTbl", baseIndex, distributionInfo);
         List<Column> baseSchema = new LinkedList<Column>();
-        Column column = new Column("k1", Type.INT);
+        Column column = new Column("k1", IntegerType.INT);
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                 KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);
-        table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
+        table.setIndexMeta(baseIndex.getMetaId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);
-        table.setBaseIndexId(baseIndex.getId());
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
         db.registerTableUnlocked(table);
         return globalStateMgr;
     }
 
     public static OlapTable mockTable(String name) {
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
 
         MaterializedIndex index = new MaterializedIndex();
         new Expectations(index) {
             {
                 index.getId();
+                minTimes = 0;
+                result = 30000L;
+                index.getMetaId();
                 minTimes = 0;
                 result = 30000L;
             }
@@ -202,162 +204,6 @@ public class AccessTestUtil {
 
          */
         return globalStateMgr;
-    }
-
-    public static Analyzer fetchAdminAnalyzer() {
-        Analyzer analyzer = new Analyzer(fetchAdminCatalog(), new ConnectContext(null));
-        new Expectations(analyzer) {
-            {
-                analyzer.getDefaultCatalog();
-                minTimes = 0;
-                result = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testDb";
-
-                analyzer.incrementCallDepth();
-                minTimes = 0;
-                result = 1;
-
-                analyzer.decrementCallDepth();
-                minTimes = 0;
-                result = 0;
-
-                analyzer.getCallDepth();
-                minTimes = 0;
-                result = 1;
-            }
-        };
-        return analyzer;
-    }
-
-    public static Analyzer fetchTableAnalyzer() {
-        Column column1 = new Column("k1", Type.VARCHAR);
-        Column column2 = new Column("k2", Type.VARCHAR);
-        Column column3 = new Column("k3", Type.VARCHAR);
-        Column column4 = new Column("k4", Type.BIGINT);
-
-        MaterializedIndex index = new MaterializedIndex();
-        new Expectations(index) {
-            {
-                index.getId();
-                minTimes = 0;
-                result = 30000L;
-            }
-        };
-
-        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
-        new Expectations(physicalPartition) {
-            {
-                physicalPartition.getBaseIndex();
-                minTimes = 0;
-                result = index;
-
-                physicalPartition.getIndex(30000L);
-                minTimes = 0;
-                result = index;
-            }
-        };
-
-        Partition partition = Deencapsulation.newInstance(Partition.class);
-        new Expectations(partition) {
-            {
-                partition.getDefaultPhysicalPartition();
-                minTimes = 0;
-                result = physicalPartition;
-            }
-        };
-
-        OlapTable table = new OlapTable();
-        new Expectations(table) {
-            {
-                table.getBaseSchema();
-                minTimes = 0;
-                result = Lists.newArrayList(column1, column2, column3, column4);
-
-                table.getPartition(40000L);
-                minTimes = 0;
-                result = partition;
-
-                table.getColumn("k1");
-                minTimes = 0;
-                result = column1;
-
-                table.getColumn("k2");
-                minTimes = 0;
-                result = column2;
-
-                table.getColumn("k3");
-                minTimes = 0;
-                result = column3;
-
-                table.getColumn("k4");
-                minTimes = 0;
-                result = column4;
-            }
-        };
-
-        Database db = new Database();
-
-        new Expectations(db) {
-            {
-                db.getTable("t");
-                minTimes = 0;
-                result = table;
-
-                db.getTable("emptyTable");
-                minTimes = 0;
-                result = null;
-
-                db.getTableNamesViewWithLock();
-                minTimes = 0;
-                result = Sets.newHashSet("t");
-
-                db.getTables();
-                minTimes = 0;
-                result = Lists.newArrayList(table);
-
-                db.getFullName();
-                minTimes = 0;
-                result = "testDb";
-            }
-        };
-        GlobalStateMgr globalStateMgr = fetchBlockCatalog();
-        Analyzer analyzer = new Analyzer(globalStateMgr, new ConnectContext(null));
-        new Expectations(analyzer) {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testDb";
-
-                analyzer.getTable((TableName) any);
-                minTimes = 0;
-                result = table;
-
-                analyzer.getCatalog();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                analyzer.incrementCallDepth();
-                minTimes = 0;
-                result = 1;
-
-                analyzer.decrementCallDepth();
-                minTimes = 0;
-                result = 0;
-
-                analyzer.getCallDepth();
-                minTimes = 0;
-                result = 1;
-
-                analyzer.getContext();
-                minTimes = 0;
-                result = new ConnectContext(null);
-
-            }
-        };
-        return analyzer;
     }
 }
 

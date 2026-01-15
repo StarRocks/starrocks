@@ -15,12 +15,9 @@
 package com.starrocks.authentication;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.starrocks.StarRocksFE;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -37,8 +34,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class FileGroupProvider extends GroupProvider {
-    private static final Logger LOG = LogManager.getLogger(FileGroupProvider.class);
-
     public static final String TYPE = "file";
     public static final String GROUP_FILE_URL = "group_file_url";
     public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(List.of(FileGroupProvider.GROUP_FILE_URL));
@@ -79,7 +74,7 @@ public class FileGroupProvider extends GroupProvider {
     }
 
     @Override
-    public Set<String> getGroup(UserIdentity userIdentity) {
+    public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
         return userGroups.getOrDefault(userIdentity.getUser(), new HashSet<>());
     }
 
@@ -97,7 +92,14 @@ public class FileGroupProvider extends GroupProvider {
         if (groupFileUrl.startsWith("http://") || groupFileUrl.startsWith("https://")) {
             return new URL(groupFileUrl).openStream();
         } else {
-            String filePath = StarRocksFE.STARROCKS_HOME_DIR + "/conf/" + groupFileUrl;
+            String starRocksHome = System.getenv("STARROCKS_HOME");
+            String filePath;
+            if (starRocksHome != null) {
+                filePath = starRocksHome + "/conf/" + groupFileUrl;
+            } else {
+                // If STARROCKS_HOME is not set, use absolute path
+                filePath = groupFileUrl;
+            }
             return new FileInputStream(filePath);
         }
     }

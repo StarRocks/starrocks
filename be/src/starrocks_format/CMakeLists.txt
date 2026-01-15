@@ -26,7 +26,7 @@ set(STARROCKS_LIBS
     Column
     Connector
     Exec
-    Exprs
+    -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     FileSystem
     Formats
     Gutil
@@ -41,6 +41,7 @@ set(STARROCKS_LIBS
     StarRocksGen
     Webserver
     TestUtil
+    Simd
     Cache
     ${WL_END_GROUP}
 )
@@ -51,7 +52,7 @@ set_target_properties(hdfs_so PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/had
 SET(STARROCKS_FORMAT_LIBS
     ${STARROCKS_LIBS}
     ${STARROCKS_DEPENDENCIES}
-    -static-libstdc++ -static-libgcc -lbfd
+    -static-libstdc++ -static-libgcc
     -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
     hdfs_so
 )

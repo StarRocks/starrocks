@@ -18,12 +18,11 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/hash_join_node.h"
 #include "exec/hash_joiner.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
@@ -33,10 +32,12 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
-#include "util/bit_util.h"
 #include "util/defer_op.h"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
+
+DEFINE_FAIL_POINT(spill_flush_set_invalid_status);
 
 Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinBuildOperator::prepare(state));
@@ -53,6 +54,8 @@ Status SpillableHashJoinBuildOperator::prepare(RuntimeState* state) {
 
 void SpillableHashJoinBuildOperator::close(RuntimeState* state) {
     HashJoinBuildOperator::close(state);
+    DCHECK(is_finished());
+    DCHECK(!need_input());
 }
 
 size_t SpillableHashJoinBuildOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
@@ -85,6 +88,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (!_join_builder->spiller()->spilled()) {
         DCHECK(_is_first_time_spill);
         _is_first_time_spill = false;
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
         ASSIGN_OR_RETURN(_hash_table_slice_iterator, _convert_hash_map_to_chunk());
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
@@ -105,6 +109,10 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 [this]() {
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
+                    FAIL_POINT_TRIGGER_EXECUTE(spill_flush_set_invalid_status, {
+                        _join_builder->spiller()->update_spilled_task_status(
+                                Status::InternalError("spill flush failed"));
+                    });
                     return Status::OK();
                 },
                 state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
@@ -201,6 +209,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
+        RETURN_IF_ERROR(_join_builder->hash_join_builder()->prepare_for_spill_start(runtime_state()));
         RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
     }
 

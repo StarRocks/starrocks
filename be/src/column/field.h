@@ -31,6 +31,7 @@ namespace starrocks {
 
 class Datum;
 class AggStateDesc;
+class SlotDescriptor;
 
 class Field {
 public:
@@ -200,7 +201,12 @@ public:
 
     static FieldPtr convert_to_dict_field(const Field& field);
 
+    static FieldPtr convert_from_slot_desc(const SlotDescriptor& slot);
+
 private:
+    static FieldPtr _build_field_from_type_desc(const TypeDescriptor& type_desc, const std::string& name, int32_t id,
+                                                bool nullable);
+
     constexpr static int kIsKeyShift = 0;
     constexpr static int kNullableShift = 1;
 

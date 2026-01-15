@@ -20,9 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -40,12 +38,15 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -53,7 +54,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -68,7 +68,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
@@ -85,10 +84,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
 
     // rollup and base schema info
+    // base index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "baseIndexId")
-    protected long baseIndexId;
+    protected long baseIndexMetaId;
+    // initially, rollup index id and rollup index meta id are the same
+    // rollup index meta id, not change the SerializedName for compatibility
     @SerializedName(value = "rollupIndexId")
-    protected long rollupIndexId;
+    protected long rollupIndexMetaId;
     @SerializedName(value = "baseIndexName")
     protected String baseIndexName;
     @SerializedName(value = "rollupIndexName")
@@ -108,7 +110,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "rollupShortKeyColumnCount")
     protected short rollupShortKeyColumnCount;
     @SerializedName(value = "origStmt")
-    protected OriginStatement origStmt;
+    protected OriginStatementInfo origStmt;
 
     @SerializedName(value = "viewDefineSql")
     protected String viewDefineSql;
@@ -121,13 +123,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
     public LakeRollupJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                         long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
+                         long baseIndexMetaId, long rollupIndexMetaId, String baseIndexName, String rollupIndexName,
                          int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash,
                          int rollupSchemaHash, KeysType rollupKeysType, short rollupShortKeyColumnCount,
                          OriginStatement origStmt, String viewDefineSql, boolean isColocateMVIndex) {
         super(jobId, JobType.ROLLUP, dbId, tableId, tableName, timeoutMs);
-        this.baseIndexId = baseIndexId;
-        this.rollupIndexId = rollupIndexId;
+        this.baseIndexMetaId = baseIndexMetaId;
+        this.rollupIndexMetaId = rollupIndexMetaId;
         this.baseIndexName = baseIndexName;
         this.rollupIndexName = rollupIndexName;
         this.rollupSchemaVersion = rollupSchemaVersion;
@@ -137,7 +139,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         this.rollupSchemaHash = rollupSchemaHash;
         this.rollupKeysType = rollupKeysType;
         this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
-        this.origStmt = origStmt;
+        if (origStmt != null) {
+            this.origStmt = new OriginStatementInfo(origStmt.getOrigStmt(), origStmt.getIdx());
+        }
         this.viewDefineSql = viewDefineSql;
         this.isColocateMVIndex = isColocateMVIndex;
     }
@@ -182,7 +186,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 MaterializedIndex rollupIndex = entry.getValue();
 
                 TTabletSchema tabletSchema = SchemaInfo.newBuilder()
-                        .setId(rollupIndexId) // For newly created materialized, schema id equals to index id
+                        .setId(rollupIndexMetaId) // For newly created materialized, schema id equals to index meta id
                         .setVersion(rollupSchemaVersion)
                         .setKeysType(rollupKeysType)
                         .setShortKeyColumnCount(rollupShortKeyColumnCount)
@@ -217,7 +221,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setDbId(dbId)
                             .setTableId(tableId)
                             .setPartitionId(partitionId)
-                            .setIndexId(rollupIndexId)
+                            .setIndexId(rollupIndexMetaId)
                             .setTabletId(rollupTabletId)
                             .setVersion(Partition.PARTITION_INIT_VERSION)
                             .setStorageMedium(storageMedium)
@@ -298,7 +302,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
         LOG.info("previous transactions are all finished, begin to send rollup tasks. job: {}", jobId);
 
-        Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
+        // initially, rollup index id and rollup index meta id are the same
+        long rollupIndexId = rollupIndexMetaId;
+        Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable tbl = getTableOrThrow(db, tableId);
@@ -330,21 +336,15 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive compute node");
                     }
-
-                    TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-                    long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
-                    List<TColumn> baseTColumn = indexToThriftColumns.get(baseIndexId);
-                    if (baseTColumn == null) {
-                        baseTColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema()
-                                .stream()
-                                .map(Column::toThrift)
-                                .collect(Collectors.toList());
-                        indexToThriftColumns.put(baseIndexId, baseTColumn);
+                    TTabletSchema baseTabletReadSchema = indexToBaseTabletReadSchema.get(baseIndexMetaId);
+                    if (baseTabletReadSchema == null) {
+                        baseTabletReadSchema = SchemaInfo.fromMaterializedIndex(
+                                tbl, baseIndexMetaId, tbl.getIndexMetaByMetaId(baseIndexMetaId)).toTabletSchema();
+                        indexToBaseTabletReadSchema.put(baseIndexMetaId, baseTabletReadSchema);
                     }
                     AlterReplicaTask rollupTask = AlterReplicaTask.rollupLakeTablet(
                             computeNode.getId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                            baseTabletId, visibleVersion, jobId,
-                            rollupJobV2Params, baseTColumn, watershedTxnId);
+                            baseTabletId, visibleVersion, jobId, rollupJobV2Params, baseTabletReadSchema, watershedTxnId);
                     rollupBatchTask.addTask(rollupTask);
                 }
                 partition.setMinRetainVersion(visibleVersion);
@@ -488,7 +488,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         info.add(TimeUtils.longToTimeString(finishedTimeMs));
         info.add(baseIndexName);
         info.add(rollupIndexName);
-        info.add(rollupIndexId);
+        info.add(rollupIndexMetaId);
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
@@ -526,8 +526,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
             this.physicalPartitionIdToBaseRollupTabletIdMap = other.physicalPartitionIdToBaseRollupTabletIdMap;
             this.physicalPartitionIdToRollupIndex = other.physicalPartitionIdToRollupIndex;
-            this.baseIndexId = other.baseIndexId;
-            this.rollupIndexId = other.rollupIndexId;
+            this.baseIndexMetaId = other.baseIndexMetaId;
+            this.rollupIndexMetaId = other.rollupIndexMetaId;
             this.baseIndexName = other.baseIndexName;
             this.rollupIndexName = other.rollupIndexName;
             this.rollupSchema = other.rollupSchema;
@@ -629,13 +629,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         // so here we initialize column uniqueId here.
         boolean restored = LakeTableHelper.restoreColumnUniqueId(rollupSchema);
         if (restored) {
-            LOG.info("Columns of rollup index {} in table {} has reset all unique ids, column size: {}", rollupIndexId,
+            LOG.info("Columns of rollup index {} in table {} has reset all unique ids, column size: {}", rollupIndexMetaId,
                     tableName, rollupSchema.size());
         }
 
-        tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
+        tbl.setIndexMeta(rollupIndexMetaId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
-        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(rollupIndexId);
+        MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(rollupIndexMetaId);
         Preconditions.checkNotNull(indexMeta);
         indexMeta.setDbId(dbId);
         indexMeta.setViewDefineSql(viewDefineSql);
@@ -743,7 +743,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 invertedIndex.deleteTablet(rollupTablet.getId());
             }
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            partition.deleteRollupIndex(rollupIndexId);
+            partition.deleteRollupIndex(rollupIndexMetaId);
             partition.setMinRetainVersion(0);
         }
         table.deleteIndexInfo(rollupIndexName);
@@ -762,9 +762,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
                 LOG.debug("update visible version of partition {} to {}. jobId={}", physicalPartition.getId(),
                         commitVersion, jobId);
-                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexId);
-                Preconditions.checkNotNull(rollupIndex, rollupIndexId);
-                physicalPartition.visualiseShadowIndex(rollupIndexId, false);
+                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexMetaId);
+                Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
+                physicalPartition.visualiseShadowIndex(rollupIndexMetaId, false);
             }
         }
         table.rebuildFullSchema();
@@ -778,7 +778,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);
             PhysicalPartition physicalPartition = tbl.getPhysicalPartition(partitionId);
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
-            TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId,
+            // initially, rollup index id and rollup index meta id are the same
+            TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexMetaId,
                     medium);
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {

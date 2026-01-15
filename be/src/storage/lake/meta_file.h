@@ -46,9 +46,18 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
-    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
-                            int64_t output_rowset_schema_id);
+    Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
+                              int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
+
+    // batch processing functions for merging multiple opwrites into one rowset
+    void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+                             const std::vector<FileMetaPB>& orphan_files);
+    void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
+                    const std::vector<std::string>& del_encryption_metas);
+    void set_final_rowset();
+
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
@@ -63,11 +72,28 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
+    // Number of segments already assigned (accumulated) in current pending batch rowset build.
+    uint32_t assigned_segment_id() const { return _pending_rowset_data.assigned_segment_id; }
+
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
 
+    // Mark Lake Compaction Rows Mapper file as orphan for deferred GC cleanup
+    // WHY: lcrm files on remote storage must be cleaned up asynchronously to handle
+    // distributed access patterns and potential failures gracefully.
+    void remove_lcrm_file(const TxnLogPB_OpCompaction& op_compaction);
+
     const TabletMetadata* tablet_meta() const { return _tablet_meta.get(); }
+
+    const DelvecPagePB& delvec_page(uint32_t segment_id) const {
+        static DelvecPagePB empty;
+        auto it = _delvecs.find(segment_id);
+        if (it != _delvecs.end()) {
+            return it->second;
+        }
+        return empty;
+    }
 
 private:
     // update delvec in tablet meta
@@ -81,6 +107,15 @@ private:
     void _sstable_meta_clean_after_alter_type();
 
 private:
+    struct PendingRowsetData {
+        RowsetMetadataPB rowset_pb;
+        std::map<int, FileInfo> replace_segments;
+        std::vector<FileMetaPB> orphan_files;
+        std::vector<std::string> dels;
+        std::vector<std::string> del_encryption_metas;
+        uint32_t assigned_segment_id = 0;
+    };
+
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
     UpdateManager* _update_mgr;
@@ -92,8 +127,12 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
+    // Pending rowset data for batch processing
+    PendingRowsetData _pending_rowset_data;
 };
 
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
+                   bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
                    const LakeIOOptions& lake_io_opts, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);

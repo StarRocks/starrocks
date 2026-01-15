@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -27,6 +26,7 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.connector.metadata.TableMetaConnector;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
@@ -202,7 +202,7 @@ public class HiveMetastoreApiConverterTest {
                 .setHiveDbName("hive_db")
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
                 .setDataColumnNames(Lists.newArrayList("c1"))
                 .setTableLocation("table_location")
                 .setStorageFormat(HiveStorageFormat.PARQUET)
@@ -231,7 +231,7 @@ public class HiveMetastoreApiConverterTest {
                 .setHiveDbName("hive_db")
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
                 .setDataColumnNames(Lists.newArrayList("c1"))
                 .setTableLocation("table_location")
                 .setStorageFormat(HiveStorageFormat.PARQUET)

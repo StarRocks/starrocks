@@ -15,7 +15,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;

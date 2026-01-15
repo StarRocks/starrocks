@@ -83,3 +83,59 @@ If the field `left_bytes` is less than `0`, it means that the amount of data con
    Routine Load guarantees exactly-once semantics.
 
    Each load task is a individual transaction. If an error occurs during the execution of the transaction, the transaction is aborted, and the FE does not update the consumption progress of the relevant partitions of the load tasks. When the FE schedules the load tasks from the task queue next time, the load tasks send the consumption request from the last saved consumption position of the partitions, thus ensuring exactly-once semantics.
+
+## What do I do if Routine Load returns an SSL Authentication error?
+
+  **Error Message:** `routines:tls_process_server_certificate:certificate verify failed: broker certificate could not be verified, verify that ssl.ca.location is correctly configured or root CA certificates are installed (install ca-certificates package) (after 273ms in state SSL_HANDSHAKE)`
+
+  **Cause analysis:** The domain in the certificate is different with that of the Kafka Broker. See [more details](https://github.com/confluentinc/librdkafka/issues/4349).
+
+  **Solution:** Add the property `"property.ssl.endpoint.identification.algorithm"= "none"` to the Routine Load job.
+
+## Why does Routine Load report “JSON data is an array.strip_outer_array must be set true”?
+
+Your input data is a JSON array `([{},{}])`. Set the property `strip_outer_array` to `true` to expand it.
+
+## Why do I get “There are more than 100 routine load jobs running” when creating a Routine Load job?
+
+Increase the value of the FE configuration `max_routine_load_job_num`.
+
+## Why does Routine Load job creation fails with “failed to get partition meta” even after configuring SASL?
+
+The actual cause can be incorrect SASL configuration.
+
+## How should I handle Routine Load error “Create replicas failed …”?
+
+Adjust the following FE configurations:
+
+```SQL
+admin set frontend config ("tablet_create_timeout_second"="5");
+admin set frontend config ("max_create_table_timeout_second"="600");
+```
+
+You set also set them in the configuration file to persist the modification.
+
+## Why does Routine Load report “Bad message format” when consuming Kafka?
+
+Kafka uses hostname for communication. Add hostname resolution for Kafka nodes in `/etc/hosts` on all server that host the StarRocks nodes.
+
+## What causes Routine Load to fail with error "failed to send task: failed to submit task. error code: TOO MANY TASKS"?
+
+It is because the total Routine Load concurrency exceeds cluster capability (which equals to `routine_load_thread_pool_size × number of active BEs`).
+
+Solutions:
+
+- Reduce loading QPS (recommended cluster QPS < 10). Calculate the cluster QPS based on `cluster routine_load_task_num / routine_load_task_consume_second`.
+
+- Increase per-task batch size (> 1 GB) by adjusting `max_routine_load_batch_size` and `routine_load_task_timeout_second`.
+
+- Ensure `routine_load_thread_pool_size` is less than half of BE CPU cores.
+
+A job’s concurrency is determined by the minimum of the following values:
+
+- `kafka_partition_num`
+- `desired_concurrent_number`
+- `alive_be_num`
+- `max_routine_load_task_concurrent_num`
+
+You may start adjusting the concurrency by reducing `max_routine_load_task_concurrent_num`.

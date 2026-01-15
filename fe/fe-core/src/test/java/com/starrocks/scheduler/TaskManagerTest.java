@@ -20,7 +20,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -33,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.thrift.TGetTasksParams;
@@ -50,19 +50,16 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestMethodOrder(MethodName.class)
 public class TaskManagerTest {
@@ -74,6 +71,7 @@ public class TaskManagerTest {
     private static final ExecuteOption DEFAULT_MERGE_OPTION = makeExecuteOption(true, false);
     private static final ExecuteOption DEFAULT_NO_MERGE_OPTION = makeExecuteOption(false, false);
     private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
+    private TaskRun taskRun;
 
     @BeforeEach
     public void setUp() {
@@ -90,6 +88,7 @@ public class TaskManagerTest {
 
             }
         };
+        taskRun = new TaskRun();
     }
 
     @BeforeAll
@@ -144,7 +143,7 @@ public class TaskManagerTest {
         String realDbName = task.getDbName();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        taskManager.createTask(task, true);
+        taskManager.replayCreateTask(task);
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
@@ -169,26 +168,7 @@ public class TaskManagerTest {
             }
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
-        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state);
-    }
-
-    @Test
-    public void taskSerializeTest() throws Exception {
-        ConnectContext ctx = starRocksAssert.getCtx();
-        String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
-        SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
-        Task task = TaskBuilder.buildTask(submitTaskStmt, ctx);
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
-        task.write(dataOutputStream);
-
-        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-        DataInputStream dataInputStream = new DataInputStream(inputStream);
-        Task readTask = Task.read(dataInputStream);
-        // upgrade should default task type to manual
-        Assertions.assertEquals(readTask.getType(), Constants.TaskType.MANUAL);
-        Assertions.assertEquals(readTask.getState(), Constants.TaskState.UNKNOWN);
+        assertEquals(Constants.TaskRunState.SUCCESS, state);
     }
 
     @Test
@@ -219,15 +199,15 @@ public class TaskManagerTest {
         queue.offer(taskRun4);
 
         TaskRunStatus get1 = queue.poll().getStatus();
-        Assertions.assertEquals(10, get1.getPriority());
+        assertEquals(10, get1.getPriority());
         TaskRunStatus get2 = queue.poll().getStatus();
-        Assertions.assertEquals(5, get2.getPriority());
-        Assertions.assertEquals(now, get2.getCreateTime());
+        assertEquals(5, get2.getPriority());
+        assertEquals(now, get2.getCreateTime());
         TaskRunStatus get3 = queue.poll().getStatus();
-        Assertions.assertEquals(5, get3.getPriority());
-        Assertions.assertEquals(now + 100, get3.getCreateTime());
+        assertEquals(5, get3.getPriority());
+        assertEquals(now + 100, get3.getCreateTime());
         TaskRunStatus get4 = queue.poll().getStatus();
-        Assertions.assertEquals(0, get4.getPriority());
+        assertEquals(0, get4.getPriority());
 
     }
 
@@ -257,14 +237,14 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
         Assertions.assertTrue(taskRuns != null);
-        Assertions.assertEquals(1, taskRuns.size());
-        Assertions.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
+        assertEquals(1, taskRuns.size());
+        assertEquals(10, taskRuns.get(0).getStatus().getPriority());
     }
 
     @Test
@@ -293,14 +273,14 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
         Assertions.assertTrue(taskRuns != null);
-        Assertions.assertEquals(1, taskRuns.size());
-        Assertions.assertEquals(10, taskRuns.get(0).getStatus().getPriority());
+        assertEquals(1, taskRuns.size());
+        assertEquals(10, taskRuns.get(0).getStatus().getPriority());
 
     }
 
@@ -330,15 +310,15 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
         Assertions.assertTrue(taskRuns != null);
-        Assertions.assertEquals(1, taskRuns.size());
+        assertEquals(1, taskRuns.size());
         TaskRun taskRun = taskRuns.get(0);
-        Assertions.assertEquals(now, taskRun.getStatus().getCreateTime());
+        assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -367,15 +347,15 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
         Assertions.assertTrue(taskRuns != null);
-        Assertions.assertEquals(1, taskRuns.size());
+        assertEquals(1, taskRuns.size());
         TaskRun taskRun = taskRuns.get(0);
-        Assertions.assertEquals(now, taskRun.getStatus().getCreateTime());
+        assertEquals(now, taskRun.getStatus().getCreateTime());
     }
 
     @Test
@@ -412,14 +392,14 @@ public class TaskManagerTest {
         taskRun3.initStatus("3", now + 10);
         taskRun3.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun3, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun3);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
         Assertions.assertTrue(taskRuns != null);
-        Assertions.assertEquals(3, taskRuns.size());
+        assertEquals(3, taskRuns.size());
     }
 
     @Test
@@ -446,7 +426,7 @@ public class TaskManagerTest {
         taskManager.replayUpdateTaskRun(change1);
 
         TaskRunScheduler taskRunScheduler = taskManager.getTaskRunScheduler();
-        Assertions.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+        assertEquals(1, taskRunScheduler.getRunningTaskCount());
     }
 
     @Test
@@ -474,8 +454,8 @@ public class TaskManagerTest {
             TaskRunStatusChange change1 = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
                     Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
             taskManager.replayUpdateTaskRun(change1);
-            Assertions.assertEquals(1, taskRunScheduler.getRunningTaskCount());
-            Assertions.assertEquals(1, taskRunScheduler.getPendingQueueCount());
+            assertEquals(1, taskRunScheduler.getRunningTaskCount());
+            assertEquals(1, taskRunScheduler.getPendingQueueCount());
         }
 
         {
@@ -483,8 +463,8 @@ public class TaskManagerTest {
             TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun2.getStatus(),
                     Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
             taskManager.replayUpdateTaskRun(change);
-            Assertions.assertEquals(0, taskRunScheduler.getRunningTaskCount());
-            Assertions.assertEquals(1, taskRunScheduler.getPendingQueueCount());
+            assertEquals(0, taskRunScheduler.getRunningTaskCount());
+            assertEquals(1, taskRunScheduler.getPendingQueueCount());
         }
 
         {
@@ -492,8 +472,8 @@ public class TaskManagerTest {
             TaskRunStatusChange change = new TaskRunStatusChange(task.getId(), taskRun1.getStatus(),
                     Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
             taskManager.replayUpdateTaskRun(change);
-            Assertions.assertEquals(0, taskRunScheduler.getRunningTaskCount());
-            Assertions.assertEquals(0, taskRunScheduler.getPendingQueueCount());
+            assertEquals(0, taskRunScheduler.getRunningTaskCount());
+            assertEquals(0, taskRunScheduler.getPendingQueueCount());
         }
     }
 
@@ -509,7 +489,7 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
-        Assertions.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+        assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
         Config.enable_task_history_archive = true;
     }
@@ -525,32 +505,31 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
-        Assertions.assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+        assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
         Config.task_runs_max_history_number = 10000;
     }
 
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
-        Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
-        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+        return TimeUtils.parseDateTime(str);
     }
 
     @Test
     public void testGetInitialDelayTime1() throws Exception {
-        Assertions.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
+        assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
                 parseLocalDateTime("2023-04-18 20:00:00")));
-        Assertions.assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
+        assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 20:00:00")));
-        Assertions.assertEquals(20, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
+        assertEquals(20, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 20:00:10")));
-        Assertions.assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
+        assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 21:00:10")));
     }
 
     @Test
     public void testGetInitialDelayTime2() throws Exception {
-        Assertions.assertEquals(23, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
+        assertEquals(23, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
                 LocalDateTime.parse("2024-01-30T15:27:37.342356010")));
-        Assertions.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
+        assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
                 LocalDateTime.parse("2024-01-30T15:27:10.342356010")));
     }
 
@@ -589,50 +568,50 @@ public class TaskManagerTest {
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
         Assertions.assertTrue(taskRuns != null);
-        Assertions.assertEquals(2, taskRunScheduler.getPendingQueueCount());
-        Assertions.assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        assertEquals(2, taskRunScheduler.getPendingQueueCount());
+        assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         // If it's a sync refresh, no merge redundant anyway
         TaskRun taskRun3 = makeTaskRun(taskId, task, makeExecuteOption(false, true));
         result = taskRunManager.submitTaskRun(taskRun3, taskRun3.getExecuteOption());
         Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-        Assertions.assertEquals(3, taskRunScheduler.getPendingQueueCount());
-        Assertions.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        assertEquals(3, taskRunScheduler.getPendingQueueCount());
+        assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
         // merge it
         TaskRun taskRun4 = makeTaskRun(taskId, task, makeExecuteOption(true, false));
         result = taskRunManager.submitTaskRun(taskRun4, taskRun4.getExecuteOption());
         Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
-        Assertions.assertEquals(3, taskRunScheduler.getPendingQueueCount());
-        Assertions.assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        assertEquals(3, taskRunScheduler.getPendingQueueCount());
+        assertEquals(3, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         // no merge it
         TaskRun taskRun5 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun5, taskRun5.getExecuteOption());
         Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-        Assertions.assertEquals(4, taskRunScheduler.getPendingQueueCount());
-        Assertions.assertEquals(4, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        assertEquals(4, taskRunScheduler.getPendingQueueCount());
+        assertEquals(4, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         for (int i = 4; i < Config.task_runs_queue_length; i++) {
             TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(false, false));
             result = taskRunManager.submitTaskRun(taskRun, taskRun.getExecuteOption());
             Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
-            Assertions.assertEquals(i + 1, taskRunScheduler.getPendingQueueCount());
-            Assertions.assertEquals(i + 1, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+            assertEquals(i + 1, taskRunScheduler.getPendingQueueCount());
+            assertEquals(i + 1, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
         }
         // no assign it: exceed queue's size
         TaskRun taskRun6 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun6, taskRun6.getExecuteOption());
         Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
-        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
+        assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
 
         // no assign it: exceed queue's size
         TaskRun taskRun7 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
         result = taskRunManager.submitTaskRun(taskRun7, taskRun7.getExecuteOption());
         Assertions.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
-        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
-        Assertions.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
+        assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingQueueCount());
+        assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
     }
 
 
@@ -730,7 +709,7 @@ public class TaskManagerTest {
             tm.getTaskRunManager().submitTaskRun(taskRun, taskRun.getExecuteOption());
         }
         long pendingTaskRunsCount = taskRunScheduler.getPendingQueueCount();
-        Assertions.assertEquals(pendingTaskRunsCount, 10);
+        assertEquals(pendingTaskRunsCount, 10);
     }
 
     @Test
@@ -793,7 +772,7 @@ public class TaskManagerTest {
             }
         });
         long runningTaskRunsCount = taskRunScheduler.getRunningTaskCount();
-        Assertions.assertEquals(1, runningTaskRunsCount);
+        assertEquals(1, runningTaskRunsCount);
 
         new MockUp<TaskRun>() {
             @Mock
@@ -804,9 +783,9 @@ public class TaskManagerTest {
         // running task run will not be removed if force kill is false
         TaskRunManager taskRunManager = tm.getTaskRunManager();
         taskRunManager.killTaskRun(1L, false);
-        Assertions.assertEquals(1, taskRunScheduler.getRunningTaskCount());
+        assertEquals(1, taskRunScheduler.getRunningTaskCount());
         taskRunManager.killTaskRun(1L, true);
-        Assertions.assertEquals(0, taskRunScheduler.getRunningTaskCount());
+        assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
 
     @Test
@@ -823,7 +802,7 @@ public class TaskManagerTest {
         taskRun.initStatus("1", now + 10);
         taskRun.getStatus().setPriority(0);
         TaskRunStatus taskRunStatus = taskRun.getStatus();
-        Assertions.assertEquals(taskRunStatus.getDefinition(), "select 1");
+        assertEquals(taskRunStatus.getDefinition(), "select 1");
     }
 
     @Test
@@ -920,7 +899,7 @@ public class TaskManagerTest {
             taskManager.replayCreateTaskRun(validStatus);
 
             TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
-            Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+            assertEquals(2, taskRunHistory.getTaskRunCount());
 
             taskManager.saveTasksV2(imageWriter);
         }
@@ -930,7 +909,7 @@ public class TaskManagerTest {
             TaskManager taskManager = new TaskManager();
             taskManager.loadTasksV2(imageReader);
             TaskRunHistory taskRunHistory = taskManager.getTaskRunHistory();
-            Assertions.assertEquals(2, taskRunHistory.getTaskRunCount());
+            assertEquals(2, taskRunHistory.getTaskRunCount());
 
             Set<Constants.TaskRunState> expectedStates = ImmutableSet.of(
                     Constants.TaskRunState.SUCCESS, Constants.TaskRunState.SKIPPED);
@@ -979,5 +958,368 @@ public class TaskManagerTest {
         validStatus.setExpireTime(System.currentTimeMillis() + 100000);
         taskManager.replayCreateTaskRun(validStatus);
         // The valid task run should be processed without errors.
+    }
+
+    @Test
+    public void removeExpiredTaskRunsShouldCancelLongRunningTasks() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        TaskRun taskRun = new TaskRun();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setCreateTime(System.currentTimeMillis() - 5000);
+        new MockUp<TaskRun>() {
+            @Mock
+            public TaskRunStatus getStatus() {
+                return status;
+            }
+
+            @Mock
+            public int getExecuteTimeoutS() {
+                return 3;
+            }
+        };
+        new MockUp<TaskRunScheduler>() {
+            @Mock
+            public Set<TaskRun> getCopiedRunningTaskRuns() {
+                return ImmutableSet.of(taskRun);
+            }
+        };
+        new MockUp<TaskRunManager>() {
+            @Mock
+            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+                assertEquals(status, taskRun.getStatus());
+            }
+        };
+
+        TaskManager taskManager = new TaskManager();
+        taskManager.removeExpiredTaskRuns(false);
+    }
+
+    @Test
+    public void removeExpiredTaskRunsShouldNotCancelTasksWithoutTimeout() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        TaskRun taskRun = new TaskRun();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setCreateTime(System.currentTimeMillis() - 5000);
+
+        new MockUp<TaskRun>() {
+            @Mock
+            public TaskRunStatus getStatus() {
+                return status;
+            }
+
+            @Mock
+            public int getExecuteTimeoutS() {
+                return 0;
+            }
+        };
+        new MockUp<TaskRunScheduler>() {
+            @Mock
+            public Set<TaskRun> getCopiedRunningTaskRuns() {
+                return ImmutableSet.of(taskRun);
+            }
+        };
+        new MockUp<TaskRunManager>() {
+            @Mock
+            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+                Assertions.fail("Task without timeout should not be canceled");
+            }
+        };
+
+        TaskManager taskManager = new TaskManager();
+        taskManager.removeExpiredTaskRuns(false);
+    }
+
+    @Test
+    public void removeExpiredTaskRunsShouldNotCancelNonExpiredTasks() {
+        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
+        TaskRun taskRun = new TaskRun();
+        TaskRunStatus status = new TaskRunStatus();
+        status.setCreateTime(System.currentTimeMillis() - 1000);
+        new MockUp<TaskRun>() {
+            @Mock
+            public TaskRunStatus getStatus() {
+                return status;
+            }
+
+            @Mock
+            public int getExecuteTimeoutS() {
+                return 5;
+            }
+        };
+        new MockUp<TaskRunScheduler>() {
+            @Mock
+            public Set<TaskRun> getCopiedRunningTaskRuns() {
+                return ImmutableSet.of(taskRun);
+            }
+        };
+        new MockUp<TaskRunManager>() {
+            @Mock
+            void killRunningTaskRun(TaskRun taskRun, boolean force) {
+                Assertions.fail("Non-expired task should not be canceled");
+            }
+        };
+
+        TaskManager taskManager = new TaskManager();
+        taskManager.removeExpiredTaskRuns(false);
+    }
+
+    @Test
+    void testInitialDelayPositive() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 20, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 19, 8, 50);
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
+        assertEquals(3070, delay);
+    }
+
+    @Test
+    void testInitialDelayNegativeWithNano() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 19, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 20, 0, 1, 1); // 有nano
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
+        assertEquals(59, delay);
+    }
+
+    @Test
+    void testInitialDelayNegativeWithoutNano() {
+        long periodSeconds = 60;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 19, 0, 0);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 20, 0, 1, 0); // nano = 0
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
+        // initialDelay = -3601, extra = 0
+        // ((-3601 % 60) + 60) % 60 = (-1 + 60) % 60 = 59 % 60 = 59
+        assertEquals(59, delay);
+    }
+
+    @Test
+    void testInitialDelayWithNullLastScheduleTime() {
+        long periodSeconds = 20;
+        LocalDateTime taskStartTime = LocalDateTime.of(2023, 4, 18, 21, 0, 10);
+        LocalDateTime currentDateTime = LocalDateTime.of(2023, 4, 18, 19, 8, 30);
+        long delay = TaskManager.getInitialDelayTime(periodSeconds, taskStartTime, currentDateTime);
+        assertEquals(1 * 3600 + 51 * 60 + 40, delay); // 1小时51分40秒
+    }
+
+    // Java
+    @Test
+    public void testRegisterSchedulerSetsNextScheduleTimeAndSchedulesTask() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        TaskSchedule schedule = new TaskSchedule();
+        long now = System.currentTimeMillis() / 1000 * 1000;
+        schedule.setStartTime(now);
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(-1);
+        taskManager.registerScheduler(task);
+        long nextScheduleTime = task.getNextScheduleTime();
+        Assertions.assertTrue(nextScheduleTime > 0);
+        Assertions.assertNotNull(taskManager.getPeriodFutureMap().get(task.getId())
+        );
+    }
+
+    @Test
+    public void testRegisterSchedulerWithLastScheduleTime() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        TaskSchedule schedule = new TaskSchedule();
+        long now = System.currentTimeMillis() / 1000 * 1000;
+        schedule.setStartTime(now - 3600); // 1小时前
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(now - 60);
+        taskManager.registerScheduler(task);
+        long nextScheduleTime = task.getNextScheduleTime();
+        Assertions.assertTrue(nextScheduleTime > 0);
+        Assertions.assertNotNull(
+                taskManager.getPeriodFutureMap().get(task.getId())
+        );
+    }
+
+    @Test
+    public void testRegisterSchedulerNonPeriodicalTask() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        task.setType(Constants.TaskType.MANUAL);
+        
+        // Register scheduler should return early for non-periodical tasks
+        taskManager.registerScheduler(task);
+        
+        // Should not create a scheduled future for manual tasks
+        Assertions.assertNull(taskManager.getPeriodFutureMap().get(task.getId()));
+    }
+
+    @Test
+    public void testRegisterSchedulerEventTriggeredTask() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test");
+        task.setType(Constants.TaskType.EVENT_TRIGGERED);
+        
+        // Register scheduler should return early for event triggered tasks
+        taskManager.registerScheduler(task);
+        
+        // Should not create a scheduled future for event triggered tasks
+        Assertions.assertNull(taskManager.getPeriodFutureMap().get(task.getId()));
+    }
+
+    @Test
+    public void testRegisterSchedulerMVTaskTriggerImmediately() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test_mv");
+        task.setSource(Constants.TaskSource.MV);
+        TaskSchedule schedule = new TaskSchedule();
+        
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 180; // 3 minutes ago
+        
+        schedule.setStartTime(startTime);
+        schedule.setPeriod(60); // 1 minute period
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setId(1L);
+        task.setLastScheduleTime(lastScheduleTime);
+        
+        // Mock executeTask to verify it's called
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName) {
+                executeTaskCalled[0] = true;
+                assertEquals("test_mv", taskName);
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+        
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+        
+        // Should trigger immediately because lastScheduleTime + period < currentTime
+        Assertions.assertTrue(executeTaskCalled[0], "Task should be executed immediately");
+        Assertions.assertTrue(task.getLastScheduleTime() >= now, "LastScheduleTime should be updated");
+        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    }
+
+    @Test
+    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test_mv");
+        task.setSource(Constants.TaskSource.MV);
+        TaskSchedule schedule = new TaskSchedule();
+
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 7200; // 2 hours ago (before start time)
+
+        schedule.setStartTime(startTime);
+        schedule.setPeriod(60);
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(lastScheduleTime);
+        task.setId(2L);
+
+        // Mock executeTask to verify it's NOT called
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Should not trigger immediately because lastScheduleTime is before taskStartTime
+        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
+        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    }
+
+    @Test
+    public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test_mv");
+        task.setSource(Constants.TaskSource.MV);
+        TaskSchedule schedule = new TaskSchedule();
+
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 30; // 30 seconds ago
+
+        schedule.setStartTime(startTime);
+        schedule.setPeriod(60); // 1 minute period
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(lastScheduleTime);
+        task.setId(3L);
+
+        // Mock executeTask to verify it's NOT called
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Should not trigger immediately because lastScheduleTime + period is in the future
+        Assertions.assertFalse(executeTaskCalled[0], "Task should not be executed immediately");
+        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
+    }
+
+    @Test
+    public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
+        TaskManager taskManager = new TaskManager();
+        Task task = new Task("test_ctas");
+        task.setSource(Constants.TaskSource.CTAS);
+        TaskSchedule schedule = new TaskSchedule();
+
+        long now = TimeUtils.getEpochSeconds();
+        long startTime = now - 3600; // 1 hour ago
+        long lastScheduleTime = now - 180; // 3 minutes ago
+
+        schedule.setStartTime(startTime);
+        schedule.setPeriod(60); // 1 minute period
+        schedule.setTimeUnit(TimeUnit.SECONDS);
+        task.setSchedule(schedule);
+        task.setType(Constants.TaskType.PERIODICAL);
+        task.setState(Constants.TaskState.ACTIVE);
+        task.setLastScheduleTime(lastScheduleTime);
+        task.setId(4L);
+
+        // Mock executeTask to verify it's NOT called
+        final boolean[] executeTaskCalled = {false};
+        TaskManager spyTaskManager = new TaskManager() {
+            @Override
+            public SubmitResult executeTask(String taskName) {
+                executeTaskCalled[0] = true;
+                return new SubmitResult("xxxx", SubmitResult.SubmitStatus.SUBMITTED);
+            }
+        };
+
+        spyTaskManager.replayCreateTask(task);
+        spyTaskManager.registerScheduler(task);
+
+        // Should not trigger immediately because source is not MV
+        Assertions.assertFalse(executeTaskCalled[0], "Non-MV task should not be executed immediately");
+        Assertions.assertNotNull(spyTaskManager.getPeriodFutureMap().get(task.getId()));
     }
 }

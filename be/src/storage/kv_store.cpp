@@ -94,14 +94,18 @@ int64_t KVStore::calc_rocksdb_write_buffer_size(MemTracker* mem_tracker) {
     int64_t total_mem_bytes = mem_tracker->limit();
     // 3. Calculate the write buffer memory bytes
     int64_t write_buffer_mem_bytes =
-            total_mem_bytes * std::max(std::min(100L, config::rocksdb_write_buffer_memory_percent), 0L) / 100L;
+            total_mem_bytes *
+            std::max(std::min(static_cast<int64_t>(100),
+                              static_cast<int64_t>(config::rocksdb_write_buffer_memory_percent)),
+                     static_cast<int64_t>(0)) /
+            100;
     // 4. Calculate the write buffer size for each disk, and there will be 2 memtables by default,
     //    so we will divide it by 2
-    int64_t write_buffer_mem_bytes_per_disk = write_buffer_mem_bytes / std::max(disk_cnt, 1L) / 2;
+    int64_t write_buffer_mem_bytes_per_disk = write_buffer_mem_bytes / std::max(disk_cnt, static_cast<int64_t>(1)) / 2;
 
     // should be around 64MB ~ 1GB rocksdb_max_write_buffer_memory_bytes
-    int64_t res = std::min(std::max(67108864L, write_buffer_mem_bytes_per_disk),
-                           config::rocksdb_max_write_buffer_memory_bytes);
+    int64_t res = std::min(std::max(static_cast<int64_t>(67108864), write_buffer_mem_bytes_per_disk),
+                           static_cast<int64_t>(config::rocksdb_max_write_buffer_memory_bytes));
 
     LOG(INFO) << "rocksdb write buffer size: " << res << ", total memory: " << total_mem_bytes
               << ", disk count: " << disk_cnt;
@@ -111,9 +115,13 @@ int64_t KVStore::calc_rocksdb_write_buffer_size(MemTracker* mem_tracker) {
 Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
-    std::string db_path = _root_path + META_POSTFIX;
-
+    // 256MB. default is 0, which means all logs will be written to one log file
+    options.max_log_file_size = 268435456;
+    // default is 1000
+    options.keep_log_file_num = 10;
     RETURN_IF_ERROR(rocksdb::GetDBOptionsFromString(options, config::rocksdb_db_options_string, &options));
+
+    std::string db_path = _root_path + META_POSTFIX;
 
     ColumnFamilyOptions meta_cf_options;
     RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
@@ -262,6 +270,12 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
                         std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
                         int64_t timeout_sec) {
+    return iterate(column_family_index, prefix, "", func, timeout_sec);
+}
+
+Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix, const std::string& start_key,
+                        std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func,
+                        int64_t timeout_sec) {
     int64_t t_start = MonotonicMillis();
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     auto opts = ReadOptions();
@@ -272,11 +286,19 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
         opts.iterate_upper_bound = &upper_bound_slice;
     }
     std::unique_ptr<Iterator> it(_db->NewIterator(opts, handle));
-    if (prefix.empty()) {
-        it->SeekToFirst();
+    if (start_key.empty()) {
+        if (prefix.empty()) {
+            it->SeekToFirst();
+        } else {
+            it->Seek(prefix);
+        }
     } else {
-        it->Seek(prefix);
+        it->Seek(start_key);
+        if (it->Valid() && it->key() == start_key) {
+            it->Next();
+        }
     }
+
     // if limit time is less than or equal to zero, it means no limit
     if (timeout_sec <= 0) {
         for (; it->Valid(); it->Next()) {
@@ -314,6 +336,30 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
     }
     LOG_IF(WARNING, !it->status().ok()) << it->status().ToString();
     return to_status(it->status());
+}
+
+Status KVStore::iterate_with_compact_on_timeout(
+        ColumnFamilyIndex column_family_index, const std::string& prefix,
+        std::function<StatusOr<bool>(std::string_view, std::string_view)> const& func, int64_t timeout_sec) {
+    std::string last_key;
+    auto func_wrapper = [&](std::string_view key, std::string_view value) -> StatusOr<bool> {
+        last_key.assign(key.data(), key.size());
+        return func(key, value);
+    };
+
+    Status st = iterate(column_family_index, prefix, func_wrapper, timeout_sec);
+    if (st.is_time_out()) {
+        LOG(WARNING) << "rocksdb iterate timeout, try to compact";
+        Status compact_st = compact();
+        if (!compact_st.ok()) {
+            LOG(ERROR) << "rocksdb compact failed before retry";
+        } else {
+            LOG(INFO) << "rocksdb compact finished, retry iterate from last key";
+        }
+        // retry, but with no timeout
+        return iterate(column_family_index, prefix, last_key, func_wrapper, 0);
+    }
+    return st;
 }
 
 Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,

@@ -105,7 +105,7 @@ download_func() {
             rm -f "$DESC_DIR/$FILENAME"
         else
             echo "Downloading $FILENAME from $DOWNLOAD_URL to $DESC_DIR"
-            wget --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
+            wget --progress=dot:mega --tries=3 --no-check-certificate $DOWNLOAD_URL -O $DESC_DIR/$FILENAME
             if [ "$?"x == "0"x ]; then
                 if md5sum_func $FILENAME $DESC_DIR $MD5SUM; then
                     SUCCESS=1
@@ -203,14 +203,14 @@ do
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_ZIP ]]; then
-            if ! $UNZIP_CMD "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
+            if ! $UNZIP_CMD -q "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to unzip ${!NAME}"
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_BZ2 ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD jxvf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
+            if ! $TAR_CMD xjf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
@@ -255,6 +255,7 @@ if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.7.1" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-add-handler-after-output-log.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.7.1-lwp.patch
+    patch -p0 < $TP_PATCH_DIR/glog-0.7.1-no-hidden.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -286,15 +287,6 @@ echo "Finished patching $LIBEVENT_SOURCE"
 # fi
 # cd -
 # echo "Finished patching $THRIFT_SOURCE"
-
-# lz4 patch to disable shared library
-cd $TP_SOURCE_DIR/$LZ4_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $LZ4_SOURCE == "lz4-1.7.5" ]; then
-    patch -p0 < $TP_PATCH_DIR/lz4-1.7.5.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $LZ4_SOURCE"
 
 cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $ROCKSDB_SOURCE == "rocksdb-6.22.1" ]; then
@@ -371,6 +363,7 @@ echo "Finished patching $PROTOBUF_SOURCE"
 cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $GPERFTOOLS_SOURCE = "gperftools-gperftools-2.7" ]; then
     patch -p1 < $TP_PATCH_DIR/tcmalloc_hook.patch
+    patch -p1 < $TP_PATCH_DIR/gperftools_20251105.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -378,7 +371,7 @@ echo "Finished patching $GPERFTOOLS_SOURCE"
 
 # patch librdkafka
 cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.0.2" ]; then
+if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-2.11.0" ]; then
     patch -p0 < $TP_PATCH_DIR/librdkafka.patch
     touch $PATCHED_MARK
 fi
@@ -420,6 +413,8 @@ fi
 cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
 if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
     if [ ! -f prefetch_crt_dep_ok ]; then
+        # make prefetch_crt_dependency.sh less chatty
+        patch -p1 < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-quiet-unzip-dependencies.patch || true
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
@@ -514,17 +509,10 @@ cd -
 # patch arrow
 if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$ARROW_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
-        # use our built jemalloc
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
-        # fix exception handling
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-fix-exception-handling.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-parquet-map-key.patch
-        touch $PATCHED_MARK
-    fi
-    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-16.1.0" ] ; then
-        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-parquet-map-key.patch
-        patch -p1 < $TP_PATCH_DIR/arrow-16.1.0-use-zstd-1.5.0.patch
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-19.0.1" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -569,6 +557,7 @@ if [[ -d $TP_SOURCE_DIR/$CLUCENE_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$CLUCENE_SOURCE
     if [ ! -f "$PATCHED_MARK" ] ; then
         patch -p1 < "$TP_PATCH_DIR/clucene-gcc14.patch"
+        patch -p0 < "$TP_PATCH_DIR/clucene-no-hidden.patch"
         touch "$PATCHED_MARK"
     fi
     cd -
@@ -625,4 +614,18 @@ if [[ -d $TP_SOURCE_DIR/$CCTZ_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $CCTZ_SOURCE"
+fi
+
+
+#patch libhdfs
+# libhdfs is build by -fhidden. we need access hidden symbol getJNIEnv
+if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.2-src" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src.patch"
+        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src-jni-crash.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $HADOOPSRC_SOURCE"
 fi

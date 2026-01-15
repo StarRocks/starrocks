@@ -41,6 +41,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -50,7 +51,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TStorageType;
 import io.netty.handler.codec.http.HttpMethod;
 import org.json.JSONObject;
@@ -95,10 +95,10 @@ public class StorageTypeCheckAction extends RestBaseAction {
 
                 OlapTable olapTbl = (OlapTable) tbl;
                 JSONObject indexObj = new JSONObject();
-                for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTbl.getIndexIdToMeta().entrySet()) {
+                for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTbl.getIndexMetaIdToMeta().entrySet()) {
                     MaterializedIndexMeta indexMeta = entry.getValue();
                     if (indexMeta.getStorageType() == TStorageType.ROW) {
-                        indexObj.put(olapTbl.getIndexNameById(entry.getKey()), indexMeta.getStorageType().name());
+                        indexObj.put(olapTbl.getIndexNameByMetaId(entry.getKey()), indexMeta.getStorageType().name());
                     }
                 }
                 root.put(tbl.getName(), indexObj);

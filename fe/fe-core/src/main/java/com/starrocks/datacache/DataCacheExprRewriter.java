@@ -14,10 +14,10 @@
 
 package com.starrocks.datacache;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 
 import java.util.Map;
 
@@ -38,7 +38,7 @@ public class DataCacheExprRewriter {
         return visitor.visit(expr);
     }
 
-    private static class Visitor implements AstVisitor<Expr, Void> {
+    private static class Visitor implements AstVisitorExtendInterface<Expr, Void> {
         private final Map<String, Expr> mapping;
 
         public Visitor(Map<String, Expr> mapping) {

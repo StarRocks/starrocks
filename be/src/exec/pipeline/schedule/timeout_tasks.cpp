@@ -24,12 +24,14 @@ void CheckFragmentTimeout::Run() {
     auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
     size_t expire_seconds = query_ctx->get_query_expire_seconds();
     TRACE_SCHEDULE_LOG << "fragment_instance_id:" << print_id(_fragment_ctx->fragment_instance_id());
+    auto query_id = query_ctx->query_id();
+    hook_on_query_timeout(query_id, expire_seconds);
     _fragment_ctx->cancel(Status::TimedOut(fmt::format("Query reached its timeout of {} seconds", expire_seconds)));
 
     _fragment_ctx->iterate_drivers([](const DriverPtr& driver) {
         driver->set_need_check_reschedule(true);
         if (driver->is_in_blocked()) {
-            LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
+            LOG_IF(WARNING, config::pipeline_timeout_diagnostic) << "[Driver] Timeout " << driver->to_readable_string();
             driver->observer()->cancel_trigger();
         }
     });

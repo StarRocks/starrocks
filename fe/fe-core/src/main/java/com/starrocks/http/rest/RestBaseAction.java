@@ -37,8 +37,12 @@ package com.starrocks.http.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -49,14 +53,21 @@ import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
+import com.starrocks.http.rest.v2.RestBaseResultV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.service.ExecuteEnv;
+import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,7 +75,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class RestBaseAction extends BaseAction {
 
@@ -126,7 +141,7 @@ public class RestBaseAction extends BaseAction {
                 List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(context.getCurrentRoleIds());
                 List<String> inactivatedRoles =
                         authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
-                return "Access denied for user " + userIdentity  + ". " +
+                return "Access denied for user " + userIdentity + ". " +
                         String.format(ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT, activatedRoles, inactivatedRoles);
             }
             return "Access denied.";
@@ -140,15 +155,34 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx lifetime is the same as the channel
+
         HttpConnectContext ctx = request.getConnectContext();
-        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        ctx.setNettyChannel(request.getContext());
-        ctx.setQualifiedUser(authInfo.fullUserName);
-        ctx.setQueryId(UUIDUtil.genUUID());
-        ctx.setRemoteIP(authInfo.remoteIp);
+
+        // Change user for ConnectContext if necessary
+        UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
+        Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
+        String prevUserName = ctx.getQualifiedUser();
+
         ctx.setCurrentUserIdentity(currentUser);
         ctx.setCurrentRoleIds(currentUser);
+        ctx.setQualifiedUser(authInfo.fullUserName);
+
+        if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
+            ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+            Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
+            if (!userChangeRes.first) {
+                ctx.setCurrentUserIdentity(prevUserIdentity);
+                ctx.setCurrentRoleIds(prevRoleIds);
+                ctx.setQualifiedUser(prevUserName);
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
+            }
+        }
+
+        // ctx lifetime is the same as the channel
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setNettyChannel(request.getContext());
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }
@@ -292,4 +326,88 @@ public class RestBaseAction extends BaseAction {
         });
     }
 
+    public static List<String> fetchResultFromOtherFrontendNodes(String queryPath,
+                                                                 String authorization,
+                                                                 HttpMethod method,
+                                                                 Boolean returnMultipleResults) {
+        List<Pair<String, Integer>> frontends = getOtherAliveFe();
+        if (frontends.isEmpty()) {
+            return List.of();
+        }
+        ImmutableMap<String, String> header = ImmutableMap.<String, String>builder()
+                .put(HttpHeaders.AUTHORIZATION, authorization).build();
+        List<String> result = Lists.newArrayList();
+        for (Pair<String, Integer> front : frontends) {
+            String url = String.format("http://%s:%d%s", front.first, front.second, queryPath);
+            try {
+                String data = null;
+                if (method == HttpMethod.GET) {
+                    data = HttpUtils.get(url, header);
+                } else if (method == HttpMethod.POST) {
+                    data = HttpUtils.post(url, null, header);
+                }
+                if (StringUtils.isNotBlank(data)) {
+                    result.add(data);
+                }
+                if (!returnMultipleResults && !result.isEmpty()) {
+                    return result;
+                }
+            } catch (Exception e) {
+                LOG.error("request url {} error", url, e);
+            }
+        }
+        return result;
+    }
+
+    public static List<Pair<String, Integer>> getAllAliveFe() {
+
+        if (GlobalStateMgr.getCurrentState() == null) {
+            return List.of();
+        } else {
+            return GlobalStateMgr.getCurrentState()
+                    .getNodeMgr()
+                    .getAllFrontends()
+                    .stream()
+                    .filter(Frontend::isAlive)
+                    .map(fe -> new Pair<>(fe.getHost(), Config.http_port))
+                    .collect(Collectors.toList());
+        }
+    }
+
+    public static Pair<String, Integer> getCurrentFe() {
+        if (GlobalStateMgr.getCurrentState() == null) {
+            return null;
+        } else {
+            return GlobalStateMgr.getCurrentState()
+                    .getNodeMgr()
+                    .getSelfNode();
+        }
+    }
+
+    public static List<Pair<String, Integer>> getOtherAliveFe() {
+        List<Pair<String, Integer>> allAliveFe = getAllAliveFe();
+        if (allAliveFe.isEmpty()) {
+            return List.of();
+        }
+        Pair<String, Integer> currentFe = getCurrentFe();
+        if (currentFe == null) {
+            return List.of();
+        }
+        String currentFeAddress = currentFe.first;
+        return allAliveFe.stream()
+                .filter(fe -> !fe.first.equals(currentFeAddress))
+                .collect(Collectors.toList());
+
+    }
+
+    protected void sendSuccessResponse(BaseResponse response, String content, BaseRequest request) {
+        sendResult(request, response, RestBaseResultV2.ok(content));
+    }
+
+    protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
+        sendResult(request,
+                response,
+                status,
+                new RestBaseResultV2<>(status.code(), message));
+    }
 }

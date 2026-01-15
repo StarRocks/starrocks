@@ -16,32 +16,35 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatisticData;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -143,7 +146,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
 
             try {
-                collectStatisticSync(sql, context);
+                collectStatisticSync(sql, context, analyzeStatus);
             } catch (Exception e) {
                 failedNum++;
                 LOG.warn("collect statistics task failed in job: {}, {}", this, sql, e);
@@ -184,7 +187,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     // ($tableId, $partitionId, '$columnName', $dbId, '$dbName.$tableName', '$partitionName',
     //  $count, $dataSize, hll_deserialize('$hll'), $countNull, $maxFunction, $minFunction, NOW(), $collectionSizeFunction);
     @Override
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        // Calculate and set remaining timeout for this SQL task
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
 
@@ -219,16 +225,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("now()");
             params.add(String.valueOf(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize()));
             // int
-            row.add(new IntLiteral(table.getId(), Type.BIGINT)); // table id, 8 byte
-            row.add(new IntLiteral(data.getPartitionId(), Type.BIGINT)); // partition id, 8 byte
+            row.add(new IntLiteral(table.getId(), IntegerType.BIGINT)); // table id, 8 byte
+            row.add(new IntLiteral(data.getPartitionId(), IntegerType.BIGINT)); // partition id, 8 byte
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
-            row.add(new IntLiteral(db.getId(), Type.BIGINT)); // db id, 8 byte
+            row.add(new IntLiteral(db.getId(), IntegerType.BIGINT)); // db id, 8 byte
             row.add(new StringLiteral(tableName)); // table name, 50 byte
             row.add(new StringLiteral(partitionName)); // partition name, 10 byte
-            row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
-            row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+            row.add(new IntLiteral(data.getRowCount(), IntegerType.BIGINT)); // row count, 8 byte
+            row.add(new IntLiteral((long) data.getDataSize(), IntegerType.BIGINT)); // data size, 8 byte
             row.add(hllDeserialize(data.getHll())); // hll, 32 kB
-            row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
+            row.add(new IntLiteral(data.getNullCount(), IntegerType.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte
@@ -288,7 +294,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
                 ") values " + String.join(", ", sqlBuffer) + ";";
         QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
-        InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("_statistics_", "column_statistics")),
+                null, NodePosition.ZERO);
+        InsertStmt insert = new InsertStmt(tableRef, qs);
         insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
@@ -343,11 +351,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("minFunction", "''");
             context.put("collectionSizeFunction", "-1");
         } else if (columnType.isCollectionType()) {
-            String collectionSizeFunction = "AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
-                    "(" + quoteColumnKey + ")) ";
+            String collectionSizeFunction = "IFNULL(AVG(" + (columnType.isArrayType() ? "ARRAY_LENGTH" : "MAP_SIZE") +
+                    "(" + quoteColumnKey + ")), -1) ";
             long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                     ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
-            String dataSizeFunction =  "COUNT(*) * " + elementTypeSize + " * " + collectionSizeFunction;
+            String dataSizeFunction =
+                    "COUNT(*) * " + elementTypeSize + " * GREATEST(0, " + collectionSizeFunction.trim() + ")";
             context.put("hllFunction", "'00'");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");

@@ -107,8 +107,7 @@ enum TxnTypePB {
      TXN_NORMAL = 0;
      TXN_REPLICATION = 1;
      TXN_EMPTY = 2;
-     TXN_SPLIT_TABLET = 3;
-     TXN_MERGE_TABLET = 4;
+     TXN_TABLET_RESHARD = 3;
 }
 
 enum ReplicationTxnStatePB {
@@ -218,25 +217,6 @@ message IndexValuesWithVerPB {
     repeated IndexValueWithVerPB values = 1;
 }
 
-message PersistentIndexSstablePB {
-    optional int64 version = 1; // Deprecated
-    optional string filename = 2;
-    optional int64 filesize = 3;
-    // used for rebuild point of persistent index
-    optional uint64 max_rss_rowid = 4;
-    optional bytes encryption_meta = 5;
-    // Whether this file shared by multiple tablets
-    optional bool shared = 6 [default=false];
-    // Filter out rows which do not satisfy the predicate
-    // when reading this specific sstable
-    optional PersistentIndexSstablePredicatePB predicate = 7;
-}
-
-message PersistentIndexSstableMetaPB {
-    // sstables are ordered with the smaller version on the left.
-    repeated PersistentIndexSstablePB sstables = 1;
-}
-
 enum TransactionStatusPB {
     TRANS_UNKNOWN = 0;
     TRANS_PREPARE = 1;
@@ -250,4 +230,27 @@ message TransactionStatePB {
     optional int64 txn_id = 1;
     optional TransactionStatusPB status = 2;
     optional string reason = 3;
+}
+
+enum InfinityTypePB {
+    NONE_INFINITY = 0;
+    MINIMUM = 1;
+    MAXIMUM = 2;
+}
+
+message VariantPB {
+    optional PTypeDesc type = 1;
+    optional string value = 2;
+    optional InfinityTypePB infinity_type = 3;
+}
+
+message TuplePB {
+    repeated VariantPB values = 1;
+}
+
+message TabletRangePB {
+    optional TuplePB lower_bound = 1;
+    optional TuplePB upper_bound = 2;
+    optional bool lower_bound_included = 3;
+    optional bool upper_bound_included = 4;
 }

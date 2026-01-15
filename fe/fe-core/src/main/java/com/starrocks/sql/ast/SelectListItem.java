@@ -16,9 +16,9 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.TableName;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -66,7 +66,7 @@ public class SelectListItem implements ParseNode {
         if (other.expr == null) {
             expr = null;
         } else {
-            expr = other.expr.clone().reset();
+            expr = ExprUtils.reset(other.expr.clone());
         }
         tblName = other.tblName;
         isStar = other.isStar;

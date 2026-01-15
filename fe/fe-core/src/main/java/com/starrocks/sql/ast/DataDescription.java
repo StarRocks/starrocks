@@ -20,14 +20,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -43,7 +35,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
@@ -55,6 +56,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+
 // used to describe data info which is needed to import.
 //
 //      data_desc:
@@ -100,7 +102,7 @@ public class DataDescription implements ParseNode {
             FunctionSet.GET_JSON_STRING);
 
     private final String tableName;
-    private final PartitionNames partitionNames;
+    private final PartitionRef partitionNames;
     private final List<String> filePaths;
     private final ColumnSeparator columnSeparator;
     private final RowDelimiter rowDelimiter;
@@ -139,7 +141,7 @@ public class DataDescription implements ParseNode {
     private final NodePosition pos;
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            List<String> filePaths,
                            List<String> columns,
                            ColumnSeparator columnSeparator,
@@ -152,7 +154,7 @@ public class DataDescription implements ParseNode {
     }
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            List<String> filePaths,
                            List<String> columns,
                            ColumnSeparator columnSeparator,
@@ -168,7 +170,7 @@ public class DataDescription implements ParseNode {
     }
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            List<String> filePaths,
                            List<String> columns,
                            ColumnSeparator columnSeparator,
@@ -197,7 +199,7 @@ public class DataDescription implements ParseNode {
 
     // data from table external_hive_table
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            String srcTableName,
                            boolean isNegative,
                            List<Expr> columnMappingList,
@@ -206,7 +208,7 @@ public class DataDescription implements ParseNode {
     }
 
     public DataDescription(String tableName,
-                           PartitionNames partitionNames,
+                           PartitionRef partitionNames,
                            String srcTableName,
                            boolean isNegative,
                            List<Expr> columnMappingList,
@@ -230,7 +232,7 @@ public class DataDescription implements ParseNode {
         return tableName;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -379,7 +381,7 @@ public class DataDescription implements ParseNode {
         for (Expr columnExpr : columnMappingList) {
             if (!(columnExpr instanceof BinaryPredicate)) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
-                        + "Expr: " + columnExpr.toSql());
+                        + "Expr: " + ExprToSql.toSql(columnExpr));
             }
             BinaryPredicate predicate = (BinaryPredicate) columnExpr;
             if (predicate.getOp() != BinaryType.EQ) {
@@ -389,7 +391,7 @@ public class DataDescription implements ParseNode {
             Expr child0 = predicate.getChild(0);
             if (!(child0 instanceof SlotRef)) {
                 throw new AnalysisException("Mapping function expr only support the column or eq binary predicate. "
-                        + "The mapping column error. column: " + child0.toSql());
+                        + "The mapping column error. column: " + ExprToSql.toSql(child0));
             }
             String column = ((SlotRef) child0).getColumnName();
             if (!columnMappingNames.add(column)) {
@@ -399,7 +401,7 @@ public class DataDescription implements ParseNode {
             Expr child1 = predicate.getChild(1);
             if (isHadoopLoad && !(child1 instanceof FunctionCallExpr)) {
                 throw new AnalysisException("Hadoop load only supports the designated function. "
-                        + "The error mapping function is:" + child1.toSql());
+                        + "The error mapping function is:" + ExprToSql.toSql(child1));
             }
             ImportColumnDesc importColumnDesc = new ImportColumnDesc(column, child1);
             parsedColumnExprList.add(importColumnDesc);
@@ -412,7 +414,7 @@ public class DataDescription implements ParseNode {
     private void analyzeColumnToHadoopFunction(String columnName, Expr child1) throws AnalysisException {
         Preconditions.checkState(child1 instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) child1;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         if (!HADOOP_SUPPORT_FUNCTION_NAMES.contains(functionName.toLowerCase())) {
             return;
         }
@@ -431,7 +433,7 @@ public class DataDescription implements ParseNode {
             } else {
                 if (isHadoopLoad) {
                     // hadoop function only support slot, string and null parameters
-                    throw new AnalysisException("Mapping function args error, arg: " + paramExpr.toSql());
+                    throw new AnalysisException("Mapping function args error, arg: " + ExprToSql.toSql(paramExpr));
                 }
             }
         }
@@ -578,7 +580,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (args.get(0) != null) {
-            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
+            ColumnDefAnalyzer.validateDefaultValue(column.getType(), new StringLiteral(args.get(0)));
         }
     }
 
@@ -618,7 +620,7 @@ public class DataDescription implements ParseNode {
         }
 
         if (replaceValue != null) {
-            ColumnDef.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
+            ColumnDefAnalyzer.validateDefaultValue(column.getType(), new StringLiteral(replaceValue));
         }
     }
 
@@ -695,7 +697,13 @@ public class DataDescription implements ParseNode {
         }
 
         if (partitionNames != null) {
-            partitionNames.analyze(null);
+            List<String> names = partitionNames.getPartitionNames();
+            if (names.isEmpty()) {
+                throw new AnalysisException("No partition specifed in partition lists");
+            }
+            if (names.stream().anyMatch(Strings::isNullOrEmpty)) {
+                throw new AnalysisException("there are empty partition name");
+            }
         }
 
         analyzeColumns();

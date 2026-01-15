@@ -16,13 +16,12 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.common;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -41,6 +40,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -58,34 +60,38 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.co
 public class AggregatePushDownUtils {
     /**
      * Rewrite query plan which has been pushed down by materialized view
-     * @param optExpression: push down query plan
+     * @param queryOptExpression: push down query plan
      * @return: rewritten query plan if rewrite success, otherwise return null
      */
-    public static OptExpression doRewritePushDownAgg(MvRewriteContext mvRewriteContext,
+    public static OptExpression doRewritePushDownAgg(MvRewriteContext origMVRewriteContext,
                                                      AggregatePushDownContext ctx,
-                                                     OptExpression optExpression,
+                                                     OptExpression queryOptExpression,
                                                      Rule rule) {
-        final ColumnRefFactory queryColumnRefFactory = mvRewriteContext.getMaterializationContext().getQueryRefFactory();
-        final List<Table> queryTables = MvUtils.getAllTables(optExpression);
-        final ReplaceColumnRefRewriter queryColumnRefRewriter =
-                MvUtils.getReplaceColumnRefWriter(optExpression, queryColumnRefFactory);
-        final OptimizerContext optimizerContext = mvRewriteContext.getMaterializationContext().getOptimizerContext();
-        PredicateSplit queryPredicateSplit = getQuerySplitPredicate(optimizerContext,
-                mvRewriteContext.getMaterializationContext(), optExpression, queryColumnRefFactory,
-                queryColumnRefRewriter, rule);
+        final MaterializationContext materializationContext = origMVRewriteContext.getMaterializationContext();
+        final ColumnRefFactory queryColumnRefFactory = materializationContext.getQueryRefFactory();
+        final ReplaceColumnRefRewriter queryColumnRefRewriter = origMVRewriteContext.getQueryColumnRefRewriter();
+        final OptimizerContext optimizerContext = materializationContext.getOptimizerContext();
+
+        // refresh query tables since query tables have been changed after push down
+        final List<Table> queryTables = MvUtils.getAllTables(queryOptExpression);
+        // refresh query predicate split since query predicate have been changed after push down
+        final PredicateSplit queryPredicateSplit = getQuerySplitPredicate(optimizerContext,
+                materializationContext, queryOptExpression, queryColumnRefFactory, queryColumnRefRewriter, rule);
         if (queryPredicateSplit == null) {
-            logMVRewrite(mvRewriteContext, "Rewrite push down agg failed: get query split predicate failed");
+            logMVRewrite(origMVRewriteContext, "Rewrite push down agg failed: get query split predicate failed");
             return null;
         }
-        logMVRewrite(mvRewriteContext, "Push down agg query split predicate: {}", queryPredicateSplit);
-        MvRewriteContext newMvRewriteContext = new MvRewriteContext(mvRewriteContext.getMaterializationContext(),
-                queryTables, optExpression, queryColumnRefRewriter, queryPredicateSplit, Lists.newArrayList(), rule);
+        logMVRewrite(origMVRewriteContext, "Push down agg query split predicate: {}", queryPredicateSplit);
+
+        // recreate MvRewriteContext for push down agg rewrite
+        MvRewriteContext newMvRewriteContext = new MvRewriteContext(materializationContext,
+                queryTables, queryOptExpression, queryColumnRefRewriter, queryPredicateSplit, Lists.newArrayList(), rule);
         // set aggregate push down context to be used in the final stage
         newMvRewriteContext.setAggregatePushDownContext(ctx);
         AggregatedMaterializedViewRewriter rewriter = new AggregatedMaterializedViewRewriter(newMvRewriteContext);
-        OptExpression result = rewriter.doRewrite(mvRewriteContext);
+        OptExpression result = rewriter.doRewrite(newMvRewriteContext);
         if (result == null) {
-            logMVRewrite(mvRewriteContext, "doRewrite phase failed in AggregatedMaterializedViewRewriter");
+            logMVRewrite(newMvRewriteContext, "doRewrite phase failed in AggregatedMaterializedViewRewriter");
             return null;
         }
         deriveLogicalProperty(result);
@@ -94,7 +100,7 @@ public class AggregatePushDownUtils {
 
     public static OptExpression getPushDownRollupFinalAggregateOpt(MvRewriteContext mvRewriteContext,
                                                                    AggregatePushDownContext ctx,
-                                                                   Map<ColumnRefOperator, ColumnRefOperator> remapping,
+                                                                   Map<ColumnRefOperator, ScalarOperator> remapping,
                                                                    OptExpression inputExpression,
                                                                    List<OptExpression> newChildren) {
         final Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
@@ -173,7 +179,7 @@ public class AggregatePushDownUtils {
 
     private static boolean getRollupFinalAggregate(MvRewriteContext mvRewriteContext,
                                                    AggregatePushDownContext ctx,
-                                                   Map<ColumnRefOperator, ColumnRefOperator> remapping,
+                                                   Map<ColumnRefOperator, ScalarOperator> remapping,
                                                    ColumnRefOperator origAggColRef,
                                                    CallOperator aggCall,
                                                    Map<ColumnRefOperator, CallOperator> newAggregations,
@@ -234,7 +240,7 @@ public class AggregatePushDownUtils {
 
     private static CallOperator getRollupFinalAggregate(MvRewriteContext mvRewriteContext,
                                                         AggregatePushDownContext ctx,
-                                                        Map<ColumnRefOperator, ColumnRefOperator> remapping,
+                                                        Map<ColumnRefOperator, ScalarOperator> remapping,
                                                         ColumnRefOperator origAggColRef,
                                                         CallOperator aggCall) {
         CallOperator newAggCall = ctx.aggColRefToPushDownAggMap.get(origAggColRef);
@@ -257,16 +263,16 @@ public class AggregatePushDownUtils {
                         "aggColRef:{}, aggCall:{}", origAggColRef, aggCall);
                 return null;
             }
-            List<ScalarOperator> newArgs = aggCall.getChildren();
-            newArgs.set(0, newArg0);
             String rollupFuncName = getRollupFunctionName(aggCall, false);
             // eg: count(distinct) + rollup
             if (rollupFuncName == null) {
                 logMVRewrite(mvRewriteContext, "Get rollup function name is null, aggCall:{}", aggCall);
                 return null;
             }
+            List<ScalarOperator> newArgs = aggCall.getChildren();
+            newArgs.set(0, newArg0);
             Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = Expr.getBuiltinFunction(rollupFuncName, argTypes,
+            Function newFunc = ExprUtils.getBuiltinFunction(rollupFuncName, argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (newFunc == null) {
                 logMVRewrite(mvRewriteContext, "Get rollup function is null, rollupFuncName:", rollupFuncName);
@@ -362,7 +368,7 @@ public class AggregatePushDownUtils {
         if (argType.isDecimalV3()) {
             // There is not need to apply ImplicitCastRule to divide operator of decimal types.
             // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
-            ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
+            ScalarType decimal128p38s0 = TypeFactory.createDecimalV3NarrowestType(38, 0);
             newAvg.getChildren().set(1, new CastOperator(decimal128p38s0, newAvg.getChild(1), true));
         } else {
             final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();

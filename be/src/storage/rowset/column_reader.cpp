@@ -50,10 +50,14 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
 #include "storage/index/index_descriptor.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#endif
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -114,6 +118,9 @@ ColumnReader::~ColumnReader() {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
         _bloom_filter_index_meta.reset(nullptr);
+    }
+    if (_builtin_inverted_index_meta != nullptr) {
+        _builtin_inverted_index_meta.reset(nullptr);
     }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
@@ -197,6 +204,9 @@ Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
                                          _bloom_filter_index_meta->SpaceUsedLong());
                 _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
+                break;
+            case BUILTIN_INVERTED_INDEX:
+                _builtin_inverted_index_meta.reset(index_meta->release_builtin_inverted_index());
                 break;
             case UNKNOWN_INDEX_TYPE:
                 return Status::Corruption(fmt::format("Bad file {}: unknown index type", file_name()));
@@ -366,13 +376,42 @@ Status ColumnReader::_calculate_row_ranges(const std::vector<uint32_t>& page_ind
     return Status::OK();
 }
 
+LogicalType ColumnReader::_get_zone_map_parse_type(const ColumnPredicate* predicate) const {
+    DCHECK(predicate != nullptr);
+    // The type of the predicate may be different from the data type in the segment
+    // file, often seen after fast schema evolution, e.g., the predicate type may be
+    // 'BIGINT' while the data type is 'INT', so it's necessary to use the type of
+    // the predicate to parse the zone map string.
+    LogicalType type = predicate->type_info()->type();
+
+    // This addresses a zone map filtering issue that occurs when converting a CHAR columna
+    // to VARCHAR. The zone map may still contain CHAR values with padding bytes (e.g., "abc\0\0\0\0\0\0\0").
+    // If these values are parsed as VARCHAR, the padding bytes are preserved, leading to incorrect
+    // comparisons with VARCHAR predicates (e.g., "abc"). By forcing the parsing type to CHAR,
+    // `datum_from_string` in `_parse_zone_map()` strips these padding bytes, ensuring consistent
+    // comparison semantics between zone map entries and predicate values.
+    if (_column_type == TYPE_CHAR && type == TYPE_VARCHAR) {
+        type = TYPE_CHAR;
+    }
+
+    return type;
+}
+
 Status ColumnReader::_parse_zone_map(LogicalType type, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
+    return _parse_zone_map(type_info, zm, detail);
+}
+
+Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMapPB& zm, ZoneMapDetail* detail) const {
     detail->set_has_null(zm.has_null());
 
     if (zm.has_not_null()) {
+        if (UNLIKELY(!zm.has_min() || !zm.has_max())) {
+            LOG(ERROR) << "Corrupted zone map protobuf detected: " << zm.ShortDebugString();
+            return Status::Corruption("Corrupted zone map data: missing min or max values");
+        }
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
         RETURN_IF_ERROR(datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
@@ -498,19 +537,20 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
 }
 
 Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
-                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts) {
-    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts));
-    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator));
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts,
+                                                 const IndexReadOptions& index_opt) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts, index_opt));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator, index_opt));
     return Status::OK();
 }
 
 Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
-                                          const SegmentReadOptions& opts) {
-    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id() &&
-        _inverted_index_loaded()) {
+                                          const SegmentReadOptions& opts, const IndexReadOptions& index_opt) {
+    if (index_meta == nullptr || _inverted_index_loaded()) {
         return Status::OK();
     }
 
+#ifndef __APPLE__
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
     return success_once(_inverted_index_load_once,
                         [&]() {
@@ -521,17 +561,22 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                 type = _column_type;
                             }
 
-                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
+                            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta));
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     opts.rowset_path, opts.rowsetid.to_string(), _segment->id(),
                                     index_meta->index_id());
                             ASSIGN_OR_RETURN(auto inverted_plugin, InvertedPluginFactory::get_plugin(imp_type));
                             RETURN_IF_ERROR(inverted_plugin->create_inverted_index_reader(index_path, index_meta, type,
                                                                                           &_inverted_index));
-
+                            RETURN_IF_ERROR(_inverted_index->load(index_opt, _builtin_inverted_index_meta.get()));
+                            if (_builtin_inverted_index_meta != nullptr) {
+                                _builtin_inverted_index_meta.reset();
+                            }
                             return Status::OK();
                         })
             .status();
+#endif
+    return Status::OK();
 }
 
 Status ColumnReader::seek_to_first(OrdinalPageIndexIterator* iter) {
@@ -563,20 +608,32 @@ std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) 
     return std::make_pair(_ordinal_index->get_first_ordinal(page_index), _ordinal_index->get_last_ordinal(page_index));
 }
 
+// Iterate the oridinal index to get the total size of all data pages
+int64_t ColumnReader::data_page_footprint() const {
+    RETURN_IF(_ordinal_index == nullptr, 0);
+    int64_t total_size = 0;
+    auto iter = _ordinal_index->begin();
+    while (iter.valid()) {
+        total_size += iter.page().size;
+        iter.next();
+    }
+    return total_size;
+}
+
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
                                      SparseRange<>* row_ranges, const IndexReadOptions& opts,
-                                     CompoundNodeType pred_relation) {
+                                     CompoundNodeType pred_relation, const Range<>* src_range) {
     RETURN_IF_ERROR(_load_zonemap_index(opts));
 
     std::vector<uint32_t> page_indexes;
     if (pred_relation == CompoundNodeType::AND) {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
-                                                                &page_indexes));
+                                                                &page_indexes, src_range));
     } else {
         RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
-                                                               &page_indexes));
+                                                               &page_indexes, src_range));
     }
 
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
@@ -590,14 +647,14 @@ StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexR
 
     LogicalType type = _encoding_info->type();
     int32_t num_pages = _zonemap_index->num_pages();
-    std::vector<ZoneMapDetail> result(num_pages);
+    std::vector<ZoneMapDetail> result;
+    result.reserve(num_pages);
 
-    for (auto& zm : _zonemap_index->page_zone_maps()) {
+    for (const auto& zm : _zonemap_index->page_zone_maps()) {
         ZoneMapDetail detail;
         RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
-        result.emplace_back(detail);
+        result.emplace_back(std::move(detail));
     }
-
     return result;
 }
 
@@ -605,18 +662,16 @@ template <CompoundNodeType PredRelation>
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
-                                      std::vector<uint32_t>* pages) {
-    // The type of the predicate may be different from the data type in the segment
-    // file, e.g., the predicate type may be 'BIGINT' while the data type is 'INT',
-    // so it's necessary to use the type of the predicate to parse the zone map string.
-    LogicalType lt;
+                                      std::vector<uint32_t>* pages, const Range<>* src_range) {
+    const ColumnPredicate* predicate;
     if (!predicates.empty()) {
-        lt = predicates[0]->type_info()->type();
+        predicate = predicates[0];
     } else if (del_predicate) {
-        lt = del_predicate->type_info()->type();
+        predicate = del_predicate;
     } else {
         return Status::OK();
     }
+    LogicalType lt = _get_zone_map_parse_type(predicate);
 
     auto page_satisfies_zone_map_filter = [&](const ZoneMapDetail& detail) {
         if constexpr (PredRelation == CompoundNodeType::AND) {
@@ -627,12 +682,25 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
         }
     };
 
+    const TypeInfoPtr type_info = get_type_info(delegate_type(lt));
+
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
-    int32_t page_size = _zonemap_index->num_pages();
-    for (int32_t i = 0; i < page_size; ++i) {
+    const int32_t num_pages = _zonemap_index->num_pages();
+
+    int32_t i = 0;
+    int32_t end_page = num_pages;
+    if (src_range != nullptr && src_range->end() != 0) {
+        i = _ordinal_index->seek_at_or_before(src_range->begin()).page_index();
+        end_page = _ordinal_index->seek_at_or_before(src_range->end() - 1).page_index();
+        if (end_page + 1 <= num_pages) {
+            end_page++;
+        }
+    }
+
+    for (; i < end_page; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
-        RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
+        RETURN_IF_ERROR(_parse_zone_map(type_info, zm, &detail));
 
         if (!page_satisfies_zone_map_filter(detail)) {
             continue;
@@ -650,7 +718,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const ColumnPredica
     if (_segment_zone_map == nullptr || predicates.empty()) {
         return true;
     }
-    LogicalType lt = predicates[0]->type_info()->type();
+    LogicalType lt = _get_zone_map_parse_type(predicates[0]);
     ZoneMapDetail detail;
     auto st = _parse_zone_map(lt, *_segment_zone_map, &detail);
     CHECK(st.ok()) << st;
@@ -700,7 +768,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_create_merge_struct_ite
                 const TypeInfoPtr& type_info = get_type_info(*sub_column);
                 auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                         sub_column->has_default_value(), sub_column->default_value(), sub_column->is_nullable(),
-                        type_info, sub_column->length(), num_rows());
+                        type_info, sub_column->length(), num_rows(), child_paths[i]);
                 ColumnIteratorOptions iter_opts;
                 RETURN_IF_ERROR(default_value_iter->init(iter_opts));
                 field_iters.emplace_back(std::move(default_value_iter));
@@ -824,8 +892,9 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::_new_json_iterator(Colum
         }
         // dynamic flattern
         // we must dynamic flat json, because we don't know other segment wasn't the paths
-        return create_json_dynamic_flat_iterator(std::move(json_iter), target_paths, target_types,
-                                                 path->is_from_compaction());
+        return create_json_dynamic_flat_iterator(
+                std::move(json_iter), target_paths, target_types,
+                path->is_from_compaction() || (column != nullptr && column->is_extended()));
     }
 
     std::vector<std::string> source_paths;

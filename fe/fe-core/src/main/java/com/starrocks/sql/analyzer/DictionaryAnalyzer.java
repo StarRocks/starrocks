@@ -16,16 +16,16 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CancelRefreshDictionaryStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.DropDictionaryStmt;
 import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.type.Type;
 
 import java.util.List;
 
@@ -34,7 +34,7 @@ public class DictionaryAnalyzer {
         new DictionaryAnalyzer.DictionaryAnalyzerVisitor().visit(stmt, session);
     }
 
-    static class DictionaryAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class DictionaryAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateDictionaryStatement(CreateDictionaryStmt statement, ConnectContext context) {
             String dictionaryName = statement.getDictionaryName();

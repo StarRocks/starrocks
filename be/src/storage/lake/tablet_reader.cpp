@@ -20,6 +20,7 @@
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
+#include "runtime/exec_env.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -170,7 +171,18 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
-            auto split = split_morsel_queue->try_get().value();
+            auto split_status_or = split_morsel_queue->try_get();
+            if (UNLIKELY(!split_status_or.ok())) {
+                LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
+                             << ", query_id: " << print_id(read_params.runtime_state->query_id())
+                             << ", tablet_id: " << tablet_shared_ptr->tablet_id();
+                // clear split tasks, and fallback to non-split mode
+                _split_tasks.clear();
+                _need_split = false;
+                return init_collector(read_params);
+            }
+
+            auto split = std::move(split_status_or.value());
             if (split != nullptr) {
                 auto ctx = std::make_unique<pipeline::LakeSplitContext>();
 
@@ -238,6 +250,14 @@ Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read
         if (readers.size() == num_readers) {
             // must all be flat json type
             JsonPathDeriver deriver;
+
+            if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_metadata->id());
+                metadata && metadata->has_flat_json_config()) {
+                auto flat_json_config = std::make_shared<FlatJsonConfig>();
+                flat_json_config->update(metadata->flat_json_config());
+                deriver.init_flat_json_config(flat_json_config.get());
+            }
+
             deriver.derived(readers);
             auto paths = deriver.flat_paths();
             auto types = deriver.flat_types();
@@ -304,6 +324,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
+    rs_opts.runtime_filter_preds = params.runtime_filter_preds;
     PredicateTree pred_tree_for_zone_map;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
                                                                       rs_opts.pred_tree_for_zone_map));
@@ -321,6 +342,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.lake_io_opts = params.lake_io_opts;
+    rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
 
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
@@ -446,19 +471,24 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
 
         ConjunctivePredicates conjunctions;
         for (const auto& cond : conds) {
-            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
-            if (pred == nullptr) {
-                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
-                             << "], condition_op[" << cond.condition_op << "], condition_values["
-                             << cond.condition_values[0] << "].";
-                continue;
+            auto pred_or = pred_parser.parse_thrift_cond(cond);
+            if (!pred_or.ok()) {
+                if (LIKELY(!config::lake_tablet_ignore_invalid_delete_predicate)) {
+                    return pred_or.status();
+                } else {
+                    LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
+                                 << "], condition_op[" << cond.condition_op << "], condition_values["
+                                 << (cond.condition_values.empty() ? "<empty>" : cond.condition_values[0]) << "].";
+                    continue;
+                }
             }
-            conjunctions.add(pred);
+            conjunctions.add(pred_or.value());
             // save for memory release.
-            _predicate_free_list.emplace_back(pred);
+            _predicate_free_list.emplace_back(pred_or.value());
         }
-
-        dels->add(index, conjunctions);
+        if (!conjunctions.empty()) {
+            dels->add(index, conjunctions);
+        }
     }
 
     return Status::OK();
@@ -690,7 +720,7 @@ Status TabletReader::parse_seek_range(const TabletSchema& tablet_schema,
         SeekTuple upper;
         RETURN_IF_ERROR(to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
         RETURN_IF_ERROR(to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
-        ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
+        ranges->emplace_back(std::move(lower), std::move(upper));
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);
     }

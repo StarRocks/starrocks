@@ -16,6 +16,8 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
+#include <optional>
 #include <vector>
 
 #include "column/column.h"
@@ -37,13 +39,13 @@ class DictMappingExpr;
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;
     SlotId slot_id;
-    // if input was not nullable but output was nullable this flag will set true
-    bool result_nullable = false;
     // size: dict codes.size() + 1
     std::vector<int16_t> code_convert_map;
-    Filter filter;
     // for no-string column convert map
     ColumnPtr convert_column;
+
+    // error status
+    std::optional<std::vector<Status>> err_status;
 };
 
 class DictOptimizeParser {
@@ -91,6 +93,8 @@ private:
     GlobalDictMaps* _mutable_dict_maps = nullptr;
     ObjectPool _free_pool;
     std::unordered_map<SlotId, ExprContext*> _dict_exprs;
+    // Mutex to protect concurrent access to _mutable_dict_maps in parallel prepare
+    std::recursive_mutex _dict_maps_mutex;
 };
 
 } // namespace starrocks

@@ -30,7 +30,8 @@ public class InvertedIndexParams {
             .collect(Collectors.toSet());
 
     public enum InvertedIndexImpType {
-        CLUCENE
+        CLUCENE,
+        BUILTIN,
     }
 
     public enum CommonIndexParamKey implements ParamsKey {

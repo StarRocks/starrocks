@@ -1,0 +1,114 @@
+-- name: test_initcap
+CREATE DATABASE IF NOT EXISTS test_initcap_db;
+-- result:
+-- !result
+USE test_initcap_db;
+-- result:
+-- !result
+SELECT initcap('hello world');
+-- result:
+Hello World
+-- !result
+SELECT initcap('HELLO WORLD');
+-- result:
+Hello World
+-- !result
+SELECT initcap('hElLo wOrLd');
+-- result:
+Hello World
+-- !result
+SELECT initcap('starrocks database');
+-- result:
+Starrocks Database
+-- !result
+SELECT initcap('   hello   world   ');
+-- result:
+   Hello   World   
+-- !result
+SELECT initcap('one,two.three;four');
+-- result:
+One,Two.Three;Four
+-- !result
+SELECT initcap('alpha-beta_gamma');
+-- result:
+Alpha-Beta_Gamma
+-- !result
+SELECT initcap('1st place');
+-- result:
+1st Place
+-- !result
+SELECT initcap('word1 word2');
+-- result:
+Word1 Word2
+-- !result
+SELECT initcap('123abc456');
+-- result:
+123abc456
+-- !result
+SELECT initcap('macDonald');
+-- result:
+Macdonald
+-- !result
+SELECT initcap('a');
+-- result:
+A
+-- !result
+SELECT initcap('A');
+-- result:
+A
+-- !result
+SELECT initcap('z');
+-- result:
+Z
+-- !result
+SELECT initcap('.');
+-- result:
+.
+-- !result
+SELECT initcap('?');
+-- result:
+?
+-- !result
+SELECT initcap('');
+-- result:
+
+-- !result
+SELECT initcap(NULL);
+-- result:
+None
+-- !result
+drop table if exists t_initcap_test;
+-- result:
+-- !result
+create table t_initcap_test (
+    id int,
+    str varchar(100)
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t_initcap_test values
+(1, 'hello world'),
+(2, 'HELLO WORLD'),
+(3, '1st place'),
+(4, NULL),
+(5, ''),
+(6, '   spaces   '),
+(7, 'complex-string_here.123');
+-- result:
+-- !result
+select id, str, initcap(str) from t_initcap_test order by id;
+-- result:
+1	hello world	Hello World
+2	HELLO WORLD	Hello World
+3	1st place	1st Place
+4	None	None
+5		
+6	   spaces   	   Spaces   
+7	complex-string_here.123	Complex-String_Here.123
+-- !result
+DROP DATABASE test_initcap_db;
+-- result:
+-- !result

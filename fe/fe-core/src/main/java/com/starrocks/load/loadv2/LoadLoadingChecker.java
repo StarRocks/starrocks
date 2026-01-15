@@ -49,7 +49,7 @@ public class LoadLoadingChecker extends FrontendDaemon {
     private LoadMgr loadManager;
 
     public LoadLoadingChecker(LoadMgr loadManager) {
-        super("Load loading checker", Config.load_checker_interval_second * 1000L);
+        super("load-loading-checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }
 

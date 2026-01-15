@@ -20,7 +20,7 @@ import com.starrocks.staros.StarMgrServer;
 
 public class StarMgrCheckpointWorker extends CheckpointWorker {
     public StarMgrCheckpointWorker(Journal journal) {
-        super("star_os_checkpoint_worker", journal);
+        super("star-os-checkpoint-worker", journal);
     }
 
     @Override

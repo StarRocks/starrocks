@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -23,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.type.PrimitiveType;
 // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
 // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
 // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t

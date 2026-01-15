@@ -1,0 +1,97 @@
+-- name: test_distinct_aggregation_over_window_without_sliding_frame
+create table t0 (
+v1 int,
+v2 int,
+v3 int
+) properties("replication_num"="1");
+-- result:
+-- !result
+insert into t0 select i%13 as v1, i%17 as v2, i % 37 as v3 from table(generate_series(1,100000)) t(i);
+-- result:
+-- !result
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(cnt,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0)))) as fingerprint from (select
+v1,v2,v3,
+count(distinct v3) over(partition by v1,v2) cnt,
+sum(distinct v3) over(partition by v1,v2) sum,
+avg(distinct v3) over(partition by v1,v2) avg
+from t0) as t;
+-- result:
+183166953401109
+-- !result
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(cnt,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0)))) as fingerprint from (select
+v1,v2,v3,
+count(distinct v3) over() cnt,
+sum(distinct v3) over() sum,
+avg(distinct v3) over() avg
+from t0) as t;
+-- result:
+183166953401109
+-- !result
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(cnt,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0))+murmur_hash3_32(ifnull(cnt1,0))+murmur_hash3_32(ifnull(sum1,0))+murmur_hash3_32(ifnull(avg1,0))+murmur_hash3_32(ifnull(r,0)))) as fingerprint from (select
+v1,v2,v3,
+count(distinct v3) over(partition by v1,v2) cnt,
+sum(distinct v3) over(partition by v1,v2) sum,
+avg(distinct v3) over(partition by v1,v2) avg,
+count(v3) over(partition by v1,v2) cnt1,
+sum(v3) over(partition by v1,v2) sum1,
+avg(v3) over(partition by v1,v2) avg1,
+rank() over(partition by v1,v2) r
+from t0) as t;
+-- result:
+-35895600093467
+-- !result
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(cnt,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0))+murmur_hash3_32(ifnull(cnt1,0))+murmur_hash3_32(ifnull(sum1,0))+murmur_hash3_32(ifnull(avg1,0))+murmur_hash3_32(ifnull(r,0)))) as fingerprint from (select
+v1,v2,v3,
+count(distinct v3) over() cnt,
+sum(distinct v3) over() sum,
+avg(distinct v3) over() avg,
+count(v3) over() cnt1,
+sum(v3) over() sum1,
+avg(v3) over() avg1,
+rank() over() r
+from t0) as t;
+-- result:
+-239925849598891
+-- !result
+select  (sum(murmur_hash3_32(ifnull(v1,0))+murmur_hash3_32(ifnull(v2,0))+murmur_hash3_32(ifnull(v3,0))+murmur_hash3_32(ifnull(cnt,0))+murmur_hash3_32(ifnull(sum,0))+murmur_hash3_32(ifnull(avg,0))+murmur_hash3_32(ifnull(cnt1,0))+murmur_hash3_32(ifnull(sum1,0))+murmur_hash3_32(ifnull(avg1,0))+murmur_hash3_32(ifnull(r,0)))) as fingerprint from (select
+v1,v2,v3,
+count(distinct v3) over(partition by v1,v2) cnt,
+sum(distinct v2) over(partition by v1,v3) sum,
+avg(distinct v1) over(partition by v3,v2) avg,
+count(v1) over(partition by v2,v3) cnt1,
+sum(v2) over(partition by v3,v1) sum1,
+avg(v3) over(partition by v2,v1) avg1,
+rank() over(partition by v1,v2) r
+from t0) as t;
+-- result:
+95237749130791
+-- !result
+with cte1 as(
+select
+v1, v2,
+count(distinct v3) over(partition by v1, v2) cnt,
+sum(distinct v3) over(partition by v1, v2) sum,
+avg(distinct v3) over(partition by v1, v2) avg
+from t0
+),
+cte2 as (
+select distinct v1, v2, cnt, sum,avg
+from cte1
+),
+cte3 as (
+select sum(murmur_hash3_32(v1,v2,cnt,sum,avg)) fp
+from cte2
+),
+cte4 as (
+select v1, v2, count(distinct v3) cnt, sum(distinct v3) sum, avg(distinct v3) avg
+from t0
+group by v1,v2
+),
+cte5 as (
+select sum(murmur_hash3_32(v1,v2,cnt,sum,avg)) fp
+from cte4
+)
+select assert_true(a.fp = b.fp) from cte5 a,cte3 b;
+-- result:
+1
+-- !result

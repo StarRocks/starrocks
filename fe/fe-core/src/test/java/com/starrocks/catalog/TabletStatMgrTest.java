@@ -29,6 +29,8 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -36,7 +38,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
-import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Delegate;
@@ -79,10 +81,10 @@ public class TabletStatMgrTest {
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         // Tablet2 is LocalTablet
         TabletMeta tabletMeta2 = new TabletMeta(DB_ID, TABLE_ID, PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
@@ -94,15 +96,13 @@ public class TabletStatMgrTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(PARTITION_ID, new DataProperty(TStorageMedium.HDD));
-        partitionInfo.setIsInMemory(PARTITION_ID, false);
-        partitionInfo.setTabletType(PARTITION_ID, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(PARTITION_ID, (short) 3);
 
         // Table
         MaterializedIndex index = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(PARTITION_ID, PH_PARTITION_ID, "p1", index, distributionInfo);
         OlapTable table = new OlapTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", INDEX_ID);
+        Deencapsulation.setField(table, "baseIndexMetaId", INDEX_ID);
         table.addPartition(partition);
         table.setIndexMeta(INDEX_ID, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
@@ -138,10 +138,10 @@ public class TabletStatMgrTest {
 
         // Schema
         List<Column> columns = Lists.newArrayList();
-        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
         columns.add(k1);
-        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("k2", IntegerType.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", IntegerType.BIGINT, false, AggregateType.SUM, "0", ""));
 
         long visibleVersionTime = System.currentTimeMillis();
 
@@ -168,7 +168,7 @@ public class TabletStatMgrTest {
 
         // Lake table
         LakeTable table = new LakeTable(TABLE_ID, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        Deencapsulation.setField(table, "baseIndexId", INDEX_ID);
+        Deencapsulation.setField(table, "baseIndexMetaId", INDEX_ID);
         table.addPartition(partition);
         table.setIndexMeta(INDEX_ID, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 

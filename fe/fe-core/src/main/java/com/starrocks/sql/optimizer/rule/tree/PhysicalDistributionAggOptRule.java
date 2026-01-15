@@ -93,6 +93,10 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             if (!agg.getType().isGlobal() || agg.getGroupBys().isEmpty()) {
                 return null;
             }
+            // Cloud Native Table is not yet optimized for bucket aggregation.
+            if (scan.getTable().isCloudNativeTableOrMaterializedView()) {
+                return null;
+            }
             agg.setUsePerBucketOptmize(true);
             scan.setNeedOutputChunkByBucket(true);
 
@@ -152,7 +156,7 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
                     agg.getGroupBys().stream().map(s -> scan.getColRefToColumnMetaMap().get(s)).collect(
                             Collectors.toList());
 
-            for (Column column : ((OlapTable) scan.getTable()).getSchemaByIndexId(scan.getSelectedIndexId())) {
+            for (Column column : ((OlapTable) scan.getTable()).getSchemaByIndexMetaId(scan.getSelectedIndexMetaId())) {
                 if (!nonKeyGroupBys.contains(column)) {
                     break;
                 }

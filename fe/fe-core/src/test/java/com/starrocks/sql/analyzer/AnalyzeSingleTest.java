@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
@@ -26,6 +25,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -301,6 +301,33 @@ public class AnalyzeSingleTest {
         // Test ambiguous reference
         analyzeSuccess("select v1, v1 from t0 order by v1");
         analyzeFail("select v1 as v, v2 as v from t0 order by v");
+        analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
+    }
+
+    @Test
+    public void testOrderAll() {
+        // Simple test
+        analyzeSuccess("select v1 from t0 order by all");
+        analyzeSuccess("select v1 from t0 order by all nulls first");
+        analyzeSuccess("select v1 from t0 order by all nulls last");
+        analyzeSuccess("select v1 from t0 order by all limit 2, 10");
+
+        // Test output scope resolve
+        analyzeSuccess("select v1+1 as v from t0 order by all");
+        analyzeSuccess("select v1+2 as v,* from t0 order by all nulls first");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v1+1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v order by all");
+
+        // Test order by with aggregation
+        analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by all");
+        analyzeSuccess("select v1,v3,sum(v2) from t0 group by v1,v3 order by all nulls first");
+
+        // Test ambiguous reference
+        analyzeFail("select v1, v1 from t0 order by v1, all");
+        analyzeSuccess("select v1 as v, v2 as v from t0 order by all");
+        analyzeSuccess("select v1, v1 from t0 order by all");
         analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
     }
 
@@ -632,8 +659,12 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
 
         analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
-                "Getting syntax error from line 1, column 35 to line 1, column 45. " +
-                        "Detail message: The number of exprs are 6 exceeded the maximum limit 5");
+                "Getting syntax error from line 1, column 34 to line 1, column 46. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
+
+        analyzeFail("select * from test.t0 where v1 in ('1','2','3','4','5','6')",
+                "Getting syntax error from line 1, column 34 to line 1, column 58. " +
+                        "Detail message: The number of children in expr are 6 exceeded the maximum limit 5");
 
         analyzeFail("select [1,2,3,4,5,6]",
                 "Getting syntax error from line 1, column 8 to line 1, column 18. " +

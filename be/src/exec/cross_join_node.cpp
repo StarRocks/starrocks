@@ -88,6 +88,13 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 _build_runtime_filters.emplace_back(rf_desc);
             }
         }
+        if (tnode.nestloop_join_node.__isset.common_slot_map) {
+            for (const auto& [key, val] : tnode.nestloop_join_node.common_slot_map) {
+                ExprContext* context;
+                RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+                _common_expr_ctxs.insert({key, context});
+            }
+        }
         return Status::OK();
     }
 
@@ -153,14 +160,14 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_probe(ChunkPtr& chunk, siz
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_probe(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
@@ -170,20 +177,20 @@ void CrossJoinNode::_copy_joined_rows_with_index_base_build(ChunkPtr& chunk, siz
                                                             size_t build_index) {
     for (size_t i = 0; i < _probe_column_count; i++) {
         SlotDescriptor* slot = _col_types[i];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
         _copy_probe_rows_with_index_base_build(dest_col, src_col, probe_index, row_count);
     }
 
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
-        ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
+        auto* dest_col = chunk->get_column_raw_ptr_by_slot_id(slot->id());
         ColumnPtr& src_col = _build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
 }
 
-void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_probe_rows_with_index_base_probe(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t copy_number) {
     if (src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -207,7 +214,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_probe_rows_with_index_base_build(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t copy_number) {
     if (src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -231,7 +238,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_build(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_build_rows_with_index_base_probe(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t row_count) {
     if (!src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -253,7 +260,7 @@ void CrossJoinNode::_copy_build_rows_with_index_base_probe(ColumnPtr& dest_col, 
     }
 }
 
-void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, ColumnPtr& src_col, size_t start_row,
+void CrossJoinNode::_copy_build_rows_with_index_base_build(Column* dest_col, ColumnPtr& src_col, size_t start_row,
                                                            size_t row_count) {
     if (!src_col->is_nullable()) {
         if (src_col->is_constant()) {
@@ -608,10 +615,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     // communication with CrossJoinRight through shared_data.
-    auto left_factory =
-            std::make_shared<ProbeFactory>(context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(),
-                                           child(1)->row_desc(), _sql_join_conjuncts, std::move(_join_conjuncts),
-                                           std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
+    auto left_factory = std::make_shared<ProbeFactory>(
+            context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
+            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs),
+            std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     if (!context->is_colocate_group()) {

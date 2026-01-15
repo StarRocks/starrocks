@@ -1,0 +1,93 @@
+-- name: test_iceberg_partition_evolution_0
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop table if exists test_orders;
+-- result:
+-- !result
+CREATE TABLE  test_orders (
+  `order_id`     BIGINT,
+  `user_id`      BIGINT,
+  `amount`       DOUBLE,
+  `ts`           DATETIME
+) PARTITION BY day(ts);
+-- result:
+-- !result
+INSERT INTO test_orders VALUES
+ (1, 101, 10.0, '2024-01-01 10:00:00'),
+ (2, 102, 20.0, '2024-01-02 10:00:00'),
+ (3, 103, 30.0, '2024-02-01 10:00:00');
+-- result:
+-- !result
+-- day(ts) -> month(ts)
+ALTER TABLE test_orders drop PARTITION column day(ts);
+-- result:
+-- !result
+ALTER TABLE test_orders add PARTITION column month(ts);
+-- result:
+-- !result
+INSERT INTO test_orders VALUES
+ (4, 201, 40.0, '2024-03-01 09:00:00'),
+ (5, 202, 50.0, '2024-03-15 12:00:00'),
+ (6, 203, 60.0, '2024-04-01 08:00:00');
+-- result:
+-- !result
+select * from test_orders where order_id between 1 and 3 order by order_id;
+-- result:
+1	101	10.0	2024-01-01 10:00:00
+2	102	20.0	2024-01-02 10:00:00
+3	103	30.0	2024-02-01 10:00:00
+-- !result
+function: assert_explain_verbose_contains("select * from test_orders where order_id between 1 and 3 order by order_id;", "partitions=3/5")
+-- result:
+None
+-- !result
+select * from test_orders where order_id between 4 and 6 order by order_id;
+-- result:
+4	201	40.0	2024-03-01 09:00:00
+5	202	50.0	2024-03-15 12:00:00
+6	203	60.0	2024-04-01 08:00:00
+-- !result
+function: assert_explain_verbose_contains("select * from test_orders where order_id between 4 and 6 order by order_id;", "partitions=2/5")
+-- result:
+None
+-- !result
+SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
+-- result:
+5	150.0
+-- !result
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-01-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=4/5")
+-- result:
+None
+-- !result
+SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';
+-- result:
+2	90.0
+-- !result
+function: assert_explain_verbose_contains("SELECT COUNT(*), SUM(amount) FROM test_orders WHERE ts >= '2024-03-01 00:00:00'  AND ts <  '2024-04-01 00:00:00';", "partitions=1/5")
+-- result:
+None
+-- !result
+function: assert_query_contains("analyze table test_orders;", "OK")
+-- result:
+None
+-- !result
+drop table test_orders force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

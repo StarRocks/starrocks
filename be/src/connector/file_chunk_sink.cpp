@@ -31,17 +31,18 @@ namespace starrocks::connector {
 
 FileChunkSink::FileChunkSink(std::vector<std::string> partition_columns,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                             std::unique_ptr<LocationProvider> location_provider,
-                             std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
+                             std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
                              RuntimeState* state)
         : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
-                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state, true) {
-}
+                             std::move(partition_chunk_writer_factory), state, true) {}
 
 void FileChunkSink::callback_on_commit(const CommitResult& result) {
     _rollback_actions.push_back(std::move(result.rollback_action));
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 
@@ -49,27 +50,28 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
-    auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    std::shared_ptr<FileSystem> fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto column_evaluators = ColumnEvaluator::clone(ctx->column_evaluators);
-    auto location_provider = std::make_unique<connector::LocationProvider>(
+    auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,
             boost::to_lower_copy(ctx->format));
 
-    std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
+    std::shared_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
-        file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
+        file_writer_factory = std::make_shared<formats::ParquetFileWriterFactory>(
+                fs, ctx->compression_type, ctx->options, ctx->column_names,
+                std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(std::move(column_evaluators)),
                 std::nullopt, ctx->executor, runtime_state);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
-        file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
+        file_writer_factory = std::make_shared<formats::ORCFileWriterFactory>(
+                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
+                runtime_state);
     } else if (boost::iequals(ctx->format, formats::CSV)) {
-        file_writer_factory = std::make_unique<formats::CSVFileWriterFactory>(
-                std::move(fs), ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor, runtime_state);
+        file_writer_factory = std::make_shared<formats::CSVFileWriterFactory>(
+                fs, ctx->compression_type, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->executor,
+                runtime_state);
     } else {
-        file_writer_factory = std::make_unique<formats::UnknownFileWriterFactory>(ctx->format);
+        file_writer_factory = std::make_shared<formats::UnknownFileWriterFactory>(ctx->format);
     }
 
     std::vector<std::string> partition_columns;
@@ -78,9 +80,28 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
         partition_columns.push_back(ctx->column_names[idx]);
         partition_column_evaluators.push_back(ctx->column_evaluators[idx]->clone());
     }
+
+    std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
+    // Disable the load spill for file sink temperarily
+    if (/* config::enable_connector_sink_spill */ false) {
+        auto partition_chunk_writer_ctx =
+                std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
+                        {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
+                        fs,
+                        ctx->fragment_context,
+                        nullptr,
+                        nullptr});
+        partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    } else {
+        auto partition_chunk_writer_ctx =
+                std::make_shared<BufferPartitionChunkWriterContext>(BufferPartitionChunkWriterContext{
+                        {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()}});
+        partition_chunk_writer_factory =
+                std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    }
+
     return std::make_unique<connector::FileChunkSink>(partition_columns, std::move(partition_column_evaluators),
-                                                      std::move(location_provider), std::move(file_writer_factory),
-                                                      ctx->max_file_size, runtime_state);
+                                                      std::move(partition_chunk_writer_factory), runtime_state);
 }
 
 } // namespace starrocks::connector

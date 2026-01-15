@@ -26,6 +26,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrTableDeltaTrait;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
@@ -127,10 +130,37 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default TableVersionRange getTableVersionRange(String dbName, Table table,
-                                                   Optional<ConnectorTableVersion> startVersion,
-                                                   Optional<ConnectorTableVersion> endVersion) {
-        return TableVersionRange.empty();
+    /**
+     * Get the Time Varying Relation (TVR) version range for the table between the specified versions.
+     */
+    default TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                 Optional<ConnectorTableVersion> startVersion,
+                                                 Optional<ConnectorTableVersion> endVersion) {
+        return TvrTableSnapshot.empty();
+    }
+
+    /**
+     * @param dbName database name of the table
+     * @param table table name
+     * @return the current latest snapshot info of the input table.
+     */
+    default TvrTableSnapshot getCurrentTvrSnapshot(String dbName, Table table) {
+        return TvrTableSnapshot.empty();
+    }
+
+    /**
+     * NOTE: ensure the last snapshot is at the last of the collection.
+     *
+     * @param dbName  database name
+     * @param table table name
+     * @param fromSnapshotExclusive from snapshot which is exclusive
+     * @param toSnapshotInclusive  to snapshot which is inclusive
+     * @return ordered delta traits which are from the start snapshot to the start snapshot.
+     */
+    default List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, Table table,
+                                                          TvrTableSnapshot fromSnapshotExclusive,
+                                                          TvrTableSnapshot toSnapshotInclusive) {
+        return Lists.newArrayList();
     }
 
     default boolean tableExists(ConnectContext context, String dbName, String tblName) {
@@ -197,7 +227,7 @@ public interface ConnectorMetadata {
                                           List<PartitionKey> partitionKeys,
                                           ScalarOperator predicate,
                                           long limit,
-                                          TableVersionRange tableVersionRange) {
+                                          TvrVersionRange tableVersionRange) {
         return Statistics.builder().build();
     }
 
@@ -261,6 +291,10 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch, Object extra) {
+        throw new StarRocksConnectorException("This connector doesn't support sink");
+    }
+
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
@@ -275,6 +309,7 @@ public interface ConnectorMetadata {
     }
 
     default void truncateTable(TruncateTableStmt truncateTableStmt, ConnectContext context) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support truncate table");
     }
 
     default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
@@ -325,9 +360,17 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
 
+    default Map<String, String> getCatalogProperties() {
+        return Map.of();
+    }
+
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
+    }
+
+    default Procedure getProcedure(DatabaseTableName procedureName) {
+        throw new StarRocksConnectorException("This connector doesn't support getting procedure");
     }
 
     default void shutdown() {

@@ -1,0 +1,82 @@
+-- name: test_parquet_late_materialization @sequential
+update default_catalog.information_schema.be_configs set value = "false" where name = "parquet_late_materialization_enable";
+-- result:
+-- !result
+create external catalog parquet_late_materialization_${uuid0} PROPERTIES (
+    "type"="hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set catalog parquet_late_materialization_${uuid0};
+-- result:
+-- !result
+create database hive_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/hive_db_${uuid0}/test_parquet_late_materialization/${uuid0}"
+);
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+create table t1 (c1 string, c2 int, c3 string, c4 int, c5 string, c6 string, c7 string, c8 string, c9 string, c10 string, c11 string, c12 string);
+-- result:
+-- !result
+insert into t1 select c1,c1,c1,c1,c1,c1,c1,c1,c1,c1,c1,c1 from table(generate_series(1, 12000)) as t(c1);
+-- result:
+-- !result
+select * from t1 where c3>"4080" and c3 <"4120" and c2 >4100 and c2<4108;
+-- result:
+4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101
+4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102
+4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103
+4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104
+4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105
+4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106
+4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107
+-- !result
+select * from t1 where c3>"4080" and c3 <"4120" and c2 >4100 and c2<4108;
+-- result:
+4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101
+4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102
+4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103
+4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104
+4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105
+4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106
+4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107
+-- !result
+select * from t1 where c3>"4080" and c3 <"4120" and c2 >4100 and c2<4108;
+-- result:
+4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101
+4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102
+4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103
+4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104
+4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105
+4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106
+4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107
+-- !result
+select * from t1 where c3>"4080" and c3 <"4120" and c2 >4100 and c2<4108;
+-- result:
+4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101	4101
+4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102	4102
+4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103	4103
+4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104	4104
+4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105	4105
+4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106	4106
+4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107	4107
+-- !result
+update default_catalog.information_schema.be_configs set value = "true" where name = "parquet_late_materialization_enable";
+-- result:
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

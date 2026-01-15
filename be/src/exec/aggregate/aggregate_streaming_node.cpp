@@ -204,7 +204,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
 Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
-        _aggregator->it_hash() = _aggregator->_state_allocator.begin();
+        _aggregator->it_hash() = _aggregator->state_allocator().begin();
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
@@ -258,10 +258,6 @@ pipeline::OpFactories AggregateStreamingNode::decompose_to_pipeline(pipeline::Pi
     }
     context->add_pipeline(ops_with_sink);
 
-    if (limit() != -1) {
-        ops_with_source.emplace_back(
-                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
-    }
     ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
     return ops_with_source;
 }

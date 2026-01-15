@@ -206,6 +206,103 @@ The various joins supported by StarRocks can be classified as equi-joins and non
   LEFT JOIN t2 ON t1.id > t2.id;
   ```
 
+#### Join with the USING clause
+
+From v4.0.2 onwards, StarRocks supports specifying join conditions via the `USING` clause in addition to `ON`. It helps to simplify equi-joins with columns of the same name. For example: `SELECT * FROM t1 JOIN t2 USING (id)`.
+
+**Differences between versions:**
+
+- **Versions before v4.0.2**
+  
+  `USING` is treated as syntactic sugar and internally converted to an `ON` condition. The result would include USING columns from both the left and right tables as separate columns, and table alias qualifiers (for example, `t1.id`) were allowed when referencing USING columns.
+
+  Example:
+
+  ```SQL
+  SELECT t1.id, t2.id FROM t1 JOIN t2 USING (id);  -- Returns two separate id columns
+  ```
+
+- **v4.0.2 and later**
+  
+  StarRocks implements SQL-standard `USING` semantics. Key features include:
+  
+  - All join types are supported, including `FULL OUTER JOIN`.
+  - USING columns appear as a single coalesced column in results. For FULL OUTER JOIN, the `COALESCE(left.col, right.col)` semantics is used.
+  - Table alias qualifiers (for example, `t1.id`) are no longer supported for USING columns. You must use unqualified column names (for example, `id`).
+  - For the result of `SELECT *`, the column order is `[USING columns, left non-USING columns, right non-USING columns]`.
+
+  Example:
+
+  ```SQL
+  SELECT t1.id FROM t1 JOIN t2 USING (id);        -- ❌ Error: Column 'id' is ambiguous
+  SELECT id FROM t1 JOIN t2 USING (id);           -- ✅ Correct: Returns a single coalesced 'id' column
+  SELECT * FROM t1 FULL OUTER JOIN t2 USING (id); -- ✅ FULL OUTER JOIN is supported
+  ```
+
+These changes align StarRocks' behavior with SQL-standard compliant databases.
+
+## ASOF Join
+
+An ASOF Join is a type of temporal or range-based join commonly used in time-series analytics. It allows joining two tables based on equality of certain keys and a non-equality condition on time or sequence fields, for example, `t1.time >= t2.time`. The ASOF Join selects the most recent matching row from the right-side table for each row on the left-side table. Supported from v4.0 onwards.
+
+In real-world scenarios, analytics involving time-series data often encounter the following challenges:
+- Data collection timing misalignment (for example, different sensor sampling times)
+- Small discrepancies between event occurrence and recording times
+- Need to find the closest historical record for a given timestamp
+
+Traditional equality joins (INNER Join) often result in significant data loss when handling such data, while inequality joins can lead to performance issues. The ASOF Join was designed to address these specific challenges.
+
+ASOF Joins are commonly used in the following cases:
+
+- **Financial Market Analysis**
+  - Matching stock prices with trading volumes
+  - Aligning data from different markets
+  - Derivative pricing reference data matching
+- **IoT Data Processing**
+  - Aligning multiple sensor data streams
+  - Correlating device state changes
+  - Time-series data interpolation
+- **Log Analysis**
+  - Correlating system events with user actions
+  - Matching logs from different services
+  - Fault analysis and problem tracking
+
+Syntax:
+
+```SQL
+SELECT [select_list]
+FROM left_table [AS left_alias]
+ASOF LEFT JOIN right_table [AS right_alias]
+    ON equality_condition
+    AND asof_condition
+[WHERE ...]
+[ORDER BY ...]
+```
+
+- `ASOF LEFT JOIN`: Performs a non-equality join based on the nearest match in time or sequence. ASOF LEFT JOIN returns all rows from the left table, filling unmatched right-side rows with NULL.
+- `equality_condition`: A standard equality constraint (for example, matching ticker symbols or IDs).
+- `asof_condition`: A range condition typically written as `left.time >= right.time`, indicating to search the most recent `right.time` records that does not exceed `left.time`. 
+
+:::note
+Only DATE and DATETIME types are supported in `asof_condition`. And only one `asof_condition` is supported.
+:::
+
+Example:
+
+```SQL
+SELECT *
+FROM holdings h ASOF LEFT JOIN prices p             
+ON h.ticker = p.ticker            
+AND h.when >= p.when
+ORDER BY ALL;
+```
+
+Limitations:
+
+- Currently, only Inner Join (default) and Left Outer Join are supported.
+- Only DATE and DATETIME types are supported in `asof_condition`.
+- Only one `asof_condition` is supported.
+
 ### ORDER BY
 
 The ORDER BY clause of a SELECT statement sorts the result set by comparing the values from one or more columns.
@@ -1118,7 +1215,7 @@ GROUP BY c0;
 
 This feature is supported starting from version 4.0.  
 
-This functionality is used to exclude specified columns from query results, simplifying SQL statements when certain columns need to be ignored. It is particularly convenient when working with tables containing a large number of columns, avoiding the need to explicitly list all columns to be retained.  
+The EXCLUDE keyword is used to exclude specified columns from query results, simplifying SQL statements when certain columns can be ignored. It is particularly convenient when working with tables containing a large number of columns, avoiding the need to explicitly list all columns to be retained.
 
 #### Syntax
 
@@ -1132,18 +1229,18 @@ FROM ...
 #### Parameters
 
 - **`* EXCLUDE`**  
-  The wildcard `*` selects all columns, followed by `EXCLUDE` and a list of column names to exclude.  
+  Selects all columns with the wildcard `*`, followed by `EXCLUDE` and a list of column names to exclude.  
 - **`<table_alias>.* EXCLUDE`**  
   When a table alias exists, this allows excluding specific columns from that table (must be used with the alias).  
 - **`<column_name>`**  
-  The column name(s) to exclude. Multiple columns are separated by commas. Columns must exist in the table; otherwise, an error will be thrown.  
+  The column name(s) to exclude. Multiple columns are separated by commas. Columns must exist in the table; otherwise, an error will be returned.  
 
 #### Examples
 
 ##### Basic Usage
 
 ```sql  
--- Create test table  
+-- Create test_table.
 CREATE TABLE test_table (  
   id INT,  
   name VARCHAR(50),  
@@ -1151,18 +1248,18 @@ CREATE TABLE test_table (
   email VARCHAR(100)  
 ) DUPLICATE KEY(id);  
 
--- Exclude a single column (age)  
+-- Exclude a single column (age).
 SELECT * EXCLUDE (age) FROM test_table;  
--- Equivalent to:  
+-- Above is equivalent to:  
 SELECT id, name, email FROM test_table;  
 
--- Exclude multiple columns (name, email)  
+-- Exclude multiple columns (name, email).
 SELECT * EXCLUDE (name, email) FROM test_table;  
--- Equivalent to:  
+-- Above is equivalent to:  
 SELECT id, age FROM test_table;  
 
--- Exclude columns using a table alias  
+-- Exclude columns using a table alias.
 SELECT test_table.* EXCLUDE (email) FROM test_table;  
--- Equivalent to:  
+-- Above is equivalent to:  
 SELECT id, name, age FROM test_table;  
 ```

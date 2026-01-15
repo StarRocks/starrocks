@@ -52,7 +52,13 @@ static const std::string HTTP_TRIM_SPACE = "trim_space";
 static const std::string HTTP_ENCLOSE = "enclose";
 static const std::string HTTP_ESCAPE = "escape";
 static const std::string HTTP_MAX_FILTER_RATIO = "max_filter_ratio";
+// For stream load, the timeout for transaction from PREPARE -> COMMITTED.
+// For transaction stream load, the timeout for transaction from PREPARE -> PREPARED.
+// The transaction will be aborted automatically if the timeout is exceeded.
 static const std::string HTTP_TIMEOUT = "timeout";
+// Only valid for transaction stream load, the timeout for transaction from PREPARED -> COMMITTED.
+// The transaction will be aborted automatically if the timeout is exceeded.
+static const std::string HTTP_PREPARED_TIMEOUT = "prepared_timeout";
 static const std::string HTTP_IDLE_TRANSACTION_TIMEOUT = "idle_transaction_timeout";
 static const std::string HTTP_PARTITIONS = "partitions";
 static const std::string HTTP_TEMP_PARTITIONS = "temporary_partitions";
@@ -72,6 +78,7 @@ static const std::string HTTP_ENABLE_REPLICATED_STORAGE = "enable_replicated_sto
 static const std::string HTTP_MERGE_CONDITION = "merge_condition";
 static const std::string HTTP_LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
 static const std::string HTTP_PARTIAL_UPDATE_MODE = "partial_update_mode";
+static const std::string HTTP_TRANSACTION_TYPE = "transaction_type";
 
 static const std::string HTTP_100_CONTINUE = "100-continue";
 static const std::string HTTP_CHANNEL_ID = "channel_id";

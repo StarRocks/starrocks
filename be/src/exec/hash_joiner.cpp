@@ -24,7 +24,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
@@ -33,6 +33,7 @@
 #include "pipeline/hashjoin/hash_joiner_fwd.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+#include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -73,6 +74,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_expr_ctxs(param._probe_expr_ctxs),
           _other_join_conjunct_ctxs(param._other_join_conjunct_ctxs),
           _conjunct_ctxs(param._conjunct_ctxs),
+          _common_expr_ctxs(param._common_expr_ctxs),
           _build_row_descriptor(param._build_row_descriptor),
           _probe_row_descriptor(param._probe_row_descriptor),
           _build_node_type(param._build_node_type),
@@ -82,7 +84,11 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _probe_output_slots(param._probe_output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
           _enable_late_materialization(param._enable_late_materialization),
-          _is_skew_join(param._is_skew_join) {
+          _max_dop(param._max_dop),
+          _is_skew_join(param._is_skew_join),
+          _asof_join_condition_op(param._asof_join_condition_op),
+          _asof_join_condition_probe_expr_ctx(param._asof_join_condition_probe_expr_ctx),
+          _asof_join_condition_build_expr_ctx(param._asof_join_condition_build_expr_ctx) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -94,7 +100,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     }
 
     HashJoinBuildOptions build_options;
-    build_options.enable_partitioned_hash_join = param._enable_partition_hash_join;
+    build_options.enable_partitioned_hash_join =
+            param._enable_partition_hash_join && support_partitioned(_join_type, !_other_join_conjunct_ctxs.empty());
 
     _hash_join_builder = HashJoinBuilderFactory::create(_pool, build_options, *this);
     _hash_join_prober = _pool->add(new HashJoinProber(*this));
@@ -157,6 +164,11 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
     param->column_view_concat_rows_limit = state->column_view_concat_rows_limit();
     param->column_view_concat_bytes_limit = state->column_view_concat_bytes_limit();
     std::set<SlotId> predicate_slots;
+    for (const auto& [slot_id, ctx] : _common_expr_ctxs) {
+        std::vector<SlotId> expr_slots;
+        ctx->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;
         expr_context->root()->get_slot_ids(&expr_slots);
@@ -167,6 +179,22 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
+
+    if (_asof_join_condition_build_expr_ctx && _asof_join_condition_probe_expr_ctx) {
+        std::vector<SlotId> build_slots, probe_slots;
+        _asof_join_condition_probe_expr_ctx->root()->get_slot_ids(&probe_slots);
+        _asof_join_condition_build_expr_ctx->root()->get_slot_ids(&build_slots);
+
+        DCHECK_EQ(probe_slots.size(), 1);
+        DCHECK_EQ(build_slots.size(), 1);
+
+        LogicalType probe_type = _asof_join_condition_probe_expr_ctx->root()->type().type;
+        LogicalType build_type = _asof_join_condition_build_expr_ctx->root()->type().type;
+        SlotId build_slot = build_slots[0], probe_slot = probe_slots[0];
+        param->asof_join_condition_desc = {probe_slot, probe_type, build_slot, build_type, _asof_join_condition_op};
+        predicate_slots.insert({build_slot, probe_slot});
+    }
+
     param->predicate_slots = std::move(predicate_slots);
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
@@ -178,7 +206,8 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* sta
         }
     }
 }
-Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
+
+Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
     if (_phase != HashJoinPhase::BUILD) {
         return Status::OK();
     }
@@ -187,7 +216,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
     }
 
     update_build_rows(chunk->num_rows());
-    return _hash_join_builder->append_chunk(chunk);
+    return _hash_join_builder->append_chunk(state, chunk);
 }
 
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
@@ -274,6 +303,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::PROBE || !_hash_join_prober->probe_chunk_empty()) {
         ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state))
+        RETURN_IF_ERROR(chunk->capacity_limit_reached());
         return chunk;
     }
 
@@ -297,6 +327,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 }
 
 void HashJoiner::close(RuntimeState* state) {
+    _spiller.reset();
     _hash_join_builder->close();
 }
 
@@ -387,6 +418,9 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
     hit_all = false;
     filter.assign((*chunk)->num_rows(), 1);
 
+    CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
+
     for (auto* ctx : _other_join_conjunct_ctxs) {
         ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()))
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
@@ -422,9 +456,10 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
 void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count,
                                                  bool filter_all, bool hit_all, const Filter& filter) {
     if (filter_all) {
+        auto& columns = (*chunk)->columns();
         for (size_t i = start_column; i < start_column + column_count; i++) {
-            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
-            auto& null_data = null_column->mutable_null_column()->get_data();
+            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(columns[i]->as_mutable_raw_ptr());
+            auto& null_data = null_column->null_column_raw_ptr()->get_data();
             for (size_t j = 0; j < (*chunk)->num_rows(); j++) {
                 null_data[j] = 1;
                 null_column->set_has_null(true);
@@ -435,9 +470,10 @@ void HashJoiner::_process_row_for_other_conjunct(ChunkPtr* chunk, size_t start_c
             return;
         }
 
+        auto& columns = (*chunk)->columns();
         for (size_t i = start_column; i < start_column + column_count; i++) {
-            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>((*chunk)->columns()[i]);
-            auto& null_data = null_column->mutable_null_column()->get_data();
+            auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(columns[i]->as_mutable_raw_ptr());
+            auto& null_data = null_column->null_column_raw_ptr()->get_data();
             for (size_t j = 0; j < filter.size(); j++) {
                 if (filter[j] == 0) {
                     null_data[j] = 1;
@@ -495,6 +531,7 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::ASOF_LEFT_OUTER_JOIN:
         return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count,
                                                        hash_table);
     case TJoinOp::RIGHT_OUTER_JOIN:
@@ -515,6 +552,8 @@ Status HashJoiner::_process_other_conjunct(ChunkPtr* chunk, JoinHashTable& hash_
 
 Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     SCOPED_TIMER(probe_metrics().where_conjunct_evaluate_timer);
+    CommonExprEvalScopeGuard guard(*chunk, _common_expr_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
     return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
@@ -522,7 +561,13 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
     size_t ht_row_count = get_ht_row_count();
 
-    if (ht_row_count > config::max_pushdown_conditions_per_column) {
+    // Use FE session variable if set, otherwise fall back to BE config
+    size_t max_conditions = config::max_pushdown_conditions_per_column;
+    if (state->query_options().__isset.max_pushdown_conditions_per_column) {
+        max_conditions = state->query_options().max_pushdown_conditions_per_column;
+    }
+
+    if (ht_row_count > max_conditions) {
         return Status::OK();
     }
 

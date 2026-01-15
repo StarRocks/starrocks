@@ -17,10 +17,11 @@
 #include <cstdlib>
 #include <random>
 
+#include "cache/block_cache/block_cache.h"
 #include "cache/cache_options.h"
-#include "cache/lrucache_engine.h"
-#include "cache/object_cache/page_cache.h"
-#include "cache/starcache_engine.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -63,6 +64,14 @@ public:
     static void random_insert_multi_threads(benchmark::State* state, StoragePageCache* cache, size_t count,
                                             size_t page_size);
 
+    void prepare_data(BlockCache* cache, int64_t count);
+    void prepare_sequence_data(BlockCache* cache, int64_t count);
+    void random_query(benchmark::State& state, BlockCache* cache, size_t ratio, int64_t iter_count, int64_t count);
+    static void random_query_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t ratio, size_t count,
+                                                 size_t page_size);
+    static void random_insert_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t count,
+                                                  size_t page_size);
+
     void insert_to_cache(benchmark::State& state, CacheType cache_type, int64_t count);
     void random_query(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t iter_count, int64_t count);
     void random_query_multi_threads_test(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t count);
@@ -73,6 +82,7 @@ private:
     size_t _capacity = 100L * 1024 * 1024 * 1024;
     size_t _page_size = 1024;
 
+    std::shared_ptr<BlockCache> _block_cache;
     std::shared_ptr<LRUCacheEngine> _lru_cache;
     std::shared_ptr<StarCacheEngine> _star_cache;
     std::shared_ptr<StoragePageCache> _page_cache;
@@ -105,14 +115,13 @@ std::string ObjectCacheBench::get_cache_type_str(CacheType type) {
 }
 
 void ObjectCacheBench::init_cache(CacheType cache_type) {
-    CacheOptions opt;
+    DiskCacheOptions opt;
     opt.mem_space_size = _capacity;
     opt.block_size = config::datacache_block_size;
     opt.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
     opt.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
     opt.enable_checksum = config::datacache_checksum_enable;
     opt.enable_direct_io = config::datacache_direct_io_enable;
-    opt.enable_tiered_cache = config::datacache_tiered_cache_enable;
     opt.skip_read_factor = config::datacache_skip_read_factor;
     opt.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
     opt.enable_datacache_persistence = false;
@@ -121,24 +130,26 @@ void ObjectCacheBench::init_cache(CacheType cache_type) {
 
     if (cache_type == CacheType::LRU) {
         _lru_cache = std::make_shared<LRUCacheEngine>();
-        Status st = _lru_cache->init(opt);
+        MemCacheOptions mem_opt;
+        mem_opt.capacity = _capacity;
+        Status st = _lru_cache->init(mem_opt);
         if (!st.ok()) {
-            LOG(FATAL) << "init star cache failed: " << st;
+            LOG(FATAL) << "init lru cache failed: " << st;
         }
         LOG(INFO) << "init lru cache success";
         _page_cache = std::make_shared<StoragePageCache>();
         _page_cache->init(_lru_cache.get());
     } else {
-        opt.engine = "starcache";
-
         _star_cache = std::make_shared<StarCacheEngine>();
         Status st = _star_cache->init(opt);
         if (!st.ok()) {
             LOG(FATAL) << "init star cache failed: " << st;
         }
-        _page_cache = std::make_shared<StoragePageCache>();
-        _page_cache->init(_star_cache.get());
-        LOG(INFO) << "init star cache succ";
+        BlockCacheOptions block_opt;
+        block_opt.block_size = _page_size;
+        _block_cache = std::make_shared<BlockCache>();
+        _block_cache->init(block_opt, _star_cache, nullptr);
+        LOG(INFO) << "init star cache (block cache) success";
     }
 }
 
@@ -148,7 +159,7 @@ void ObjectCacheBench::prepare_sequence_data(StoragePageCache* cache, int64_t co
         auto* ptr = new std::vector<uint8_t>(_page_size);
         (*ptr)[0] = 1;
         PageCacheHandle handle;
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
@@ -164,7 +175,7 @@ void ObjectCacheBench::prepare_data(StoragePageCache* cache, int64_t count) {
         auto* ptr = new std::vector<uint8_t>(_page_size);
         (*ptr)[0] = 1;
         PageCacheHandle handle;
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
@@ -213,7 +224,7 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Stor
         auto* ptr = new std::vector<uint8_t>(page_size);
         (*ptr)[0] = 1;
         PageCacheHandle handle;
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         Status st = cache->insert(key, ptr, options, &handle);
         if (!st.ok()) {
             if (!st.is_already_exist()) {
@@ -221,7 +232,79 @@ void ObjectCacheBench::random_insert_multi_threads(benchmark::State* state, Stor
             }
         }
     }
+    state->PauseTiming();
+}
 
+void ObjectCacheBench::prepare_sequence_data(BlockCache* cache, int64_t count) {
+    std::vector<uint8_t> buf(_page_size, 1);
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(rand() % count);
+        Status st = cache->write_buffer(key, 0, _page_size, buf.data());
+        if (!st.ok()) {
+            if (!st.is_already_exist()) {
+                LOG(FATAL) << "write_buffer failed: " << st;
+            }
+        }
+    }
+}
+
+void ObjectCacheBench::prepare_data(BlockCache* cache, int64_t count) {
+    std::vector<uint8_t> buf(_page_size, 1);
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(rand());
+        Status st = cache->write_buffer(key, 0, _page_size, buf.data());
+        if (!st.ok()) {
+            if (!st.is_already_exist()) {
+                LOG(FATAL) << "write_buffer failed: " << st;
+            }
+        }
+    }
+}
+
+void ObjectCacheBench::random_query(benchmark::State& state, BlockCache* cache, size_t ratio, int64_t iter_count,
+                                    int64_t count) {
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(1, 1073741824);
+    std::vector<char> buf(_page_size);
+
+    LOG(ERROR) << "random query start";
+    for (size_t i = 0; i < iter_count; i++) {
+        std::string key = "str:" + std::to_string(dis(gen) % (count * ratio));
+        (void)cache->read_buffer(key, 0, _page_size, buf.data());
+    }
+    LOG(ERROR) << "random query end";
+}
+
+void ObjectCacheBench::random_query_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t ratio,
+                                                        size_t count, size_t page_size) {
+    state->ResumeTiming();
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(1, 1073741824);
+    std::vector<char> buf(page_size);
+
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(dis(gen) % (count * ratio));
+        (void)cache->read_buffer(key, 0, page_size, buf.data());
+    }
+    state->PauseTiming();
+}
+
+void ObjectCacheBench::random_insert_multi_threads_block(benchmark::State* state, BlockCache* cache, size_t count,
+                                                         size_t page_size) {
+    state->ResumeTiming();
+    thread_local std::mt19937 gen(std::random_device{}());
+    thread_local std::uniform_int_distribution<> dis(1, 1073741824);
+    std::vector<uint8_t> buf(page_size, 1);
+
+    for (size_t i = 0; i < count; i++) {
+        std::string key = "str:" + std::to_string(dis(gen));
+        Status st = cache->write_buffer(key, 0, page_size, buf.data());
+        if (!st.ok()) {
+            if (!st.is_already_exist()) {
+                LOG(FATAL) << "write_buffer failed: " << st;
+            }
+        }
+    }
     state->PauseTiming();
 }
 
@@ -231,11 +314,20 @@ void ObjectCacheBench::insert_to_cache(benchmark::State& state, CacheType cache_
     init_cache(cache_type);
 
     state.ResumeTiming();
-    prepare_data(_page_cache.get(), count);
+    if (cache_type == CacheType::LRU) {
+        prepare_data(_page_cache.get(), count);
+    } else {
+        prepare_data(_block_cache.get(), count);
+    }
     state.PauseTiming();
 
     int64_t new_mem_usage = CurrentThread::mem_tracker()->consumption();
-    int64_t calc_usage = _page_cache->memory_usage() / 1024 / 1024;
+    int64_t calc_usage = 0;
+    if (cache_type == CacheType::LRU) {
+        calc_usage = _page_cache->memory_usage() / 1024 / 1024;
+    } else {
+        calc_usage = _star_cache->mem_usage() / 1024 / 1024;
+    }
     int64_t real_usage = (new_mem_usage - old_mem_usage) / 1024 / 1024;
 
     LOG(INFO) << "insert: type=" << type_str << ", metric=" << calc_usage << "M, lru=" << real_usage << "M";
@@ -244,10 +336,15 @@ void ObjectCacheBench::insert_to_cache(benchmark::State& state, CacheType cache_
 void ObjectCacheBench::random_query(benchmark::State& state, CacheType cache_type, size_t ratio, int64_t iter_count,
                                     int64_t count) {
     init_cache(cache_type);
-    prepare_sequence_data(_page_cache.get(), count);
-
-    state.ResumeTiming();
-    random_query(state, _page_cache.get(), ratio, iter_count, count);
+    if (cache_type == CacheType::LRU) {
+        prepare_sequence_data(_page_cache.get(), count);
+        state.ResumeTiming();
+        random_query(state, _page_cache.get(), ratio, iter_count, count);
+    } else {
+        prepare_sequence_data(_block_cache.get(), count);
+        state.ResumeTiming();
+        random_query(state, _block_cache.get(), ratio, iter_count, count);
+    }
     state.PauseTiming();
 }
 
@@ -255,18 +352,32 @@ void ObjectCacheBench::random_query_multi_threads_test(benchmark::State& state, 
                                                        int64_t count) {
     state.PauseTiming();
     init_cache(cache_type);
-    prepare_sequence_data(_page_cache.get(), count);
 
     LOG(INFO) << "start random query test";
     std::vector<std::thread> threads;
-    for (size_t i = 0; i < 10; i++) {
-        threads.emplace_back(random_query_multi_threads, &state, _page_cache.get(), ratio, count);
+    if (cache_type == CacheType::LRU) {
+        prepare_sequence_data(_page_cache.get(), count);
+        for (size_t i = 0; i < 10; i++) {
+            threads.emplace_back(random_query_multi_threads, &state, _page_cache.get(), ratio, count);
+        }
+    } else {
+        prepare_sequence_data(_block_cache.get(), count);
+        for (size_t i = 0; i < 10; i++) {
+            threads.emplace_back(random_query_multi_threads_block, &state, _block_cache.get(), ratio, count,
+                                 _page_size);
+        }
     }
+
     for (auto& t : threads) {
         t.join();
     }
-    LOG(INFO) << "end random query test: lookup=" << _page_cache->get_lookup_count()
-              << ", hit=" << _page_cache->get_hit_count();
+
+    if (cache_type == CacheType::LRU) {
+        LOG(INFO) << "end random query test: lookup=" << _page_cache->get_lookup_count()
+                  << ", hit=" << _page_cache->get_hit_count();
+    } else {
+        LOG(INFO) << "end random query test (BlockCache stats not directly available in this bench)";
+    }
 
     threads.clear();
     state.ResumeTiming();
@@ -279,7 +390,11 @@ void ObjectCacheBench::insert_cache_multi_threads_test(benchmark::State& state, 
 
     std::vector<std::thread> threads;
     for (size_t i = 0; i < 5; i++) {
-        threads.emplace_back(random_insert_multi_threads, &state, _page_cache.get(), count, _page_size);
+        if (cache_type == CacheType::LRU) {
+            threads.emplace_back(random_insert_multi_threads, &state, _page_cache.get(), count, _page_size);
+        } else {
+            threads.emplace_back(random_insert_multi_threads_block, &state, _block_cache.get(), count, _page_size);
+        }
     }
     for (auto& t : threads) {
         t.join();

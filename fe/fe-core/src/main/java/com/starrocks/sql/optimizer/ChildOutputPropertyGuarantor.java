@@ -17,11 +17,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.HintNode;
-import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -102,39 +100,17 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                    HashDistributionSpec rightLocalDistributionSpec,
                                    List<DistributionCol> leftShuffleColumns,
                                    List<DistributionCol> rightShuffleColumns) {
+        return leftLocalDistributionSpec.canColocate(rightLocalDistributionSpec) &&
+                checkDistributionMatchShuffle(leftLocalDistributionSpec, rightLocalDistributionSpec,
+                        leftShuffleColumns, rightShuffleColumns);
+    }
+
+    private boolean checkDistributionMatchShuffle(HashDistributionSpec leftLocalDistributionSpec,
+                                                  HashDistributionSpec rightLocalDistributionSpec,
+                                                  List<DistributionCol> leftShuffleColumns,
+                                                  List<DistributionCol> rightShuffleColumns) {
         HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
         HashDistributionDesc rightLocalDistributionDesc = rightLocalDistributionSpec.getHashDistributionDesc();
-
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        EquivalentDescriptor leftDesc = leftLocalDistributionSpec.getEquivDesc();
-        EquivalentDescriptor rightDesc = rightLocalDistributionSpec.getEquivDesc();
-        long leftTableId = leftDesc.getTableId();
-        long rightTableId = rightDesc.getTableId();
-
-        // join self
-        if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
-            if (!leftDesc.isSinglePartition() || !rightDesc.isSinglePartition() ||
-                    !leftDesc.getPartitionIds().equals(rightDesc.getPartitionIds())) {
-                return false;
-            }
-        } else {
-            // colocate group
-            if (!colocateIndex.isSameGroup(leftTableId, rightTableId)) {
-                return false;
-            }
-
-            ColocateTableIndex.GroupId leftGroupId = colocateIndex.getGroup(leftTableId);
-            ColocateTableIndex.GroupId rightGroupId = colocateIndex.getGroup(rightTableId);
-            if (colocateIndex.isGroupUnstable(leftGroupId) || colocateIndex.isGroupUnstable(rightGroupId)) {
-                return false;
-            }
-            checkState(leftLocalDistributionSpec.getHashDistributionDesc().getDistributionCols().size()
-                            == rightLocalDistributionSpec.getHashDistributionDesc().getDistributionCols().size(),
-                    "Failed to enforce the output property of children in the join operator. " +
-                            "left child distribution info %s, right child distribution info %s",
-                    leftLocalDistributionSpec, rightLocalDistributionSpec);
-        }
-
         for (int i = 0; i < leftLocalDistributionDesc.getDistributionCols().size(); ++i) {
             DistributionCol leftCol = leftLocalDistributionDesc.getDistributionCols().get(i);
             DistributionCol rightCol = rightLocalDistributionDesc.getDistributionCols().get(i);

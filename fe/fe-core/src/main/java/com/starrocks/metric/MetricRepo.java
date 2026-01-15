@@ -36,6 +36,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SlidingTimeWindowArrayReservoir;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -48,6 +49,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.clone.BalanceStat;
+import com.starrocks.clone.TabletSchedCtx;
+import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
@@ -74,12 +78,14 @@ import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionMetricRegistry;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -93,7 +99,6 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.management.Attribute;
 import javax.management.AttributeList;
@@ -168,6 +173,34 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
                             "the number of failed statistics collect jobs"));
 
+    /**
+     * Histogram tracking the lock held time (in milliseconds) when slow locks are detected.
+     * Updated when lock hold time exceeds the slow_lock_threshold_ms configuration.
+     * NOTE:
+     * This metric may not accurately reflect the lock held time under high contention, because the metric will
+     * be updated once the wait time exceeds the threshold, but the held time may continue to increase until the
+     * owner completes its operation and releases the lock.
+     * The good thing is that this metric can still be updated even deadlock happens.
+     * Sample Prometheus alert rules in runbook:
+     * - alert: SlowLockHeldTimeHigh
+     *   expr: starrocks_fe_slow_lock_held_time_ms{quantile="0.99"} > 300000
+     *   for: 5m
+     */
+    public static final Histogram HISTO_SLOW_LOCK_HELD_TIME_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_held_time_ms"),
+                    SlideWindowHistogramCreator.INSTANCE);
+    /**
+     * Histogram tracking the lock wait time (in milliseconds) when slow locks are detected.
+     * Uses a 1-minute sliding time window reservoir to track recent slow lock behavior.
+     * Updated when lock wait time exceeds the slow_lock_threshold_ms configuration.
+     * NOTE:
+     * This metric can accurately track the lock wait time. However, this metric can't be updated
+     * when deadlock happens, hence it can't be used to detect deadlock situations.
+     */
+    public static final Histogram HISTO_SLOW_LOCK_WAIT_TIME_MS =
+            METRIC_REGISTER.histogram(MetricRegistry.name("slow_lock_wait_time_ms"),
+                    SlideWindowHistogramCreator.INSTANCE);
+
     public static LongCounterMetric COUNTER_SQL_BLOCK_HIT_COUNT;
 
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
@@ -180,10 +213,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_EDIT_LOG_SIZE_BYTES;
     public static LongCounterMetric COUNTER_IMAGE_WRITE;
     public static LongCounterMetric COUNTER_IMAGE_PUSH;
-    public static LongCounterMetric COUNTER_TXN_REJECT;
-    public static LongCounterMetric COUNTER_TXN_BEGIN;
-    public static LongCounterMetric COUNTER_TXN_FAILED;
-    public static LongCounterMetric COUNTER_TXN_SUCCESS;
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_REJECT;
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_BEGIN;
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_FAILED;
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_SUCCESS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -223,15 +256,21 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P95;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
-    public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
 
-    public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
+    public static List<LeaderAwareGaugeMetric<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
     public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
     public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
+
+    public static Histogram HISTO_CACHE_MISS_RATIO;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_AVERAGE;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P50;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P90;
+    public static GaugeMetricImpl<Float> GAUGE_CACHE_MISS_RATIO_P99;
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
@@ -239,6 +278,18 @@ public final class MetricRepo {
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
+
+    /**
+     * A creator for SlideWindowHistogram, which uses SlidingTimeWindowArrayReservoir as reservoir.
+     */
+    private static class SlideWindowHistogramCreator implements MetricRegistry.MetricSupplier<Histogram> {
+        private static final SlideWindowHistogramCreator INSTANCE = new SlideWindowHistogramCreator();
+
+        @Override
+        public Histogram newMetric() {
+            return new Histogram(new SlidingTimeWindowArrayReservoir(1, TimeUnit.MINUTES));
+        }
+    }
 
     public static synchronized void init() {
         if (hasInit) {
@@ -324,16 +375,6 @@ public final class MetricRepo {
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
-        // scheduled tablet num
-        Metric<Long> scheduledTabletNum = new LeaderAwareGaugeMetricLong(
-                "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
-            @Override
-            public Long getValueLeader() {
-                return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
-            }
-        };
-        STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
-
         // routine load jobs
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
             Metric<Long> gauge = new LeaderAwareGaugeMetricLong("routine_load_jobs",
@@ -395,9 +436,26 @@ public final class MetricRepo {
         GAUGE_QUERY_TIMEOUT_RATE.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_TIMEOUT_RATE);
 
-        GAUGE_MAX_TABLET_COMPACTION_SCORE = new GaugeMetricImpl<>("max_tablet_compaction_score",
-                MetricUnit.NOUNIT, "max tablet compaction score of all backends");
-        GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(0L);
+        // max tablet compaction score of all backends
+        GAUGE_MAX_TABLET_COMPACTION_SCORE = new LeaderAwareGaugeMetricLong("max_tablet_compaction_score", MetricUnit.NOUNIT,
+                "max tablet compaction score of all backends") {
+            @Override
+            public Long getValueLeader() {
+                if (RunMode.isSharedDataMode()) {
+                    return (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getMaxCompactionScore();
+                } else {
+                    long maxCompactionScore = 0;
+                    List<Metric> compactionScoreMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_MAX_COMPACTION_SCORE);
+                    for (Metric metric : compactionScoreMetrics) {
+                        long compactionScore = ((LeaderAwareGaugeMetric<Long>) metric).getValue();
+                        if (compactionScore > maxCompactionScore) {
+                            maxCompactionScore = compactionScore;
+                        }
+                    }
+                    return maxCompactionScore;
+                }
+            }
+        };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_MAX_TABLET_COMPACTION_SCORE);
 
         GAUGE_STACKED_JOURNAL_NUM = new GaugeMetricImpl<>(
@@ -451,6 +509,32 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.addLabel(new MetricLabel("type", "999_quantile"));
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
+
+        HISTO_CACHE_MISS_RATIO = METRIC_REGISTER.histogram(MetricRegistry.name("query", "cache_miss_ratio", "permille"));
+
+        GAUGE_CACHE_MISS_RATIO_AVERAGE =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "average of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_AVERAGE.addLabel(new MetricLabel("type", "average"));
+        GAUGE_CACHE_MISS_RATIO_AVERAGE.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_AVERAGE);
+
+        GAUGE_CACHE_MISS_RATIO_P50 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p50 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P50.addLabel(new MetricLabel("type", "50_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P50.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P50);
+
+        GAUGE_CACHE_MISS_RATIO_P90 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p90 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P90.addLabel(new MetricLabel("type", "90_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P90.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P90);
+
+        GAUGE_CACHE_MISS_RATIO_P99 =
+                new GaugeMetricImpl<>("cache_miss_ratio", MetricUnit.NOUNIT, "p99 of cache miss ratio");
+        GAUGE_CACHE_MISS_RATIO_P99.addLabel(new MetricLabel("type", "99_quantile"));
+        GAUGE_CACHE_MISS_RATIO_P99.setValue(0.0f);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_CACHE_MISS_RATIO_P99);
 
         GAUGE_SAFE_MODE = new GaugeMetricImpl<>("safe_mode", MetricUnit.NOUNIT, "safe mode flag");
         GAUGE_SAFE_MODE.addLabel(new MetricLabel("type", "safe_mode"));
@@ -554,19 +638,21 @@ public final class MetricRepo {
                                                            "total analysis error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_ANALYSIS_ERR);
 
-        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS, 
+        COUNTER_QUERY_INTERNAL_ERR = new LongCounterMetric("query_internal_err", MetricUnit.REQUESTS,
                                                            "total internal error query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_INTERNAL_ERR);
 
         COUNTER_TXN_REJECT =
-                new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
+                new LeaderAwareCounterMetricLong("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_REJECT);
-        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of beginning transactions");
+        COUNTER_TXN_BEGIN =
+                new LeaderAwareCounterMetricLong("txn_begin", MetricUnit.REQUESTS, "counter of beginning transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_BEGIN);
         COUNTER_TXN_SUCCESS =
-                new LongCounterMetric("txn_success", MetricUnit.REQUESTS, "counter of success transactions");
+                new LeaderAwareCounterMetricLong("txn_success", MetricUnit.REQUESTS, "counter of success transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_SUCCESS);
-        COUNTER_TXN_FAILED = new LongCounterMetric("txn_failed", MetricUnit.REQUESTS, "counter of failed transactions");
+        COUNTER_TXN_FAILED =
+                new LeaderAwareCounterMetricLong("txn_failed", MetricUnit.REQUESTS, "counter of failed transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_FAILED);
 
         COUNTER_ROUTINE_LOAD_ROWS =
@@ -631,6 +717,9 @@ public final class MetricRepo {
         // init system metrics
         initSystemMetrics();
 
+        // init clone metrics
+        initCloneMetrics();
+
         updateMetrics();
         hasInit = true;
 
@@ -683,6 +772,81 @@ public final class MetricRepo {
         };
         tpcOutSegs.addLabel(new MetricLabel("name", "tcp_out_segs"));
         STARROCKS_METRIC_REGISTER.addMetric(tpcOutSegs);
+    }
+
+    private static void initCloneMetrics() {
+        // gauge metrics
+        // scheduled tablet num
+        Metric<Long> scheduledTabletNum = new LeaderAwareGaugeMetricLong(
+                "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
+            @Override
+            public Long getValueLeader() {
+                return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
+
+        // scheduled pending tablet num
+        for (TabletSchedCtx.Type schedType : TabletSchedCtx.Type.values()) {
+            Metric<Long> scheduledPendingTabletNum = new LeaderAwareGaugeMetricLong(
+                    "scheduled_pending_tablet_num", MetricUnit.NOUNIT, "number of pending tablets being scheduled") {
+                @Override
+                public Long getValueLeader() {
+                    return GlobalStateMgr.getCurrentState().getTabletScheduler().getPendingNum(schedType);
+                }
+            };
+            scheduledPendingTabletNum.addLabel(new MetricLabel("type", schedType.name()));
+            STARROCKS_METRIC_REGISTER.addMetric(scheduledPendingTabletNum);
+        }
+
+        // scheduled running tablet num
+        for (TabletSchedCtx.Type schedType : TabletSchedCtx.Type.values()) {
+            Metric<Long> scheduledRunningTabletNum = new LeaderAwareGaugeMetricLong(
+                    "scheduled_running_tablet_num", MetricUnit.NOUNIT, "number of running tablets being scheduled") {
+                @Override
+                public Long getValueLeader() {
+                    return GlobalStateMgr.getCurrentState().getTabletScheduler().getRunningNum(schedType);
+                }
+            };
+            scheduledRunningTabletNum.addLabel(new MetricLabel("type", schedType.name()));
+            STARROCKS_METRIC_REGISTER.addMetric(scheduledRunningTabletNum);
+        }
+
+        // counter metrics
+        // clone task total
+        TabletSchedulerStat stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
+        LeaderAwareCounterMetric cloneTaskTotal = new LeaderAwareCounterMetricExternalLong(
+                "clone_task_total", MetricUnit.REQUESTS, "total clone task", stat.counterCloneTask);
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskTotal);
+
+        // clone task success
+        LeaderAwareCounterMetric cloneTaskSuccess = new LeaderAwareCounterMetricExternalLong(
+                "clone_task_success", MetricUnit.REQUESTS, "success clone task", stat.counterCloneTaskSucceeded);
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskSuccess);
+
+        // clone task copy bytes
+        LeaderAwareCounterMetric cloneTaskInterNodeCopyBytes = new LeaderAwareCounterMetricExternalLong(
+                "clone_task_copy_bytes", MetricUnit.BYTES, "clone task copy bytes", stat.counterCloneTaskInterNodeCopyBytes);
+        cloneTaskInterNodeCopyBytes.addLabel(new MetricLabel("type", BalanceStat.INTER_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskInterNodeCopyBytes);
+
+        LeaderAwareCounterMetric cloneTaskIntraNodeCopyBytes = new LeaderAwareCounterMetricExternalLong(
+                "clone_task_copy_bytes", MetricUnit.BYTES, "clone task copy bytes", stat.counterCloneTaskIntraNodeCopyBytes);
+        cloneTaskIntraNodeCopyBytes.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyBytes);
+
+        // clone task copy duration
+        LeaderAwareCounterMetric cloneTaskInterNodeCopyDurationMs = new LeaderAwareCounterMetricExternalLong(
+                "clone_task_copy_duration_ms", MetricUnit.MILLISECONDS, "clone task copy duration ms",
+                stat.counterCloneTaskInterNodeCopyDurationMs);
+        cloneTaskInterNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTER_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskInterNodeCopyDurationMs);
+
+        LeaderAwareCounterMetric cloneTaskIntraNodeCopyDurationMs = new LeaderAwareCounterMetricExternalLong(
+                "clone_task_copy_duration_ms", MetricUnit.MILLISECONDS, "clone task copy duration ms",
+                stat.counterCloneTaskIntraNodeCopyDurationMs);
+        cloneTaskIntraNodeCopyDurationMs.addLabel(new MetricLabel("type", BalanceStat.INTRA_NODE));
+        STARROCKS_METRIC_REGISTER.addMetric(cloneTaskIntraNodeCopyDurationMs);
     }
 
     // to generate the metrics related to tablets of each backend
@@ -787,7 +951,7 @@ public final class MetricRepo {
                 Collectors.groupingBy(RoutineLoadJob::getWarehouseId)
         );
 
-        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+        List<LeaderAwareGaugeMetric<Long>> routineLoadLags = new ArrayList<>();
 
         // get all partitions offset in a batch api
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -854,11 +1018,15 @@ public final class MetricRepo {
                     maxLag = Math.max(latestOffsets.get(j) - progress, maxLag);
                 }
                 if (maxLag >= Config.min_routine_load_lag_for_metrics) {
-                    GaugeMetricImpl<Long> metric =
-                            new GaugeMetricImpl<>("routine_load_max_lag_of_partition", MetricUnit.NOUNIT,
-                                    "routine load kafka lag");
+                    long finalMaxLag = maxLag;
+                    LeaderAwareGaugeMetric<Long> metric = new LeaderAwareGaugeMetricLong("routine_load_max_lag_of_partition",
+                            MetricUnit.NOUNIT, "routine load kafka lag") {
+                        @Override
+                        public Long getValueLeader() {
+                            return finalMaxLag;
+                        }
+                    };
                     metric.addLabel(new MetricLabel("job_name", kJob.getName()));
-                    metric.setValue(maxLag);
                     routineLoadLags.add(metric);
                 }
             }
@@ -881,8 +1049,13 @@ public final class MetricRepo {
         visitor.visitJvm(jvmStats);
 
         // starrocks metrics
-        for (Metric metric : STARROCKS_METRIC_REGISTER.getMetrics()) {
-            visitor.visit(metric);
+        List<Metric> metrics = STARROCKS_METRIC_REGISTER.getMetrics();
+        // group metrics by name so that the same metric name will be visited together
+        Map<String, List<Metric>> groupedMetrics = metrics.stream().collect(Collectors.groupingBy(Metric::getName));
+        for (Map.Entry<String, List<Metric>> entry : groupedMetrics.entrySet()) {
+            for (Metric metric : entry.getValue()) {
+                visitor.visit(metric);
+            }
         }
 
         // database metrics
@@ -910,6 +1083,9 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+        // ADD: Collect Kafka routine load lag time metrics
+        RoutineLoadLagTimeMetricMgr.getInstance().collectRoutineLoadLagTimeMetrics(visitor);
+
         if (Config.memory_tracker_enable) {
             collectMemoryUsageMetrics(visitor);
         }
@@ -924,8 +1100,8 @@ public final class MetricRepo {
         HttpMetricRegistry.getInstance().visit(visitor);
 
 
-        //collect connections for per user
-        collectUserConnMetrics(visitor);
+        // collect connection metrics
+        collectConnectionMetrics(visitor, requestParams.isCollectUserConnMetrics());
 
         // collect runnning txns of per db
         collectDbRunningTxnMetrics(visitor);
@@ -938,6 +1114,8 @@ public final class MetricRepo {
 
         // collect merge commit metrics
         MergeCommitMetricRegistry.getInstance().visit(visitor);
+
+        TransactionMetricRegistry.getInstance().report(visitor);
 
         // node info
         visitor.getNodeInfo();
@@ -1000,13 +1178,17 @@ public final class MetricRepo {
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames(new ConnectContext());
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
+        GaugeMetricImpl<Long> totalSize = new GaugeMetricImpl<>(
+                "total_data_size_bytes", MetricUnit.BYTES, "total size of all databases approximately in bytes");
         int dbNum = 0;
+        long dbDataSizeTotal = 0;
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (null == db) {
                 continue;
             }
             dbNum++;
+            dbDataSizeTotal += db.usedDataQuotaBytes.get();
             GaugeMetricImpl<Integer> tableNum = new GaugeMetricImpl<>(
                     "table_num", MetricUnit.OPERATIONS, "count of table");
             tableNum.setValue(db.getTableNumber());
@@ -1024,7 +1206,9 @@ public final class MetricRepo {
             visitor.visit(dbSizeBytesTotal);
         }
         databaseNum.setValue(dbNum);
+        totalSize.setValue(dbDataSizeTotal);
         visitor.visit(databaseNum);
+        visitor.visit(totalSize);
     }
 
     private static void collectBrpcMetrics(MetricVisitor visitor) {
@@ -1071,7 +1255,7 @@ public final class MetricRepo {
     }
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
-        for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
+        for (Metric<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
             visitor.visit(metric);
         }
     }
@@ -1085,22 +1269,24 @@ public final class MetricRepo {
         }
     }
 
-    // collect connections of per user
-    private static void collectUserConnMetrics(MetricVisitor visitor) {
-
-        Map<String, AtomicInteger> userConnectionMap = ExecuteEnv.getInstance().getScheduler().getUserConnectionMap();
-
-        userConnectionMap.forEach((username, connValue) -> {
-            GaugeMetricImpl<Integer> metricConnect =
-                    new GaugeMetricImpl<>("connection_total", MetricUnit.CONNECTIONS,
-                        "total connection");
-            metricConnect.addLabel(new MetricLabel("user", username));
-            metricConnect.setValue(connValue.get());
-            visitor.visit(metricConnect);
-        });
+    private static void collectConnectionMetrics(MetricVisitor visitor, boolean collectUserConnMetrics) {
+        if (collectUserConnMetrics) {
+            ExecuteEnv.getInstance().getScheduler().getUserConnectionMap().forEach((user, count) -> {
+                GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                        MetricUnit.CONNECTIONS, "total connection");
+                metric.addLabel(new MetricLabel("user", user));
+                metric.setValue(count.get());
+                visitor.visit(metric);
+            });
+        } else {
+            GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>("connection_total",
+                    MetricUnit.CONNECTIONS, "total connections");
+            metric.setValue(ExecuteEnv.getInstance().getScheduler().getConnectionNum());
+            visitor.visit(metric);
+        }
     }
 
-    // collect runnning txns of per db
+    // collect running txns of per db
     private static void collectDbRunningTxnMetrics(MetricVisitor visitor) {
         Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getAllDatabaseTransactionMgrs();
@@ -1109,10 +1295,14 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            GaugeMetricImpl<Integer> txnNum = new GaugeMetricImpl<>("txn_running", MetricUnit.NOUNIT,
-                     "number of running transactions");
+            LeaderAwareGaugeMetric<Integer> txnNum = new LeaderAwareGaugeMetricInteger("txn_running", MetricUnit.NOUNIT,
+                    "number of running transactions") {
+                @Override
+                public Integer getValueLeader() {
+                    return mgr.getRunningTxnNums();
+                }
+            };
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
-            txnNum.setValue(mgr.getRunningTxnNums());
             visitor.visit(txnNum);
         }
     }

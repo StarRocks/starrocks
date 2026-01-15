@@ -38,7 +38,9 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
   - Textfile 文件支持 NO_COMPRESSION 压缩格式。
 
-  您可以通过系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+  您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+
+  在写入 Hive 表时，如果该表的属性中包含了 `compression_codec`，StarRocks 优先使用该算法对写入数据进行压缩。否则，使用系统变量 `connector_sink_compression_codec` 中设置的压缩算法代替。
 
 ## 准备工作
 
@@ -486,6 +488,7 @@ StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 | enable_cache_list_names                | 否       | 指定 StarRocks 是否缓存 Hive Partition Names。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| remote_file_cache_memory_ratio         | 否       | 远程文件缓存的最大内存使用率。默认值：`0.1`，即 10%。自 v3.5.6 起支持。 |
 
 ### 示例
 
@@ -1029,7 +1032,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
 | file_format       | Managed Table 的文件格式。当前支持 Parquet、ORC、Textfile 文件格式，其中 ORC 和 Textfile 文件格式自 3.3 版本起支持。取值范围：`parquet`、`orc`、`textfile`。默认值：`parquet`。 |
-| compression_codec | Managed Table 的压缩格式。该属性自 3.2.3 版本起弃用，此后写入 Hive 表时的压缩算法统一由会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 控制。 |
+| compression_codec | Managed Table 的压缩格式。                                   |
 
 ### 示例
 
@@ -1076,7 +1079,7 @@ PARTITION BY (par_col1[, par_col2...])
 :::note
 
 - 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
-- 您可以通过会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来指定写入 Hive 表时的压缩算法。
+- 您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md/#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
 
 :::
 
@@ -1161,6 +1164,56 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## 清空 Hive 表
+
+您可以使用 [TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) 语句快速删除 Hive 托管表中的所有数据。该操作支持：
+
+- 清空非分区表中的所有数据
+- 清空分区表中的所有分区
+- 清空分区表中的指定分区
+
+### 语法
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### 参数
+
+- `table_name`: 要清空数据的 Hive 表名称。清空表数据前，需要[切换至目标 Hive Catalog 和 Database](#切换-hive-catalog-和数据库)。
+- `partition_name = partition_value`: 分区列的名称和值，用于识别要清空的分区。
+
+### 示例
+
+以下示例的前提是已切换至目标 Hive Catalog 和 Database。
+
+1. 清空非分区表：
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. 清空分区表所有分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. 清空单分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. 清空多分区表的指定分区：
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
    ```
 
 ## 删除 Hive 表

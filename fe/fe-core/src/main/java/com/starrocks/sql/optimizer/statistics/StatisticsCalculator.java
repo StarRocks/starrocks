@@ -22,10 +22,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.JoinOperator;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -36,17 +32,22 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.JoinOperator;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -90,6 +91,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -130,6 +132,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
@@ -151,6 +154,7 @@ import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.type.DateType;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -162,12 +166,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -184,6 +186,37 @@ import static java.lang.Math.pow;
  */
 public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContext> {
     private static final Logger LOG = LogManager.getLogger(StatisticsCalculator.class);
+
+    private static final ThreadLocal<Integer> SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
+    public static final class SkipPredicateColumnsCollectionScope implements AutoCloseable {
+        private SkipPredicateColumnsCollectionScope() {
+        }
+
+        @Override
+        public void close() {
+            int v = SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() - 1;
+            if (v <= 0) {
+                SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.remove();
+            } else {
+                SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.set(v);
+            }
+        }
+    }
+
+    public static SkipPredicateColumnsCollectionScope skipPredicateColumnsCollectionScope() {
+        SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.set(SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() + 1);
+        return new SkipPredicateColumnsCollectionScope();
+    }
+
+    private static boolean shouldSkipPredicateColumnsCollection() {
+        return SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() > 0;
+    }
+
+    public static boolean isInSkipPredicateColumnsCollectionScope() {
+        return shouldSkipPredicateColumnsCollection();
+    }
 
     private final ExpressionContext expressionContext;
     private final ColumnRefFactory columnRefFactory;
@@ -466,7 +499,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         if (partitionStatistics.size() == 1) {
-            Statistics partitionStats =  partitionStatistics.values().iterator().next();
+            Statistics partitionStats = partitionStatistics.values().iterator().next();
             columnMap.keySet().forEach(column ->
                     statistics.addColumnStatistic(column, partitionStats.getColumnStatistic(column)));
         }
@@ -535,13 +568,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
-            TableVersionRange version;
+            TvrVersionRange version;
             IcebergMORParams icebergMORParams;
             if (node.isLogical()) {
-                version = ((LogicalIcebergScanOperator) node).getTableVersionRange();
+                version = ((LogicalIcebergScanOperator) node).getTvrVersionRange();
                 icebergMORParams = ((LogicalIcebergScanOperator) node).getMORParam();
             } else {
-                version = ((PhysicalIcebergScanOperator) node).getTableVersionRange();
+                version = ((PhysicalIcebergScanOperator) node).getTvrVersionRange();
                 icebergMORParams = ((PhysicalIcebergScanOperator) node).getMORParams();
             }
 
@@ -581,7 +614,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TableVersionRange.empty());
+                    node.getPredicate(), node.getLimit(), TvrTableSnapshot.empty());
             context.setStatistics(stats);
 
             if (node.isLogical()) {
@@ -643,21 +676,24 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalPaimonScan(LogicalPaimonScanOperator node, ExpressionContext context) {
-        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computePaimonScanNode(node, context, node.getTable(),
+                node.getColRefToColumnMetaMap(), node.getTvrVersionRange());
     }
 
     @Override
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
-        return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computePaimonScanNode(node, context, node.getTable(),
+                node.getColRefToColumnMetaMap(), TvrTableSnapshot.empty());
     }
 
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,
-                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
+                                       TvrVersionRange tvrVersionRange) {
         if (context.getStatistics() == null) {
             String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), node.getLimit(), TableVersionRange.empty());
+                    node.getPredicate(), node.getLimit(), tvrVersionRange);
             context.setStatistics(stats);
             if (node.isLogical()) {
                 boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
@@ -706,7 +742,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String catalogName = ((KuduTable) table).getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, columnRefOperatorColumnMap, null,
-                    node.getPredicate(), -1, TableVersionRange.empty());
+                    node.getPredicate(), -1, TvrTableSnapshot.empty());
             context.setStatistics(stats);
         }
 
@@ -772,7 +808,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                    int outputRowCount) {
+                                                    long outputRowCount) {
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         builder.setOutputRowCount(outputRowCount);
 
@@ -783,25 +819,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_MYSQL_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
@@ -830,7 +866,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalMetaScan(LogicalMetaScanOperator node, ExpressionContext context) {
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
                 node.getColRefToColumnMetaMap(), optimizerContext);
-        builder.setOutputRowCount(node.getAggColumnIdToNames().size());
+        builder.setOutputRowCount(node.getAggColumnIdToColumns().size());
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -840,7 +876,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
         Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
                 node.getColRefToColumnMetaMap(), optimizerContext);
-        builder.setOutputRowCount(node.getAggColumnIdToNames().size());
+        builder.setOutputRowCount(node.getAggColumnIdToColumns().size());
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
@@ -849,13 +885,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalJDBCScan(LogicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     @Override
     public Void visitPhysicalJDBCScan(PhysicalJDBCScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_JDBC_OUTPUT_ROWS);
+                Config.default_statistics_output_row_count);
     }
 
     /**
@@ -907,7 +943,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (minLiteral instanceof DateLiteral) {
                 DateLiteral minDateLiteral = (DateLiteral) minLiteral;
                 DateLiteral maxDateLiteral;
-                maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(Type.DATE, true) :
+                maxDateLiteral = maxLiteral instanceof MaxLiteral ? new DateLiteral(DateType.DATE, true) :
                         (DateLiteral) maxLiteral;
                 min = Utils.getLongFromDateTime(minDateLiteral.toLocalDateTime());
                 max = Utils.getLongFromDateTime(maxDateLiteral.toLocalDateTime());
@@ -982,6 +1018,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             allBuilder.addColumnStatistic(requiredColumnRefOperator, outputStatistic);
         }
 
+        builder.addMultiColumnStatistics(inputStatistics.getMultiColumnCombinedStats());
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
     }
@@ -1144,10 +1181,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics rightStatistics = context.getChildStatistics(1);
         // construct cross join statistics
         Statistics.Builder crossBuilder = Statistics.builder();
-        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0),
+        addColumnStatisticsFromOtherStatisticByRefs(crossBuilder, leftStatistics, context.getChildOutputColumns(0),
                 preserveJoinHistogram);
-        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1),
+        addColumnStatisticsFromOtherStatisticByRefs(crossBuilder, rightStatistics, context.getChildOutputColumns(1),
                 preserveJoinHistogram);
+        // Add multi-column statistics from both sides (they are independent after cross join)
+        crossBuilder.addMultiColumnStatistics(leftStatistics.getMultiColumnCombinedStats());
+        crossBuilder.addMultiColumnStatistics(rightStatistics.getMultiColumnCombinedStats());
+
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
         double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
@@ -1156,8 +1197,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
                 rightStatistics.getUsedColumns(), allJoinPredicate);
 
-        PredicateColumnsMgr.getInstance().recordJoinPredicate(eqOnPredicates, optimizerContext.getColumnRefFactory(),
-                context.getOptExpression());
+        if (!shouldSkipPredicateColumnsCollection()) {
+            PredicateColumnsMgr.getInstance().recordJoinPredicate(eqOnPredicates, optimizerContext.getColumnRefFactory(),
+                    context.getOptExpression());
+        }
 
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
@@ -1204,7 +1247,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             innerRowCount = innerJoinStats.getOutputRowCount();
         } else {
-            innerJoinStats = Statistics.buildFrom(crossJoinStats).setOutputRowCount(innerRowCount).build();
+            innerJoinStats = crossJoinStats.withOutputRowCount(innerRowCount);
         }
 
         Statistics.Builder joinStatsBuilder;
@@ -1213,6 +1256,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                 break;
             case INNER_JOIN:
+            case ASOF_INNER_JOIN:
                 if (eqOnPredicates.isEmpty()) {
                     joinStatsBuilder = Statistics.buildFrom(crossJoinStats);
                     break;
@@ -1222,6 +1266,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             case LEFT_OUTER_JOIN:
                 joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
                 joinStatsBuilder.setOutputRowCount(max(innerRowCount, leftRowCount));
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
+                break;
+            case ASOF_LEFT_OUTER_JOIN:
+                joinStatsBuilder = Statistics.buildFrom(innerJoinStats);
+                joinStatsBuilder.setOutputRowCount(leftRowCount);
                 computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, joinStatsBuilder);
                 break;
             case LEFT_SEMI_JOIN:
@@ -1267,21 +1316,44 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         allJoinPredicate.removeAll(eqOnPredicates);
         Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
         if (joinType.isLeftOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), leftRowCount))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(estimateStatistics.getOutputRowCount(), leftRowCount));
         } else if (joinType.isRightOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), rightRowCount))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(estimateStatistics.getOutputRowCount(), rightRowCount));
         } else if (joinType.isFullOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()));
+        } else if (joinType.isAsofInnerJoin()) {
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1));
+        } else if (joinType.isAsofLeftOuterJoin()) {
+            estimateStatistics = estimateStatistics.withOutputRowCount(Math.max(1, leftRowCount));
         }
 
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
+    }
+
+    private void addColumnStatisticsFromOtherStatisticByRefs(Statistics.Builder builder, Statistics statistics,
+                                                             ColumnRefSet hintRefs, boolean withHist) {
+        if (statistics == null || hintRefs == null) {
+            return;
+        }
+        Map<ColumnRefOperator, ColumnStatistic> src = statistics.getColumnStatistics();
+        for (int id : hintRefs.getColumnIds()) {
+            ColumnRefOperator col = columnRefFactory.getColumnRef(id);
+            ColumnStatistic v = src.get(col);
+            if (v == null) {
+                continue;
+            }
+            if (withHist) {
+                builder.addColumnStatistic(col, v);
+            } else {
+                builder.addColumnStatistic(col, v.getHistogram() == null ? v :
+                        ColumnStatistic.buildFrom(v).setHistogram(null).build());
+            }
+        }
     }
 
     private Statistics buildStatisticsForUKFKJoin(JoinOperator joinType, UKFKConstraints constraints,
@@ -1369,13 +1441,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     estimateColumnStatistic = StatisticsEstimateUtils.unionColumnStatistic(
                             estimateColumnStatistics.get(outputIdx), estimateRowCount,
                             childStatistics.getColumnStatistic(childOutputColumn), childStatistics.getOutputRowCount());
+                    // set new estimate column statistic
+                    estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
+                    estimateRowCount += childStatistics.getOutputRowCount();
                 } else {
+                    // For Iceberg equality delete rewrite, use only the first child's statistics
+                    // The first child represents the whole table's cardinality (with predicates applied)
+                    // The division between branches is runtime-dependent and doesn't affect overall estimates
                     estimateColumnStatistic = estimateColumnStatistics.get(outputIdx);
+                    estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
+                    // Don't add child row counts - keep the first child's row count as the union result
                 }
-
-                // set new estimate column statistic
-                estimateColumnStatistics.set(outputIdx, estimateColumnStatistic);
-                estimateRowCount += childStatistics.getOutputRowCount();
             }
             builder.addColumnStatistic(outputColumnRef.get(outputIdx), estimateColumnStatistics.get(outputIdx));
             builder.setOutputRowCount(estimateRowCount);
@@ -1456,6 +1532,26 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalRawValues(LogicalRawValuesOperator node, ExpressionContext context) {
+        return computeRawValuesNode(context, node.getColumnRefSet(), node.getConstantCount());
+    }
+
+    @Override
+    public Void visitPhysicalRawValues(PhysicalRawValuesOperator node, ExpressionContext context) {
+        return computeRawValuesNode(context, node.getColumnRefSet(), node.getConstantCount());
+    }
+
+    private Void computeRawValuesNode(ExpressionContext context, List<ColumnRefOperator> columnRefs, int constantCount) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRef : columnRefs) {
+            builder.addColumnStatistic(columnRef, ColumnStatistic.unknown());
+        }
+        builder.setOutputRowCount(constantCount);
+        context.setStatistics(builder.build());
+        return visitOperator(context.getOp(), context);
     }
 
     @Override
@@ -1567,8 +1663,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (ConnectContext.get().getSessionVariable().isUseCorrelatedJoinEstimate()) {
             return estimatedInnerJoinStatisticsAssumeCorrelated(statistics, eqOnPredicates);
         } else {
-            return Statistics.buildFrom(statistics)
-                    .setOutputRowCount(estimateInnerRowCountMiddleGround(statistics, eqOnPredicates)).build();
+            return statistics.withOutputRowCount(estimateInnerRowCountMiddleGround(statistics, eqOnPredicates));
         }
     }
 
@@ -1579,19 +1674,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // for other (auxiliary) predicates.
     private Statistics estimatedInnerJoinStatisticsAssumeCorrelated(Statistics statistics,
                                                                     List<BinaryPredicateOperator> eqOnPredicates) {
-        Queue<BinaryPredicateOperator> remainingEqOnPredicates = new LinkedList<>(eqOnPredicates);
-        BinaryPredicateOperator drivingPredicate = remainingEqOnPredicates.poll();
-        Statistics result = statistics;
-        for (int i = 0; i < eqOnPredicates.size(); ++i) {
-            Statistics estimateStatistics =
-                    estimateByEqOnPredicates(statistics, drivingPredicate, remainingEqOnPredicates);
-            if (estimateStatistics.getOutputRowCount() < result.getOutputRowCount()) {
-                result = estimateStatistics;
-            }
-            remainingEqOnPredicates.add(drivingPredicate);
-            drivingPredicate = remainingEqOnPredicates.poll();
+        int predicateNum = eqOnPredicates.size();
+        if (predicateNum == 1) {
+            Statistics estimateStatistics = estimateStatistics(ImmutableList.of(eqOnPredicates.get(0)), statistics);
+            return estimateStatistics.getOutputRowCount() < statistics.getOutputRowCount() ? estimateStatistics : statistics;
         }
-        return result;
+
+        double auxiliaryCoeffPow = pow(StatisticsEstimateCoefficient.UNKNOWN_AUXILIARY_FILTER_COEFFICIENT, predicateNum - 1);
+
+        double bestRowCount = statistics.getOutputRowCount();
+        Statistics bestDrivingStats = null;
+        for (BinaryPredicateOperator drivingPredicate : eqOnPredicates) {
+            Statistics drivingStats = estimateStatistics(ImmutableList.of(drivingPredicate), statistics);
+            double candidateRowCount = drivingStats.getOutputRowCount() * auxiliaryCoeffPow;
+            if (candidateRowCount < bestRowCount) {
+                bestRowCount = candidateRowCount;
+                bestDrivingStats = drivingStats;
+            }
+        }
+
+        if (bestDrivingStats == null) {
+            return statistics;
+        }
+        return bestDrivingStats.withOutputRowCount(bestRowCount);
     }
 
     private double getPredicateSelectivity(PredicateOperator predicateOperator, Statistics statistics) {
@@ -1672,21 +1777,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
     }
 
-    public Statistics estimateByEqOnPredicates(Statistics statistics, BinaryPredicateOperator divingPredicate,
-                                               Collection<BinaryPredicateOperator> remainingEqOnPredicate) {
-        Statistics estimateStatistics = estimateStatistics(ImmutableList.of(divingPredicate), statistics);
-        for (BinaryPredicateOperator ignored : remainingEqOnPredicate) {
-            estimateStatistics = estimateByAuxiliaryPredicates(estimateStatistics);
-        }
-        return estimateStatistics;
-    }
-
-    public Statistics estimateByAuxiliaryPredicates(Statistics estimateStatistics) {
-        double rowCount = estimateStatistics.getOutputRowCount() *
-                StatisticsEstimateCoefficient.UNKNOWN_AUXILIARY_FILTER_COEFFICIENT;
-        return Statistics.buildFrom(estimateStatistics).setOutputRowCount(rowCount).build();
-    }
-
     @Override
     public Void visitLogicalTopN(LogicalTopNOperator node, ExpressionContext context) {
         return computeTopNNode(context, node);
@@ -1702,12 +1792,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         long partitionLimit = 0;
         List<ColumnRefOperator> partitions = Collections.emptyList();
+        boolean isTopNPushDownAgg = false;
         if (node instanceof LogicalTopNOperator) {
             partitionLimit = ((LogicalTopNOperator) node).getPartitionLimit();
             partitions = ((LogicalTopNOperator) node).getPartitionByColumns();
+            isTopNPushDownAgg = ((LogicalTopNOperator) node).isTopNPushDownAgg();
         } else if (node instanceof PhysicalTopNOperator) {
             partitionLimit = ((PhysicalTopNOperator) node).getPartitionLimit();
             partitions = ((PhysicalTopNOperator) node).getPartitionByColumns();
+            isTopNPushDownAgg = ((PhysicalTopNOperator) node).isTopNPushDownAgg();
         }
 
         Statistics.Builder builder = Statistics.builder();
@@ -1730,7 +1823,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                     inputStatistics.getOutputRowCount())));
         }
 
-        if (partitionLimit > 0 && !partitions.isEmpty()
+        if (isTopNPushDownAgg) {
+            // prefer to use the partition limit as output row count
+            builder.setOutputRowCount(1);
+        } else if (partitionLimit > 0 && !partitions.isEmpty()
                 && partitions.stream().map(inputStatistics::getColumnStatistic).noneMatch(ColumnStatistic::isUnknown)) {
             double partitionNums = partitions.stream()
                     .map(inputStatistics::getColumnStatistic)
@@ -1827,7 +1923,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         // avoid sample statistics filter all data, save one rows least
         if (statistics.getOutputRowCount() > 0 && result.getOutputRowCount() == 0) {
-            return Statistics.buildFrom(result).setOutputRowCount(1).build();
+            return result.withOutputRowCount(1);
         }
         return result;
     }

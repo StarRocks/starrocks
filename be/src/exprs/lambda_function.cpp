@@ -60,10 +60,6 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         }
     });
 
-    if (expr->is_dictmapping_expr()) {
-        return Status::OK();
-    }
-
     // for the lambda function, we only consider extracting the outer common expression from the lambda expr,
     // not its arguments
     int child_num = expr->is_lambda_function() ? 1 : expr->get_num_children();
@@ -72,9 +68,16 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
     for (int i = 0; i < child_num; i++) {
         auto child = expr->get_child(i);
 
+        // ignore dictmapping expr & its children, because it will be rewritten by DictOptimizeParser::rewrite_expr function.
+        if (child->is_dictmapping_expr()) {
+            continue;
+        }
+
         RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, child, ctx));
+
         // if child is a slotref or a lambda function or a literal, we can't replace it.
-        if (child->is_slotref() || child->is_lambda_function() || child->is_literal() || child->is_constant()) {
+        if (child->is_slotref() || child->is_lambda_function() || child->is_literal() || child->is_constant() ||
+            child->is_dictmapping_expr()) {
             continue;
         }
 
@@ -106,6 +109,27 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
 Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprContext* expr_ctx, ExtractContext* ctx) {
     RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, this, ctx));
     return Status::OK();
+}
+
+bool LambdaFunction::can_evaluate_constant() const {
+    DCHECK(_is_prepared);
+    return _captured_slot_ids.empty() && _is_lambda_expr_independent && !_is_nondeterministic;
+}
+
+StatusOr<ColumnPtr> LambdaFunction::evaluate_constant(ExprContext* context) {
+    DCHECK(_is_prepared);
+    DCHECK(can_evaluate_constant());
+    if (_common_sub_expr.empty()) {
+        return this->get_child(0)->evaluate_checked(context, nullptr);
+    }
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto i = 0; i < _common_sub_expr.size(); ++i) {
+        ASSIGN_OR_RETURN(auto sub_col, context->evaluate(_common_sub_expr[i], nullptr));
+        chunk->append_column(std::move(sub_col), _common_sub_expr_ids[i]);
+    }
+    // try to evaluate lambda expr to constant column
+    return this->get_child(0)->evaluate_checked(context, nullptr);
 }
 
 Status LambdaFunction::collect_lambda_argument_ids() {
@@ -215,7 +239,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* chunk) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
         ASSIGN_OR_RETURN(auto sub_col, context->evaluate(_common_sub_expr[i], chunk));
-        chunk->append_column(sub_col, _common_sub_expr_ids[i]);
+        chunk->append_column(std::move(sub_col), _common_sub_expr_ids[i]);
     }
     return get_child(0)->evaluate_checked(context, chunk);
 }
@@ -242,4 +266,16 @@ std::string LambdaFunction::debug_string() const {
     return out.str();
 }
 
+Status LambdaFunction::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    // call callback for children
+    for (auto& child : _children) {
+        RETURN_IF_ERROR(callback(child));
+    }
+    // If the lambda function contains a dictmapping expr, we don't need to extract the outer common expression.
+    // because the dictmapping expr needs to be rewritten by DictOptimizeParser::rewrite_expr/DictMappingExpr::open function.
+    for (auto& child : _common_sub_expr) {
+        RETURN_IF_ERROR(callback(child));
+    }
+    return Status::OK();
+}
 } // namespace starrocks

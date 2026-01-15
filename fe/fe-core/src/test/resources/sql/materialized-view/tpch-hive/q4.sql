@@ -23,9 +23,9 @@ order by
 [result]
 TOP-N (order by [[6: o_orderpriority ASC NULLS FIRST]])
     TOP-N (order by [[6: o_orderpriority ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{113: count=sum(113: count)}] group by [[81: o_orderpriority]] having [null]
-            EXCHANGE SHUFFLE[81]
-                AGGREGATE ([LOCAL] aggregate [{113: count=sum(82: order_count)}] group by [[81: o_orderpriority]] having [null]
-                    SCAN (mv[query4_mv] columns[80: o_orderdate, 81: o_orderpriority, 82: order_count] predicate[80: o_orderdate >= 1994-09-01 AND 80: o_orderdate < 1994-12-01])
+        AGGREGATE ([GLOBAL] aggregate [{107: count=sum(107: count)}] group by [[29: o_orderpriority]] having [null]
+            EXCHANGE SHUFFLE[29]
+                AGGREGATE ([LOCAL] aggregate [{107: count=sum(30: order_count)}] group by [[29: o_orderpriority]] having [null]
+                    SCAN (mv[query4_mv] columns[28: o_orderdate, 29: o_orderpriority, 30: order_count] predicate[28: o_orderdate >= 1994-09-01 AND 28: o_orderdate < 1994-12-01])
 [end]
 

@@ -1,0 +1,229 @@
+-- name: test_mv_rewrite_bugs1
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `sales_data` (
+  `customer_id` bigint(20) NOT NULL,
+  `order_id` bigint(20) NOT NULL,
+  `line_item` smallint(6) NOT NULL,
+  `order_date` datetime NOT NULL,
+  `original_customer_id` varchar(1048576) NOT NULL,
+  `original_order_id` varchar(1048576) NOT NULL,
+  `month_order` datetime NULL,
+  `week_order` datetime NULL,
+  `quarter_order` datetime NULL,
+  `year_order` datetime NULL,
+  `store_name` varchar(1048576) NULL,
+  `retailer_brand` varchar(1048576) NULL,
+  `sales_channel` varchar(1048576) NULL,
+  `parent_company` varchar(1048576) NULL,
+  `store_postal_code` varchar(1048576) NULL,
+  `state` varchar(1048576) NULL,
+  `region` varchar(18) NULL,
+  `age` decimal(16, 0) NULL,
+  `generation` varchar(17) NULL,
+  `gender` varchar(11) NULL,
+  `is_adult` boolean NULL,
+  `is_hispanic` boolean NULL,
+  `recent_login` boolean NULL,
+  `customer_postal_code` varchar(1048576) NULL,
+  `loyalty_id` varchar(1048576) NULL,
+  `product_code` varchar(1048576) NULL,
+  `brand` varchar(1048576) NULL,
+  `manufacturer` varchar(1048576) NULL,
+  `category_l1` varchar(1048576) NULL,
+  `category_l2` varchar(1048576) NULL,
+  `category_l3` varchar(1048576) NULL,
+  `category_l4` varchar(1048576) NULL,
+  `product_description` varchar(1048576) NULL,
+  `private_label` boolean NULL,
+  `digital_receipt` boolean NULL,
+  `quantity` decimal(10, 2) NULL,
+  `sales_amount` decimal(10, 2) NULL,
+  `loyalty_program_a` boolean NULL,
+  `loyalty_program_b` boolean NULL,
+  `loyalty_program_c` boolean NULL,
+  `category_partition_key` varchar(1048576) NULL,
+  `load_timestamp` datetime NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`customer_id`, `order_id`, `line_item`, `order_date`)
+PARTITION BY date_trunc('day', order_date)
+DISTRIBUTED BY HASH(`customer_id`) BUCKETS 12 
+ORDER BY(`brand`, `category_l1`)
+PROPERTIES (
+"colocate_with" = "sales_data_orders",
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"replication_num" = "1"
+);
+
+INSERT INTO `sales_data` (
+  `customer_id`, `order_id`, `line_item`, `order_date`,
+  `original_customer_id`, `original_order_id`,
+  `month_order`, `week_order`, `quarter_order`, `year_order`,
+  `store_name`, `retailer_brand`, `sales_channel`, `parent_company`,
+  `store_postal_code`, `state`, `region`, `age`, `generation`, `gender`,
+  `is_adult`, `is_hispanic`, `recent_login`,
+  `customer_postal_code`, `loyalty_id`, `product_code`, `brand`, `manufacturer`,
+  `category_l1`, `category_l2`, `category_l3`, `category_l4`, `product_description`,
+  `private_label`, `digital_receipt`, `quantity`, `sales_amount`,
+  `loyalty_program_a`, `loyalty_program_b`, `loyalty_program_c`,
+  `category_partition_key`, `load_timestamp`
+) VALUES
+(10001, 500001, 1, '2025-09-01 10:15:00',
+ '10001', '500001',
+ '2025-09-01', '2025-09-01', '2025-07-01', '2025-01-01',
+ 'SuperMart Downtown', 'SuperMart', 'Offline', 'SuperMart Inc.',
+ '10001', 'NY', 'Northeast', 32, 'Millennial', 'F',
+ TRUE, FALSE, TRUE,
+ '10001', 'LOYAL123', '1234567890123', 'Store Brand', 'SuperMart',
+ 'Dairy', 'Milk', 'Whole Milk', NULL, '1 Gallon Whole Milk',
+ FALSE, TRUE, 1.00, 3.49,
+ FALSE, TRUE, FALSE,
+ 'Dairy', '2025-09-01 12:00:00'),
+(10002, 500002, 1, '2025-09-02 15:30:00',
+ '10002', '500002',
+ '2025-09-01', '2025-09-01', '2025-07-01', '2025-01-01',
+ 'MegaStore', 'MegaStore', 'Offline', 'MegaStore Corp.',
+ '90001', 'CA', 'West', 25, 'Gen Z', 'M',
+ TRUE, TRUE, FALSE,
+ '90001', 'LOYAL456', '9876543210987', 'CrunchyChips', 'SnackCorp',
+ 'Snacks', 'Chips', NULL, NULL, 'Classic Potato Chips',
+ FALSE, FALSE, 2.00, 5.98,
+ FALSE, TRUE, TRUE,
+ 'Snacks', '2025-09-02 16:00:00'),
+(10003, 500003, 1, '2025-09-03 09:45:00',
+ '10003', '500003',
+ '2025-09-01', '2025-09-01', '2025-07-01', '2025-01-01',
+ 'BulkMart', 'BulkMart', 'Offline', 'BulkMart Wholesale',
+ '77001', 'TX', 'South', 29, 'Millennial', 'F',
+ TRUE, FALSE, TRUE,
+ '77001', 'LOYAL789', '5555555555555', 'BabyComfort', 'BabyCorp',
+ 'Baby', 'Diapers', NULL, NULL, 'Comfort Diapers Size 2',
+ FALSE, TRUE, 1.00, 39.99,
+ TRUE, FALSE, FALSE,
+ 'Baby', '2025-09-03 10:00:00');
+
+CREATE MATERIALIZED VIEW `sales_data_mv2`
+PARTITION BY (date_trunc('day', `order_date`))
+DISTRIBUTED BY HASH(`customer_id`) BUCKETS 12 
+ORDER BY (category_l1, category_l2, category_l3)
+REFRESH MANUAL
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1",
+"partition_refresh_number" = "60",
+"bloom_filter_columns" = "category_l1, category_l2, category_l3, product_description, manufacturer, retailer_brand, store_name",
+"colocate_with" = "sales_data_orders"
+)
+AS SELECT 
+  `sales_data`.`customer_id`, 
+  `sales_data`.`order_id`, 
+  `sales_data`.`line_item`, 
+  `sales_data`.`order_date`, 
+  `sales_data`.`month_order`, 
+  `sales_data`.`week_order`, 
+  `sales_data`.`quarter_order`, 
+  `sales_data`.`year_order`, 
+  `sales_data`.`store_name`, 
+  `sales_data`.`retailer_brand`, 
+  `sales_data`.`sales_channel`, 
+  `sales_data`.`parent_company`, 
+  `sales_data`.`store_postal_code`, 
+  `sales_data`.`state`, 
+  `sales_data`.`region`, 
+  `sales_data`.`age`, 
+  `sales_data`.`generation`, 
+  `sales_data`.`gender`, 
+  `sales_data`.`is_adult`, 
+  `sales_data`.`is_hispanic`, 
+  `sales_data`.`recent_login`, 
+  `sales_data`.`customer_postal_code`, 
+  `sales_data`.`loyalty_id`, 
+  `sales_data`.`product_code`, 
+  `sales_data`.`brand`, 
+  `sales_data`.`manufacturer`, 
+  `sales_data`.`category_l1`, 
+  `sales_data`.`category_l2`, 
+  `sales_data`.`category_l3`, 
+  `sales_data`.`category_l4`, 
+  `sales_data`.`product_description`, 
+  `sales_data`.`private_label`, 
+  `sales_data`.`digital_receipt`, 
+  `sales_data`.`quantity`, 
+  `sales_data`.`sales_amount`, 
+  `sales_data`.`loyalty_program_a`, 
+  `sales_data`.`loyalty_program_b`, 
+  `sales_data`.`loyalty_program_c`, 
+  `sales_data`.`category_partition_key`, 
+  `sales_data`.`load_timestamp`
+FROM `sales_data`;
+
+CREATE MATERIALIZED VIEW `sales_data_mv1` 
+PARTITION BY (date_trunc('day', `order_date`))
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12 
+ORDER BY (brand, category_l1)
+REFRESH MANUAL
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1",
+"partition_refresh_number" = "60",
+"bloom_filter_columns" = "brand, category_l1, category_l2, category_l3, product_description, manufacturer, retailer_brand, store_name",
+"colocate_with" = "sales_data_mv1_orders_mv1"
+)
+AS SELECT 
+  `sales_data`.`customer_id`, 
+  `sales_data`.`order_id`, 
+  `sales_data`.`line_item`, 
+  `sales_data`.`order_date`, 
+  `sales_data`.`month_order`, 
+  `sales_data`.`week_order`, 
+  `sales_data`.`quarter_order`, 
+  `sales_data`.`year_order`, 
+  `sales_data`.`store_name`, 
+  `sales_data`.`retailer_brand`, 
+  `sales_data`.`sales_channel`, 
+  `sales_data`.`parent_company`, 
+  `sales_data`.`store_postal_code`, 
+  `sales_data`.`state`, 
+  `sales_data`.`region`, 
+  `sales_data`.`age`, 
+  `sales_data`.`generation`, 
+  `sales_data`.`gender`, 
+  `sales_data`.`is_adult`, 
+  `sales_data`.`is_hispanic`, 
+  `sales_data`.`recent_login`, 
+  `sales_data`.`customer_postal_code`, 
+  `sales_data`.`loyalty_id`, 
+  `sales_data`.`product_code`, 
+  `sales_data`.`brand`, 
+  `sales_data`.`manufacturer`, 
+  `sales_data`.`category_l1`, 
+  `sales_data`.`category_l2`, 
+  `sales_data`.`category_l3`, 
+  `sales_data`.`category_l4`, 
+  `sales_data`.`product_description`, 
+  `sales_data`.`private_label`, 
+  `sales_data`.`digital_receipt`, 
+  `sales_data`.`quantity`, 
+  `sales_data`.`sales_amount`, 
+  `sales_data`.`loyalty_program_a`, 
+  `sales_data`.`loyalty_program_b`, 
+  `sales_data`.`loyalty_program_c`, 
+  `sales_data`.`category_partition_key`, 
+  `sales_data`.`load_timestamp`
+FROM `sales_data`;
+
+WITH snack_buyers AS (
+  SELECT DISTINCT customer_id 
+  FROM sales_data 
+  WHERE category_l1 = 'Snacks'
+), 
+dairy_buyers AS (
+  SELECT DISTINCT customer_id 
+  FROM sales_data 
+  WHERE category_l1 = 'Dairy'
+) 
+SELECT 
+  (SELECT APPROX_COUNT_DISTINCT(customer_id) FROM dairy_buyers) AS dairy_customers,
+  (SELECT APPROX_COUNT_DISTINCT(customer_id) FROM snack_buyers) AS snack_customers;

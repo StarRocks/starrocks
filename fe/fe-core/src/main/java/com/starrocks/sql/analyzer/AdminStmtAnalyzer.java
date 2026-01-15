@@ -16,14 +16,9 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Enums;
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.Replica;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -34,24 +29,28 @@ import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.List;
+import java.util.Map;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AdminStmtAnalyzer {
-    public static final long DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC = 4 * 3600L;
-
     public static void analyze(StatementBase statementBase, ConnectContext session) {
         new AdminStmtAnalyzerVisitor().analyze(statementBase, session);
     }
 
-    static class AdminStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class AdminStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         public void analyze(StatementBase statementBase, ConnectContext session) {
             visit(statementBase, session);
         }
@@ -61,7 +60,7 @@ public class AdminStmtAnalyzer {
                                                         ConnectContext session) {
             long tabletId = -1;
             long backendId = -1;
-            Replica.ReplicaStatus status = null;
+            ReplicaStatus status = null;
             NodePosition pos = NodePosition.ZERO;
             for (Property property : adminSetReplicaStatusStmt.getProperties().getPropertySet()) {
                 String key = property.getKey();
@@ -80,8 +79,8 @@ public class AdminStmtAnalyzer {
                         throw new SemanticException(PARSER_ERROR_MSG.invalidIdFormat("backend", val), pos);
                     }
                 } else if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.STATUS)) {
-                    status = Enums.getIfPresent(Replica.ReplicaStatus.class, val.toUpperCase()).orNull();
-                    if (status != Replica.ReplicaStatus.BAD && status != Replica.ReplicaStatus.OK) {
+                    status = Enums.getIfPresent(ReplicaStatus.class, val.toUpperCase()).orNull();
+                    if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
                         throw new SemanticException(PARSER_ERROR_MSG.invalidPropertyValue("replica status", val), pos);
                     }
                 } else {
@@ -105,14 +104,9 @@ public class AdminStmtAnalyzer {
             String dbName = adminShowReplicaDistributionStmt.getDbName();
             String tblName = adminShowReplicaDistributionStmt.getTblName();
             NodePosition pos = adminShowReplicaDistributionStmt.getPos();
-            if (Strings.isNullOrEmpty(dbName)) {
-                if (Strings.isNullOrEmpty(session.getDatabase())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
-                } else {
-                    dbName = session.getDatabase();
-                }
+            if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
             }
-            adminShowReplicaDistributionStmt.setDbName(dbName);
             return null;
         }
 
@@ -126,21 +120,18 @@ public class AdminStmtAnalyzer {
                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                     throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
                 } else {
+                    // Database name will be resolved from session when needed
                     dbName = session.getDatabase();
                 }
             }
-            adminShowReplicaStatusStmt.setDbName(dbName);
 
             CatalogUtils.checkIsLakeTable(dbName, tblName);
 
-            List<String> partitions = Lists.newArrayList();
-            PartitionNames partitionNames = adminShowReplicaStatusStmt.getTblRef().getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = adminShowReplicaStatusStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temporary partitions"), pos);
                 }
-                partitions.addAll(partitionNames.getPartitionNames());
-                adminShowReplicaStatusStmt.setPartitions(partitions);
             }
 
             if (!analyzeWhere(adminShowReplicaStatusStmt)) {
@@ -163,23 +154,31 @@ public class AdminStmtAnalyzer {
         @Override
         public Void visitAdminRepairTableStatement(AdminRepairTableStmt adminRepairTableStmt, ConnectContext session) {
             String dbName = adminRepairTableStmt.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                if (Strings.isNullOrEmpty(session.getDatabase())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected());
-                } else {
-                    dbName = session.getDatabase();
-                }
+            if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected());
             }
-            adminRepairTableStmt.setDbName(dbName);
-            PartitionNames partitionNames = adminRepairTableStmt.getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = adminRepairTableStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temp partitions"),
-                            partitionNames.getPos());
+                            partitionRef.getPos());
                 }
-                adminRepairTableStmt.setPartitions(partitionNames);
             }
-            adminRepairTableStmt.setTimeoutSec(DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC); // default 4 hours
+
+            Map<String, String> properties = adminRepairTableStmt.getProperties();
+            if (!properties.isEmpty()) {
+                boolean enforceConsistentVersion = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ENFORCE_CONSISTENT_VERSION, true);
+                adminRepairTableStmt.setEnforceConsistentVersion(enforceConsistentVersion);
+
+                boolean allowEmptyTabletRecovery = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY, false);
+                adminRepairTableStmt.setAllowEmptyTabletRecovery(allowEmptyTabletRecovery);
+
+                if (!properties.isEmpty()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, properties);
+                }
+            }
             return null;
         }
 
@@ -187,21 +186,15 @@ public class AdminStmtAnalyzer {
         public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt adminCancelRepairTableStmt,
                                                          ConnectContext session) {
             String dbName = adminCancelRepairTableStmt.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                if (Strings.isNullOrEmpty(session.getDatabase())) {
-                    throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), adminCancelRepairTableStmt.getPos());
-                } else {
-                    dbName = session.getDatabase();
-                }
+            if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
+                throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), adminCancelRepairTableStmt.getPos());
             }
-            adminCancelRepairTableStmt.setDbName(dbName);
-            PartitionNames partitionNames = adminCancelRepairTableStmt.getPartitionNames();
-            if (partitionNames != null) {
-                if (partitionNames.isTemp()) {
+            PartitionRef partitionRef = adminCancelRepairTableStmt.getPartitionRef();
+            if (partitionRef != null) {
+                if (partitionRef.isTemp()) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("temp partitions"),
-                            partitionNames.getPos());
+                            partitionRef.getPos());
                 }
-                adminCancelRepairTableStmt.setPartitions(partitionNames);
             }
             return null;
         }
@@ -227,41 +220,40 @@ public class AdminStmtAnalyzer {
 
         @Override
         public Void visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, ConnectContext context) {
-            statement.getTableName().normalization(context);
+            statement.setTableRef(AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context));
             return null;
         }
 
         private boolean analyzeWhere(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt) {
             Expr where = adminShowReplicaStatusStmt.getWhere();
-            Replica.ReplicaStatus statusFilter = null;
 
             // analyze where clause if not null
             if (where == null) {
                 return true;
             }
 
-            if (!(where instanceof BinaryPredicate)) {
+            if (!(where instanceof BinaryPredicate binaryPredicate)) {
                 return false;
             }
 
-            BinaryPredicate binaryPredicate = (BinaryPredicate) where;
             BinaryType op = binaryPredicate.getOp();
             if (op != BinaryType.EQ && op != BinaryType.NE) {
                 return false;
             }
-            adminShowReplicaStatusStmt.setOp(op);
 
             Expr leftChild = binaryPredicate.getChild(0);
             Expr rightChild = binaryPredicate.getChild(1);
-            String leftKey = ((SlotRef) leftChild).getColumnName();
-            if (!(rightChild instanceof StringLiteral) || !leftKey.equalsIgnoreCase("status")) {
+
+            if (!(leftChild instanceof SlotRef) || !(rightChild instanceof StringLiteral)) {
                 return false;
             }
-            statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
-                            ((StringLiteral) rightChild).getStringValue().toUpperCase())
-                    .orNull();
 
-            adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
+            String leftKey = ((SlotRef) leftChild).getColumnName();
+            if (!leftKey.equalsIgnoreCase("status")) {
+                return false;
+            }
+            ReplicaStatus statusFilter = Enums.getIfPresent(ReplicaStatus.class,
+                    ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
             return statusFilter != null;
         }
     }

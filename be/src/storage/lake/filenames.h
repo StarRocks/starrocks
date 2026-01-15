@@ -19,6 +19,7 @@
 #include <optional>
 #include <string_view>
 
+#include "gen_cpp/Types_types.h" // for PUniqueId
 #include "gutil/strings/util.h"
 #include "util/string_parser.hpp"
 #include "util/uid_util.h"
@@ -73,6 +74,18 @@ inline bool is_sst(std::string_view file_name) {
     return HasSuffixString(file_name, ".sst");
 }
 
+inline bool is_cols(std::string_view file_name) {
+    return HasSuffixString(file_name, ".cols");
+}
+
+// Check if file is a Lake Compaction Rows Mapper file
+// WHY: Need to distinguish between local (.crm) and remote (.lcrm) mapper files
+// for correct cleanup behavior. Remote lcrm files must not be deleted immediately
+// after use since they may be accessed by multiple nodes during parallel pk execution.
+inline bool is_lcrm(std::string_view file_name) {
+    return HasSuffixString(file_name, ".lcrm");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
@@ -85,8 +98,24 @@ inline std::string gen_delvec_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.delvec", txn_id, generate_uuid_string());
 }
 
+// Generate filename for Lake Compaction Rows Mapper file (.lcrm)
+// WHY: lcrm files are stored on remote storage (S3/HDFS) for parallel pk execution
+// FORMAT: {txn_id}_{uuid}.lcrm
+// - txn_id: Transaction ID for tracking and debugging
+// - uuid: Ensures uniqueness to avoid conflicts in distributed environment
+// DISTINCTION from .crm:
+// - .lcrm: Remote storage, multi-node access, managed by metadata GC
+// - .crm: Local disk, single-node access, deleted immediately after use
+inline std::string gen_lcrm_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.lcrm", txn_id, generate_uuid_string());
+}
+
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("{:016X}_{:016X}.log", tablet_id, txn_id);
+}
+
+inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) {
+    return fmt::format("{:016X}_{:016X}_{:016X}_{:016X}.log", tablet_id, txn_id, load_id.hi(), load_id.lo());
 }
 
 inline std::string txn_slog_filename(int64_t tablet_id, int64_t txn_id) {
@@ -120,6 +149,74 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
 
 inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+}
+
+// Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
+inline std::string extract_uuid_from(std::string_view file_name) {
+    if (file_name.empty()) {
+        return {};
+    }
+
+    const size_t dot_pos = file_name.find_last_of('.');
+    if (dot_pos == std::string_view::npos) {
+        return {};
+    }
+
+    std::string_view extension = file_name.substr(dot_pos);
+
+    // sst file: uuid.sst
+    if (extension == ".sst") {
+        return std::string(file_name.substr(0, dot_pos));
+    }
+
+    // normal case：{:016x}_uuid.ext, with txn_id (16bit) as prefix
+    constexpr size_t TXN_ID_LENGTH = 16;
+    if (file_name.size() < TXN_ID_LENGTH + 2) {
+        return {};
+    }
+
+    if (file_name[TXN_ID_LENGTH] != '_') {
+        return {};
+    }
+
+    // check extension
+    if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols") {
+        return {};
+    }
+
+    const size_t uuid_start = TXN_ID_LENGTH + 1;
+    const size_t uuid_length = dot_pos - uuid_start;
+
+    // standard UUID format: 8-4-4-4-12 = 36 characters
+    if (uuid_length != 36) {
+        LOG(WARNING) << "Invalid UUID length: " << uuid_length << " in file: " << file_name;
+        return {};
+    }
+
+    return std::string(file_name.substr(uuid_start, uuid_length));
+}
+
+// Helper function to generate a new filename from old filename, which is used in shared-data cross cluster migration
+inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_name) {
+    if (is_sst(old_file_name)) {
+        // sst file's name will keep no change,
+        return std::string(old_file_name);
+    }
+
+    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name)) &&
+        !is_cols(old_file_name)) {
+        // not a valid file
+        return {};
+    }
+
+    auto uuid = extract_uuid_from(old_file_name);
+    if (UNLIKELY(uuid.empty())) {
+        return {};
+    }
+
+    size_t dot_pos = old_file_name.find_last_of('.');
+    std::string_view extension = std::string_view(old_file_name).substr(dot_pos);
+    return fmt::format("{:016x}_{}{}", txn_id, uuid, extension);
 }
 
 inline std::string gen_cols_filename(int64_t txn_id) {
@@ -166,7 +263,6 @@ inline std::pair<int64_t, int64_t> parse_tablet_metadata_filename(std::string_vi
 // Return value: <tablet id, txn id>
 inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_name) {
     constexpr static int kBase = 16;
-    CHECK_EQ(kTxnLogFilenameLength, file_name.size()) << file_name;
     StringParser::ParseResult res;
     auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;

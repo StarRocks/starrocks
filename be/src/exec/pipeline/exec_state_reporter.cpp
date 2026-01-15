@@ -24,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
+#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks::pipeline {
@@ -31,8 +32,11 @@ std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
     }
+
+    std::string resolved_ip = BackendOptions::get_resolved_ip();
+
     std::stringstream url;
-    url << "http://" << get_host_port(BackendOptions::get_localhost(), config::be_http_port) << "/api/_load_error_log?"
+    url << "http://" << get_host_port(resolved_ip, config::be_http_port) << "/api/_load_error_log?"
         << "file=" << file_name;
     return url.str();
 }
@@ -246,8 +250,8 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
     return rpc_status;
 }
 
-ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
-    auto status = ThreadPoolBuilder("ex_state_report") // exec state reporter
+ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids, ExecStateReporterMetrics* metrics) {
+    auto status = ThreadPoolBuilder("exec_state_report") // exec state reporter
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)
@@ -258,7 +262,7 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
 
-    status = ThreadPoolBuilder("priority_ex_state_report") // priority exec state reporter with infinite queue
+    status = ThreadPoolBuilder("priority_exec_state_report") // priority exec state reporter with infinite queue
                      .set_min_threads(1)
                      .set_max_threads(2)
                      .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
@@ -267,6 +271,16 @@ ExecStateReporter::ExecStateReporter(const CpuUtil::CpuIds& cpuids) {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
     }
+
+    _metrics = metrics;
+    _metrics->monitor_reporter(_thread_pool.get());
+    _metrics->monitor_priority_reporter(_priority_thread_pool.get());
+}
+
+ExecStateReporter::~ExecStateReporter() {
+    // remove thread pool metrics from parent metrics
+    _metrics->unmonitor_reporter(_thread_pool.get());
+    _metrics->unmonitor_priority_reporter(_priority_thread_pool.get());
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {

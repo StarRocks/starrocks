@@ -15,11 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -31,6 +30,7 @@ public abstract class QueryRelation extends Relation {
     protected List<OrderByElement> sortClause;
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
+    private boolean hasRecursiveCTE = false;
 
     protected QueryRelation() {
         this(NodePosition.ZERO);
@@ -70,7 +70,9 @@ public abstract class QueryRelation extends Relation {
     }
 
     public void clearOrder() {
-        sortClause.clear();
+        if (sortClause != null) {
+            sortClause.clear();
+        }
     }
 
     public LimitElement getLimit() {
@@ -83,6 +85,14 @@ public abstract class QueryRelation extends Relation {
 
     public boolean hasLimit() {
         return limit != null;
+    }
+
+    public boolean isHasRecursiveCTE() {
+        return hasRecursiveCTE;
+    }
+
+    public void setHasRecursiveCTE(boolean hasRecursiveCTE) {
+        this.hasRecursiveCTE = hasRecursiveCTE;
     }
 
     public long getOffset() {
@@ -109,6 +119,6 @@ public abstract class QueryRelation extends Relation {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitQueryRelation(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitQueryRelation(this, context);
     }
 }

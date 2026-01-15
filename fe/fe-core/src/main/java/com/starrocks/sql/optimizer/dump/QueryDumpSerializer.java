@@ -24,6 +24,7 @@ import com.google.gson.JsonSerializer;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
@@ -65,12 +66,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         long beNum = ctx.getAliveBackendNumber();
         dumpJson.addProperty("be_number", beNum);
         // backend core stat
-        JsonObject backendCoreStat = new JsonObject();
-        backendCoreStat.addProperty("numOfHardwareCoresPerBe",
-                GsonUtils.GSON.toJson(BackendResourceStat.getInstance().getNumHardwareCoresPerBe()));
-        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
-                BackendResourceStat.getInstance().getCachedAvgNumHardwareCores());
-        dumpJson.add("be_core_stat", backendCoreStat);
+        BackendResourceStat.getInstance().dump(dumpJson, ctx);
         // exception
         JsonArray exceptions = new JsonArray();
         for (String ex : dumpInfo.getExceptionList()) {
@@ -87,7 +83,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
 
     private JsonObject serializeSensitiveContent(QueryDumpInfo dumpInfo) {
         JsonObject dumpJson = new JsonObject();
-        if (dumpInfo.isDesensitizedInfo()) {
+        if (Config.enable_desensitize_query_dump || dumpInfo.isDesensitizedInfo()) {
             try {
                 desensitizeContent(dumpInfo, dumpJson);
                 return dumpJson;

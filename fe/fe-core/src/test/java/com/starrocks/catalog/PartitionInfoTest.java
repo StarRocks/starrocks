@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -26,13 +27,11 @@ import java.io.IOException;
 public class PartitionInfoTest {
     private final long partitionId = 10086;
     private final short replicationNum = 3;
-    private final boolean inMemory = false;
     private final DataProperty dataProperty = DataProperty.DEFAULT_DATA_PROPERTY;
     private final DataCacheInfo dataCacheInfo = new DataCacheInfo(true, false);
 
     void validatePartitionInfo(PartitionInfo info, long id) {
         Assertions.assertEquals(replicationNum, info.getReplicationNum(id));
-        Assertions.assertEquals(inMemory, info.getIsInMemory(id));
         Assertions.assertEquals(dataProperty, info.getDataProperty(id));
         Assertions.assertEquals(dataCacheInfo, info.getDataCacheInfo(id));
         Assertions.assertEquals(1L, info.idToStorageCacheInfo.size());
@@ -45,30 +44,30 @@ public class PartitionInfoTest {
     public void testAddDropPartitionPartitionInfo() throws AnalysisException {
         { // ListPartitionInfo
             ListPartitionInfo info =
-                    new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", Type.BIGINT)));
-            info.addPartition(null, partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo, null, null);
+                    new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
+            info.addPartition(null, partitionId, dataProperty, replicationNum, dataCacheInfo, null, null);
             validatePartitionInfo(info, partitionId);
         }
         { // SinglePartitionInfo
             SinglePartitionInfo info = new SinglePartitionInfo();
-            info.addPartition(partitionId, dataProperty, replicationNum, inMemory, dataCacheInfo);
+            info.addPartition(partitionId, dataProperty, replicationNum, dataCacheInfo);
             validatePartitionInfo(info, partitionId);
         }
         { // RangePartitionInfo
-            RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+            RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
             PartitionKey partitionKey = new PartitionKey();
             Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
-            info.addPartition(partitionId, false, range, dataProperty, replicationNum, inMemory, dataCacheInfo);
+            info.addPartition(partitionId, false, range, dataProperty, replicationNum, dataCacheInfo);
             validatePartitionInfo(info, partitionId);
         }
     }
 
     @Test
     public void testCleanupStaledIdToDataCacheInfo() throws IOException {
-        RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", Type.BIGINT)));
+        RangePartitionInfo info = new RangePartitionInfo(Lists.newArrayList(new Column("c0", IntegerType.BIGINT)));
         PartitionKey partitionKey = new PartitionKey();
         Range<PartitionKey> range = Range.closedOpen(partitionKey, partitionKey);
-        info.addPartition(partitionId, false, range, dataProperty, replicationNum, inMemory, dataCacheInfo);
+        info.addPartition(partitionId, false, range, dataProperty, replicationNum, dataCacheInfo);
 
         info.idToStorageCacheInfo.put(10087L, dataCacheInfo);
         Assertions.assertEquals(2L, info.idToStorageCacheInfo.size());

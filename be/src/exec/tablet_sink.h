@@ -118,9 +118,11 @@ private:
     // So we need to pad char column after compute buckect hash.
     void _padding_char_column(Chunk* chunk);
 
-    void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
+    void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,
+                                  int32_t row_index);
 
-    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
+    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc,
+                                         Chunk* chunk, int32_t row_index);
 
     Status _fill_auto_increment_id(Chunk* chunk);
 
@@ -188,6 +190,7 @@ private:
     bool _is_lake_table = false;
     bool _write_txn_log = false;
     bool _enable_data_file_bundling = false;
+    bool _is_multi_statements_txn = false;
 
     TKeysType::type _keys_type;
 
@@ -214,7 +217,7 @@ private:
     std::unordered_map<int64_t, std::set<int64_t>> _index_id_partition_ids;
     std::vector<uint32_t> _record_hashes;
     // Store the output expr comput result column
-    std::unique_ptr<Chunk> _output_chunk;
+    ChunkUniquePtr _output_chunk;
     bool _open_done{false};
 
     std::unique_ptr<TabletSinkSender> _tablet_sink_sender;

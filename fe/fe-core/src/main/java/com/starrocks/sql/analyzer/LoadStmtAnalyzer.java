@@ -15,11 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -30,8 +29,10 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
 import org.apache.commons.collections.CollectionUtils;
@@ -48,7 +49,7 @@ public class LoadStmtAnalyzer {
         new LoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
-    static class LoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class LoadStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private static final String VERSION = "version";
 
@@ -110,8 +111,16 @@ public class LoadStmtAnalyzer {
 
                 EtlJobType etlJobType;
                 if (resourceDesc != null) {
-                    resourceDesc.analyze();
-                    etlJobType = resourceDesc.getEtlJobType();
+                    // check resource exist or not
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceDesc.getName());
+                    if (resource == null) {
+                        throw new AnalysisException("Resource does not exist. name: " + resourceDesc.getName());
+                    }
+                    if (resource.getType() == Resource.ResourceType.SPARK) {
+                        etlJobType = EtlJobType.SPARK;
+                    } else {
+                        etlJobType = EtlJobType.UNKNOWN;
+                    }
                 } else if (brokerDesc != null) {
                     etlJobType = EtlJobType.BROKER;
                 } else {

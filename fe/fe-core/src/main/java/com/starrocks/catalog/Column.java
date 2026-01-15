@@ -38,32 +38,45 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.ExpressionSerializedObject;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.ColumnDefAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.MapExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TAggStateDesc;
+import com.starrocks.thrift.TAggregationType;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.NullType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -81,6 +94,7 @@ import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
  * This class represents the column-related metadata.
  */
 public class Column implements Writable, GsonPreProcessable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(Column.class);
 
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
@@ -132,10 +146,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     private DefaultExpr defaultExpr;
     @SerializedName(value = "comment")
     private String comment;
-    @SerializedName(value = "stats")
-    private ColumnStats stats;     // cardinality and selectivity etc.
     // Define expr may exist in two forms, one is analyzed, and the other is not analyzed.
-    // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
+    // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be
+    // analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
     // physicalName is used to store the physical name of the column in the storage layer.
@@ -147,14 +160,16 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
     private ColumnIdExpr generatedColumnExpr;
+    // Whether this column is a hidden column, hidden columns are used to store some internal data(eg: _ROW_ID).
+    @SerializedName(value = "isHidden")
+    private boolean isHidden = false;
 
     // Only for persist
     public Column() {
         this.name = "";
-        this.type = Type.NULL;
+        this.type = NullType.NULL;
         this.isAggregationTypeImplicit = false;
         this.isKey = false;
-        this.stats = new ColumnStats();
         this.uniqueId = -1;
     }
 
@@ -208,7 +223,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.columnId = ColumnId.create(this.name);
         this.type = type;
         if (this.type == null) {
-            this.type = Type.NULL;
+            this.type = NullType.NULL;
         }
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
@@ -226,17 +241,32 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = isAllowNull;
         if (defaultValueDef != null) {
             if (defaultValueDef.expr instanceof StringLiteral) {
-                this.defaultValue = ((StringLiteral) defaultValueDef.expr).getValue();
+                String value = ((StringLiteral) defaultValueDef.expr).getValue();
+                if (type != null && type.getPrimitiveType() == PrimitiveType.BOOLEAN) {
+                    if (value.equalsIgnoreCase("true")) {
+                        this.defaultValue = "1";
+                    } else if (value.equalsIgnoreCase("false")) {
+                        this.defaultValue = "0";
+                    } else {
+                        this.defaultValue = value;
+                    }
+                } else {
+                    this.defaultValue = value;
+                }
             } else if (defaultValueDef.expr instanceof NullLiteral) {
                 // for default value is null or default value is not set the defaultExpr = null
                 this.defaultExpr = null;
             } else {
-                this.defaultExpr = new DefaultExpr(defaultValueDef.expr.toSql(), defaultValueDef.hasArguments);
+                boolean isExprObject = isComplexTypeExpression(defaultValueDef.expr);
+                if (isExprObject) {
+                    this.defaultExpr = new DefaultExpr(defaultValueDef.expr);
+                } else {
+                    this.defaultExpr = new DefaultExpr(ExprToSql.toSql(defaultValueDef.expr), defaultValueDef.hasArguments);
+                }
             }
         }
         this.isAutoIncrement = false;
         this.comment = comment;
-        this.stats = new ColumnStats();
         this.generatedColumnExpr = null;
         this.uniqueId = columnUniqId;
         this.physicalName = physicalName;
@@ -254,13 +284,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAllowNull = column.isAllowNull();
         this.defaultValue = column.getDefaultValue();
         this.comment = column.getComment();
-        this.stats = column.getStats();
         this.defineExpr = column.getDefineExpr();
         this.defaultExpr = column.defaultExpr;
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
+        this.isHidden = column.isHidden;
     }
 
     public Column deepCopy() {
@@ -272,17 +302,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public ColumnDef toColumnDef(Table table) {
-        ColumnDef.DefaultValueDef defaultDef = null;
-        if (defaultValue == null) {
-            if (defaultExpr != null) {
-                defaultDef = new ColumnDef.DefaultValueDef(true, defaultExpr.obtainExpr());
-            } else {
-                defaultDef = new ColumnDef.DefaultValueDef(false, null);
-            }
-        } else {
-            defaultDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue));
-        }
-        ColumnDef.DefaultValueDef defaultValueDef = null;
+        ColumnDef.DefaultValueDef defaultValueDef;
         if (defaultValue != null) {
             defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue));
         } else {
@@ -395,15 +415,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public String getDefaultValue() {
+        if (this.defaultValue == null && this.defaultExpr != null && this.defaultExpr.hasExprObject()) {
+            return this.defaultExpr.toSql();
+        }
         return this.defaultValue;
-    }
-
-    public void setStats(ColumnStats stats) {
-        this.stats = stats;
-    }
-
-    public ColumnStats getStats() {
-        return this.stats;
     }
 
     public void setComment(String comment) {
@@ -424,6 +439,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return generatedColumnExpr != null;
     }
 
+    public boolean isVisible() {
+        return !isHidden;
+    }
+
+    public boolean isHidden() {
+        return isHidden;
+    }
+
+    public void setIsHidden(boolean hidden) {
+        isHidden = hidden;
+    }
+
     public boolean isShadowColumn() {
         return this.name.startsWith(SchemaChangeHandler.SHADOW_NAME_PREFIX);
     }
@@ -441,28 +468,60 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.columnId.getId());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
-        tColumn.setType_desc(this.type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(this.type));
         if (null != this.aggregationType) {
-            tColumn.setAggregation_type(this.aggregationType.toThrift());
+            tColumn.setAggregation_type(toThrift(aggregationType));
         }
         if (null != this.aggStateDesc) {
-            TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
+            TAggStateDesc tAggStateDesc = TypeSerializer.toThrift(this.aggStateDesc);
             tColumn.setAgg_state_desc(tAggStateDesc);
         }
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
         tColumn.setIs_auto_increment(this.isAutoIncrement);
-        tColumn.setDefault_value(this.defaultValue);
+        if (this.defaultExpr != null && this.defaultExpr.getExprObject() != null) {
+            tColumn.setDefault_expr(ExprToThrift.treeToThrift(this.defaultExpr.getExprObject()));
+        } else if (this.defaultValue != null) {
+            tColumn.setDefault_value(this.defaultValue);
+        }
+
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
         // It will not be used here, but through another structure `TAlterMaterializedViewParam`.
 
         // scalar type or nested type
         // If this field is set, column_type will be ignored.
-        tColumn.setType_desc(type.toThrift());
+        tColumn.setType_desc(TypeSerializer.toThrift(type));
         tColumn.setCol_unique_id(uniqueId);
 
         return tColumn;
+    }
+
+    public TAggregationType toThrift(AggregateType aggregateType) {
+        switch (aggregateType) {
+            case SUM:
+                return TAggregationType.SUM;
+            case MAX:
+                return TAggregationType.MAX;
+            case MIN:
+                return TAggregationType.MIN;
+            case REPLACE:
+                return TAggregationType.REPLACE;
+            case REPLACE_IF_NOT_NULL:
+                return TAggregationType.REPLACE_IF_NOT_NULL;
+            case NONE:
+                return TAggregationType.NONE;
+            case HLL_UNION:
+                return TAggregationType.HLL_UNION;
+            case BITMAP_UNION:
+                return TAggregationType.BITMAP_UNION;
+            case PERCENTILE_UNION:
+                return TAggregationType.PERCENTILE_UNION;
+            case AGG_STATE_UNION:
+                return TAggregationType.AGG_STATE_UNION;
+            default:
+                return null;
+        }
     }
 
     public void checkSchemaChangeAllowed(Column other) throws DdlException {
@@ -474,7 +533,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             throw new DdlException("Dest column name is empty");
         }
 
-        if (!ColumnType.isSchemaChangeAllowed(type, other.type)) {
+        if (!SchemaChangeTypeCompatibility.isSchemaChangeAllowed(type, other.type)) {
             throw new DdlException("Can not change " + getType() + " to " + other.getType());
         }
 
@@ -502,7 +561,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             }
         }
         if (getPrimitiveType().isJsonType() && other.getPrimitiveType().isCharFamily()) {
-            if (other.getStrLen() <= getPrimitiveType().getTypeSize()) {
+            if (other.getStrLen() < getPrimitiveType().getTypeSize()) {
                 throw new DdlException("JSON needs minimum length of " + getPrimitiveType().getTypeSize());
             }
         }
@@ -624,7 +683,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (defaultExpr == null && isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
         } else if (defaultExpr != null) {
-            if (isValidDefaultTimeFunction(defaultExpr.getExpr())) {
+            if (defaultExpr.hasExprObject()) {
+                sb.append("DEFAULT ").append(defaultExpr.toSql()).append(" ");
+            } else if (isValidDefaultTimeFunction(defaultExpr.getExpr())) {
                 // compatible with mysql
                 if (defaultExpr.hasArgs()) {
                     sb.append("DEFAULT ").append(defaultExpr.getExpr()).append(" ");
@@ -653,13 +714,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public enum DefaultValueType {
         NULL,       // default value is not set or default value is null
-        CONST,      // const expr e.g. default "1"
+        CONST,      // const expr e.g. default "1" or [1, 2, 3]
         VARY        // variable expr e.g. uuid() function
     }
 
     public DefaultValueType getDefaultValueType() {
         if (defaultExpr != null) {
             if (isEmptyDefaultTimeFunction(defaultExpr)) {
+                return DefaultValueType.CONST;
+            } else if (defaultExpr.hasExprObject()) {
                 return DefaultValueType.CONST;
             } else {
                 return DefaultValueType.VARY;
@@ -709,6 +772,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
                 return localDateTime.format(DATE_TIME_FORMATTER);
+            } else if (defaultExpr.hasExprObject()) {
+                // For expr object type default expressions, return null
+                // The actual default value will be evaluated in BE from TExpr
+                return null;
             }
         }
 
@@ -729,6 +796,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 }
                 return "CURRENT_TIMESTAMP";
             } else {
+                if (defaultExpr.hasExprObject()) {
+                    return defaultExpr.toSql();
+                }
                 if (extras != null) {
                     extras.add("DEFAULT_GENERATED");
                 }
@@ -757,7 +827,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                         .append("\" ");
             }
         } else {
-            if (isValidDefaultTimeFunction(defaultExpr.getExpr())) {
+            if (defaultExpr.hasExprObject()) {
+                sb.append("DEFAULT ").append(defaultExpr.toSql()).append(" ");
+            } else if (isValidDefaultTimeFunction(defaultExpr.getExpr())) {
                 // compatible with mysql
                 if (defaultExpr.hasArgs()) {
                     sb.append("DEFAULT ").append(defaultExpr.getExpr()).append(" ");
@@ -771,7 +843,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (isGeneratedColumn()) {
             String generatedColumnSql;
             if (idToColumn != null) {
-                generatedColumnSql = generatedColumnExpr.convertToColumnNameExpr(idToColumn).toSql();
+                generatedColumnSql = ExprToSql.toSql(generatedColumnExpr.convertToColumnNameExpr(idToColumn));
             } else {
                 generatedColumnSql = generatedColumnExpr.toSql();
             }
@@ -834,6 +906,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 !this.generatedColumnExpr.equals(other.generatedColumnExpr)) {
             return false;
         }
+        if (this.isHidden != other.isHidden()) {
+            return false;
+        }
 
         return comment == null ? other.comment == null : comment.equals(other.getComment());
     }
@@ -864,13 +939,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return true;
     }
 
-
-
-    public static Column read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Column.class);
-    }
-
     public String generatedColumnExprToString() {
         if (generatedColumnExprSerialized != null && generatedColumnExprSerialized.getExpressionSql() != null) {
             return generatedColumnExprSerialized.deserialize().toSql();
@@ -889,6 +957,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (this.aggStateDesc != null) {
             this.type.setAggStateDesc(this.aggStateDesc);
+        }
+        if (defaultExpr != null && defaultExpr.hasExprObject() && defaultExpr.getExprObject() != null) {
+            try {
+                Expr validatedExpr = ColumnDefAnalyzer.validateComplexTypeDefaultValue(
+                        type, defaultExpr.getExprObject(), true);
+                defaultExpr.setExprObject(validatedExpr);
+            } catch (Exception e) {
+                LOG.warn("Failed to re-validate complex default expression for column {}: {}", name, e.getMessage());
+            }
         }
     }
 
@@ -940,5 +1017,22 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public AggStateDesc getAggStateDesc() {
         return this.aggStateDesc;
+    }
+
+    private static boolean isComplexTypeExpression(Expr expr) {
+        Expr unwrapped = expr;
+        if (expr instanceof CastExpr) {
+            unwrapped = expr.getChild(0);
+        }
+
+        if (unwrapped instanceof ArrayExpr || unwrapped instanceof MapExpr) {
+            return true;
+        }
+
+        if (unwrapped instanceof FunctionCallExpr) {
+            String functionName = ((FunctionCallExpr) unwrapped).getFunctionName();
+            return "row".equalsIgnoreCase(functionName);
+        }
+        return false;
     }
 }

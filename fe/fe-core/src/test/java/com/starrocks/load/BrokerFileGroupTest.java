@@ -17,24 +17,25 @@ package com.starrocks.load;
 
 import com.google.api.client.util.Sets;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableFunctionTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.DataDescription;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.BitmapType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -132,16 +133,16 @@ public class BrokerFileGroupTest {
         SlotRef slotRef3 = new SlotRef(null, "k3");
         BinaryPredicate predicate2 = new BinaryPredicate(
                 BinaryType.EQ, slotRef3,
-                new ArithmeticExpr(ArithmeticExpr.Operator.ADD, slotRef2, new IntLiteral(1, Type.INT)));
+                new ArithmeticExpr(ArithmeticExpr.Operator.ADD, slotRef2, new IntLiteral(1, IntegerType.INT)));
         DataDescription desc = new DataDescription("olapTable", null, "hiveTable", false,
                 Lists.newArrayList(predicate1, predicate2), null);
         desc.analyze("testDb");
 
         // schema
-        Column k1 = new Column("k1", Type.BITMAP);
-        Column k2 = new Column("k2", Type.INT);
-        Column k3 = new Column("k3", Type.INT);
-        Column k4 = new Column("k4", Type.INT);
+        Column k1 = new Column("k1", BitmapType.BITMAP);
+        Column k2 = new Column("k2", IntegerType.INT);
+        Column k3 = new Column("k3", IntegerType.INT);
+        Column k4 = new Column("k4", IntegerType.INT);
 
         new Expectations() {
             {

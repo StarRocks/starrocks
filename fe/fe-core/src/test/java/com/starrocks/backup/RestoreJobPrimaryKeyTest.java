@@ -242,8 +242,8 @@ public class RestoreJobPrimaryKeyTest {
                     .getMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
-                idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
-                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexId(index.getId());
+                idxInfo.name = expectedRestoreTbl.getIndexNameByMetaId(index.getMetaId());
+                idxInfo.schemaHash = expectedRestoreTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                 partInfo.indexes.put(idxInfo.name, idxInfo);
 
                 for (Tablet tablet : index.getTablets()) {
@@ -387,10 +387,10 @@ public class RestoreJobPrimaryKeyTest {
         OlapTable tbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL_NAME);
         List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println(partNames);
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        System.out.println("tbl signature: " + RestoreJob.getSignature(tbl, BackupHandler.SIGNATURE_VERSION, partNames, true));
         tbl.setName("newName");
         partNames = Lists.newArrayList(tbl.getPartitionNames());
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+        System.out.println("tbl signature: " + RestoreJob.getSignature(tbl, BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
 }
 

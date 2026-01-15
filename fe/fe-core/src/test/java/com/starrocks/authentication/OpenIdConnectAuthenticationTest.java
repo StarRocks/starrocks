@@ -15,12 +15,13 @@
 package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.UserAuthOptionAnalyzer;
 import com.starrocks.sql.ast.UserAuthOption;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -37,7 +38,7 @@ public class OpenIdConnectAuthenticationTest {
 
         JWTAuthenticationProvider provider =
                 new JWTAuthenticationProvider("jwks.json", "preferred_username", emptyIssuer, emptyAudience);
-        UserAuthOptionAnalyzer.analyzeAuthOption(new UserIdentity("harbor", "%"),
+        UserAuthOptionAnalyzer.analyzeAuthOption(new UserRef("harbor", "%"),
                 new UserAuthOption(null, "", true, NodePosition.ZERO));
         String openIdConnectJson = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
 
@@ -45,7 +46,8 @@ public class OpenIdConnectAuthenticationTest {
         serializer.writeInt1(0);
         serializer.writeLenEncodedString(openIdConnectJson);
         try {
-            provider.authenticate(new ConnectContext(), new UserIdentity("harbor", "%"), serializer.toArray());
+            provider.authenticate(new ConnectContext().getAccessControlContext(), new UserIdentity("harbor", "%"),
+                    serializer.toArray());
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }
@@ -86,9 +88,8 @@ public class OpenIdConnectAuthenticationTest {
         JWKSet jwkSet = mockJwkMgr.getJwkSet("jwks.json");
 
         try {
-            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor",
-                    jwkSet, "preferred_username", new String[] {"http://localhost:38080/realms/master",
-                            "foo"}, new String[] {"12345", "56789"});
+            OpenIdConnectVerifier.verify(openIdConnectJson, "harbor", jwkSet, "preferred_username",
+                    new String[] {"http://localhost:38080/realms/master", "foo"}, new String[] {"12345", "56789"});
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
         }

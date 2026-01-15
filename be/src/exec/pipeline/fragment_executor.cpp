@@ -24,19 +24,15 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
-#include "exec/multi_olap_table_sink.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
@@ -178,7 +174,11 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 
     if (request.common().__isset.pred_tree_params) {
         const auto& tpred_tree_params = request.common().pred_tree_params;
-        _fragment_ctx->set_pred_tree_params({tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile});
+        const int32_t max_pushdown_or_predicates = tpred_tree_params.__isset.max_pushdown_or_predicates
+                                                           ? tpred_tree_params.max_pushdown_or_predicates
+                                                           : PredicateTreeParams::DEFAULT_MAX_PUSHDOWN_OR_PREDICATES;
+        _fragment_ctx->set_pred_tree_params(
+                {tpred_tree_params.enable_or, tpred_tree_params.enable_show_in_profile, max_pushdown_or_predicates});
     }
 
     return Status::OK();
@@ -259,6 +259,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
+    const int arrow_flight_sql_version = request.common().__isset.arrow_flight_sql_version
+                                                 ? request.common().arrow_flight_sql_version
+                                                 : TArrowFlightSQLVersion::type::V0;
+    runtime_state->set_arrow_flight_sql_version(arrow_flight_sql_version);
 
     // RuntimeFilterWorker::open_query is idempotent
     const TRuntimeFilterParams* runtime_filter_params = nullptr;
@@ -273,6 +277,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         _query_ctx->set_is_runtime_filter_coordinator(true);
         exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
+    _fragment_ctx->prepare_pass_through_chunk_buffer();
     _fragment_ctx->set_report_when_finish(request.unique().params.__isset.report_when_finish &&
                                           request.unique().params.report_when_finish);
 
@@ -675,7 +680,8 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
                             delete ctx;
                         }
                     });
-                    RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                    RETURN_IF_ERROR(
+                            exec_env->stream_context_mgr()->put_channel_context(label, table_name, channel_id, ctx));
                 }
                 stream_load_contexts.push_back(ctx);
             }
@@ -829,6 +835,36 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
+Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
+    bool prepare_success = false;
+
+    UnifiedExecPlanFragmentParams request(common_request, common_request);
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+
+    // make sure query context can be released
+    // if _prepare_query_ctx return error, query context doesn't exist
+    // so it's safe to put this DeferOp below _prepare_query_ctx
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+        if (!prepare_success) {
+            query_ctx->count_down_fragments();
+        }
+    });
+
+    // Set up desc tbl
+    DescriptorTbl* desc_tbl = nullptr;
+    const auto& t_desc_tbl = request.common().desc_tbl;
+
+    DCHECK(t_desc_tbl.__isset.is_cached && !t_desc_tbl.is_cached);
+    // only data lake table need runtime state, and we baned the plan with dla using single node parallel prepare
+    // so it's safe to pass nullptr here
+    RETURN_IF_ERROR(DescriptorTbl::create(nullptr, _query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
+    _query_ctx->set_desc_tbl(desc_tbl);
+
+    prepare_success = true;
+    return Status::OK();
+}
+
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -853,7 +889,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
             auto* profile = fragment_ctx->runtime_state()->runtime_profile();
 
-            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 10_ms);
+            auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(profile, "FragmentInstancePrepareTime", 1_ms);
             COUNTER_SET(prepare_timer, profiler.prepare_time);
 
             auto* prepare_query_ctx_timer =
@@ -928,6 +964,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
+
     prepare_success = true;
 
     return Status::OK();
@@ -940,7 +977,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
             _fail_cleanup(true);
         }
     });
-
     auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
     auto* prepare_driver_timer =
@@ -958,6 +994,9 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
 
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_fragment_prepared(true);
+
     return Status::OK();
 }
 
@@ -967,13 +1006,15 @@ void FragmentExecutor::_fail_cleanup(bool fragment_has_registed) {
             if (fragment_has_registed) {
                 _query_ctx->fragment_mgr()->unregister(_fragment_ctx->fragment_instance_id());
             }
+            _fragment_ctx->destroy_pass_through_chunk_buffer();
             _fragment_ctx.reset();
         }
         _query_ctx->count_down_fragments();
     }
 }
 
-Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
+Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
+                                                        TExecPlanFragmentResult* response) {
     DCHECK(!request.__isset.fragment);
     DCHECK(request.__isset.params);
     const TPlanFragmentExecParams& params = request.params;
@@ -981,22 +1022,34 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
     const TUniqueId& instance_id = params.fragment_instance_id;
 
     QueryContextPtr query_ctx = exec_env->query_context_mgr()->get(query_id);
-    if (query_ctx == nullptr) return Status::OK();
+    if (query_ctx == nullptr) {
+        // query can be cancelled because of timeout or short-circuited query like `limit`.
+        // return Status::InternalError(fmt::format("QueryContext not found for query_id: {}", print_id(query_id)));
+        return Status::OK();
+    }
     FragmentContextPtr fragment_ctx = query_ctx->fragment_mgr()->get(instance_id);
-    if (fragment_ctx == nullptr) return Status::OK();
+    if (fragment_ctx == nullptr) {
+        return Status::InternalError(fmt::format("FragmentContext not found for query_id: {}, instance_id: {}",
+                                                 print_id(query_id), print_id(instance_id)));
+    }
     RuntimeState* runtime_state = fragment_ctx->runtime_state();
 
     std::unordered_set<int> notify_ids;
+    std::vector<int32_t> closed_scan_nodes;
 
     for (const auto& [node_id, scan_ranges] : params.per_node_scan_ranges) {
         if (scan_ranges.size() == 0) continue;
         auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
         if (iter == fragment_ctx->morsel_queue_factories().end()) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
         }
         MorselQueueFactory* morsel_queue_factory = iter->second.get();
         if (morsel_queue_factory == nullptr) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}", node_id,
+                                print_id(query_id), print_id(instance_id)));
         }
 
         RETURN_IF_ERROR(add_scan_ranges_partition_values(runtime_state, scan_ranges));
@@ -1006,17 +1059,25 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
         morsel_queue_factory->set_has_more(has_more_morsel);
         notify_ids.insert(node_id);
+
+        if (morsel_queue_factory->reach_limit()) {
+            closed_scan_nodes.push_back(node_id);
+        }
     }
 
     if (params.__isset.node_to_per_driver_seq_scan_ranges) {
         for (const auto& [node_id, per_driver_scan_ranges] : params.node_to_per_driver_seq_scan_ranges) {
             auto iter = fragment_ctx->morsel_queue_factories().find(node_id);
             if (iter == fragment_ctx->morsel_queue_factories().end()) {
-                continue;
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory not found for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
             }
             MorselQueueFactory* morsel_queue_factory = iter->second.get();
             if (morsel_queue_factory == nullptr) {
-                continue;
+                return Status::InternalError(
+                        fmt::format("MorselQueueFactory is null for node_id: {}, query_id: {}, instance_id: {}",
+                                    node_id, print_id(query_id), print_id(instance_id)));
             }
 
             bool has_more_morsel = has_more_per_driver_seq_scan_ranges(per_driver_scan_ranges);
@@ -1030,6 +1091,14 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
             }
             morsel_queue_factory->set_has_more(has_more_morsel);
             notify_ids.insert(node_id);
+
+            if (morsel_queue_factory->reach_limit()) {
+                closed_scan_nodes.push_back(node_id);
+            }
+        }
+
+        if (closed_scan_nodes.size() > 0) {
+            response->__set_closed_scan_nodes(closed_scan_nodes);
         }
     }
 

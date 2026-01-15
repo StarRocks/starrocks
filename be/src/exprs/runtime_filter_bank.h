@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <semaphore>
 #include <set>
 
 #include "column/column.h"
@@ -35,6 +36,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
+#include "util/failpoint/fail_point.h"
 
 namespace starrocks::pipeline {
 struct RuntimeMembershipFilterBuildParam;
@@ -58,12 +60,13 @@ public:
     static size_t max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column);
     static size_t serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int rf_version, const RuntimeFilter* rf, uint8_t* data);
-    static size_t serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
-                                                                   uint8_t* data);
+    static StatusOr<size_t> serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
+                                                                             uint8_t* data);
     static int deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data, size_t size);
-    static int deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool, SkewBroadcastRfMaterial** material,
-                                                                  const uint8_t* data, size_t size,
-                                                                  const PTypeDesc& ptype);
+    static StatusOr<int> deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool,
+                                                                            SkewBroadcastRfMaterial** material,
+                                                                            const uint8_t* data, size_t size,
+                                                                            const PTypeDesc& ptype);
 
     static RuntimeFilter* create_runtime_empty_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
     static RuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
@@ -111,6 +114,9 @@ public:
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
 
     TRuntimeFilterBuildType::type type() const { return _runtime_filter_type; }
+    bool is_asc() const { return _is_asc; }
+    bool is_nulls_first() const { return _is_nulls_first; }
+    size_t limit() const { return _limit; }
 
     void set_runtime_filter(RuntimeFilter* rf) { _runtime_filter = rf; }
     // used in TopN filter to intersect with other runtime filters.
@@ -160,6 +166,10 @@ private:
     RuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
     size_t _num_colocate_partition = 0;
+    // field used in top-n runtime filter
+    bool _is_asc{};
+    bool _is_nulls_first{};
+    size_t _limit{};
 
     bool _is_broad_cast_in_skew = false;
     int32_t _skew_shuffle_filter_id = -1;
@@ -228,6 +238,11 @@ public:
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
+    int32_t exchange_hash_function_version() const { return _exchange_hash_function_version; }
+
+#ifdef FIU_ENABLE
+    failpoint::OneToAnyBarrier barrier;
+#endif
 
 private:
     friend class HashJoinNode;
@@ -252,8 +267,11 @@ private:
 
     std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
+    RuntimeState* _runtime_state = nullptr;
     pipeline::Observable _observable;
     bool _has_push_down_to_storage = false;
+    // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
@@ -291,7 +309,7 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
 
-    void compute_hash_values(Chunk* chunk, Column* column, RuntimeFilterProbeDescriptor* rf_desc,
+    void compute_hash_values(Chunk* chunk, const Column* column, RuntimeFilterProbeDescriptor* rf_desc,
                              RuntimeMembershipFilterEvalContext& eval_context);
     // only used in no-pipeline mode (deprecated)
     void evaluate(Chunk* chunk);

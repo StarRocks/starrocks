@@ -49,9 +49,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     @SerializedName(value = "id")
     private long id;
 
-    @SerializedName(value = "name")
-    private String name;
-
     private long beforeRestoreId;
 
     @SerializedName(value = "parentId")
@@ -123,7 +120,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
      */
     private long visibleTxnId = -1;
 
+    // Autovacuum
     private final AtomicLong lastVacuumTime = new AtomicLong(0);
+
+    // Full vacuum (orphan data files and redundant db/table/partition)
+    private volatile long lastFullVacuumTime;
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
@@ -138,9 +139,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     }
 
-    public PhysicalPartition(long id, String name, long parentId, MaterializedIndex baseIndex) {
+    public PhysicalPartition(long id, long parentId, MaterializedIndex baseIndex) {
         this.id = id;
-        this.name = name;
         this.parentId = parentId;
         this.baseIndex = baseIndex;
         this.visibleVersion = PARTITION_INIT_VERSION;
@@ -154,14 +154,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public long getId() {
         return this.id;
-    }
-
-    public String getName() {
-        return this.name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     public void setIdForRestore(long id) {
@@ -211,6 +203,14 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setLastVacuumTime(long lastVacuumTime) {
         this.lastVacuumTime.set(lastVacuumTime);
+    }
+
+    public long getLastFullVacuumTime() {
+        return lastFullVacuumTime;
+    }
+
+    public void setLastFullVacuumTime(long lastVacuumTime) {
+        this.lastFullVacuumTime = lastVacuumTime;
     }
 
     public long getMinRetainVersion() {
@@ -375,6 +375,15 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.metadataSwitchVersion = metadataSwitchVersion;
     }
 
+    public boolean isTabletBalanced() {
+        for (MaterializedIndex index : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            if (!index.isTabletBalanced()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public MaterializedIndex getIndex(long indexId) {
         if (baseIndex.getId() == indexId) {
             return baseIndex;
@@ -524,7 +533,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("partitionId: ").append(id).append("; ");
-        buffer.append("partitionName: ").append(name).append("; ");
         buffer.append("parentPartitionId: ").append(parentId).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("isImmutable: ").append(isImmutable()).append("; ");

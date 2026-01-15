@@ -18,7 +18,7 @@ import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 plugins {
     java
-    antlr
+    checkstyle
     id("com.baidu.jprotobuf") version "1.2.1"
 }
 
@@ -29,7 +29,6 @@ java {
         main {
             java {
                 srcDir("src/main/java")
-                srcDir("build/generated-sources/antlr4")
                 srcDir("build/generated-sources/proto")
                 srcDir("build/generated-sources/thrift")
                 srcDir("build/generated-sources/genscript")
@@ -46,19 +45,16 @@ java {
     }
 }
 
-
-configurations.configureEach {
-    resolutionStrategy.force("org.antlr:antlr4-runtime:${project.ext["antlr.version"]}")
-}
-
 dependencies {
-    antlr("org.antlr:antlr4:${project.ext["antlr.version"]}")
-
     // Internal project dependencies
-    implementation(project(":fe-common"))
-    implementation(project(":plugin-common"))
-    implementation(project(":hive-udf"))
-    implementation(project(":spark-dpp"))
+    implementation(project(":fe-grammar"))
+    implementation(project(":fe-type"))
+    implementation(project(":fe-parser"))
+    implementation(project(":fe-spi"))
+    implementation(project(":fe-testing"))
+    implementation(project(":fe-utils"))
+    implementation(project(":plugin:hive-udf"))
+    implementation(project(":plugin:spark-dpp"))
 
     // dependency sync start
     implementation("com.aliyun.datalake:metastore-client-hive3") {
@@ -70,8 +66,13 @@ dependencies {
     implementation("com.aliyun.odps:odps-sdk-core") {
         exclude(group = "org.codehaus.jackson", module = "jackson-mapper-asl")
         exclude(group = "org.ini4j", module = "ini4j")
+        exclude(group = "org.antlr", module = "antlr4")
+        exclude(group = "org.lz4", module = "lz4-java")
     }
-    implementation("com.aliyun.odps:odps-sdk-table-api")
+    implementation("com.aliyun.odps:odps-sdk-table-api") {
+        exclude(group = "org.antlr", module = "antlr4")
+        exclude(group = "org.lz4", module = "lz4-pure-java")
+    }
     implementation("com.azure:azure-identity")
     implementation("com.azure:azure-storage-blob")
     compileOnly("com.baidu:jprotobuf-precompile-plugin") {
@@ -154,7 +155,6 @@ dependencies {
     implementation("javax.annotation:javax.annotation-api")
     implementation("javax.validation:validation-api")
     implementation("net.openhft:zero-allocation-hashing:0.16")
-    implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.arrow:arrow-jdbc")
     implementation("org.apache.arrow:arrow-memory-netty")
     implementation("org.apache.arrow:arrow-vector")
@@ -196,6 +196,7 @@ dependencies {
         exclude(group = "io.netty", module = "*")
         exclude(group = "org.glassfish", module = "javax.el")
         exclude(group = "org.apache.zookeeper", module = "zookeeper")
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.hudi:hudi-hadoop-mr") {
         exclude(group = "org.glassfish", module = "javax.el")
@@ -218,7 +219,13 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core")
     implementation("org.apache.logging.log4j:log4j-layout-template-json")
     implementation("org.apache.logging.log4j:log4j-slf4j-impl")
-    implementation("org.apache.paimon:paimon-bundle")
+    implementation("org.apache.paimon:paimon-bundle") {
+        exclude(group = "org.lz4", module = "lz4-java")
+        // https://avd.aquasec.com/nvd/cve-2024-7254
+        exclude(group = "com.google.protobuf", module = "protobuf-java")
+        // https://avd.aquasec.com/nvd/cve-2025-27820
+        exclude(group = "org.apache.httpcomponents.client5", module = "httpclient5")
+    }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
     implementation("org.apache.parquet:parquet-avro")
@@ -250,6 +257,7 @@ dependencies {
         exclude(group = "org.eclipse.jetty", module = "jetty-servlet")
         exclude(group = "org.eclipse.jetty", module = "jetty-client")
         exclude(group = "org.eclipse.jetty", module = "jetty-security")
+        exclude(group = "org.lz4", module = "lz4-java")
     }
     implementation("org.apache.spark:spark-launcher_2.12")
     compileOnly("org.apache.spark:spark-sql_2.12")
@@ -280,6 +288,8 @@ dependencies {
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:bundle")
     implementation("tools.profiler:async-profiler")
+    implementation("com.github.vertical-blank:sql-formatter:2.0.4")
+    implementation("at.yawk.lz4:lz4-java")
     // dependency sync end
 
     // extra dependencies pom.xml does not have
@@ -288,17 +298,6 @@ dependencies {
     testImplementation("org.apache.spark:spark-sql_2.12")
     implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("net.openhft:zero-allocation-hashing:0.16")
-}
-
-// Configure ANTLR plugin
-tasks.generateGrammarSource {
-    maxHeapSize = "512m"
-    // Add the -lib argument to tell ANTLR where to find imported grammars
-    arguments = arguments + listOf(
-        "-visitor",
-        "-package", "com.starrocks.sql.parser",
-    )
-    outputDirectory = layout.buildDirectory.get().dir("generated-sources/antlr4/com/starrocks/sql/parser").asFile
 }
 
 // Custom task for Protocol Buffer generation
@@ -408,7 +407,6 @@ tasks.register<Task>("generateByScripts") {
             commandLine(
                 "python3",
                 "${project.rootProject.projectDir}/../build-support/gen_build_version.py",
-                "--cpp", outputDir.toString(),
                 "--java", outputDir.toString()
             )
         }
@@ -425,11 +423,6 @@ tasks.register<Task>("generateByScripts") {
     }
 }
 
-// Add source generation tasks to the build process
-tasks.compileJava {
-    dependsOn("generateGrammarSource", "generateThriftSources", "generateProtoSources", "generateByScripts")
-}
-
 tasks.named<PrecompileTask>("jprotobuf_precompile") {
     filterClassPackage = "com.starrocks.proto;com.starrocks.rpc;com.starrocks.server"
     generateProtoFile = "true"
@@ -442,7 +435,7 @@ tasks.named<ProcessResources>("processTestResources") {
 // Configure test task
 tasks.test {
     useJUnitPlatform()
-    maxParallelForks = (project.findProperty("fe_ut_parallel") as String? ?: "8").toInt()
+    maxParallelForks = (project.findProperty("fe_ut_parallel") as String? ?: "16").toInt()
 
     // Don't reuse JVM processes for tests
     forkEvery = 1
@@ -458,12 +451,12 @@ tasks.test {
         )
 
         // Show the standard output and error streams of the test JVM(s)
-        showStandardStreams = true
+        showStandardStreams = false
 
         // Configure how exceptions are displayed
-        exceptionFormat = TestExceptionFormat.FULL // Or SHORT
-        showStackTraces = true
-        showCauses = true // Show underlying causes for exceptions
+        exceptionFormat = TestExceptionFormat.SHORT // Or FULL
+        showStackTraces = false
+        showCauses = false // Show underlying causes for exceptions
     }
 
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
@@ -478,10 +471,39 @@ tasks.test {
     // Use independent class loading (equivalent to useSystemClassLoader=false)
     systemProperty("java.security.manager", "allow")
 
-    // Exclude specific tests
-    //exclude("**/QueryDumpRegressionTest.class")
+    exclude {
+        it.name.contains("QueryDumpRegressionTest") || it.name.contains("QueryDumpCaseRewriter")
+    }
 }
 
+// Checkstyle configuration to match Maven behavior
+checkstyle {
+    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    configFile = rootProject.file("checkstyle.xml")
+}
+
+// Configure Checkstyle tasks to match Maven behavior
+tasks.withType<Checkstyle>().configureEach {
+    // Don't check generated source files
+    setSource(source.filter {
+        !it.path.contains("/generated-sources/") &&
+                !it.path.contains("/sql/parser/gen/")
+    })
+
+    ignoreFailures = false  // Match Maven behavior: failsOnError=true
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes
+    classpath = files()
+
+    // Increase memory for checkstyle to avoid OutOfMemoryError
+    maxHeapSize = "4096m"
+}
+
+// Bind checkstyle to run before compilation
+tasks.compileJava {
+    dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
+    // Add explicit dependency on hive-udf shadowJar task
+    dependsOn(":plugin:hive-udf:shadowJar")
+}
 
 // Configure JAR task
 tasks.jar {

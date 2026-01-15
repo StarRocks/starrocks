@@ -30,6 +30,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -37,6 +39,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.TabletStatRequest;
@@ -45,6 +49,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 
@@ -168,5 +174,23 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
         increaseMetrics();
         return lakeService.aggregatePublishVersion(request);
+    }
+
+    @Override
+    public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+        increaseMetrics();
+        return lakeService.vacuumFull(request);
+    }
+
+    @Override
+    public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+        increaseMetrics();
+        return lakeService.getTabletMetadatas(request);
+    }
+
+    @Override
+    public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+        increaseMetrics();
+        return lakeService.repairTabletMetadata(request);
     }
 }

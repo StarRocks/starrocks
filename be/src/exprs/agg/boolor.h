@@ -52,8 +52,7 @@ public:
     void empty_result(FunctionContext* ctx, Column* to) const {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
             output->append(false);
             nullable->null_column_data().push_back(1);
         } else {
@@ -71,11 +70,11 @@ public:
             }
             const auto& data_column = nullable_column.data_column();
             const auto& column = down_cast<const InputColumnType&>(*data_column);
-            bool value = column.get_data()[row_num];
+            bool value = column.immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-            bool value = column.get_data()[row_num];
+            bool value = column.immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         }
     }
@@ -93,7 +92,7 @@ public:
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (!nullable_column.is_null(i)) {
                     const auto& column = down_cast<const InputColumnType&>(*data_column);
-                    bool value = column.get_data()[i];
+                    bool value = column.immutable_data()[i];
                     if (value) {
                         this->data(state).result = true;
                         break;
@@ -104,7 +103,7 @@ public:
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
 
             for (size_t i = 0; i < chunk_size; ++i) {
-                bool value = column.get_data()[i];
+                bool value = column.immutable_data()[i];
                 if (value) {
                     this->data(state).result = true;
                     break;
@@ -127,7 +126,7 @@ public:
 
             for (size_t i = frame_start; i < frame_end; ++i) {
                 if (!nullable_column.is_null(i)) {
-                    bool value = column.get_data()[i];
+                    bool value = column.immutable_data()[i];
                     if (value) {
                         this->data(state).result = true;
                         break;
@@ -138,7 +137,7 @@ public:
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
 
             for (size_t i = frame_start; i < frame_end; ++i) {
-                bool value = column.get_data()[i];
+                bool value = column.immutable_data()[i];
                 if (value) {
                     this->data(state).result = true;
                     break;
@@ -155,11 +154,11 @@ public:
             }
             const auto& data_column = nullable_column.data_column();
             const auto* input_column = down_cast<const InputColumnType*>(data_column.get());
-            bool value = input_column->get_data()[row_num];
+            bool value = input_column->immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         } else {
             const auto* input_column = down_cast<const InputColumnType*>(column);
-            bool value = input_column->get_data()[row_num];
+            bool value = input_column->immutable_data()[row_num];
             BoolOrElement()(this->data(state), value);
         }
     }
@@ -167,8 +166,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
             output->append(this->data(state).result);
             nullable->null_column_data().push_back(0);
         } else {
@@ -178,15 +176,14 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(to);
-            auto& data_column = nullable->data_column();
-            auto* output = down_cast<BooleanColumn*>(data_column.get());
+            auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
             output->append(this->data(state).result);
             nullable->null_column_data().push_back(0);
         } else {
@@ -202,8 +199,7 @@ public:
         for (size_t i = start; i < end; ++i) {
             if (dst->is_nullable()) {
                 auto* nullable = down_cast<NullableColumn*>(dst);
-                auto& data_column = nullable->data_column();
-                auto* output = down_cast<BooleanColumn*>(data_column.get());
+                auto* output = down_cast<BooleanColumn*>(nullable->data_column_raw_ptr());
                 output->get_data()[i] = this->data(state).result;
             } else {
                 auto* output = down_cast<BooleanColumn*>(dst);

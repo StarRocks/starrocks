@@ -35,7 +35,7 @@ public:
         DCHECK((*columns[0]).is_numeric());
         if constexpr (std::is_integral_v<T>) {
             const auto& column = static_cast<const InputColumnType&>(*columns[0]);
-            this->data(state).add(column.get_data()[row_num]);
+            this->data(state).add(column.immutable_data()[row_num]);
         }
     }
 
@@ -52,12 +52,12 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         if constexpr (std::is_integral_v<T>) {
-            auto* dst_column = down_cast<BitmapColumn*>((*dst).get());
+            auto* dst_column = down_cast<BitmapColumn*>(dst.get());
             const auto* src_column = static_cast<const InputColumnType*>(src[0].get());
             for (size_t i = 0; i < chunk_size; ++i) {
-                BitmapValue bitmap(src_column->get_data()[i]);
+                BitmapValue bitmap(src_column->immutable_data()[i]);
                 dst_column->append(std::move(bitmap));
             }
         }

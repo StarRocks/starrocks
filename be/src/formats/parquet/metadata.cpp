@@ -24,6 +24,7 @@
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/utils.h"
+#include "runtime/current_thread.h"
 #include "util/thrift_util.h"
 
 namespace starrocks::parquet {
@@ -469,7 +470,7 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
         auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
-        ObjectCacheWriteOptions options;
+        MemCacheWriteOptions options;
         options.evict_probability = _datacache_options->datacache_evict_probability;
         auto capture = std::make_unique<FileMetaDataPtr>(file_metadata);
         Status st = _cache->insert(metacache_key, (void*)(capture.get()), file_metadata_size, deleter, options,
@@ -529,7 +530,7 @@ Status FileMetaDataParser::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int
         RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
         *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
     }
-#ifdef BE_TEST
+#if defined(BE_TEST) || defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
     *file_metadata_size = sizeof(FileMetaData);
 #endif
     return Status::OK();

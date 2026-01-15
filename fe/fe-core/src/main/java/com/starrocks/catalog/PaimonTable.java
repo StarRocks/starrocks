@@ -15,14 +15,15 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
@@ -87,7 +88,11 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        if (!new Identifier(databaseName, tableName).isSystemTable()) {
+            return String.join(".", catalogName,  paimonNativeTable.uuid());
+        } else {
+            return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        }
     }
 
     @Override
@@ -189,6 +194,11 @@ public class PaimonTable extends Table {
                 databaseName.equals(that.databaseName) &&
                 tableName.equals(that.tableName) &&
                 Objects.equals(getTableIdentifier(), that.getTableIdentifier());
+    }
+
+    @Override
+    public boolean isTemporal() {
+        return true;
     }
 
     @Override

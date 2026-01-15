@@ -15,18 +15,15 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
-import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.thrift.TCloudType;
@@ -35,6 +32,7 @@ import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THiveTableSink;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -44,6 +42,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.Map;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -70,7 +69,7 @@ public class HiveTableSinkTest {
                 .setHiveTableName("hive_table")
                 .setPartitionColumnNames(Lists.newArrayList("p1"))
                 .setDataColumnNames(Lists.newArrayList("c1"))
-                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setFullSchema(Lists.newArrayList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
                 .setTableLocation("hdfs://hadoop01:9000/tableLocation")
                 .setProperties(new HashMap<>())
                 .setStorageFormat(HiveStorageFormat.PARQUET)
@@ -78,8 +77,10 @@ public class HiveTableSinkTest {
 
         new Expectations() {
             {
+                CloudConfiguration cloudConfig = new CloudConfiguration();
+                cloudConfig.loadCommonFields(new HashMap<>());
                 hiveConnector.getMetadata().getCloudConfiguration();
-                result = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+                result = cloudConfig;
                 minTimes = 1;
             }
         };
@@ -118,6 +119,107 @@ public class HiveTableSinkTest {
         builder.setStorageFormat(HiveStorageFormat.AVRO);
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Writing to hive table in [AVRO] format is not supported",
-                () ->new HiveTableSink(builder.build(), desc, true, new SessionVariable()));
+                () -> new HiveTableSink(builder.build(), desc, true, new SessionVariable()));
     }
+
+    @Test
+    public void testCompressionFromHiveTableProperty(@Mocked CatalogConnector hiveConnector,
+                                                     @Mocked SessionVariable sessionVariable) {
+        // hiveTable.properties contains compression_codec -> should use it
+        Map<String, String> props = new HashMap<>();
+        props.put("compression_codec", "snappy");
+
+        HiveTable.Builder builder = HiveTable.builder()
+                .setId(1)
+                .setTableName("hive_table")
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(java.util.Collections.singletonList("p1"))
+                .setDataColumnNames(java.util.Collections.singletonList("c1"))
+                .setFullSchema(java.util.Arrays.asList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
+                .setTableLocation("hdfs://hadoop01:9000/tableLocation")
+                .setProperties(props)
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setCreateTime(System.currentTimeMillis());
+
+        new Expectations() {
+            {
+                CloudConfiguration cloudConfig = new CloudConfiguration();
+                cloudConfig.loadCommonFields(new HashMap<>());
+                hiveConnector.getMetadata().getCloudConfiguration();
+                result = cloudConfig;
+                minTimes = 1;
+            }
+        };
+
+        ConnectorMgr connectorMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getConnectorMgr();
+        new Expectations(connectorMgr) {{
+            connectorMgr.getConnector("hive_catalog");
+            result = hiveConnector;
+            minTimes = 1;
+
+            sessionVariable.getConnectorSinkCompressionCodec();
+            result = "gzip";
+            sessionVariable.getHiveTempStagingDir();
+            result = "/tmp";
+        }};
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        HiveTableSink sink = new HiveTableSink(builder.build(), desc, true, sessionVariable);
+        TDataSink tDataSink = sink.toThrift();
+        THiveTableSink tHiveTableSink = tDataSink.getHive_table_sink();
+        Assertions.assertEquals(TCompressionType.SNAPPY, tHiveTableSink.getCompression_type());
+    }
+
+    @Test
+    public void testCompressionFallbackToSessionVariable(@Mocked CatalogConnector hiveConnector,
+                                                         @Mocked SessionVariable sessionVariable) {
+        // hiveTable.properties does NOT contain compression_codec -> should fallback to sessionVariable
+        HiveTable.Builder builder = HiveTable.builder()
+                .setId(2)
+                .setTableName("hive_table2")
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table2")
+                .setPartitionColumnNames(java.util.Collections.singletonList("p1"))
+                .setDataColumnNames(java.util.Collections.singletonList("c1"))
+                .setFullSchema(java.util.Arrays.asList(new Column("c1", IntegerType.INT), new Column("p1", IntegerType.INT)))
+                .setTableLocation("hdfs://hadoop01:9000/tableLocation")
+                .setProperties(new HashMap<>())
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setCreateTime(System.currentTimeMillis());
+
+        new Expectations() {
+            {
+                CloudConfiguration cloudConfig = new CloudConfiguration();
+                cloudConfig.loadCommonFields(new HashMap<>());
+                hiveConnector.getMetadata().getCloudConfiguration();
+                result = cloudConfig;
+                minTimes = 1;
+
+                // session variable returns fallback compression codec and staging dir
+                sessionVariable.getConnectorSinkCompressionCodec();
+                result = "gzip";
+                sessionVariable.getHiveTempStagingDir();
+                result = "/tmp";
+            }
+        };
+
+        ConnectorMgr connectorMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getConnectorMgr();
+        new Expectations(connectorMgr) {
+            {
+                connectorMgr.getConnector("hive_catalog");
+                result = hiveConnector;
+                minTimes = 1;
+            }
+        };
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        HiveTableSink sink = new HiveTableSink(builder.build(), desc, true, sessionVariable);
+        TDataSink tDataSink = sink.toThrift();
+        THiveTableSink tHiveTableSink = tDataSink.getHive_table_sink();
+        Assertions.assertEquals(TCompressionType.GZIP, tHiveTableSink.getCompression_type());
+    }
+
 }

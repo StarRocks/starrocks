@@ -76,8 +76,8 @@ public:
 
     class ReplayEntry {
     public:
-        ReplayEntry(const ReplayerOP& o, const ChunkPtr& cp, const string& cc)
-                : op(o), chunk_ptr(cp), condition_col(cc) {}
+        ReplayEntry(ReplayerOP o, ChunkPtr cp, string cc)
+                : op(std::move(o)), chunk_ptr(std::move(cp)), condition_col(std::move(cc)) {}
         // Operation type
         ReplayerOP op;
         // Replay data
@@ -99,15 +99,15 @@ public:
     }
 
     bool check(const ChunkPtr& chunk) {
-        std::map<int, std::pair<int, int>> tmp_chunk;
+        std::map<std::string, std::pair<int, int>> tmp_chunk;
         for (int i = 0; i < chunk->num_rows(); i++) {
-            if (tmp_chunk.count(chunk->columns()[0]->get(i).get_int32()) > 0) {
+            if (tmp_chunk.count(chunk->columns()[0]->get(i).get_slice().to_string()) > 0) {
                 // duplicate pk
-                LOG(ERROR) << "duplicate pk: " << chunk->columns()[0]->get(i).get_int32();
+                LOG(ERROR) << "duplicate pk: " << chunk->columns()[0]->get(i).get_slice().to_string();
                 return false;
             }
-            tmp_chunk[chunk->columns()[0]->get(i).get_int32()] = {chunk->columns()[1]->get(i).get_int32(),
-                                                                  chunk->columns()[2]->get(i).get_int32()};
+            tmp_chunk[chunk->columns()[0]->get(i).get_slice().to_string()] = {chunk->columns()[1]->get(i).get_int32(),
+                                                                              chunk->columns()[2]->get(i).get_int32()};
         }
         if (tmp_chunk.size() != _replayer_index.size()) {
             LOG(ERROR) << "inconsistency row number, actual : " << tmp_chunk.size()
@@ -146,24 +146,24 @@ public:
             if (log.op == ReplayerOP::UPSERT) {
                 // Upsert
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
+                    _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
                             chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
                 }
             } else if (log.op == ReplayerOP::ERASE) {
                 // Delete
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    _replayer_index.erase(chunk->columns()[0]->get(i).get_int32());
+                    _replayer_index.erase(chunk->columns()[0]->get(i).get_slice().to_string());
                 }
             } else if (log.op == ReplayerOP::PARTIAL_UPSERT || log.op == ReplayerOP::PARTIAL_UPDATE) {
                 // Partial update
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_int32());
+                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_slice().to_string());
                     if (iter != _replayer_index.end()) {
-                        _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
+                        _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
                                 chunk->columns()[1]->get(i).get_int32(), iter->second.second};
                     } else if (log.op == ReplayerOP::PARTIAL_UPSERT) {
                         // insert new record with default val
-                        _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
+                        _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
                                 chunk->columns()[1]->get(i).get_int32(), 0};
                     } else {
                         // do nothing
@@ -186,11 +186,11 @@ public:
                     return false;
                 };
                 for (int i = 0; i < chunk->num_rows(); i++) {
-                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_int32());
+                    auto iter = _replayer_index.find(chunk->columns()[0]->get(i).get_slice().to_string());
                     if (iter == _replayer_index.end() || is_condition_meet_fn(iter->second, i)) {
                         // update if condition meet or not found
                         // insert new record
-                        _replayer_index[chunk->columns()[0]->get(i).get_int32()] = {
+                        _replayer_index[chunk->columns()[0]->get(i).get_slice().to_string()] = {
                                 chunk->columns()[1]->get(i).get_int32(), chunk->columns()[2]->get(i).get_int32()};
                     }
                 }
@@ -206,7 +206,7 @@ private:
     // logs for replay.
     std::vector<ReplayEntry> _redo_logs;
     // c0 -> <c1, c2>
-    std::map<int, std::pair<int, int>> _replayer_index;
+    std::map<std::string, std::pair<int, int>> _replayer_index;
 };
 
 class LakePrimaryKeyConsistencyTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
@@ -216,8 +216,8 @@ public:
         _tablet_metadata->set_enable_persistent_index(true);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _partial_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
+        _partial_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
         _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
         _partial_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
         _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
@@ -261,6 +261,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
         _old_l0_size = config::l0_max_mem_usage;
         config::l0_max_mem_usage = MaxNumber * (sizeof(int) + sizeof(uint64_t) * 2) / 10;
         _old_memtable_size = config::write_buffer_size;
@@ -269,6 +270,8 @@ public:
         config::enable_pindex_minor_compaction = false;
         _old_enable_pk_strict_memcheck = config::enable_pk_strict_memcheck;
         config::enable_pk_strict_memcheck = false;
+        _old_pk_index_eager_build_threshold_bytes = config::pk_index_eager_build_threshold_bytes;
+        config::pk_index_eager_build_threshold_bytes = 1;
     }
 
     void TearDown() override {
@@ -276,6 +279,7 @@ public:
         config::l0_max_mem_usage = _old_l0_size;
         config::write_buffer_size = _old_memtable_size;
         config::enable_pk_strict_memcheck = _old_enable_pk_strict_memcheck;
+        config::pk_index_eager_build_threshold_bytes = _old_pk_index_eager_build_threshold_bytes;
     }
 
     std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
@@ -287,7 +291,7 @@ public:
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
-        //  |   c0   |  INT | YES |  NO  |
+        //  |   c0   |  STRING | YES |  NO  |
         //  |   c1   |  INT | NO  |  NO  |
         //  |   c2   |  INT | NO  |  NO  |
         auto schema = metadata->mutable_schema();
@@ -299,9 +303,10 @@ public:
         {
             c0->set_unique_id(next_id());
             c0->set_name("c0");
-            c0->set_type("INT");
+            c0->set_type("VARCHAR");
             c0->set_is_key(true);
             c0->set_is_nullable(false);
+            c0->set_length(3200);
         }
         auto c1 = schema->add_column();
         {
@@ -327,14 +332,22 @@ public:
     std::pair<ChunkPtr, std::vector<uint32_t>> gen_upsert_data(bool is_upsert) {
         const size_t chunk_size = (size_t)_random_generator->random_n();
         std::vector<std::vector<int>> cols(3);
+        std::vector<std::string> key_col_str;
+        std::vector<Slice> key_col;
         std::vector<uint8_t> v3(chunk_size, is_upsert ? TOpType::UPSERT : TOpType::DELETE);
         _random_generator->random_cols(chunk_size, &cols);
+        for (size_t i = 0; i < chunk_size; i++) {
+            key_col_str.emplace_back(std::to_string(cols[0][i]));
+        }
+        for (const auto& s : key_col_str) {
+            key_col.emplace_back(s);
+        }
 
-        auto c0 = Int32Column::create();
+        auto c0 = BinaryColumn::create();
         auto c1 = Int32Column::create();
         auto c2 = Int32Column::create();
         auto c3 = Int8Column::create();
-        c0->append_numbers(cols[0].data(), cols[0].size() * sizeof(int));
+        c0->append_strings(key_col.data(), key_col.size());
         c1->append_numbers(cols[1].data(), cols[1].size() * sizeof(int));
         c2->append_numbers(cols[2].data(), cols[2].size() * sizeof(int));
         c3->append_numbers(v3.data(), v3.size() * sizeof(uint8_t));
@@ -350,18 +363,49 @@ public:
     std::pair<ChunkPtr, std::vector<uint32_t>> gen_partial_update_data() {
         const size_t chunk_size = (size_t)_random_generator->random_n();
         std::vector<std::vector<int>> cols(2);
+        std::vector<std::string> key_col_str;
+        std::vector<Slice> key_col;
         std::vector<uint8_t> v3(chunk_size, TOpType::UPSERT);
         _random_generator->random_cols(chunk_size, &cols);
+        for (size_t i = 0; i < chunk_size; i++) {
+            key_col_str.emplace_back(std::to_string(cols[0][i]));
+        }
+        for (const auto& s : key_col_str) {
+            key_col.emplace_back(s);
+        }
 
-        auto c0 = Int32Column::create();
+        auto c0 = BinaryColumn::create();
         auto c1 = Int32Column::create();
-        c0->append_numbers(cols[0].data(), cols[0].size() * sizeof(int));
+        c0->append_strings(key_col.data(), key_col.size());
         c1->append_numbers(cols[1].data(), cols[1].size() * sizeof(int));
         auto indexes = std::vector<uint32_t>(chunk_size);
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
         return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1)}, _slot_cid_map), std::move(indexes)};
+    }
+
+    // 5% chance to force index memtable flush
+    std::unique_ptr<ConfigResetGuard<int64_t>> random_force_index_mem_flush() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_flush_guard;
+        uint32_t r = _random_generator->random() % 100;
+        if (r < 5) {
+            // 5% chance to force index memtable flush
+            force_flush_guard = std::make_unique<ConfigResetGuard<int64_t>>(&config::l0_max_mem_usage, 1);
+        }
+        return force_flush_guard;
+    }
+
+    // 20% chance to enable eager PK index build
+    std::unique_ptr<ConfigResetGuard<bool>> random_pk_index_eager_build() {
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard;
+        uint32_t r = _random_generator->random() % 100;
+        if (r < 20) {
+            // 20% chance to enable eager PK index build
+            pk_index_eager_build_guard =
+                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_index_eager_build, true);
+        }
+        return pk_index_eager_build_guard;
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {
@@ -383,6 +427,8 @@ public:
     }
 
     Status upsert_op() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -418,6 +464,8 @@ public:
     }
 
     Status partial_update_op(PartialUpdateMode mode) {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -453,6 +501,8 @@ public:
     }
 
     Status condition_update() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         // c2 as merge_condition
         std::string merge_condition = "c2";
@@ -484,11 +534,13 @@ public:
     }
 
     Status upsert_with_batch_pub_op() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         size_t batch_cnt = std::max(_random_generator->random() % MaxBatchCnt, (size_t)1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
             auto txn_id = next_id();
-            txn_ids.push_back(txn_id);
+            txn_ids.emplace_back(txn_id);
             ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                        .set_tablet_manager(_tablet_mgr.get())
                                                        .set_tablet_id(_tablet_metadata->id())
@@ -525,6 +577,8 @@ public:
     }
 
     Status delete_op() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -550,6 +604,8 @@ public:
     }
 
     Status compact_op() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
                                                                     false, nullptr);
@@ -658,6 +714,7 @@ protected:
     int64_t _old_l0_size = 0;
     int64_t _old_memtable_size = 0;
     bool _old_enable_pk_strict_memcheck = false;
+    int64_t _old_pk_index_eager_build_threshold_bytes = 0;
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {

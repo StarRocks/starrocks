@@ -35,13 +35,13 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.ArrayList;
@@ -63,6 +63,9 @@ public class SessionAction extends WebBaseAction {
         SESSION_TABLE_HEADER.add("Info");
         SESSION_TABLE_HEADER.add("IsPending");
         SESSION_TABLE_HEADER.add("Warehouse");
+        SESSION_TABLE_HEADER.add("CNGroup");
+        SESSION_TABLE_HEADER.add("Catalog");
+        SESSION_TABLE_HEADER.add("QueryId");
     }
 
     public SessionAction(ActionController controller) {

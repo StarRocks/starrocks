@@ -37,6 +37,7 @@ package com.starrocks.http.action;
 import com.google.common.base.Strings;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -52,7 +53,6 @@ import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -117,7 +117,8 @@ public class WebBaseAction extends BaseAction {
                     + "    <div class=\"navbar-header\">"
                     + "      <a class=\"navbar-brand\" href=\"/\" style=\"padding: unset;\">"
                     +
-                    "        <img alt=\"StarRocks\" style=\"height: inherit;\" src=\"/static/images?res=starrocks-logo.png\">"
+                    "        <img alt=\"StarRocks\" style=\"height: inherit;\" " +
+                    "src=\"/static/images?res=starrocks-logo.png\">"
                     + "      </a>"
                     + "    </div>"
                     + "    <div>"
@@ -314,6 +315,9 @@ public class WebBaseAction extends BaseAction {
                     .append("</a></li>");
             sb.append("<li id=\"nav_ha\"><a href=\"/ha\">")
                     .append("ha")
+                    .append("</a></li>");
+            sb.append("<li id=\"nav_proc_profile\"><a href=\"/proc_profile\">")
+                    .append("proc profiles")
                     .append("</a></li>");
         }
 

@@ -538,6 +538,53 @@ TEST(TestRuntimeProfile, testUpdateWithOldAndNewProfile) {
     ASSERT_EQ(2, child_profile->get_version());
 }
 
+TEST(TestRuntimeProfile, testUpdateMinMax) {
+    auto profile = std::make_shared<RuntimeProfile>("base_profile");
+    auto* base_c1 =
+            profile->add_counter("counter1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    COUNTER_SET(base_c1, int64_t(4));
+    base_c1->set_min(1);
+    base_c1->set_max(7);
+    auto* base_c2 =
+            profile->add_counter("counter2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    COUNTER_SET(base_c2, int64_t(5));
+
+    auto update_profile = std::make_shared<RuntimeProfile>("update_profile");
+    auto* update_c1 =
+            update_profile->add_counter("counter1", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    COUNTER_SET(update_c1, int64_t(6));
+    auto* update_c2 =
+            update_profile->add_counter("counter2", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    COUNTER_SET(update_c2, int64_t(8));
+    update_c2->set_min(4);
+    update_c2->set_max(12);
+    auto* update_c3 =
+            update_profile->add_counter("counter3", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    COUNTER_SET(update_c3, int64_t(10));
+    update_c3->set_min(5);
+    update_c3->set_max(15);
+
+    TRuntimeProfileTree update_tree;
+    update_profile->to_thrift(&update_tree);
+
+    profile->update(update_tree);
+    ASSERT_EQ(6, base_c1->value());
+    ASSERT_FALSE(base_c1->min_value().has_value());
+    ASSERT_FALSE(base_c1->max_value().has_value());
+    ASSERT_EQ(8, base_c2->value());
+    ASSERT_TRUE(base_c2->min_value().has_value());
+    ASSERT_EQ(4, base_c2->min_value().value());
+    ASSERT_TRUE(base_c2->max_value().has_value());
+    ASSERT_EQ(12, base_c2->max_value().value());
+    auto* base_c3 = profile->get_counter("counter3");
+    ASSERT_TRUE(base_c3 != nullptr);
+    ASSERT_EQ(10, base_c3->value());
+    ASSERT_TRUE(base_c3->min_value().has_value());
+    ASSERT_EQ(5, base_c3->min_value().value());
+    ASSERT_TRUE(base_c3->max_value().has_value());
+    ASSERT_EQ(15, base_c3->max_value().value());
+}
+
 TEST(TestRuntimeProfile, testRaceMergeProfiles) {
     ObjectPool pool;
     std::vector<RuntimeProfile*> profiles;

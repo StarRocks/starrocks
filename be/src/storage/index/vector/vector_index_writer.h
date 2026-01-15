@@ -64,7 +64,7 @@ private:
     uint32_t _start_vector_index_build_threshold = config::config_vector_index_default_build_threshold;
 
     // buffer data for tiny data size
-    ColumnPtr _buffer_column;
+    MutableColumnPtr _buffer_column;
 
     // size of null_bit column is the same size with buffer_column
     // e.g. buffer_column: [1, NULL, 3, NULL, 4], null_column: [0, 1, 0, 1, 0]

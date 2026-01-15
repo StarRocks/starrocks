@@ -5,7 +5,7 @@ sidebar_position: 30
 
 # Manage user privileges
 
-import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
@@ -89,7 +89,6 @@ You can grant roles to a user or another role using [GRANT](../../../sql-referen
   GRANT example_role TO ROLE test_role;
   ```
 
-<!--enterprise
 - Grant a role to a user group. You can identify user groups from external authentication systems via [Group Provider](../group_provider.md).
 
   The following example grants the role `example_role` to the user group `analysts`:
@@ -97,7 +96,6 @@ You can grant roles to a user or another role using [GRANT](../../../sql-referen
   ```SQL
   GRANT example_role TO EXTERNAL GROUP analysts;
   ```
--->
 
 ### Alter the default role of a user
 
@@ -195,7 +193,6 @@ You can grant privileges to a user or a role using [GRANT](../../../sql-referenc
   GRANT SELECT ON TABLE sr_member TO ROLE example_role;
   ```
 
-<!--enterprise
 - Grant a privilege to a user group. You can identify user groups from external authentication systems via [Group Provider](../group_provider.md).
 
   The following example grants the SELECT privilege on the table `sr_member` to the user group `analysts`:
@@ -203,7 +200,6 @@ You can grant privileges to a user or a role using [GRANT](../../../sql-referenc
   ```SQL
   GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
   ```
--->
 
 ### Revoke privileges
 

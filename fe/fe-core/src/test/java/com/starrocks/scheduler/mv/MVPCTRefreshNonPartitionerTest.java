@@ -18,12 +18,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshNonPartitioner;
+import com.starrocks.sql.common.PCellSortedSet;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-
-import java.util.Collections;
-import java.util.Iterator;
 
 public class MVPCTRefreshNonPartitionerTest {
 
@@ -33,11 +32,10 @@ public class MVPCTRefreshNonPartitionerTest {
         TaskRunContext taskRunContext = Mockito.mock(TaskRunContext.class);
         Database database = Mockito.mock(Database.class);
         MaterializedView mv = Mockito.mock(MaterializedView.class);
+        MVRefreshParams mvRefreshParams = Mockito.mock(MVRefreshParams.class);
         MVPCTRefreshNonPartitioner job = new MVPCTRefreshNonPartitioner(mvTaskRunContext, taskRunContext,
-                database, mv);
-        Iterator<String> dummyIter = Collections.emptyIterator();
-
-        int result = job.getAdaptivePartitionRefreshNumber(dummyIter);
+                database, mv, mvRefreshParams);
+        int result = job.getAdaptivePartitionRefreshNumber(PCellSortedSet.of());
         Assertions.assertEquals(0, result);
     }
 }

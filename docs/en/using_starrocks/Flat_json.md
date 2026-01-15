@@ -30,7 +30,7 @@ Due to the special nature of the JSON type, its performance in queries is not as
 - Redundant data: Queries need to read the entire JSON data, which includes many redundant fields.
 
 StarRocks introduces the Flat JSON feature to improve JSON data query efficiency and reduce the complexity of using JSON.
-- This feature is available from version 3.3.0, disabled by default, and needs to be enabled manually.
+- This feature is available from version 3.3.0. It is disabled by default before v4.0 and needs to be enabled manually. From v4.0 onwards, it is enabled by default.
 
 ## What is Flat JSON
 
@@ -46,6 +46,45 @@ The core principle of Flat JSON is to detect JSON data during load and extract c
 ```
 
 When loading the above JSON data, fields `a` and `b` are present in most JSON data and have similar data types (both INT). Therefore, the data of fields `a` and `b` can be extracted from JSON and stored separately as two INT columns. When these two columns are used in queries, their data can be directly read without needing to process additional JSON fields, reducing the computational overhead of handling JSON structures.
+
+## Enable Flat JSON
+
+Flat JSON is enabled globally by default from v4.0 onwards. For versions earlier than v4.0, you must manually enable it.
+
+From v4.0, this feature can be configured on the table level.
+
+### Enable for versions earlier than v4.0
+
+1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v4.0. For modification methods, refer to
+[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters).
+2. Enable FE pruning feature:
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
+
+### Enable Flat JSON Feature on table level
+
+Setting Flat JSON-related properties on table level is supported from v4.0 onwards.
+
+1. When creating the table, you can set `flat_json.enable` and other Flat JSON-related properties. For detailed instructions, see [CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-flat-json-properties-on-table-level).
+
+   Alternatively, you can set these properties using [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
+
+   Example:
+
+   ```SQL
+   ALTER TABLE t1 SET ("flat_json.enable" = "true");
+   ALTER TABLE t1 SET ("flat_json.null.factor" = "0.1");
+   ALTER TABLE t1 SET ("flat_json.sparsity.factor" = "0.8");
+   ALTER TABLE t1 SET ("flat_json.column.max" = "90");
+   ```
+
+2. Enable FE pruning feature:
+
+   ```SQL
+   SET GLOBAL cbo_prune_json_subfield = true;
+   ```
 
 ## Verify if Flat JSON is Effective
 
@@ -64,29 +103,43 @@ You can verify whether the executed query benefits from Flat JSON optimization t
 
 ## Usage Example
 
+- Method 1: Configure Flat JSON properties when creating a table with JSON columns. Supported from v4.0 onwards.
+
+  ```SQL
+  CREATE TABLE `t1` (
+      `k1` int,
+      `k2` JSON,
+      `k3` VARCHAR(20),
+      `k4` JSON
+  )             
+  DUPLICATE KEY(`k1`)
+  COMMENT "OLAP"
+  DISTRIBUTED BY HASH(`k1`) BUCKETS 2
+  PROPERTIES (
+      "replication_num" = "3",
+      "flat_json.enable" = "true",
+      "flat_json.null.factor" = "0.5",
+      "flat_json.sparsity.factor" = "0.5",
+      "flat_json.column.max" = "50");
+   INSERT INTO t1 (k1,k2) VALUES
+      (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
+      (15,parse_json('{"str":"test_str0","Integer":11,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str1","Integer":111,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (16,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (17,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (18,parse_json('{"str":"test_str5","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (19,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
+  ``` 
+
+- Method 2: Enable Flat JSON before creating the table.
+
 1. Enable the feature (refer to other sections)
 2. Create a table with JSON columns. In this example, use INSERT INTO to load JSON data into the table.
 
    ```SQL
-    -- method1: Create a table with JSON columns and configure Flat JSON at creation time. It only support share-nothing cluster.
-   CREATE TABLE `t1` (
-       `k1` int,
-       `k2` JSON,
-       `k3` VARCHAR(20),
-       `k4` JSON
-   )             
-   DUPLICATE KEY(`k1`)
-   COMMENT "OLAP"
-   DISTRIBUTED BY HASH(`k1`) BUCKETS 2
-   PROPERTIES (
-     "replication_num" = "3",
-     "flat_json.enable" = "true",
-     "flat_json.null.factor" = "0.5",
-     "flat_json.sparsity.factor" = "0.5",
-     "flat_json.column.max" = "50");
-   )
-   
-   -- method2: Enabling the Flat JSON feature is required, and this approach is applicable to both share-nothing and share-data clusters.
    CREATE TABLE `t1` (
        `k1` int,
        `k2` JSON,
@@ -97,19 +150,19 @@ You can verify whether the executed query benefits from Flat JSON optimization t
    COMMENT "OLAP"
    DISTRIBUTED BY HASH(`k1`) BUCKETS 2
    PROPERTIES ("replication_num" = "3");   
-    
-      
+
+
    INSERT INTO t1 (k1,k2) VALUES
-   (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
-   (15,parse_json('{"str":"test_str0","Integer":11,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (15,parse_json('{"str":"test_str1","Integer":111,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (16,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (17,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (18,parse_json('{"str":"test_str5","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (19,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
-   (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
+      (11,parse_json('{"str":"test_flat_json","Integer":123456,"Double":3.14158,"Object":{"c":"d"},"arr":[10,20,30],"Bool":false,"null":null}')),
+      (15,parse_json('{"str":"test_str0","Integer":11,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str1","Integer":111,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (15,parse_json('{"str":"test_str2","Integer":222,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (16,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (17,parse_json('{"str":"test_str3","Integer":333,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (18,parse_json('{"str":"test_str5","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (19,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}')),
+      (20,parse_json('{"str":"test_str6","Integer":444,"Double":3.14,"Object":{"a":"b"},"arr":[1,2,3],"Bool":true,"null":null}'));
    ```
 
 3. View the extracted sub-columns for the `k2` column.
@@ -148,6 +201,28 @@ You can verify whether the executed query benefits from Flat JSON optimization t
       - JsonFlattern: 0ns
    ```
 
+## Related variables and configurations
+
+### Session variables
+
+- `cbo_json_v2_rewrite` (default: true): Enables JSON v2 path rewrite so that expressions like `get_json_*` can be rewritten to direct access of Flat JSON subcolumns, unlocking predicate pushdown and column pruning.
+- `cbo_json_v2_dict_opt` (default: true): Enables low-cardinality dictionary optimization for Flat JSON extended string subcolumns produced by the rewrite, which can speed up string expressions, GROUP BY, and JOIN.
+
+Example:
+
+```SQL
+SET cbo_json_v2_rewrite = true;
+SET cbo_json_v2_dict_opt = true;
+```
+
+### BE Configurations
+
+- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+
 ## Feature Limitations
 
 - All table types in StarRocks support Flat JSON.
@@ -169,32 +244,3 @@ Starting from version v3.3.3:
 - The results extracted by Flat JSON are divided into common columns and reserved field columns. When all JSON Schemas are consistent, no reserved field columns are generated.
 - Flat JSON only stores common field columns and reserved field columns, without additionally storing the original JSON data.
 - When loading data, common fields will automatically infer types as BIGINT/LARGEINT/DOUBLE/STRING. Unrecognized types will be inferred as JSON types, and reserved field columns will be stored as JSON types.
-
-## Enabling Flat JSON Feature (Only support shared-nothing cluster)
-
-1. During table creation, `flat_json.enable` property can be set in the table parameters. See [Table Creation](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) for reference.
-   The Flat JSON feature can also be enabled or reconfigured by modifying table properties directly. Example:
-   ```SQL
-   alter table t1 set ("flat_json.enable" = "true")
-   
-   alter table t1 set ("flat_json.null.factor" = "0.1")
-   
-   alter table t1 set ("flat_json.sparsity.factor" = "0.8")
-   
-   alter table t1 set ("flat_json.column.max" = "90")
-   ```
-2. Enable FE pruning feature: `SET GLOBAL cbo_prune_json_subfield = true;`
-
-## Enabling Flat JSON Feature (Before Version 3.4)
-
-1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before version 3.4. For modification methods, refer to
-[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters)
-2. Enable FE pruning feature: `SET GLOBAL cbo_prune_json_subfield = true;`
-
-## Other Optional BE Configurations
-
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)

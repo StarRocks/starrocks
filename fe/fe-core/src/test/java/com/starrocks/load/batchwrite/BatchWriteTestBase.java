@@ -19,6 +19,8 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,6 +86,8 @@ public abstract class BatchWriteTestBase {
         allNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends()
                 .stream().map(node -> (ComputeNode) node).collect(Collectors.toList());
         Collections.shuffle(allNodes);
+        FeConstants.runningUnitTest = false;
+        Config.enable_new_publish_mechanism = false;
     }
 
     protected List<TTabletCommitInfo> buildCommitInfos() {

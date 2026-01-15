@@ -14,11 +14,7 @@
 
 #pragma once
 
-#include <lz4/lz4.h>
-#include <lz4/lz4frame.h>
-#include <zstd/zstd.h>
-#include <zstd/zstd_errors.h>
-
+#include "util/compression/compression_headers.h"
 #include "util/faststring.h"
 
 namespace starrocks::compression {

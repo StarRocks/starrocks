@@ -15,25 +15,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
-import com.starrocks.common.util.OrderByPair;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class ShowTabletStmt extends ShowStmt {
@@ -43,49 +33,33 @@ public class ShowTabletStmt extends ShowStmt {
             .add("IsSync").add("DetailCmd")
             .build();
 
-    private String dbName;
-    private String tableName;
-    private long tabletId;
-    private PartitionNames partitionNames;
-    private Expr whereClause;
-    private List<OrderByElement> orderByElements;
-    private LimitElement limitElement;
+    private TableRef tableRef;
+    private final long tabletId;
+    private final PartitionRef partitionNames;
+    private final Expr whereClause;
 
     private long version;
     private long backendId;
     private String indexName;
     private Replica.ReplicaState replicaState;
     private Boolean isConsistent;
-    private ArrayList<OrderByPair> orderByPairs;
-
-    private boolean isShowSingleTablet;
 
     private Table table;
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
-        this(dbTableName, tabletId, null, null, null, null, pos);
+    public ShowTabletStmt(TableRef tableRef, long tabletId, NodePosition pos) {
+        this(tableRef, tabletId, null, null, null, null, pos);
     }
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
+    public ShowTabletStmt(TableRef tableRef, long tabletId, PartitionRef partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement) {
-        this(dbTableName, tabletId, partitionNames, whereClause, orderByElements, limitElement, NodePosition.ZERO);
+        this(tableRef, tabletId, partitionNames, whereClause, orderByElements, limitElement, NodePosition.ZERO);
     }
 
-    public ShowTabletStmt(TableName dbTableName, long tabletId, PartitionNames partitionNames,
+    public ShowTabletStmt(TableRef tableRef, long tabletId, PartitionRef partitionNames,
                           Expr whereClause, List<OrderByElement> orderByElements, LimitElement limitElement,
                           NodePosition pos) {
         super(pos);
-        if (dbTableName == null) {
-            this.dbName = null;
-            this.tableName = null;
-            this.isShowSingleTablet = true;
-            this.indexName = null;
-        } else {
-            this.dbName = dbTableName.getDb();
-            this.tableName = dbTableName.getTbl();
-            this.isShowSingleTablet = false;
-            this.indexName = Strings.emptyToNull(indexName);
-        }
+        this.tableRef = tableRef;
         this.tabletId = tabletId;
         this.partitionNames = partitionNames;
         this.whereClause = whereClause;
@@ -99,16 +73,24 @@ public class ShowTabletStmt extends ShowStmt {
         this.orderByPairs = null;
     }
 
-    public String getDbName() {
-        return dbName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public void setDbName(String db) {
-        this.dbName = db;
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public long getTabletId() {
@@ -116,7 +98,7 @@ public class ShowTabletStmt extends ShowStmt {
     }
 
     public boolean isShowSingleTablet() {
-        return isShowSingleTablet;
+        return tableRef == null;
     }
 
     public boolean hasOffset() {
@@ -131,7 +113,7 @@ public class ShowTabletStmt extends ShowStmt {
         return partitionNames != null;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -187,7 +169,8 @@ public class ShowTabletStmt extends ShowStmt {
         this.replicaState = replicaState;
     }
 
-    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
+    @Override
+    public void setOrderByPairs(List<OrderByPair> orderByPairs) {
         this.orderByPairs = orderByPairs;
     }
 
@@ -195,12 +178,8 @@ public class ShowTabletStmt extends ShowStmt {
         return whereClause;
     }
 
-    public List<OrderByElement> getOrderByElements() {
-        return orderByElements;
-    }
-
-    public LimitElement getLimitElement() {
-        return limitElement;
+    public Table getTable() {
+        return table;
     }
 
     public void setTable(Table table) {
@@ -209,11 +188,11 @@ public class ShowTabletStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTabletStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowTabletStatement(this, context);
     }
 
-    private ImmutableList<String> getTitleNames() {
-        if (isShowSingleTablet) {
+    public ImmutableList<String> getTitleNames() {
+        if (isShowSingleTablet()) {
             return SINGLE_TABLET_TITLE_NAMES;
         }
 
@@ -224,24 +203,6 @@ public class ShowTabletStmt extends ShowStmt {
             return LakeTabletsProcDir.TITLE_NAMES;
         } else {
             return LocalTabletsProcDir.TITLE_NAMES;
-        }
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        for (String title : getTitleNames()) {
-            builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
-        }
-        return builder.build();
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
-            return RedirectStatus.FORWARD_NO_SYNC;
-        } else {
-            return RedirectStatus.NO_FORWARD;
         }
     }
 }

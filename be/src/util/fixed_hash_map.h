@@ -18,14 +18,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <functional>
-#include <limits>
-#include <optional>
 #include <type_traits>
 #include <utility>
 
-#include "column/column_hash.h"
 #include "glog/logging.h"
+#include "util/hash_fwd.h"
+
 namespace starrocks {
 
 // FixedSizeHashMap
@@ -119,19 +117,16 @@ public:
         return lazy_emplace(key, f);
     }
 
-    struct HashFunction {
-        size_t operator()(KeyType key) { return static_cast<size_t>(key); }
-    };
-
-    HashFunction hash_function() { return HashFunction(); }
-
-    size_t bucket_count() { return hash_table_size; }
-
     size_t size() { return _size; }
 
-    size_t capacity() { return bucket_count(); }
+    size_t capacity() { return hash_table_size; }
 
     size_t dump_bound() { return hash_table_size; }
+
+    void clear() {
+        memset(_hash_table, 0, sizeof(ValueType) * hash_table_size);
+        _size = 0;
+    }
 
 private:
     size_t _size = 0;
@@ -191,6 +186,8 @@ public:
         _hash_table[static_cast<search_key_type>(key)] = 1;
     }
 
+    void insert(KeyType key) { emplace(key); }
+
     bool contains(KeyType key) { return _hash_table[static_cast<search_key_type>(key)]; }
 
     size_t dump_bound() { return hash_table_size; }
@@ -199,9 +196,31 @@ public:
 
     size_t capacity() { return hash_table_size; }
 
+    void clear() {
+        memset(_hash_table, 0, sizeof(uint8_t) * hash_table_size);
+        _size = 0;
+    }
+
 private:
     size_t _size = 0;
     uint8_t _hash_table[hash_table_size + 1];
 };
+
+template <typename T>
+struct no_prefetch_set : std::false_type {};
+template <typename KeyType, PhmapSeed seed>
+struct no_prefetch_set<SmallFixedSizeHashSet<KeyType, seed>> : std::true_type {};
+
+template <typename T>
+struct no_prefetch_map : std::false_type {};
+
+template <typename KeyType, typename ValueType, PhmapSeed seed>
+struct no_prefetch_map<SmallFixedSizeHashMap<KeyType, ValueType, seed>> : std::true_type {};
+
+template <class T>
+constexpr bool is_no_prefetch_set = no_prefetch_set<T>::value;
+
+template <class T>
+constexpr bool is_no_prefetch_map = no_prefetch_map<T>::value;
 
 } // namespace starrocks

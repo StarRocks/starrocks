@@ -20,6 +20,10 @@ sidebar_position: 10
 
 不过在一些特殊场景下，比如历史数据按月划分分区、最近数据按天划分分区，则需要采用 [Range 分区](./Data_distribution.md#range-分区)创建分区。
 
+:::note
+请注意，尽管 `PARTITION BY date_trunc(column)` 和 `PARTITION BY time_slice(column)` 的格式为表达式分区，两者都属于属于 Range 分区。因此，您可以使用 `ALTER TABLE ... ADD PARTITION` 的 Range 分区语法，为采用此类分区策略的表添加新分区。
+:::
+
 ### 语法
 
 ```sql
@@ -338,7 +342,7 @@ MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
 ```sql
 ALTER TABLE [<db_name>.]<table_name>
 PARTITION BY <time_expr>
-BETWEEN <start_time> AND <end_time>
+[WHERE <time_range_column>] BETWEEN <start_time> AND <end_time>
 ```
 
 #### 参数解释

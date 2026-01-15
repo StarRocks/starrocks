@@ -19,23 +19,23 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.CloneExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
-import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TreeNode;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -52,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
+import com.starrocks.type.IntegerType;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -67,18 +68,16 @@ public class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
-    private final boolean inlineView;
     private final MVTransformerContext mvTransformerContext;
     public static final String GROUPING_ID = "GROUPING_ID";
     public static final String GROUPING = "GROUPING";
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
-                            CTETransformerContext cteContext, boolean inlineView,
+                            CTETransformerContext cteContext,
                             MVTransformerContext mvTransformerContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
-        this.inlineView = inlineView;
         this.mvTransformerContext = mvTransformerContext;
     }
 
@@ -168,7 +167,7 @@ public class QueryTransformer {
     private OptExprBuilder planFrom(Relation node, CTETransformerContext cteContext) {
         TransformerContext transformerContext = new TransformerContext(
                 columnRefFactory, session, new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
-                cteContext, inlineView, mvTransformerContext);
+                cteContext, mvTransformerContext);
         return new RelationTransformer(transformerContext).visit(node).getRootBuilder();
     }
 
@@ -536,7 +535,7 @@ public class QueryTransformer {
             }
 
             //Build grouping_id(all grouping columns)
-            ColumnRefOperator grouping = columnRefFactory.create(GROUPING_ID, Type.BIGINT, false);
+            ColumnRefOperator grouping = columnRefFactory.create(GROUPING_ID, IntegerType.BIGINT, false);
             List<Long> groupingID = new ArrayList<>();
             for (BitSet bitSet : groupingIdsBitSets) {
                 long gid = Utils.convertBitSetToLong(bitSet, groupByColumnRefs.size());
@@ -558,7 +557,7 @@ public class QueryTransformer {
             //Build grouping function in select item
             Map<ColumnRefOperator, List<ColumnRefOperator>> groupingFnArgs = Maps.newHashMap();
             for (Expr groupingFunction : groupingFunctionCallExprs) {
-                grouping = columnRefFactory.create(GROUPING, Type.BIGINT, false);
+                grouping = columnRefFactory.create(GROUPING, IntegerType.BIGINT, false);
                 List<ColumnRefOperator> fnArgs = Lists.newArrayList();
 
                 ArrayList<BitSet> tempGroupingIdsBitSets = new ArrayList<>();
@@ -631,7 +630,7 @@ public class QueryTransformer {
 
         List<Ordering> orderings = new ArrayList<>();
         for (OrderByElement item : orderByExpressions) {
-            if (item.getExpr().isLiteral()) {
+            if (ExprUtils.isLiteral(item.getExpr())) {
                 continue;
             }
             ColumnRefOperator column =

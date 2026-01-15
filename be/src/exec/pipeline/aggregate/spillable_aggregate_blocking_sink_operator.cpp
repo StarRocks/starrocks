@@ -39,10 +39,13 @@ bool SpillableAggregateBlockingSinkOperator::need_input() const {
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
-    if (!spilled()) {
-        return _is_finished || AggregateBlockingSinkOperator::is_finished();
+    if (_is_finished) {
+        return true;
     }
-    return _is_finished || _aggregator->is_finished();
+    if (!spilled()) {
+        return AggregateBlockingSinkOperator::is_finished();
+    }
+    return _aggregator->is_finished();
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
@@ -51,7 +54,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     }
     ONCE_DETECT(_set_finishing_once);
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
+        _aggregator->spill_channel()->set_finishing();
         _is_finished = true;
     });
 
@@ -66,8 +69,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     }
     if (!_aggregator->spill_channel()->has_task()) {
         if (_aggregator->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _aggregator->hash_map_variant().visit(
-                    [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+            _aggregator->it_hash() = _aggregator->state_allocator().begin();
             _aggregator->spill_channel()->add_spill_task(_build_spill_task(state));
         }
     }
@@ -98,10 +100,14 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
 void SpillableAggregateBlockingSinkOperator::close(RuntimeState* state) {
     AggregateBlockingSinkOperator::close(state);
+    DCHECK(is_finished());
+    DCHECK(!need_input());
 }
 
 Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare(state));
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::prepare_local_state(state));
+
     DCHECK(!_aggregator->is_none_group_by_exprs());
     _aggregator->spiller()->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
@@ -109,8 +115,7 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     if (state->spill_mode() == TSpillMode::FORCE) {
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
-    _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
-            "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    _peak_revocable_mem_bytes = ADD_PEAK_COUNTER(_unique_metrics, "PeakRevocableMemoryBytes", TUnit::BYTES);
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
     _agg_group_by_with_limit = false;
     _aggregator->params()->enable_pipeline_share_limit = false;
@@ -270,8 +275,7 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
     if (should_spill_hash_table) {
-        _aggregator->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+        _aggregator->it_hash() = _aggregator->state_allocator().begin();
     }
     CHECK(!_aggregator->spill_channel()->has_task());
     RETURN_IF_ERROR(_aggregator->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));

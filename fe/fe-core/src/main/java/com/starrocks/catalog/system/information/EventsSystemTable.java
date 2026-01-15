@@ -13,12 +13,13 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -33,32 +34,32 @@ public class EventsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("EVENT_CATALOG", ScalarType.createVarchar(64))
-                        .column("EVENT_SCHEMA", ScalarType.createVarchar(64))
-                        .column("EVENT_NAME", ScalarType.createVarchar(64))
-                        .column("DEFINER", ScalarType.createVarchar(77))
-                        .column("TIME_ZONE", ScalarType.createVarchar(64))
-                        .column("EVENT_BODY", ScalarType.createVarchar(8))
+                        .column("EVENT_CATALOG", TypeFactory.createVarcharType(64))
+                        .column("EVENT_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("EVENT_NAME", TypeFactory.createVarcharType(64))
+                        .column("DEFINER", TypeFactory.createVarcharType(77))
+                        .column("TIME_ZONE", TypeFactory.createVarcharType(64))
+                        .column("EVENT_BODY", TypeFactory.createVarcharType(8))
                         // TODO: Type for EVENT_DEFINITION should be `longtext`, but `varchar(65535)` was set at this stage.
                         .column("EVENT_DEFINITION",
-                                ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EVENT_TYPE", ScalarType.createVarchar(9))
-                        .column("EXECUTE_AT", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("INTERVAL_VALUE", ScalarType.createVarchar(256))
-                        .column("INTERVAL_FIELD", ScalarType.createVarchar(18))
-                        .column("SQL_MODE", ScalarType.createVarchar(8192))
-                        .column("STARTS", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("ENDS", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("STATUS", ScalarType.createVarchar(18))
-                        .column("ON_COMPLETION", ScalarType.createVarchar(12))
-                        .column("CREATED", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_ALTERED", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LAST_EXECUTED", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("EVENT_COMMENT", ScalarType.createVarchar(64))
-                        .column("ORIGINATOR", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("CHARACTER_SET_CLIENT", ScalarType.createVarchar(32))
-                        .column("COLLATION_CONNECTION", ScalarType.createVarchar(32))
-                        .column("DATABASE_COLLATION", ScalarType.createVarchar(32))
+                                TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EVENT_TYPE", TypeFactory.createVarcharType(9))
+                        .column("EXECUTE_AT", DateType.DATETIME)
+                        .column("INTERVAL_VALUE", TypeFactory.createVarcharType(256))
+                        .column("INTERVAL_FIELD", TypeFactory.createVarcharType(18))
+                        .column("SQL_MODE", TypeFactory.createVarcharType(8192))
+                        .column("STARTS", DateType.DATETIME)
+                        .column("ENDS", DateType.DATETIME)
+                        .column("STATUS", TypeFactory.createVarcharType(18))
+                        .column("ON_COMPLETION", TypeFactory.createVarcharType(12))
+                        .column("CREATED", DateType.DATETIME)
+                        .column("LAST_ALTERED", DateType.DATETIME)
+                        .column("LAST_EXECUTED", DateType.DATETIME)
+                        .column("EVENT_COMMENT", TypeFactory.createVarcharType(64))
+                        .column("ORIGINATOR", IntegerType.BIGINT)
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarcharType(32))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarcharType(32))
+                        .column("DATABASE_COLLATION", TypeFactory.createVarcharType(32))
                         .build(), TSchemaTableType.SCH_EVENTS);
     }
 }

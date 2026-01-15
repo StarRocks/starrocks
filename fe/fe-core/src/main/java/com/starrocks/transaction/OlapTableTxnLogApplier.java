@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -195,7 +196,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (ColumnId column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                    IDictManager.getInstance().removeGlobalDict(tableId, column);
+                    IDictManager.getInstance().removeGlobalDict(table, column);
                 }
             }
             if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
@@ -207,12 +208,21 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
+        // TODO(murphy) don't invalidate all cache columns, only invalidate the columns that are changed
+        // Invalidate the dict for JSON type
+        List<Column> jsonColumns = table.getColumns().stream()
+                .filter(x -> x.getType().isJsonType())
+                .toList();
+        for (Column column : jsonColumns) {
+            IDictManager.getInstance().removeGlobalDictForJson(tableId, column.getColumnId());
+        }
+
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 ColumnId columnName = validDictCacheColumns.get(i);
                 long collectedVersion = dictCollectedVersions.get(i);
                 IDictManager.getInstance()
-                        .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
+                        .updateGlobalDict(table, columnName, collectedVersion, maxPartitionVersionTime);
             }
         }
     }

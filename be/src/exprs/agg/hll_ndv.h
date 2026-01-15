@@ -57,7 +57,7 @@ public:
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
-            const auto& v = column->get_data();
+            const auto v = column->immutable_data();
             value = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
         }
 
@@ -83,7 +83,7 @@ public:
             }
         } else {
             uint64_t value = 0;
-            const auto& v = column->get_data();
+            const auto v = column->immutable_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
 
@@ -128,9 +128,9 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const auto* column = down_cast<const ColumnType*>(src[0].get());
-        auto* result = down_cast<BinaryColumn*>((*dst).get());
+        auto* result = down_cast<BinaryColumn*>(dst.get());
 
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 10);
@@ -144,7 +144,7 @@ public:
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {
-                auto v = column->get_data()[i];
+                auto v = column->immutable_data()[i];
                 value = HashUtil::murmur_hash64A(&v, sizeof(v), HashUtil::MURMUR_SEED);
             }
             if (value != 0) {

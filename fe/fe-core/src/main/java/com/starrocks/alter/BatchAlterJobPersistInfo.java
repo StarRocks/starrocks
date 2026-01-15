@@ -19,10 +19,6 @@ package com.starrocks.alter;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -37,22 +33,8 @@ public class BatchAlterJobPersistInfo implements Writable {
         this.alterJobV2List = alterJobV2List;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeInt(alterJobV2List.size());
-        for (AlterJobV2 alterJobV2 : alterJobV2List) {
-            alterJobV2.write(out);
-        }
-    }
 
-    public static BatchAlterJobPersistInfo read(DataInput in) throws IOException {
-        int size = in.readInt();
-        List<AlterJobV2> alterJobV2List = new ArrayList<>();
-        for (int i = 0; i < size; i++) {
-            alterJobV2List.add(AlterJobV2.read(in));
-        }
-        return new BatchAlterJobPersistInfo(alterJobV2List);
-    }
+
 
     public List<AlterJobV2> getAlterJobV2List() {
         return alterJobV2List;

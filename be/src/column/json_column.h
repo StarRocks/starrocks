@@ -34,6 +34,7 @@ public:
     using ValueType = JsonValue;
     using SuperClass = CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column>;
     using BaseClass = JsonColumnBase;
+    using ImmContainer = ObjectDataProxyContainer;
 
     JsonColumn() = default;
     explicit JsonColumn(size_t size) : SuperClass(size) {}
@@ -94,8 +95,6 @@ public:
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
     size_t container_memory_usage() const override;
     size_t reference_memory_usage() const override;
     size_t reference_memory_usage(size_t from, size_t size) const override;
@@ -115,11 +114,7 @@ public:
 
     LogicalType get_flat_field_type(const std::string& path) const;
 
-    Columns& get_flat_fields() { return _flat_columns; };
-
-    const Columns& get_flat_fields() const { return _flat_columns; };
-
-    Columns get_flat_fields_ptrs() const {
+    Columns get_flat_fields() const {
         Columns columns;
         columns.reserve(_flat_columns.size());
         columns.assign(_flat_columns.begin(), _flat_columns.end());
@@ -143,7 +138,7 @@ public:
     bool has_remain() const { return _flat_columns.size() == (_flat_column_paths.size() + 1); }
 
     void set_flat_columns(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
-                          const Columns& flat_columns);
+                          MutableColumns&& flat_columns);
 
     bool is_equallity_schema(const Column* other) const;
 
@@ -157,7 +152,7 @@ public:
 
 private:
     // flat-columns[sub_columns, remain_column]
-    Columns _flat_columns;
+    std::vector<Column::WrappedPtr> _flat_columns;
 
     // flat-column paths, doesn't contains remain column
     std::vector<std::string> _flat_column_paths;

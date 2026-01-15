@@ -18,6 +18,7 @@
 
 #include <sstream>
 
+#include "common/config.h"
 #include "gen_cpp/AgentService_types.h"
 
 namespace starrocks {
@@ -101,8 +102,8 @@ public:
 
 private:
     bool _flat_json_enable = false;
-    double _flat_json_null_factor = 0.3;
-    double _flat_json_sparsity_factor = 0.9;
-    int _flat_json_max_column_max = 100;
+    double _flat_json_null_factor = config::json_flat_null_factor;
+    double _flat_json_sparsity_factor = config::json_flat_sparsity_factor;
+    int _flat_json_max_column_max = config::json_flat_column_max;
 };
 } // namespace starrocks

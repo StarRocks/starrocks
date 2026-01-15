@@ -6,6 +6,10 @@ displayed_sidebar: docs
 
 DataGrip supports querying both internal data and external data in StarRocks.
 
+:::tip
+[DataGrip docs](https://www.jetbrains.com/help/datagrip/getting-started.html)
+:::
+
 Create a data source in DataGrip. Note that you must select MySQL as the data source.
 
 ![DataGrip - 1](../../_assets/BI_datagrip_1.png)

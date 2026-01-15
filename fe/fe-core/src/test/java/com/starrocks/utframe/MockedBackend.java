@@ -38,6 +38,8 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
@@ -69,6 +71,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.StatusPB;
@@ -78,6 +82,8 @@ import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.proto.UnlockTabletMetadataResponse;
 import com.starrocks.proto.UploadSnapshotsRequest;
 import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumFullRequest;
+import com.starrocks.proto.VacuumFullResponse;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -139,6 +145,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -167,12 +174,14 @@ public class MockedBackend {
     private static final AtomicInteger BASE_PORT = new AtomicInteger(8000);
     private static final long PATH_HASH = 123456;
 
+    private final int backendId;
     private final String host;
     private final int brpcPort;
     private final int heartBeatPort;
     private final int beThriftPort;
     private final int httpPort;
     private final int starletPort;
+
 
     final MockHeatBeatClient heatBeatClient;
 
@@ -182,11 +191,12 @@ public class MockedBackend {
 
     private final MockLakeService lakeService;
 
-    public MockedBackend(String host) {
-        this(host, BASE_PORT.getAndIncrement());
+    public MockedBackend(int backendId, String host) {
+        this(backendId, host, BASE_PORT.getAndIncrement());
     }
 
-    public MockedBackend(String host, int beThriftPort) {
+    public MockedBackend(int backendId, String host, int beThriftPort) {
+        this.backendId = backendId;
         this.host = host;
         this.beThriftPort = beThriftPort;
 
@@ -227,6 +237,10 @@ public class MockedBackend {
         };
     }
 
+    public int getBackendId() {
+        return backendId;
+    }
+
     public String getHost() {
         return host;
     }
@@ -251,6 +265,10 @@ public class MockedBackend {
         return starletPort;
     }
 
+    public MockBeThriftClient getMockBeThriftClient() {
+        return thriftClient;
+    }
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
@@ -269,6 +287,7 @@ public class MockedBackend {
         public THeartbeatResult heartbeat(TMasterInfo masterInfo) {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
+            backendInfo.setStarlet_port(starletPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
 
@@ -285,37 +304,64 @@ public class MockedBackend {
         }
     }
 
-    private static class MockBeThriftClient extends BackendService.Client {
-        // task queue to save all agent tasks coming from Frontend
-        private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
+    public static class MockBeThriftClient extends BackendService.Client {
+        // Shared static resources across all MockBeThriftClient instances
+        private static BlockingQueue<TaskWrapper> sharedTaskQueue = Queues.newLinkedBlockingQueue();
+        private static LeaderImpl sharedMaster = new LeaderImpl();
+        private static volatile boolean workerThreadStarted = false;
+        private static Object lock = new Object();
+
+        // Wrapper class to include backend reference with task
+        private static class TaskWrapper {
+            final TAgentTaskRequest request;
+            final TBackend backend;
+            final long reportVersion;
+
+            TaskWrapper(TAgentTaskRequest request, TBackend backend, long reportVersion) {
+                this.request = request;
+                this.backend = backend;
+                this.reportVersion = reportVersion;
+            }
+        }
+
         private final TBackend tBackend;
         private long reportVersion = 0;
-        private final LeaderImpl master = new LeaderImpl();
+
+        private volatile boolean captureAgentTask = false;
+        private final ConcurrentLinkedQueue<TAgentTaskRequest> capturedAgentTasks = new ConcurrentLinkedQueue<>();
 
         public MockBeThriftClient(MockedBackend backend) {
             super(null);
 
             tBackend = new TBackend(backend.getHost(), backend.getBeThriftPort(), backend.getHttpPort());
-            new Thread(() -> {
-                while (true) {
-                    try {
-                        TAgentTaskRequest request = taskQueue.take();
-                        TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
-                                request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
-                        finishTaskRequest.setReport_version(++reportVersion);
-                        if (request.getTask_type() == CREATE) {
-                            TTabletInfo tabletInfo = new TTabletInfo();
-                            tabletInfo.setPath_hash(PATH_HASH);
-                            tabletInfo.setData_size(0);
-                            tabletInfo.setTablet_id(request.getSignature());
-                            finishTaskRequest.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
+
+            // Start the shared worker thread only once
+            synchronized (lock) {
+                if (!workerThreadStarted) {
+                    workerThreadStarted = true;
+                    new Thread(() -> {
+                        while (true) {
+                            try {
+                                TaskWrapper taskWrapper = sharedTaskQueue.take();
+                                TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(taskWrapper.backend,
+                                        taskWrapper.request.getTask_type(), taskWrapper.request.getSignature(),
+                                        new TStatus(TStatusCode.OK));
+                                finishTaskRequest.setReport_version(taskWrapper.reportVersion);
+                                if (taskWrapper.request.getTask_type() == CREATE) {
+                                    TTabletInfo tabletInfo = new TTabletInfo();
+                                    tabletInfo.setPath_hash(PATH_HASH);
+                                    tabletInfo.setData_size(0);
+                                    tabletInfo.setTablet_id(taskWrapper.request.getSignature());
+                                    finishTaskRequest.setFinish_tablet_infos(Lists.newArrayList(tabletInfo));
+                                }
+                                sharedMaster.finishTask(finishTaskRequest);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
                         }
-                        master.finishTask(finishTaskRequest);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                    }, "shared-mock-be-thrift-worker").start();
                 }
-            }).start();
+            }
         }
 
         @Override
@@ -340,8 +386,25 @@ public class MockedBackend {
 
         @Override
         public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
-            taskQueue.addAll(tasks);
+            for (TAgentTaskRequest task : tasks) {
+                sharedTaskQueue.add(new TaskWrapper(task, tBackend, ++reportVersion));
+                if (captureAgentTask) {
+                    capturedAgentTasks.add(task);
+                }
+            }
             return new TAgentResult(new TStatus(TStatusCode.OK));
+        }
+
+        public void setCaptureAgentTask(boolean captureAgentTask) {
+            this.captureAgentTask = captureAgentTask;
+        }
+
+        public List<TAgentTaskRequest> getCapturedAgentTasks() {
+            return new ArrayList<>(capturedAgentTasks);
+        }
+
+        public void clearCapturedAgentTasks() {
+            capturedAgentTasks.clear();
         }
 
         @Override
@@ -651,6 +714,21 @@ public class MockedBackend {
 
         @Override
         public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
             return CompletableFuture.completedFuture(null);
         }
     }

@@ -21,12 +21,10 @@ import com.starrocks.alter.DecommissionType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -38,8 +36,6 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -345,7 +341,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         this.heartbeatPort = heartbeatPort;
     }
 
-    /** Set liveness and adjust the Internal status accordingly
+    /**
+     * Set liveness and adjust the Internal status accordingly
      * |    Status    |  IsAlive |
      * |  CONNECTING  |   false  |
      * |     OK       |   true   |
@@ -404,6 +401,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         return lastMissingHeartbeatTime;
     }
 
+    @VisibleForTesting
+    public void setLastMissingHeartbeatTime(long lastMissingHeartbeatTime) {
+        this.lastMissingHeartbeatTime = lastMissingHeartbeatTime;
+    }
+
     public boolean isAlive() {
         return this.isAlive.get();
     }
@@ -457,13 +459,6 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
                 groupAndUsage -> ResourceGroupUsage.fromThrift(groupAndUsage.second, groupAndUsage.first)
         ));
         groupIdToUsage.set(newGroupIdToUsage);
-    }
-
-
-
-    public static ComputeNode read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, ComputeNode.class);
     }
 
     @Override
@@ -617,7 +612,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendResourceStat.getInstance().setNumHardwareCoresOfBe(hbResponse.getBeId(), hbResponse.getCpuCores());
+                    BackendResourceStat.getInstance()
+                            .setNumCoresOfBe(warehouseId, hbResponse.getBeId(), hbResponse.getCpuCores());
                 }
             }
 
@@ -627,7 +623,8 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
                 // BackendCoreStat is a global state, checkpoint should not modify it.
                 if (!GlobalStateMgr.isCheckpointThread()) {
-                    BackendResourceStat.getInstance().setMemLimitBytesOfBe(hbResponse.getBeId(), hbResponse.getMemLimitBytes());
+                    BackendResourceStat.getInstance()
+                            .setMemLimitBytesOfBe(warehouseId, hbResponse.getBeId(), hbResponse.getMemLimitBytes());
                 }
             }
 
@@ -774,17 +771,33 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         private final int cpuCoreUsagePermille;
         private final long memUsageBytes;
         private final int numRunningQueries;
+        private final long memLimitBytes;
+        private final String memPool;
+        private final long memPoolMemUsageBytes;
+        private final long memPoolMemLimitBytes;
 
-        private ResourceGroupUsage(ResourceGroup group, int cpuCoreUsagePermille, long memUsageBytes, int numRunningQueries) {
+        private ResourceGroupUsage(ResourceGroup group,
+                                   int cpuCoreUsagePermille,
+                                   long memUsageBytes,
+                                   int numRunningQueries,
+                                   long memLimitBytes,
+                                   String memPool,
+                                   long memPoolMemUsageBytes,
+                                   long memPoolMemLimitBytes) {
             this.group = group;
             this.cpuCoreUsagePermille = cpuCoreUsagePermille;
             this.memUsageBytes = memUsageBytes;
             this.numRunningQueries = numRunningQueries;
+            this.memLimitBytes = memLimitBytes;
+            this.memPool = memPool;
+            this.memPoolMemUsageBytes = memPoolMemUsageBytes;
+            this.memPoolMemLimitBytes = memPoolMemLimitBytes;
         }
 
         private static ResourceGroupUsage fromThrift(TResourceGroupUsage tUsage, ResourceGroup group) {
             return new ResourceGroupUsage(group, tUsage.getCpu_core_used_permille(), tUsage.getMem_used_bytes(),
-                    tUsage.getNum_running_queries());
+                    tUsage.getNum_running_queries(), tUsage.getMem_limit_bytes(), tUsage.getMem_pool(),
+                    tUsage.getMem_pool_mem_used_bytes(), tUsage.getMem_pool_mem_limit_bytes());
         }
 
         public boolean isCpuCoreUsagePermilleEffective() {
@@ -806,5 +819,22 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
         public int getNumRunningQueries() {
             return numRunningQueries;
         }
+
+        public long getMemLimitBytes() {
+            return memLimitBytes;
+        }
+
+        public String getMemPool() {
+            return memPool;
+        }
+
+        public long getMemPoolMemUsageBytes() {
+            return memPoolMemUsageBytes;
+        }
+
+        public long getMemPoolMemLimitBytes() {
+            return memPoolMemLimitBytes;
+        }
+
     }
 }

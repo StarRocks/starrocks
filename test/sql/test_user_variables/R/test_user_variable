@@ -81,7 +81,7 @@ select      /*+ set_user_variable(@a = (select c0 * 0.1 from always1)) */ percen
 -- !result
 select      /*+ set_user_variable(@a = (select c0 * 0.1 from alwaysnull)) */ percentile_approx(c0, @a)  from t0;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: percentile_approx requires the second parameter's type is numeric type.")
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 101. Detail message: percentile_approx requires the second parameter (percentile) to be numeric type or array type, but got: varchar.')
 -- !result
 select      percentile_approx(c0, cast(null as double))  from t0;
 -- result:

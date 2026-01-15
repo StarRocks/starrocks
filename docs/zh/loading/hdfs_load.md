@@ -6,9 +6,9 @@ keywords: ['Broker Load']
 
 # 从 HDFS 导入
 
-import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.md'
+import LoadMethodIntro from '../_assets/commonMarkdown/loadMethodIntro.mdx'
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks 支持通过以下方式从 HDFS 导入数据：
 

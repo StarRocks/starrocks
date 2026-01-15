@@ -40,7 +40,7 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartition() throws Exception {
-        PhysicalPartition p = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p = new PhysicalPartition(1, 1, new MaterializedIndex());
         Assertions.assertEquals(1, p.getId());
         Assertions.assertEquals(1, p.getParentId());
         Assertions.assertFalse(p.isImmutable());
@@ -106,7 +106,7 @@ public class PhysicalPartitionImplTest {
         Assertions.assertTrue(p.equals(p));
         Assertions.assertFalse(p.equals(new Partition(0, 11, "", null, null)));
 
-        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p2 = new PhysicalPartition(1, 1, new MaterializedIndex());
         Assertions.assertFalse(p.equals(p2));
         p2.setBaseIndex(new MaterializedIndex(1));
 
@@ -149,8 +149,8 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartitionEqual() throws Exception {
-        PhysicalPartition p1 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
-        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p1 = new PhysicalPartition(1, 1, new MaterializedIndex());
+        PhysicalPartition p2 = new PhysicalPartition(1, 1, new MaterializedIndex());
         Assertions.assertTrue(p1.equals(p2));
 
         p1.createRollupIndex(new MaterializedIndex());

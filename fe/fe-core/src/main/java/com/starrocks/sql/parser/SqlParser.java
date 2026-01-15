@@ -15,18 +15,19 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.connector.trino.TrinoParserUnsupportedException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -34,7 +35,7 @@ import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.LexerATNSimulator;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
@@ -43,6 +44,7 @@ import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -137,26 +139,31 @@ public class SqlParser {
             LOG.warn("StarRocks parse sql [{}] error, cause by {}", sql, starRocksException);
             if (trinoException instanceof UnsupportedException) {
                 throw unsupportedException(String.format("Trino parser parse sql error: [%s], " +
-                                "and StarRocks parser also can not parse: [%s]", trinoException, starRocksException));
+                        "and StarRocks parser also can not parse: [%s]", trinoException, starRocksException));
             } else {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR,
                         String.format("Trino parser parse sql error: [%s], and StarRocks parser also can not parse: [%s]",
-                        trinoException, starRocksException));
+                                trinoException, starRocksException));
             }
         }
     }
 
     private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
         List<StatementBase> statements = Lists.newArrayList();
-        Pair<ParserRuleContext, StarRocksParser> pair = invokeParser(sql, sessionVariable, StarRocksParser::sqlStatements);
-        StarRocksParser.SqlStatementsContext sqlStatementsContext = (StarRocksParser.SqlStatementsContext) pair.first;
-        List<StarRocksParser.SingleStatementContext> singleStatementContexts = sqlStatementsContext.singleStatement();
+        Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> pair =
+                invokeParser(sql, sessionVariable, com.starrocks.sql.parser.StarRocksParser::sqlStatements);
+        com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext sqlStatementsContext =
+                (com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext) pair.first;
+        List<com.starrocks.sql.parser.StarRocksParser.SingleStatementContext> singleStatementContexts =
+                sqlStatementsContext.singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
             // collect hint info
             HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
             collector.collect(singleStatementContexts.get(idx));
-            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
-                    .create(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory.create(
+                    sessionVariable.getSqlMode(),
+                    GlobalVariable.enableTableNameCaseInsensitive,
+                    collector.getContextWithHintMap());
             StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
             if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
                     && !(statement instanceof PrepareStmt)) {
@@ -212,16 +219,18 @@ public class SqlParser {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
-                StarRocksParser::expressionSingleton).first;
+                com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
         return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
-                .create(sqlMode).visit(expressionContext);
+                .create(sqlMode, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>()).visit(expressionContext);
     }
 
     public static List<Expr> parseSqlToExprs(String expressions, SessionVariable sessionVariable) {
-        StarRocksParser.ExpressionListContext expressionListContext = (StarRocksParser.ExpressionListContext)
-                invokeParser(expressions, sessionVariable, StarRocksParser::expressionList).first;
+        com.starrocks.sql.parser.StarRocksParser.ExpressionListContext expressionListContext =
+                (com.starrocks.sql.parser.StarRocksParser.ExpressionListContext)
+                        invokeParser(expressions, sessionVariable,
+                                com.starrocks.sql.parser.StarRocksParser::expressionList).first;
         AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
-                .create(sessionVariable.getSqlMode());
+                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>());
         return expressionListContext.expression().stream()
                 .map(e -> (Expr) astBuilder.visit(e))
                 .collect(Collectors.toList());
@@ -231,25 +240,39 @@ public class SqlParser {
         SessionVariable sessionVariable = new SessionVariable();
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext importColumnsContext = invokeParser(expressionSql, sessionVariable,
-                StarRocksParser::importColumns).first;
+                com.starrocks.sql.parser.StarRocksParser::importColumns).first;
         return (ImportColumnsStmt) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
-                .create(sqlMode).visit(importColumnsContext);
+                .create(sqlMode, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .visit(importColumnsContext);
     }
 
-    private static Pair<ParserRuleContext, StarRocksParser> invokeParser(
+    private static Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> invokeParser(
             String sql, SessionVariable sessionVariable,
-            Function<StarRocksParser, ParserRuleContext> parseFunction) {
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+            Function<com.starrocks.sql.parser.StarRocksParser, ParserRuleContext> parseFunction) {
+        com.starrocks.sql.parser.StarRocksLexer lexer =
+                new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
+        if (Config.enable_concurrent_parse_optimization) {
+            DFA[] lexerDecisionDFA = new DFA[StarRocksLexer._ATN.getNumberOfDecisions()];
+            for (int i = 0; i < StarRocksLexer._ATN.getNumberOfDecisions(); i++) {
+                lexerDecisionDFA[i] = new DFA(StarRocksLexer._ATN.getDecisionState(i), i);
+            }
+            lexer.setInterpreter(new LexerATNSimulator(
+                    lexer,
+                    StarRocksLexer._ATN,
+                    lexerDecisionDFA,
+                    new PredictionContextCache()
+            ));
+        }
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
         int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
-        StarRocksParser parser = new StarRocksParser(tokenStream);
+        com.starrocks.sql.parser.StarRocksParser parser = new com.starrocks.sql.parser.StarRocksParser(tokenStream);
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
         parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
-        if (!Config.enable_parser_context_cache) {
+        if (!Config.enable_parser_context_cache || Config.enable_concurrent_parse_optimization) {
             DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
             for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
                 decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
@@ -272,21 +295,5 @@ public class SqlParser {
             parser.setErrorHandler(new StarRocksDefaultErrorStrategy());
             return Pair.create(parseFunction.apply(parser), parser);
         }
-    }
-
-    public static String getTokenDisplay(Token t) {
-        if (t == null) {
-            return "<no token>";
-        }
-
-        String s = t.getText();
-        if (s == null) {
-            if (t.getType() == Token.EOF) {
-                s = EOF;
-            } else {
-                s = "<" + t.getType() + ">";
-            }
-        }
-        return s;
     }
 }

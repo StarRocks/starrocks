@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -45,7 +46,7 @@ import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private DistributionSpec distributionSpec;
-    private long selectedIndexId;
+    private long selectedIndexMetaId;
     private List<Long> selectedTabletId;
     private List<Long> hintsReplicaId;
     private List<Long> selectedPartitionId;
@@ -78,7 +79,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     DistributionSpec distributionDesc,
                                     long limit,
                                     ScalarOperator predicate,
-                                    long selectedIndexId,
+                                    long selectedIndexMetaId,
                                     List<Long> selectedPartitionId,
                                     List<Long> selectedTabletId,
                                     List<Long> hintsReplicaId,
@@ -88,7 +89,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     VectorSearchOptions vectorSearchOptions) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.distributionSpec = distributionDesc;
-        this.selectedIndexId = selectedIndexId;
+        this.selectedIndexMetaId = selectedIndexMetaId;
         this.selectedPartitionId = selectedPartitionId;
         this.selectedTabletId = selectedTabletId;
         this.hintsReplicaId = hintsReplicaId;
@@ -100,7 +101,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public PhysicalOlapScanOperator(LogicalOlapScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
         this.distributionSpec = scanOperator.getDistributionSpec();
-        this.selectedIndexId = scanOperator.getSelectedIndexId();
+        this.selectedIndexMetaId = scanOperator.getSelectedIndexMetaId();
         this.gtid = scanOperator.getGtid();
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
         this.selectedTabletId = scanOperator.getSelectedTabletId();
@@ -115,8 +116,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return vectorSearchOptions;
     }
 
-    public long getSelectedIndexId() {
-        return selectedIndexId;
+    public long getSelectedIndexMetaId() {
+        return selectedIndexMetaId;
     }
 
     public long getGtid() {
@@ -147,7 +148,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         for (Long partitionId : getSelectedPartitionId()) {
             final Partition partition = ((OlapTable) getTable()).getPartition(partitionId);
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                final MaterializedIndex selectedTable = subPartition.getIndex(getSelectedIndexId());
+                final MaterializedIndex selectedTable = subPartition.getIndex(getSelectedIndexMetaId());
                 totalTabletsNum += selectedTable.getTablets().size();
             }
         }
@@ -250,7 +251,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
+        return Objects.hash(super.hashCode(), selectedIndexMetaId, selectedPartitionId,
                 selectedTabletId, sample);
     }
 
@@ -266,7 +267,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             return false;
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
-        return selectedIndexId == that.selectedIndexId &&
+        return selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
@@ -306,7 +307,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         public Builder withOperator(PhysicalOlapScanOperator operator) {
             super.withOperator(operator);
             builder.distributionSpec = operator.distributionSpec;
-            builder.selectedIndexId = operator.selectedIndexId;
+            builder.selectedIndexMetaId = operator.selectedIndexMetaId;
             builder.gtid = operator.gtid;
             builder.selectedTabletId = operator.selectedTabletId;
             builder.hintsReplicaId = operator.hintsReplicaId;
@@ -321,6 +322,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
             builder.vectorSearchOptions = operator.vectorSearchOptions;
             builder.sample = operator.getSample();
+            builder.columnAccessPaths = operator.columnAccessPaths;
             return this;
         }
 
@@ -336,6 +338,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
             builder.prunedPartitionPredicates = prunedPartitionPredicates;
+            return this;
+        }
+
+        public Builder setColumnAccessPath(List<ColumnAccessPath> accessPaths) {
+            builder.setColumnAccessPaths(accessPaths);
             return this;
         }
     }

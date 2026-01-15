@@ -19,14 +19,20 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.StringLiteral;
+import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
@@ -35,11 +41,12 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -75,7 +82,7 @@ public class TaskRun implements Comparable<TaskRun> {
     // to another and must be only set specifically for each run but cannot be extended from the last task run.
     // eg: `FORCE` is only allowed to set in the first task run and cannot be copied into the following task run.
     public static final Set<String> MV_UNCOPYABLE_PROPERTIES = ImmutableSet.of(
-            PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE);
+            PARTITION_START, PARTITION_END, PARTITION_VALUES);
     // If there are many pending mv task runs, we can merge some of them by comparing the properties, those properties that are
     // used to check equality of task runs and we can ignore the other properties.
     // eg:
@@ -192,6 +199,36 @@ public class TaskRun implements Comparable<TaskRun> {
         return isKilled;
     }
 
+    /**
+     * Get the execute timeout in seconds.
+     */
+    public int getExecuteTimeoutS() {
+        // if `query_timeout`/`insert_timeout` is set in the execute option, use it
+        int defaultTimeoutS = Config.task_runs_timeout_second;
+        if (properties != null) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)
+                        || entry.getKey().equalsIgnoreCase(SessionVariable.INSERT_TIMEOUT)) {
+                    try {
+                        int timeout = Integer.parseInt(entry.getValue());
+                        if (timeout > 0) {
+                            defaultTimeoutS = Math.max(timeout, defaultTimeoutS);
+                        }
+                    } catch (NumberFormatException e) {
+                        LOG.warn("invalid timeout value: {}, task run:{}", entry.getValue(), this);
+                    }
+                }
+            }
+        }
+        // The timeout of task run should not be longer than the ttl of task runs and task
+        return Math.min(Math.min(defaultTimeoutS, Config.task_runs_ttl_second), Config.task_ttl_second);
+    }
+
+    @VisibleForTesting
+    public void setStatus(TaskRunStatus status) {
+        this.status = status;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -239,29 +276,69 @@ public class TaskRun implements Comparable<TaskRun> {
 
         if (parentRunCtx != null) {
             context.setParentConnectContext(parentRunCtx);
+            // Propagate submitter's remote IP into the internal context so components
+            // that rely on ConnectContext.getRemoteIP() can behave consistently.
+            // parentRunCtx may come from an external MySQL session and contains the real client IP.
+            String parentRemoteIp = parentRunCtx.getRemoteIP();
+            if (!Strings.isNullOrEmpty(parentRemoteIp)) {
+                context.setRemoteIP(parentRemoteIp);
+            }
         }
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentCatalog(task.getCatalogName());
         context.setDatabase(task.getDbName());
-        context.setQualifiedUser(status.getUser());
-        if (status.getUserIdentity() != null) {
-            context.setCurrentUserIdentity(status.getUserIdentity());
-        } else {
-            context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
-        }
-        context.setCurrentRoleIds(context.getCurrentUserIdentity());
         context.getState().reset();
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
+        context.setSingleStmt(true);
         context.resetSessionVariable();
+        // Preserve critical session variables from parent context if available
+        // This ensures that settings like enableSingleNodeSchedule are inherited
+        if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {
+            context.getSessionVariable().setEnableSingleNodeSchedule(
+                    parentRunCtx.getSessionVariable().enableSingleNodeSchedule());
+        }
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
+        // NOTE: The switchUser might depend on the thread-local context if it's LDAP user
+        switchUser(context);
         return context;
     }
 
-    public Constants.TaskRunState executeTaskRun() throws Exception {
+    /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * - It's suitable for most scenarios, especially for the sql needs proper user
+     * Root-based: always use the ROOT to refresh the MV
+     * - It's suitable for LDAP-based authorization system, which lacks a proper user for authorization
+     */
+    private void switchUser(ConnectContext context) {
+        if (!Config.mv_use_creator_based_authorization) {
+            context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        } else {
+            context.setQualifiedUser(status.getUser());
+            if (status.getUserIdentity() != null) {
+                context.setCurrentUserIdentity(status.getUserIdentity());
+            } else {
+                context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+            }
+            // For internal task runs (e.g., MV refresh), always activate all roles of the task user
+            // to avoid relying on session default roles which may be empty (causing privilege errors).
+            try {
+                context.setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr()
+                        .getRoleIdsByUser(context.getCurrentUserIdentity()));
+            } catch (PrivilegeException e) {
+                LOG.warn("TaskRun {} set role failed", taskRunId, e);
+                // Fallback to previous behavior if fetching roles fails
+                context.setCurrentRoleIds(context.getCurrentUserIdentity());
+            }
+        }
+    }
+
+    public TaskRunContext buildTaskRunContext() {
         TaskRunContext taskRunContext = new TaskRunContext();
 
         // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
@@ -283,11 +360,15 @@ public class TaskRun implements Comparable<TaskRun> {
                 key = key.substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
             }
             String value = entry.getValue();
+            boolean set = false;
             try {
-                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true);
-            } catch (DdlException e) {
-                // not session variable
+                set = (runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(value)), true));
+            } catch (DdlException ignored) {
+            }
+            if (!set) {
                 taskRunContextProperties.put(key, properties.get(key));
+                // FIXME: it's too hack, don't pollute the session when setting variables
+                runCtx.getState().resetError();
             }
         }
         // set warehouse
@@ -306,16 +387,66 @@ public class TaskRun implements Comparable<TaskRun> {
         // If this is the first task run of the job, use its uuid as the job id.
         taskRunContext.setTaskRunId(taskRunId);
         taskRunContext.setCtx(runCtx);
-        taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
+        // Prefer the submitter's real remote host:port if available, otherwise fall back.
+        String remoteHostPort = "";
+        if (parentRunCtx != null && parentRunCtx.getMysqlChannel() != null) {
+            remoteHostPort = parentRunCtx.getMysqlChannel().getRemoteHostPortString();
+        }
+        if (Strings.isNullOrEmpty(remoteHostPort) && parentRunCtx != null) {
+            // Fallback to plain remote IP
+            remoteHostPort = parentRunCtx.getRemoteIP();
+        }
+        if (Strings.isNullOrEmpty(remoteHostPort) && runCtx.getMysqlChannel() != null) {
+            remoteHostPort = runCtx.getMysqlChannel().getRemoteHostPortString();
+        }
+        taskRunContext.setRemoteIp(remoteHostPort == null ? "" : remoteHostPort);
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
+        return taskRunContext;
+    }
+
+    public Constants.TaskRunState executeTaskRun() throws Exception {
+        try {
+            Constants.TaskRunState result = doExecuteTaskRun();
+            // clear the fail count
+            if (result != null && result.isSuccessState()) {
+                task.resetConsecutiveFailCount();
+            }
+            return result;
+        } catch (Exception e) {
+            task.incConsecutiveFailCount();
+            LOG.warn("Failed to execute task run, task_id: {}, task_run_id: {}, failCount:{}",
+                    taskId, taskRunId, task.getConsecutiveFailCount(), e);
+            if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
+                    task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
+                LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                        task.getName(), task.getConsecutiveFailCount());
+                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+                taskManager.suspendTask(task);
+                String mvName = "";
+                MaterializedView mv = TaskBuilder.getMvFromTask(task);
+                if (mv != null) {
+                    // If the task is an mv task, inactive the mv
+                    AlterMVJobExecutor.inactiveForConsecutiveFailures(mv);
+                    mvName = mv.getName();
+                }
+                throw new StarRocksException(String.format("Task %s has continuously failed %d times " +
+                                "and has been suspended. If you want active it again, try `ALTER MATERIALIZED VIEW %s ACTIVE`.",
+                        task.getName(), task.getConsecutiveFailCount(), mvName), e);
+            }
+            throw e;
+        }
+    }
+
+    private Constants.TaskRunState doExecuteTaskRun() throws Exception {
+        TaskRunContext taskRunContext = buildTaskRunContext();
 
         // prepare to execute task run, move it here so that we can catch the exception and set the status
-        processor.prepare(taskRunContext);
+        taskRunContext = processor.prepare(taskRunContext);
 
         // process task run
         Constants.TaskRunState taskRunState;
@@ -336,8 +467,14 @@ public class TaskRun implements Comparable<TaskRun> {
             return Constants.TaskRunState.FAILED;
         }
 
-        // post prosess task run
+        // post process task run
         try (Timer ignored = Tracers.watchScope("TaskRunPostProcess")) {
+            // record the final status of task run
+            if (taskRunContext != null && taskRunContext.getStatus() != null) {
+                Tracers.record("TaskRunStatus", taskRunContext.getStatus().toJSON());
+            }
+
+            // post process the task run
             processor.postTaskRun(taskRunContext);
         } catch (Exception e) {
             LOG.warn("Failed to post task run, task_id: {}, task_run_id: {}, error: {}",

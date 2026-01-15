@@ -18,6 +18,7 @@ import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeMetricsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.BeTxnsSystemTable;
+import com.starrocks.catalog.system.information.FeThreadsSystemTable;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.jupiter.api.AfterAll;
@@ -57,6 +58,9 @@ public class InformationSchemaBeFeTableTest {
             Assertions.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
             Assertions.assertEquals(BeMetricsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
+            Assertions.assertTrue(stmt.execute("select * from information_schema.fe_threads"));
+            Assertions.assertEquals(FeThreadsSystemTable.create().getColumns().size(),
+                    stmt.getResultSet().getMetaData().getColumnCount());
         } finally {
             stmt.close();
             connection.close();
@@ -72,7 +76,8 @@ public class InformationSchemaBeFeTableTest {
                 long beId = 10001 + i;
                 PseudoBackend be = PseudoCluster.getInstance().getBackend(beId);
                 long oldCnt = be.getNumSchemaScan();
-                Assertions.assertTrue(stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
+                Assertions.assertTrue(
+                        stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
                 long newCnt = be.getNumSchemaScan();
                 Assertions.assertEquals(1, newCnt - oldCnt);
             }
@@ -111,10 +116,13 @@ public class InformationSchemaBeFeTableTest {
         Statement stmt = connection.createStatement();
         try {
             Assertions.assertFalse(
-                    stmt.execute("update information_schema.be_configs set value=\"1000\" where name=\"txn_info_history_size\""));
+                    stmt.execute(
+                            "update information_schema.be_configs set value=\"1000\" where " +
+                                    "name=\"txn_info_history_size\""));
         } finally {
             stmt.close();
             connection.close();
         }
     }
+
 }

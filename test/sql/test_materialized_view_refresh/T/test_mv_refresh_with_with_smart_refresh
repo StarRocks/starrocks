@@ -287,21 +287,21 @@ select count(1) from test_mv11;
 select count(1) from test_mv12;
 select count(1) from test_mv13;
 
-function: check_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
-function: check_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
-function: check_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
-function: check_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
-function: check_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
-function: check_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
 
-select dt, s1 from test_mv1 order by 1;
-select dt, s1 from test_mv2 order by 1;
-select dt, s1 from test_mv3 order by 1;
-select dt, s1 from test_mv4 order by 1;
-select dt, s1 from test_mv5 order by 1;
-select dt, s1 from test_mv6 order by 1;
-select dt, province from test_mv7 order by 1;
+select dt, s1 from test_mv1 order by 1, 2;
+select dt, s1 from test_mv2 order by 1, 2;
+select dt, s1 from test_mv3 order by 1, 2;
+select dt, s1 from test_mv4 order by 1, 2;
+select dt, s1 from test_mv5 order by 1, 2;
+select dt, s1 from test_mv6 order by 1, 2;
+select dt, province from test_mv7 order by 1, 2;
 
 select dt, count(1) from test_mv11 group by dt order by 1;
 select dt, count(1) from test_mv12 group by dt order by 1;
@@ -370,21 +370,21 @@ select count(1) from test_mv11;
 select count(1) from test_mv12;
 select count(1) from test_mv13;
 
-function: check_no_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
-function: check_no_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
-function: check_no_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
-function: check_no_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
-function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
-function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
-function: check_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
 
-select dt, s1 from test_mv1 order by 1;
-select dt, s1 from test_mv2 order by 1;
-select dt, s1 from test_mv3 order by 1;
-select dt, s1 from test_mv4 order by 1;
-select dt, s1 from test_mv5 order by 1;
-select dt, s1 from test_mv6 order by 1;
+select dt, s1 from test_mv1 order by 1, 2;
+select dt, s1 from test_mv2 order by 1, 2;
+select dt, s1 from test_mv3 order by 1, 2;
+select dt, s1 from test_mv4 order by 1, 2;
+select dt, s1 from test_mv5 order by 1, 2;
+select dt, s1 from test_mv6 order by 1, 2;
 select dt, province, sum(age) from u7 group by dt, province order by dt, province;
 
 select dt, count(1) from test_mv11 group by dt order by 1;

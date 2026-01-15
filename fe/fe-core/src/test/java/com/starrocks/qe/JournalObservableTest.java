@@ -19,12 +19,13 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Multiset;
 import com.google.common.collect.TreeMultiset;
+import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
 
-public class JournalObservableTest {
+public class JournalObservableTest extends StarRocksTestBase {
     @Test
     public void testUpperBound() {
         Multiset<JournalObserver> elements = TreeMultiset.create();
@@ -58,7 +59,7 @@ public class JournalObservableTest {
             elements.add(ovserver42);
 
             for (JournalObserver journalObserver : elements) {
-                System.out.println(journalObserver);
+                logSysInfo(journalObserver);
             }
 
             int size = elements.size();
@@ -98,9 +99,9 @@ public class JournalObservableTest {
             elements.add(ovserver6);
             elements.add(ovserver6);
             int size = elements.size();
-            //            System.out.println("size=" + size);
+            //            logSysInfo("size=" + size);
             //            for(int i = 0; i < size; i ++) {
-            //                System.out.println("array " + i + " = " + ((MasterOpExecutor)elements.get(i)).getTargetJournalId());
+            //                logSysInfo("array " + i + " = " + ((MasterOpExecutor)elements.get(i)).getTargetJournalId());
             //            }
             Assertions.assertEquals(0, JournalObservable.upperBound(elements.toArray(), size, 1L));
             Assertions.assertEquals(2, JournalObservable.upperBound(elements.toArray(), size, 2L));
@@ -131,18 +132,18 @@ public class JournalObservableTest {
         }
         {
             CountDownLatch latch = new CountDownLatch(1);
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
 
             latch.countDown();
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
 
             latch.countDown();
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
 
             latch.countDown();
-            System.out.println(latch.getCount());
+            logSysInfo(latch.getCount());
         }
-        System.out.println("success");
+        logSysInfo("success");
     }
 }
 

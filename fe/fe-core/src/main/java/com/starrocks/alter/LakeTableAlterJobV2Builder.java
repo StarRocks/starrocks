@@ -31,7 +31,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +48,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @Override
     public AlterJobV2 build() throws StarRocksException {
-        if (newIndexSchema.isEmpty() && !hasIndexChanged) {
+        if (newIndexMetaIdToSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -63,18 +62,20 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setComputeResource(computeResource);
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
-        for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
-            long originIndexId = entry.getKey();
+        for (Map.Entry<Long, List<Column>> entry : newIndexMetaIdToSchema.entrySet()) {
+            long originIndexMetaId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
-            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
-            short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
-            long shadowIndexId = globalStateMgr.getNextId();
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameByMetaId(originIndexMetaId);
+            short newShortKeyColumnCount = newIndexMetaIdToShortKeyCount.get(originIndexMetaId);
+            long shadowIndexMetaId = globalStateMgr.getNextId();
+            // initially, index id and index meta id are the same
+            long shadowIndexId = shadowIndexMetaId;
 
-            // create SHADOW index for each partition
-            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-                long partitionId = partition.getParentId();
-                long physicalPartitionId = partition.getId();
-                MaterializedIndex originIndex = partition.getIndex(originIndexId);
+            // create SHADOW index for each physicalPartition
+            for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+                long partitionId = physicalPartition.getParentId();
+                long physicalPartitionId = physicalPartition.getId();
+                MaterializedIndex originIndex = physicalPartition.getIndex(originIndexMetaId);
                 long shardGroupId = originIndex.getShardGroupId();
 
                 List<Tablet> originTablets = originIndex.getTablets();
@@ -85,10 +86,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
-                List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionFilePathInfo(physicalPartitionId),
-                                table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
-                                originTabletIds, properties, computeResource);
+                List<Long> shadowTabletIds = createShards(originTablets.size(),
+                        table.getPartitionFilePathInfo(physicalPartitionId),
+                        table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
+                        originTabletIds, properties, computeResource);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -96,23 +97,17 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, medium, true);
                 MaterializedIndex shadowIndex =
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
-                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
-                            .addTabletIdMap(physicalPartitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
-                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
+                            .addTabletIdMap(physicalPartitionId, shadowIndexMetaId, shadowTablet.getId(), originTablet.getId());
                 }
 
-                List<Long> virtualBuckets = new ArrayList<>(originIndex.getVirtualBuckets());
-                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
-                shadowIndex.setVirtualBuckets(virtualBuckets);
-
-                schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexId, shadowIndex);
-            } // end for partition
-            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newShortKeyColumnCount,
+                schemaChangeJob.addPartitionShadowIndex(physicalPartitionId, shadowIndexMetaId, shadowIndex);
+            } // end for physicalPartition
+            schemaChangeJob.addIndexSchema(shadowIndexMetaId, originIndexMetaId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
         } // end for index
         return schemaChangeJob;

@@ -3,6 +3,7 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 
 set enable_query_trigger_analyze = false;
 set enable_iceberg_column_statistics = true;
+set new_planner_optimize_timeout = 30000;
 
 select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.eq_del_tbl;
 select count(distinct name) from iceberg_sql_test_${uuid0}.iceberg_oss_db.eq_del_tbl;

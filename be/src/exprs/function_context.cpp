@@ -20,10 +20,14 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
+#ifndef __APPLE__
 #include "exprs/agg/java_udaf_function.h"
+#endif
 #include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
+#ifndef __APPLE__
 #include "udf/java/java_udf.h"
+#endif
 #include "util/bloom_filter.h"
 
 namespace starrocks {
@@ -38,7 +42,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(BUILD_FORMAT_LIB)
+#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
 #endif
     return ctx;
@@ -54,7 +58,7 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(BUILD_FORMAT_LIB)
+#if !defined(__APPLE__) && !defined(BUILD_FORMAT_LIB)
     ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
 #endif
     ctx->_is_distinct = is_distinct;
@@ -137,10 +141,12 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
 }
 
 void FunctionContext::release_mems() {
+#ifndef __APPLE__
     if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
         auto env = JVMFunctionHelper::getInstance().getEnv();
         _jvm_udaf_ctxs->states->clear(this, env);
     }
+#endif
 }
 
 void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
@@ -228,27 +234,27 @@ struct ColumnBuilder {
     }
 };
 
-ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_desc, bool nullable) {
+MutableColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_desc, bool nullable) {
     const auto type = type_desc.type;
-    ColumnPtr p = nullptr;
+    MutableColumnPtr p = nullptr;
 
     if (type == TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.field_names.size());
-        Columns columns;
+        MutableColumns columns;
         for (size_t i = 0; i < field_size; i++) {
-            ColumnPtr field_column = create_column(type_desc.children[i], true);
-            columns.emplace_back(field_column);
+            auto field_column = create_column(type_desc.children[i], true);
+            columns.emplace_back(std::move(field_column));
         }
-        p = StructColumn::create(columns, type_desc.field_names);
+        p = StructColumn::create(std::move(columns), type_desc.field_names);
     } else if (type == TYPE_ARRAY) {
         auto offsets = UInt32Column::create();
         auto data = create_column(type_desc.children[0], true);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type == TYPE_MAP) {
         auto offsets = UInt32Column ::create();
-        ColumnPtr keys = nullptr;
-        ColumnPtr values = nullptr;
+        MutableColumnPtr keys = nullptr;
+        MutableColumnPtr values = nullptr;
         if (type_desc.children[0].type == TYPE_UNKNOWN) {
             FunctionContext::TypeDesc desc;
             desc.type = TYPE_NULL;
@@ -265,11 +271,12 @@ ColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc& type_d
         }
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else {
-        p = type_dispatch_column(type, ColumnBuilder(), type_desc);
+        auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
+        p = col ? std::move(*col).mutate() : nullptr;
     }
 
     if (nullable && p != nullptr) {
-        return NullableColumn::create(p, NullColumn::create());
+        return NullableColumn::create(std::move(p), NullColumn::create());
     }
     return p;
 }

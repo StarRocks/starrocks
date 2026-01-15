@@ -21,6 +21,7 @@
 namespace starrocks {
 
 using NullData = FixedLengthColumn<uint8_t>::Container;
+using ImmutableNullData = FixedLengthColumn<uint8_t>::ImmContainer;
 using NullColumn = FixedLengthColumn<uint8_t>;
 using NullColumnPtr = NullColumn::Ptr;
 using NullColumns = std::vector<NullColumnPtr>;
@@ -35,13 +36,22 @@ class NullableColumn : public CowFactory<ColumnFactory<Column, NullableColumn>, 
 public:
     using ValueType = void;
 
-    inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
+    inline static MutableColumnPtr wrap_if_necessary(ColumnPtr&& column) {
+        if (column->is_nullable()) {
+            return std::move(*column).mutate();
+        }
+        auto null = NullColumn::create(column->size(), 0);
+        return NullableColumn::create(std::move(*column).mutate(), std::move(null));
+    }
+
+    inline static ColumnPtr wrap_if_necessary(const ColumnPtr& column) {
         if (column->is_nullable()) {
             return column;
         }
         auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(column->as_mutable_ptr(), null->as_mutable_ptr());
+        return NullableColumn::create(column, std::move(null));
     }
+
     NullableColumn() = default;
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
@@ -92,6 +102,7 @@ public:
 
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
+    bool is_variant() const override { return _data_column->is_variant(); }
     bool is_array() const override { return _data_column->is_array(); }
     bool is_array_view() const override { return _data_column->is_array_view(); }
 
@@ -154,9 +165,9 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override;
+    StatusOr<MutableColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _data_column->has_large_column(); }
 
@@ -209,21 +220,14 @@ public:
         return create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
-    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) const override;
+    size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, uint32_t max_row_size,
+                                       size_t start, size_t count) const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
-
-    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
-    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
-    void crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -233,33 +237,28 @@ public:
 
     const ColumnPtr& data_column() const { return _data_column; }
     ColumnPtr& data_column() { return _data_column; }
-    MutableColumnPtr data_column_mutable_ptr() { return _data_column->as_mutable_ptr(); }
 
-    const NullColumnPtr& null_column() const { return _null_column; }
-    NullColumnPtr& null_column() { return _null_column; }
-    NullColumn::MutablePtr null_column_mutable_ptr() {
-        return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr());
-    }
+    Column* data_column_raw_ptr() { return _data_column.get(); }
+    const Column* data_column_raw_ptr() const { return _data_column.get(); }
 
     const Column& data_column_ref() const { return *_data_column; }
     Column& data_column_ref() { return *_data_column; }
+
+    const NullColumnPtr& null_column() const { return _null_column; }
+    NullColumnPtr& null_column() { return _null_column; }
+
+    NullColumn* null_column_raw_ptr() { return _null_column.get(); }
+    const NullColumn* null_column_raw_ptr() const { return _null_column.get(); }
+
     NullColumn& null_column_ref() { return *_null_column; }
     const NullColumn& null_column_ref() const { return *_null_column; }
 
     NullData& null_column_data() { return _null_column->get_data(); }
-    const NullData& null_column_data() const { return _null_column->get_data(); }
-    const NullData& immutable_null_column_data() const { return _null_column->get_data(); }
-
-    const Column* immutable_data_column() const { return _data_column.get(); }
-
-    Column* mutable_data_column() { return _data_column.get(); }
-    // TODO(COW): remove const_cast
-    NullColumn* mutable_null_column() const { return const_cast<NullColumn*>(_null_column.get()); }
-    const NullColumn* immutable_null_column() const { return _null_column.get(); }
+    const ImmutableNullData null_column_data() const { return _null_column->immutable_data(); }
+    const ImmutableNullData immutable_null_column_data() const { return _null_column->immutable_data(); }
 
     size_t null_count() const;
     size_t null_count(size_t offset, size_t count) const;
-
     Datum get(size_t n) const override {
         if (_has_null && (immutable_null_column_data()[n])) {
             return {};
@@ -273,7 +272,7 @@ public:
         _has_null = true;
         return true;
     }
-    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
+    StatusOr<MutableColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -357,8 +356,8 @@ public:
     }
 
 protected:
-    ColumnPtr _data_column;
-    NullColumnPtr _null_column;
+    Column::WrappedPtr _data_column;
+    NullColumn::WrappedPtr _null_column;
     mutable bool _has_null;
 };
 

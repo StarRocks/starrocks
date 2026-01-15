@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
@@ -73,6 +75,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
@@ -82,6 +85,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -225,6 +229,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalValues(LogicalValuesOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitLogicalRawValues(LogicalRawValuesOperator node, C context) {
         return visitOperator(node, context);
     }
 
@@ -383,6 +391,10 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitPhysicalRawValues(PhysicalRawValuesOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
     public R visitPhysicalRepeat(PhysicalRepeatOperator node, C context) {
         return visitOperator(node, context);
     }
@@ -428,6 +440,14 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalTableFunctionTableScan(PhysicalTableFunctionTableScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalFetch(PhysicalFetchOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalLookUp(PhysicalLookUpOperator node, C context) {
         return visitOperator(node, context);
     }
 }

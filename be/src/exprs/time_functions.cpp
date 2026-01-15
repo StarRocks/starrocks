@@ -19,12 +19,20 @@
 #include <libdivide.h>
 
 #include <algorithm>
-#include <mutex>
 #include <string_view>
 #include <unordered_map>
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "gutil/port.h"
+
+// Fix for ulong type on macOS
+#ifdef __APPLE__
+#ifndef HAVE_ULONG
+#define HAVE_ULONG 1
+typedef unsigned long ulong;
+#endif
+#endif
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
 #include "runtime/datetime_value.h"
@@ -82,7 +90,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         }
     } else if (v1->is_nullable()) {
         auto v = ColumnHelper::as_column<NullableColumn>(v1);
-        auto& nulls = v->null_column()->get_data();
+        auto& nulls = v->immutable_null_column_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v->data_column())->get_data();
 
         auto null_column = NullColumn::create();
@@ -299,10 +307,16 @@ StatusOr<ColumnPtr> TimeFunctions::utc_time(FunctionContext* context, const Colu
 }
 
 StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
-    return columns[0];
+    return std::move(*columns[0]).mutate();
 }
 
 static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
+
+StatusOr<ColumnPtr> TimeFunctions::current_timezone(FunctionContext* context, const Columns& columns) {
+    starrocks::RuntimeState* state = context->state();
+    const std::string& timezone = state->timezone();
+    return ColumnHelper::create_const_column<TYPE_VARCHAR>(timezone, 1);
+}
 
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
@@ -520,6 +534,13 @@ DEFINE_UNARY_FN_WITH_IMPL(day_of_week_isoImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(day_of_week_iso, TYPE_DATETIME, TYPE_INT);
 
+// week_day
+DEFINE_UNARY_FN_WITH_IMPL(week_dayImpl, v) {
+    int day = ((DateValue)v).weekday();
+    return (day + 6) % 7;
+}
+DEFINE_TIME_UNARY_FN(week_day, TYPE_DATETIME, TYPE_INT);
+
 DEFINE_UNARY_FN_WITH_IMPL(time_to_secImpl, v) {
     return static_cast<int64_t>(v);
 }
@@ -725,7 +746,7 @@ Status TimeFunctions::to_tera_date_prepare(FunctionContext* context, FunctionCon
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -786,7 +807,7 @@ Status TimeFunctions::to_tera_timestamp_prepare(FunctionContext* context, Functi
     auto format_col = context->get_constant_column(1);
     auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
     if (!state->formatter->prepare(format_str)) {
-        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str.to_string()));
     }
     return Status::OK();
 }
@@ -902,6 +923,7 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     }
 
     ColumnPtr column_format = context->get_constant_column(2);
+    RETURN_IF(column_format == nullptr, Status::InvalidArgument("time_slice requires constant parameter"));
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
@@ -1466,7 +1488,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_32(Function
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int64Column::create();
     result->append(value);
@@ -1474,7 +1496,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, 
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
-    DCHECK_EQ(columns.size(), 0);
+    RETURN_IF(0 != columns.size(), Status::InvalidArgument("to_unix_for_now requires 0 arguments"));
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int32Column::create();
     result->append(value);
@@ -1598,7 +1620,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
     auto ctz = context->state()->timezone_obj();
     auto size = columns[0]->size();
     ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TYPE_TINYINT> result(size);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1612,7 +1634,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
         }
 
         cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
-        int offset = ctz.lookup_offset(t).offset;
+        int offset = ctz.lookup(t).offset;
         int hour = impl_hour_from_unixtime(date + offset);
         result.append(hour);
     }
@@ -2545,7 +2567,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
 
     size_t num_rows = viewer.size();
     ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
-    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+    builder.data_column_raw_ptr()->reserve(num_rows, num_rows * patten_size);
 
     for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {
@@ -3179,7 +3201,7 @@ Status TimeFunctions::date_trunc_prepare(FunctionContext* context, FunctionConte
 }
 
 StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context, const starrocks::Columns& columns) {
-    return columns[1];
+    return std::move(*columns[1]).mutate();
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(date_trunc_monthImpl, v) {
@@ -3890,4 +3912,39 @@ StatusOr<ColumnPtr> TimeFunctions::time_format(FunctionContext* context, const s
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+constexpr static const int64_t MAX_TIME = 3023999L;
+
+static int64_t from_seconds_with_limit(int64_t time) {
+    if (time > MAX_TIME) {
+        return MAX_TIME;
+    }
+    if (time < -MAX_TIME) {
+        return -MAX_TIME;
+    }
+    return time;
+}
+
+StatusOr<ColumnPtr> TimeFunctions::sec_to_time(FunctionContext* context, const starrocks::Columns& columns) {
+    const auto& bigint_column = columns[0];
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    auto bigint_viewer = ColumnViewer<TYPE_BIGINT>(bigint_column);
+    const size_t size = bigint_column->size();
+    auto builder = ColumnBuilder<TYPE_TIME>(size);
+
+    for (size_t i = 0; i < size; ++i) {
+        if (bigint_viewer.is_null(i)) {
+            builder.append_null();
+            continue;
+        }
+        auto time = static_cast<double>(from_seconds_with_limit(bigint_viewer.value(i)));
+        builder.append(time);
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks
+
+#include "gen_cpp/opcode/TimeFunctions.inc"

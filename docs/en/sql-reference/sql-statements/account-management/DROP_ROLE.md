@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # DROP ROLE
 
-DROP ROLE drops a role. If a role has been granted to a user, the user still has the privileges associated with this role even after the role is dropped.
+DROP ROLE drops a role. If a role has been granted to a user, the user will lose the privileges associated with this role after the role is dropped.
 
 :::tip
 

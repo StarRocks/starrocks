@@ -1,4 +1,4 @@
--- name: test_load_ha @sequential
+-- name: test_load_ha @sequential @native
 create database db_${uuid0};
 -- result:
 -- !result

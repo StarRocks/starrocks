@@ -112,11 +112,18 @@ As shown in the image, SMT can automatically generate CREATE TABLE statements of
 
 ### Steps
 
-1. Download [Flink](https://flink.apache.org/downloads.html). The version of Flink is supported to be 1.11 or later.
+| Dependency                | Package name                                  | Download link                                                     |
+| ------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
+| Flink                     | flink-x.x.x-bin-scala_2.12.tgz                | [Click here](https://flink.apache.org/downloads.html)             |
+| Flink CDC connector       | flink-sql-connector-mysql-cdc-x.x.x.jar       | [Click here](https://github.com/apache/flink-cdc/releases)        |
+| Flink-connector-starrocks | flink-connector-starrocks-x.x.x_flink-x.x.jar | [Click here](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases) |
+| SMT                       | smt.tar.gz                                    | [Click here](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) |
+
+1. Download [Flink](https://flink.apache.org/downloads.html). Flink 1.11 or later is supported.
 
 2. Download [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases). Make sure that you download the `flink-sql-connector-mysql-cdc-xxx.jar` corresponding to the version of Flink.
 
-3. Download [Flink-connector-starrocks](https://github.com/StarRocks/flink-connector-starrocks).
+3. Download [Flink-connector-starrocks](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases).
 
 4. Copy **flink-sql-connector-mysql-cdc-xxx.jar** and **flink-connector-starrocks-xxx.jar** to **flink-xxx/lib/**.
 
@@ -595,7 +602,7 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. Execute *starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
+7. Execute **starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
 
 ​    ```Bash
     $./starrocks-migrate-tool
@@ -781,8 +788,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
 
 For TiDB whose version is before v4.0.0, additional configuration of `flink.cdc.pd-addresses` is required.
 
-````
-```Bash
+```Plain
 ############################################
 ### flink-cdc configuration for `tidb`
 ############################################
@@ -790,4 +796,3 @@ For TiDB whose version is before v4.0.0, additional configuration of `flink.cdc.
 # # TiKV cluster's PD address.
 # flink.cdc.pd-addresses = 127.0.0.1:2379
 ```
-````

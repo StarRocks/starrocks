@@ -914,9 +914,14 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p1
 }
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p18s18Normal) {
-    CastTestCaseArray test_cases = {{-1, -1, "-1.6450195", 18, 18, "-1.645019531249999872", "false"},
-                                    {-1, -1, "-1.9657545", 18, 18, "-1.965754508972167936", "false"},
-                                    {-1, -1, "-4.394038", 18, 18, "-4.394038200378418176", "false"}};
+    CastTestCaseArray test_cases = {
+#ifdef __aarch64__
+            {-1, -1, "-1.6450195", 18, 18, "-1.645019531250000128", "false"},
+#else
+            {-1, -1, "-1.6450195", 18, 18, "-1.645019531249999872", "false"},
+#endif
+            {-1, -1, "-1.9657545", 18, 18, "-1.965754508972167936", "false"},
+            {-1, -1, "-4.394038", 18, 18, "-4.394038200378418176", "false"}};
     test_cast_all<TYPE_FLOAT, TYPE_DECIMAL64>(test_cases);
 }
 
@@ -930,18 +935,30 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p1
 
 PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromFloatToDecimal64p15s13Normal) {
     CastTestCaseArray test_cases = {{-1, -1, "-0.89487344", 15, 13, "-0.8948734402657", "false"},
+#ifdef __aarch64__
+                                    {-1, -1, "-131614.89", 15, 13, "-131614.8906250000128", "false"},
+#else
                                     {-1, -1, "-131614.89", 15, 13, "-131614.8906249999872", "false"},
+#endif
                                     {-1, -1, "24832.969", 15, 13, "24832.9687500000000", "false"},
                                     {-1, -1, "-467690.0", 15, 13, "-467690", "false"},
                                     {-1, -1, "2047.9398", 15, 13, "2047.9398193359376", "false"},
                                     {-1, -1, "4.805915", 15, 13, "4.8059148788452", "false"},
                                     {-1, -1, "0.0", 15, 13, "0", "false"},
                                     {-1, -1, "-0.3382293", 15, 13, "-0.3382292985916", "false"},
+#ifdef __aarch64__
+                                    {-1, -1, "67966.195", 15, 13, "67966.1953125000064", "false"},
+#else
                                     {-1, -1, "67966.195", 15, 13, "67966.1953124999936", "false"},
+#endif
                                     {-1, -1, "58.239567", 15, 13, "58.2395668029785", "false"},
                                     {-1, -1, "-372493.8", 15, 13, "-372493.8125000000000", "false"},
                                     {-1, -1, "-84.3005", 15, 13, "-84.3004989624024", "false"},
+#ifdef __aarch64__
+                                    {-1, -1, "-2425.594", 15, 13, "-2425.5939941406252", "false"},
+#else
                                     {-1, -1, "-2425.594", 15, 13, "-2425.5939941406248", "false"},
+#endif
                                     {-1, -1, "-251.13904", 15, 13, "-251.1390380859375", "false"},
                                     {-1, -1, "-1.1857784", 15, 13, "-1.1857783794403", "false"}};
     test_cast_all<TYPE_FLOAT, TYPE_DECIMAL64>(test_cases);
@@ -1308,7 +1325,11 @@ PARALLEL_TEST(VectorizedDecimalCastExprFloatTest, testCastFromDoubleToDecimal64p
                                     {-1, -1, "1012.1739979915868", 15, 13, "1012.1739979915868", "false"},
                                     {-1, -1, "-97.32205029180439", 15, 13, "-97.3220502918044", "false"},
                                     {-1, -1, "201.32818746648948", 15, 13, "201.3281874664895", "false"},
+#ifdef __aarch64__
+                                    {-1, -1, "-2553.250982941662", 15, 13, "-2553.2509829416624", "false"},
+#else
                                     {-1, -1, "-2553.250982941662", 15, 13, "-2553.2509829416620", "false"},
+#endif
                                     {-1, -1, "-0.2020401057276776", 15, 13, "-0.2020401057277", "false"},
                                     {-1, -1, "-550.1934096087264", 15, 13, "-550.1934096087264", "false"}};
     test_cast_all<TYPE_DOUBLE, TYPE_DECIMAL64>(test_cases);

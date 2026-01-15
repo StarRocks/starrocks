@@ -45,6 +45,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         Config.tablet_sched_disable_colocate_overall_balance = true;
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @AfterEach
@@ -81,7 +82,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
                 "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
         String plan = getCostExplain(sql);
-        assertContains(plan, "concat-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
+        assertContains(plan, "CONCAT-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
     }
 
     @Test
@@ -652,15 +653,15 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "            )";
         String plan = getCostExplain(sql);
         // not eval char/varchar type predicate cardinality in scan node
-        assertContains(plan, "Predicates: 24: N_NAME IN ('IRAN', 'CANADA')");
+        assertContains(plan, "Predicates: [24: N_NAME, CHAR, false] IN ('IRAN', 'CANADA')");
         assertContains(plan, "cardinality: 25");
         // eval char/varchar type predicate cardinality in join node
-        assertContains(plan, "  5:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) " +
-                "OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
-                "  |  cardinality: 1\n");
-
+        assertContains(plan, "  5:NESTLOOP JOIN\n"
+                + "  |  join op: INNER JOIN\n"
+                + "  |  other join predicates: (([19: N_NAME, CHAR, false] = 'CANADA') "
+                + "AND ([24: N_NAME, CHAR, false] = 'IRAN')) OR (([19: N_NAME, CHAR, false] = 'IRAN') "
+                + "AND ([24: N_NAME, CHAR, false] = 'CANADA'))\n"
+                + "  |  cardinality: 1");
     }
 
     @Test
@@ -683,17 +684,17 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        assertContains(plan, "4:OlapScanNode\n" +
-                "     table: nation, rollup: nation\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
-                "     partitionsRatio=1/1, tabletsRatio=1/1");
+        assertContains(plan, "4:OlapScanNode\n"
+                + "     table: nation, rollup: nation\n"
+                + "     preAggregation: on\n"
+                + "     Predicates: [23: N_NATIONKEY, INT, false] IN (2, 1)\n"
+                + "     partitionsRatio=1/1, tabletsRatio=1/1");
         // eval predicate cardinality in join node
-        assertContains(plan, "6:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) " +
-                "OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
-                "  |  cardinality: 1");
+        assertContains(plan, "6:NESTLOOP JOIN\n"
+                + "  |  join op: INNER JOIN\n"
+                + "  |  other join predicates: (([18: N_NATIONKEY, INT, false] = 1) AND ([23: N_NATIONKEY, INT, false] = 2)) "
+                + "OR (([18: N_NATIONKEY, INT, false] = 2) AND ([23: N_NATIONKEY, INT, false] = 1))\n"
+                + "  |  cardinality: 1");
     }
 
     @Test
@@ -743,34 +744,34 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select ps_partkey,ps_suppkey from partsupp left outer join part on " +
                 "ps_partkey = p_partkey where p_partkey is null";
         String plan = getCostExplain(sql);
-        assertContains(plan, "3:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n" +
-                "  |  other predicates: 7: P_PARTKEY IS NULL\n" +
-                "  |  output columns: 1, 2\n" +
-                "  |  cardinality: 8000000");
+        assertContains(plan, "  3:HASH JOIN\n"
+                + "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n"
+                + "  |  other predicates: [7: P_PARTKEY, INT, true] IS NULL\n"
+                + "  |  output columns: 1, 2\n"
+                + "  |  cardinality: 8000000");
         // test right outer join
         sql = "select ps_partkey,ps_suppkey from partsupp right outer join part on " +
                 "ps_partkey = p_partkey where ps_partkey is null";
         plan = getCostExplain(sql);
-        assertContains(plan, "3:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, false]\n" +
-                "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (7: P_PARTKEY), remote = false\n" +
-                "  |  output columns: 1, 2\n" +
-                "  |  cardinality: 8000000");
+        assertContains(plan, "  3:HASH JOIN\n"
+                + "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, false]\n"
+                + "  |  other predicates: [1: PS_PARTKEY, INT, true] IS NULL\n"
+                + "  |  build runtime filters:\n"
+                + "  |  - filter_id = 0, build_expr = (7: P_PARTKEY), remote = false\n"
+                + "  |  output columns: 1, 2\n"
+                + "  |  cardinality: 8000000");
         // test full outer join
         sql = "select ps_partkey,ps_suppkey from partsupp full outer join part on " +
                 "ps_partkey = p_partkey where ps_partkey is null";
         plan = getCostExplain(sql);
-        assertContains(plan, "3:HASH JOIN\n" +
-                "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n" +
-                "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
-                "  |  output columns: 1, 2\n" +
-                "  |  cardinality: 4000000");
+        assertContains(plan, "  3:HASH JOIN\n"
+                + "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n"
+                + "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n"
+                + "  |  other predicates: [1: PS_PARTKEY, INT, true] IS NULL\n"
+                + "  |  output columns: 1, 2\n"
+                + "  |  cardinality: 4000000");
     }
 
     @Test
@@ -779,31 +780,31 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
         assertContains(plan, "* month-->[1.0, 12.0, 0.0, 1.0, 12.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT day(P_PARTKEY) AS day FROM part GROUP BY day ORDER BY day DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "day-->[1.0, 31.0, 0.0, 1.0, 31.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT hour(P_PARTKEY) AS hour FROM part GROUP BY hour ORDER BY hour DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, " hour-->[0.0, 23.0, 0.0, 1.0, 24.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT minute(P_PARTKEY) AS minute FROM part GROUP BY minute ORDER BY minute DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "minute-->[0.0, 59.0, 0.0, 1.0, 60.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
 
         sql = "SELECT second(P_PARTKEY) AS second FROM part GROUP BY second ORDER BY second DESC LIMIT 5";
         plan = getCostExplain(sql);
         assertContains(plan, "* second-->[0.0, 59.0, 0.0, 1.0, 60.0]");
         assertContains(plan, "2:AGGREGATE (update serialize)");
-        assertContains(plan, "4:AGGREGATE (merge finalize)");
+        assertContains(plan, "5:AGGREGATE (merge finalize)");
     }
 
     @Test
@@ -1463,6 +1464,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: [1: d_datekey, INT, true] = [18: d_datekey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (18: d_datekey), remote = false\n" +
+                "  |  output columns: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 35\n" +
                 "  |  cardinality: 2300\n" +
                 "  |  \n" +
                 "  |----2:AGGREGATE (update finalize)");
@@ -1602,18 +1604,20 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testOneTabletDistinctAgg() throws Exception {
-        String sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "2:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  output: sum(3: sum), group_concat(2: name, ',')\n"
-                + "  |  group by: 1: id\n"
-                + "  |  \n"
-                + "  1:AGGREGATE (update serialize)\n"
-                + "  |  output: sum(1: id)\n"
-                + "  |  group by: 1: id, 2: name\n"
-                + "  |  \n"
-                + "  0:OlapScanNode");
+        String sql;
+        String plan;
+
+        sql = "select sum(id), group_concat(distinct name) from skew_table where id = 1 group by id";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: sum), group_concat(2: name, ',')\n" +
+                "  |  group by: 1: id\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(1: id)\n" +
+                "  |  group by: 1: id, 2: name\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         sql = "select n_name,count(distinct n_regionkey,n_name) from nation group by n_name";
         plan = getFragmentPlan(sql);

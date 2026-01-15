@@ -33,12 +33,15 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SlotSelectionStrategyV2Test {
     private static final int NUM_CORES = 16;
 
     private boolean prevEnableQueryQueueV2 = false;
+
+    private SlotManager slotManager;
 
     @BeforeAll
     public static void beforeClass() {
@@ -50,7 +53,10 @@ public class SlotSelectionStrategyV2Test {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
         Config.enable_query_queue_v2 = true;
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES);
+        ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
+        slotManager = new SlotManager(resourceUsageMonitor);
+
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, NUM_CORES);
     }
 
     @AfterEach
@@ -61,14 +67,14 @@ public class SlotSelectionStrategyV2Test {
     }
 
     private SlotSelectionStrategyV2 createSlotSelectionStrategy() {
-        return new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        return new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
 
     @Test
     public void testSmallSlot() {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot largeSlot = generateSlot(opts.v2().getTotalSlots() - 1);
         List<LogicalSlot> smallSlots = IntStream.range(0, NUM_CORES + 2)
@@ -130,8 +136,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testHeadLineBlocking1() {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
         LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2);
@@ -177,8 +183,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testHeadLineBlocking2() {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
         LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2);
@@ -228,8 +234,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testUpdateOptionsPeriodicallyAtAllocating() throws InterruptedException {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
         LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2 - 1);
@@ -244,7 +250,7 @@ public class SlotSelectionStrategyV2Test {
         assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot3, slot2);
 
         // Make options changed.
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES * 2);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, NUM_CORES * 2);
         Thread.sleep(1200);
         // 3. Allocate slot2 and slot3.
         slotTracker.allocateSlot(slot2);
@@ -264,8 +270,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testUpdateOptionsPeriodicallyAtReleasing() throws InterruptedException {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
         LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2 - 1);
@@ -285,7 +291,7 @@ public class SlotSelectionStrategyV2Test {
         assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(slot2.getNumPhysicalSlots() + slot3.getNumPhysicalSlots());
 
         // Make options changed.
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES * 2);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, NUM_CORES * 2);
         Thread.sleep(1200);
         // 3. Release slot2 and slot3.
         assertThat(slotTracker.releaseSlot(slot2.getSlotId())).isSameAs(slot2);
@@ -301,8 +307,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testUpdateOptionsChangeQueueStrategyOnline() throws InterruptedException {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
         LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2 - 1);
@@ -345,8 +351,8 @@ public class SlotSelectionStrategyV2Test {
     public void testHistorySlotsQueue() {
         Config.max_query_queue_history_slots_number = 10;
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
         LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2);
@@ -409,8 +415,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testConcurrencyLimit1() {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         int oldVal = GlobalVariable.getQueryQueueConcurrencyLimit();
         GlobalVariable.setQueryQueueConcurrencyLimit(10);
@@ -479,8 +485,8 @@ public class SlotSelectionStrategyV2Test {
     @Test
     public void testConcurrencyLimitWithLargeSlots() {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         GlobalVariable.setQueryQueueConcurrencyLimit(1);
         LogicalSlot largeSlot1 = generateSlot(opts.v2().getTotalSlots() - 1);
@@ -506,8 +512,8 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testConcurrencyLimitWithSmallSlots() {
-        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
         GlobalVariable.setQueryQueueConcurrencyLimit(1);
         LogicalSlot smallSlot1 = generateSlot(1);

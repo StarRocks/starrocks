@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.analysis.BinaryType;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.List;
@@ -55,7 +55,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitBinaryPredicate(this, context);
+        return  visitor.visitBinaryPredicate(this, context);
     }
 
     public BinaryPredicateOperator commutative() {
@@ -117,6 +117,15 @@ public class BinaryPredicateOperator extends PredicateOperator {
     }
 
     @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        BinaryPredicateOperator that = (BinaryPredicateOperator) obj;
+        return type == that.type;
+    }
+
+    @Override
     public int hashCodeSelf() {
         return Objects.hash(super.hashCodeSelf(), type);
     }
@@ -128,6 +137,10 @@ public class BinaryPredicateOperator extends PredicateOperator {
 
     public static BinaryPredicateOperator eq(ScalarOperator lhs, ScalarOperator rhs) {
         return new BinaryPredicateOperator(BinaryType.EQ, lhs, rhs);
+    }
+
+    public static BinaryPredicateOperator null_safe_eq(ScalarOperator lhs, ScalarOperator rhs) {
+        return new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, lhs, rhs);
     }
 
     public static BinaryPredicateOperator ge(ScalarOperator lhs, ScalarOperator rhs) {

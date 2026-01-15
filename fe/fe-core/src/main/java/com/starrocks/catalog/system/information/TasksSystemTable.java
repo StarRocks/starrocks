@@ -14,24 +14,27 @@
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskInfo;
+import com.starrocks.type.DateType;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,15 +53,15 @@ public class TasksSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TASK_NAME", ScalarType.createVarchar(64))
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("SCHEDULE", ScalarType.createVarchar(64))
-                        .column("CATALOG", ScalarType.createVarchar(64))
-                        .column("DATABASE", ScalarType.createVarchar(64))
-                        .column("DEFINITION", ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("PROPERTIES", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("CREATOR", ScalarType.createVarchar(64))
+                        .column("TASK_NAME", TypeFactory.createVarcharType(64))
+                        .column("CREATE_TIME", DateType.DATETIME)
+                        .column("SCHEDULE", TypeFactory.createVarcharType(64))
+                        .column("CATALOG", TypeFactory.createVarcharType(64))
+                        .column("DATABASE", TypeFactory.createVarcharType(64))
+                        .column("DEFINITION", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXPIRE_TIME", DateType.DATETIME)
+                        .column("PROPERTIES", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("CREATOR", TypeFactory.createVarcharType(64))
                         .build(), TSchemaTableType.SCH_TASKS);
     }
 
@@ -69,7 +72,7 @@ public class TasksSystemTable {
         List<TTaskInfo> result = Lists.newArrayList();
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
         }
 
         for (Task task : taskList) {
@@ -96,12 +99,16 @@ public class TasksSystemTable {
                 scheduleStr = task.getType().name();
             }
             if (task.getType() == Constants.TaskType.PERIODICAL) {
-                scheduleStr += task.getSchedule();
+                scheduleStr += " " + task.getSchedule();
             }
             info.setSchedule(scheduleStr);
             info.setCatalog(task.getCatalogName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
-            info.setDefinition(task.getDefinition());
+            if (Config.enable_task_info_mask_credential) {
+                info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
+            } else {
+                info.setDefinition(task.getDefinition());
+            }
             info.setExpire_time(task.getExpireTime() / 1000);
             info.setProperties(task.getPropertiesString());
             if (task.getUserIdentity() != null) {

@@ -40,7 +40,10 @@ StarRocks は、Red Hat Enterprise Linux 7.9、CentOS Linux 7.9、または Ubun
 
 ## Software
 
-StarRocks バージョン 3.5 以降を実行するには、サーバーに JDK 17 をインストールする必要があります。
+StarRocks を実行するには、サーバーに適切な JDK バージョンをインストールする必要があります。
+
+- StarRocks v3.3、v3.4 では JDK 11 以降を使用してください。
+- StarRocks v3.5 では JDK 17 以降を使用してください。
 
 > **注意**
 >

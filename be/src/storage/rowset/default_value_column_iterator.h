@@ -40,6 +40,7 @@
 
 namespace starrocks {
 
+class ColumnAccessPath;
 class TypeInfo;
 using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 
@@ -47,14 +48,16 @@ using TypeInfoPtr = std::shared_ptr<TypeInfo>;
 class DefaultValueColumnIterator final : public ColumnIterator {
 public:
     DefaultValueColumnIterator(bool has_default_value, std::string default_value, bool is_nullable,
-                               TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows)
+                               TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows,
+                               const ColumnAccessPath* path = nullptr)
             : _has_default_value(has_default_value),
               _default_value(std::move(default_value)),
               _is_nullable(is_nullable),
               _type_info(std::move(type_info)),
               _schema_length(schema_length),
               _pool(),
-              _num_rows(num_rows) {}
+              _num_rows(num_rows),
+              _path(path) {}
 
     Status init(const ColumnIteratorOptions& opts) override;
 
@@ -78,7 +81,7 @@ public:
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation) override;
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override;
 
     bool all_page_dict_encoded() const override { return false; }
 
@@ -114,6 +117,11 @@ private:
     ordinal_t _current_rowid = 0;
     ordinal_t _num_rows = 0;
     bool _may_contain_deleted_row = false;
+
+    // Optional: used when scan prunes subfields (e.g. only read /struct_col/subfield).
+    // For missing columns filled by default value, we need this to project STRUCT default datums
+    // to match the pruned column shape.
+    const ColumnAccessPath* _path = nullptr;
 };
 
 } // namespace starrocks

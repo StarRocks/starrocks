@@ -43,6 +43,7 @@ public:
     void close_source_operator(int32_t consumer_index) override;
     void open_sink_operator() override;
     void close_sink_operator() override;
+    bool is_all_sources_finished() const override;
 
 private:
     // one input chunk will be split into _num_consumers chunks by _split_expr_ctxs and saved in _buffer

@@ -6,9 +6,167 @@ displayed_sidebar: docs
 
 :::warning
 
-升级至 v3.3 后，请勿直接将集群降级至 v3.2.0、v3.2.1 或 v3.2.2，否则会导致元数据丢失。您必须降级到 v3.2.3 或更高版本以避免出现此问题。
+- 升级至 v3.3 后，请勿直接将集群降级至 v3.2.0、v3.2.1 或 v3.2.2，否则会导致元数据丢失。您必须降级到 v3.2.3 或更高版本以避免出现此问题。
+- 升级至 v3.3.9 后，您只能将集群降级至 v3.2.11 或更高版本。
 
 :::
+
+## 3.3.21
+
+发布日期：2025 年 12 月 25 日
+
+### 问题修复
+
+修复了以下问题：
+
+- `trim` 函数处理特定 Unicode 空白字符（如 `\u1680`）时的逻辑错误，以及预留内存计算导致的性能问题。 [#66428](https://github.com/StarRocks/starrocks/pull/66428), [#66477](https://github.com/StarRocks/starrocks/pull/66477)
+- FE 重启时因表加载顺序问题导致外键约束（Foreign Key Constraints）丢失的问题。 [#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- 安全漏洞 CVE-2025-66566 和 CVE-2025-12183，以及上游潜在崩溃问题。 [#66453](https://github.com/StarRocks/starrocks/pull/66453), [#66362](https://github.com/StarRocks/starrocks/pull/66362), [#67075](https://github.com/StarRocks/starrocks/pull/67075)
+- Group Execution 模式下 Join 配合窗口函数使用时，计算结果不正确。 [#66441](https://github.com/StarRocks/starrocks/pull/66441)
+- Warehouse 删除后，系统仍尝试获取其元数据，导致 `SHOW LOAD` 或 SQL 执行失败。 [#66436](https://github.com/StarRocks/starrocks/pull/66436)
+- 当聚合输入的 Scan 被完全过滤（Empty Set）时，`PartitionColumnMinMaxRewriteRule` 优化导致结果错误地返回 Empty Set 而非 NULL。 [#66356](https://github.com/StarRocks/starrocks/pull/66356)
+- Rowset 提交或 Compaction 失败时 Rowset ID 未被正确释放，导致磁盘空间无法回收。 [#66301](https://github.com/StarRocks/starrocks/pull/66301)
+- 高选择率过滤导致 Scan 提前结束（EOS）时，审计日志中的 Scan 统计信息（如扫描行数/字节数）缺失。 [#66280](https://github.com/StarRocks/starrocks/pull/66280)
+- BE 发生 fatal signal (如 SIGSEGV) 进入 Crash 处理流程后仍响应心跳为 Alive，导致 FE 继续分发查询并报错。 [#66212](https://github.com/StarRocks/starrocks/pull/66212)
+- Local TopN 下推优化导致 Runtime Filter 的 `set_collector` 被多次调用，引发 BE Crash。 [#66199](https://github.com/StarRocks/starrocks/pull/66199)
+- 列模式部分更新（Partial Update）与条件更新（Conditional Update）同时使用时，因 `rssid` 未初始化导致导入任务失败。 [#66139](https://github.com/StarRocks/starrocks/pull/66139)
+- Colocate Execution Group 在提交驱动（Driver）时存在竞态条件，导致 BE Crash。 [#66099](https://github.com/StarRocks/starrocks/pull/66099)
+- `RecordBatchQueue` 关闭（如 SparkSQL 触发 Limit）后，`MemoryScratchSinkOperator` 处于 pending 状态无法取消，导致查询挂起。 [#66041](https://github.com/StarRocks/starrocks/pull/66041)
+- `ExecutionGroup` 倒计时逻辑中访问 `_num_pipelines` 存在竞态条件，导致 Use-after-free 问题。 [#65940](https://github.com/StarRocks/starrocks/pull/65940)
+- 查询错误率相关监控指标（Internal/Analysis/Timeout error rate）计算逻辑错误，导致显示负值。 [#65891](https://github.com/StarRocks/starrocks/pull/65891)
+- LDAP 用户执行任务时，因 `ConnectContext` 未设置导致空指针异常 (NPE)。 [#65843](https://github.com/StarRocks/starrocks/pull/65843)
+- 文件系统缓存（Filesystem Cache）因使用对象引用比较而非值比较，导致相同 Key 的缓存查找失败，影响性能。 [#65823](https://github.com/StarRocks/starrocks/pull/65823)
+- 快照加载失败后，因状态变量检查错误导致 Tablet 关联文件未能被正确清理。 [#65709](https://github.com/StarRocks/starrocks/pull/65709)
+- 建表或 Schema Change 时，FE 配置的压缩类型和级别未正确透传至 BE 或持久化，导致使用默认压缩设置。 [#65673](https://github.com/StarRocks/starrocks/pull/65673)
+- `COM_STMT_EXECUTE` 默认无审计日志，且 Profile 信息被错误地合并到 Prepare 阶段记录中；修复后默认开启审计并支持参数解码。 [#65448](https://github.com/StarRocks/starrocks/pull/65448)
+- Delete Vector 的 CRC32 校验在集群升级/降级场景下因版本不兼容导致检查失败。 [#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- `UnionConstSourceOperator` 在合并 Union 到 Values 时，对 Nullable 属性处理不当导致 BE Crash。 [#65429](https://github.com/StarRocks/starrocks/pull/65429)
+- Alter Table 操作期间，若目标 Tablet 被 Drop，并发的导入任务（Ingestion）会在提交阶段失败。 [#65396](https://github.com/StarRocks/starrocks/pull/65396)
+- HTTP SQL 接口在切换用户时未正确设置上下文，导致鉴权失败时的错误日志信息不准确。 [#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- 修复 `INSERT OVERWRITE` 后的统计信息收集问题：包括无法为临时分区收集统计信息、事务提交时行数统计不准导致未触发收集等。 [#65327](https://github.com/StarRocks/starrocks/pull/65327), [#65298](https://github.com/StarRocks/starrocks/pull/65298), [#65225](https://github.com/StarRocks/starrocks/pull/65225)
+- TCP 连接复用场景下，后续非 SQL 的 HTTP 请求覆盖了 Context，导致 SQL 相关的 `HttpConnectContext` 无法释放。 [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- BE 启动加载 Tablet 元数据时，若 RocksDB 迭代超时会导致 Tablet 加载不全从而引发版本丢失。 [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- `percentile_approx_weighted` 函数在处理压缩参数时存在越界访问风险，导致 BE Crash。 [#64838](https://github.com/StarRocks/starrocks/pull/64838)
+- 从 Follower 转发到 Leader 执行的查询丢失 Query Profile 日志。 [#64395](https://github.com/StarRocks/starrocks/pull/64395)
+- Spill 过程中，大字符串列在进行 LZ4 编码时因 Size 检查不严导致 BE Crash。 [#61495](https://github.com/StarRocks/starrocks/pull/61495)
+- 无 `PARTITION BY` 和 `GROUP BY` 的 Ranking 窗口函数优化生成了空的 `ORDER BY`，导致 `MERGING-EXCHANGE` 算子 Crash。 [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- 低基数（Low Cardinality）列重写逻辑依赖 Set 迭代顺序，导致结果不稳定或报错，改为并查集实现。 [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+
+## 3.3.20
+
+发布日期：2025 年 11 月 18 日
+
+### 问题修复
+
+修复了以下问题：
+
+- CVE-2024-47561。[#64193](https://github.com/StarRocks/starrocks/pull/64193)
+- CVE-2025-59419。[#64142](https://github.com/StarRocks/starrocks/pull/64142)
+- Lake 主键表返回的行数不正确。[#64007](https://github.com/StarRocks/starrocks/pull/64007)
+- 带 IGNORE NULLS 标志的窗口函数无法与未带该标志的对应函数合并。[#63958](https://github.com/StarRocks/starrocks/pull/63958)
+- `PartitionedSpillerWriter::_remove_partition` 中的 ASAN 错误。[#63903](https://github.com/StarRocks/starrocks/pull/63903)
+- 共享数据集群中排序聚合（sorted aggregation）结果错误。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- 创建分区物化视图时发生 NPE。[#63830](https://github.com/StarRocks/starrocks/pull/63830)
+- 删除分区时 Partitioned Spill 崩溃。[#63825](https://github.com/StarRocks/starrocks/pull/63825)
+- FE 在清理过期导入作业时发生 NPE。[#63820](https://github.com/StarRocks/starrocks/pull/63820)
+- 初始化 `ExceptionStackContext` 时可能发生死锁。[#63776](https://github.com/StarRocks/starrocks/pull/63776)
+- 简化复杂函数的 CASE WHEN 表达式时出现无收益优化，导致扫描性能下降。[#63732](https://github.com/StarRocks/starrocks/pull/63732)
+- 类型不匹配导致物化视图改写失败。[#63659](https://github.com/StarRocks/starrocks/pull/63659)
+- 某些计划下，物化视图改写抛出 `IllegalStateException`。[#63655](https://github.com/StarRocks/starrocks/pull/63655)
+- 无法感知 LZ4 压缩或解压错误。[#63629](https://github.com/StarRocks/starrocks/pull/63629)
+- 在将 LARGEINT 转换为 DECIMAL128 时（例如 INT128_MIN 等符号边界情况）溢出检测错误导致稳定性问题。[#63559](https://github.com/StarRocks/starrocks/pull/63559)
+- 使用组合谓词进行 `date_trunc` 分区裁剪时错误地产生 EMPTYSET。[#63464](https://github.com/StarRocks/starrocks/pull/63464)
+- ARRAY 低基数优化导致 `Left Join` 结果不完整。[#63419](https://github.com/StarRocks/starrocks/pull/63419)
+- 聚合中间类型使用 `ARRAY<NULL_TYPE>` 导致问题。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
+- 基于自增列的部分更新出现元数据不一致。[#63370](https://github.com/StarRocks/starrocks/pull/63370)
+- 共享数据集群中 Fast Schema Evolution 使用的 Bitmap 索引复用不兼容。[#63315](https://github.com/StarRocks/starrocks/pull/63315)
+- Pod 重启或升级时 CN 被不必要地注销。[#63085](https://github.com/StarRocks/starrocks/pull/63085)
+- 执行 PREPARE/EXECUTE 语句时，Profile 中显示 SQL 为 `omit`。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
+
+## 3.3.19
+
+发布日期: 2025年10月14日
+
+### 问题修复
+
+修复了以下问题：
+
+- `UserProperty` 的优先级低于会话变量。 [#63173](https://github.com/StarRocks/starrocks/pull/63173)
+- 当 Hive 基表被删除并重新创建时，可能导致物化视图刷新失败。 [#63072](https://github.com/StarRocks/starrocks/pull/63072)
+- 聚合下推重写规则的问题。 [#63060](https://github.com/StarRocks/starrocks/pull/63060)
+- JSON 的布尔值提取函数中 null 列与数据列不一致。 [#63054](https://github.com/StarRocks/starrocks/pull/63054)
+- 获取 Delta Lake 格式表的分区列时的问题。 [#62953](https://github.com/StarRocks/starrocks/pull/62953)
+- 存算分离集群中物化视图不支持 Colocation。 [#62941](https://github.com/StarRocks/starrocks/pull/62941)
+- 基于视图的物化视图改写时 Projection 映射错误。 [#62918](https://github.com/StarRocks/starrocks/pull/62918)
+- 当 Most Common Values (MCV) 包含单引号时，直方图统计中的 SQL 语法错误。 [#62853](https://github.com/StarRocks/starrocks/pull/62853)
+- `KILL ANALYZE` 不生效。 [#62842](https://github.com/StarRocks/starrocks/pull/62842)
+- CVE-2025-58056 漏洞。 [#62801](https://github.com/StarRocks/starrocks/pull/62801)
+- 未指定数据库执行 `SHOW CREATE ROUTINE LOAD` 时返回错误结果的问题。 [#62745](https://github.com/StarRocks/starrocks/pull/62745)
+- 在 `files()` 中错误跳过 CSV 表头导致数据丢失。 [#62719](https://github.com/StarRocks/starrocks/pull/62719)
+- 当复制与 Compaction 事务一起提交时的版本检查失败。 [#62663](https://github.com/StarRocks/starrocks/pull/62663)
+- 在恢复任务失败后，由于未清除物化视图版本映射，跳过物化视图刷新。 [#62634](https://github.com/StarRocks/starrocks/pull/62634)
+- 物化视图分析器中区分大小写的分区列校验引发问题。 [#62598](https://github.com/StarRocks/starrocks/pull/62598)
+
+## 3.3.18
+
+发布日期：2025 年 8 月 28 日
+
+### 问题修复
+
+修复了如下问题：
+
+- BE 在 `LakePersistentIndex` 初始化失败时因清理 `_memtable` 而崩溃。[#62279](https://github.com/StarRocks/starrocks/pull/62279)
+- 因在复制事务管理器中获取 Tablet 的最大版本时缺少锁而导致的并发问题。[#62238](https://github.com/StarRocks/starrocks/pull/62238)
+- 分阶段调度器因同步收集 Profile 时始终等待而导致的挂起问题（修复后，系统在调度出错时会正确结束 Profile 收集）。[#62140](https://github.com/StarRocks/starrocks/pull/62140)
+- 低基数优化中 `ALLOW_THROW_EXCEPTION` 模式下的异常处理问题（修复后，表达式计算中的异常会被捕获并正确返回）。 [#62098](https://github.com/StarRocks/starrocks/pull/62098)
+- 当 `enable_rbo_table_prune` 为 `false` 时，在表裁剪时系统无法在 memo 之外计算嵌套 CTE 统计信息的问题。[#62070](https://github.com/StarRocks/starrocks/pull/62070)
+- CVE‑2025‑55163 问题。 [#62041](https://github.com/StarRocks/starrocks/pull/62041)
+- `partition_morsel_queue` 中包含嵌套 `split_morsel_queue` 时，后者未能正确接收 Tablet Schema 的问题。[#62034](https://github.com/StarRocks/starrocks/pull/62034) 
+- Parquet 写入中对 `NULL` 数组的错误处理导致数据不一致或崩溃（修复后系统确保 `split` 函数能够正确处理 `NULL` 输入字符串）。[#61999](https://github.com/StarRocks/starrocks/pull/61999)
+- 创建使用 `CASE WHEN `表达式的物化视图时，因 VARCHAR 类型返回不兼容导致的失败（修复后系统确保刷新前后一致性）。 [#61996](https://github.com/StarRocks/starrocks/pull/61996) 
+- 因在计算压缩分数时持有分片级别的锁，导致长时间操作而引发并发安全性问题。[#61899](https://github.com/StarRocks/starrocks/pull/61899)  
+- 因 CBO 的表裁剪逻辑未考虑所有相关谓词导致的裁剪不完整问题。[#61881](https://github.com/StarRocks/starrocks/pull/61881) 
+
+## 3.3.17
+
+发布日期：2025 年 7 月 30 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 升级 HttpClient5 至 5.4.3。[#61298](https://github.com/StarRocks/starrocks/pull/61298)
+- 资源组 `cpu_core_used_permille` 限制错误。[#61177](https://github.com/StarRocks/starrocks/pull/61177)
+- ALTER 任务和分区创建任务冲突。[#61167](https://github.com/StarRocks/starrocks/pull/61167)
+- `ConnectContext` 中缺失 `globalStateMgr` 导致的 NPE。 [#60880](https://github.com/StarRocks/starrocks/pull/60880)
+- 当分区的值不同但名称在不区分大小写的情况下相同时，分区创建失败。 [#60909](https://github.com/StarRocks/starrocks/pull/60909)
+- 分区统计信息使用同步访问方式导致锁竞争。 [#61041](https://github.com/StarRocks/starrocks/pull/61041)
+- 重启 FE 后，ANALYZE 任务停滞在 `pending` 状态。 [#61113](https://github.com/StarRocks/starrocks/pull/61113)
+- BE 中 JIT (Just-In-Time) 编译导致的问题。 [#61060](https://github.com/StarRocks/starrocks/pull/61060)
+- Starmgr 的 Leader 地址问题。 [#61016](https://github.com/StarRocks/starrocks/pull/61016)
+- Broker 上的 CVE 漏洞。 [#60908](https://github.com/StarRocks/starrocks/pull/60908)
+- 实际的 JDBC 连接数超出 `jdbc_connection_pool_size` 限制。 [#61004](https://github.com/StarRocks/starrocks/pull/61004) 
+- CVE-2022-41404 漏洞。 [#59689](https://github.com/StarRocks/starrocks/pull/59689)
+- Parquet 和 HttpClient5 相关的 CVE 漏洞。 [#58750](https://github.com/StarRocks/starrocks/pull/58750)
+- 当物理分区 ID 为空时，系统未能将分区从 `_partition_map` 中删除导致的问题。 [#60842](https://github.com/StarRocks/starrocks/pull/60842)
+- 存算分离集群中缺少版本检查。 [#59422](https://github.com/StarRocks/starrocks/pull/59422)
+- 存算分离集群中，系统批量发布日志时，事务日志不存在的问题。[#60949](https://github.com/StarRocks/starrocks/pull/60949)
+- 存算分离集群中，启用批量发布时，系统并发发布相同事务的问题。[#57574](https://github.com/StarRocks/starrocks/pull/57574)
+- 统计信息 Overwrite 未使用半同步模式导致的问题。 [#60897](https://github.com/StarRocks/starrocks/pull/60897) 
+- 获取最新合并文件切片时，用于过滤 Hudi 文件的 `maxInstantTime` 不准确问题。[#60927](https://github.com/StarRocks/starrocks/pull/60927)
+- TaskRun 状态与低版本的不兼容导致的问题。 [#60438](https://github.com/StarRocks/starrocks/pull/60438)
+- CVE-2025-52999 漏洞。[#60795](https://github.com/StarRocks/starrocks/pull/60795)
+- Broker 中 `log4j-1.2.17-cloudera6` 导致的漏洞。[#59579](https://github.com/StarRocks/starrocks/pull/59579)
+- 加载 OOM 分区时 BE 崩溃的问题。 [#60778](https://github.com/StarRocks/starrocks/pull/60778)
+- 大量 Base Compaction 任务阻塞其他 Compaction 任务问题。[#60711](https://github.com/StarRocks/starrocks/pull/60711)
+- 系统无法高效处理错误字符串截断。[#60878](https://github.com/StarRocks/starrocks/pull/60878)
+- 物化视图在多 FE 环境下改写失败。[#60841](https://github.com/StarRocks/starrocks/pull/60841)
+- INSERT OVERWRITE 在手动创建分区的失败问题。[#60750](https://github.com/StarRocks/starrocks/pull/60750)
+- 聚合键使用随机分布导致的问题。[#60702](https://github.com/StarRocks/starrocks/pull/60702)
+- 低基数改写导致 `multi_distinct_count` 崩溃问题。[#60664](https://github.com/StarRocks/starrocks/pull/60664)
+- Pivot 解析字段问题。[#60748](https://github.com/StarRocks/starrocks/pull/60748) 
+- 升级 `hudi-common` 至1.0.2。[#59501](https://github.com/StarRocks/starrocks/pull/59501)
+- CLONE 任务和 DROP TABLE 并发时可能导致 BE Crash 的问题。[#61359](https://github.com/StarRocks/starrocks/pull/61359)
 
 ## 3.3.16
 
@@ -613,12 +771,9 @@ displayed_sidebar: docs
 - Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
 - 优化写入算子的的异步统计信息收集方式，解决导入任务较多时延迟变高的问题。[#48162](https://github.com/StarRocks/starrocks/pull/48162)
 -  增加以下 BE 动态参数以控制导入过程中的资源硬限制，从而降低写入大量 Tablet 时对 BE 稳定性的影响。[#48495](https://github.com/StarRocks/starrocks/pull/48495)
-
   包括：
-
   - `load_process_max_memory_hard_limit_ratio`
   - `enable_new_load_on_memory_limit_exceeded`
-
 - 增加同一表内 Column ID 的一致性检查，防止引起 Compaction 错误。[#48498](https://github.com/StarRocks/starrocks/pull/48628)
 - 持久化 PIPE 元数据，防止因 FE 重启而导致元数据丢失。[#48852](https://github.com/StarRocks/starrocks/pull/48852)
 
@@ -842,6 +997,7 @@ displayed_sidebar: docs
 
 #### 其他
 
+- 从 StarRocks v3.3.0 起，需使用 JDK 11 或更高版本。
 - 物化视图属性 `partition_refresh_num` 默认值从 `-1` 调整为 `1`，当物化视图有多个分区需要刷新时，原来在一个刷新任务重刷新所有的分区，当前会一个分区一个分区增量刷新，避免先前行为消耗过多资源。可以通过 FE 参数 `default_mv_partition_refresh_number` 调整默认行为。
 - 系统原先按照 GMT+8 时区的时间调度数据库一致性检查，现在将按照当地时区的时间进行调度。[#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - 默认启用 Data Cache 来加速数据湖查询。用户也可通过 `SET enable_scan_datacache = false` 手动关闭 Data Cache。

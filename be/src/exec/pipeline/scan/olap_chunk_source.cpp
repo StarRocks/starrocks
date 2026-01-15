@@ -14,19 +14,24 @@
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <unordered_map>
 
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/field.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/jsonpath.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/map_util.h"
@@ -37,13 +42,15 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/vector/vector_search_option.h"
+#include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
-#include "storage/tablet_index.h"
 #include "types/logical_type.h"
+#include "util/json.h"
 #include "util/runtime_profile.h"
+#include "util/string_parser.hpp"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
@@ -178,7 +185,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
-    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
+    _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _rows_key_range_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
@@ -207,8 +214,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
 
-    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
-    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
+    // FlatJSON
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
@@ -238,6 +244,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
+    _params.enable_predicate_col_late_materialize =
+            _runtime_state->query_options().enable_predicate_col_late_materialize;
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
     _params.sample_options = thrift_olap_scan_node.sample_options;
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
@@ -339,6 +347,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
+
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
@@ -409,6 +418,10 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
             } else {
                 LOG(WARNING) << "failed to convert column access path: " << res.status();
             }
+        } else if (path->is_root() && !path->children().empty()) {
+            // Check if this is a ROOT path for JSON field that has been pruned
+            // For JSON fields, the root column might be pruned but sub-paths are still needed
+            VLOG_ROW << "Skipping pruned JSON root path: " << root;
         } else {
             LOG(WARNING) << "failed to find column in schema: " << root;
         }
@@ -483,6 +496,152 @@ Status OlapChunkSource::_prune_schema_by_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+// Inherit default value from JSON parent column for extended subcolumn.
+// This method extracts the default value of a JSON subfield based on the access path
+// and sets it to the column if extraction succeeds.
+void OlapChunkSource::_inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                                       const ColumnAccessPath* path) {
+    if (!root_column.has_default_value() || root_column.type() != TYPE_JSON) {
+        return;
+    }
+
+    const std::string& json_default = root_column.default_value();
+    auto json_value_or = JsonValue::parse_json_or_string(Slice(json_default));
+    if (!json_value_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON default value: " << json_value_or.status();
+        return;
+    }
+
+    // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
+    const std::string& linear = path->linear_path();
+    const std::string& parent = path->path();
+    std::string json_path_str;
+    if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
+        // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
+        json_path_str = "$" + linear.substr(parent.size());
+    } else {
+        json_path_str = "$";
+    }
+
+    auto json_path_or = JsonPath::parse(Slice(json_path_str));
+    if (!json_path_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON path: " << json_path_str;
+        return;
+    }
+
+    vpack::Builder builder;
+    vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
+    if (extracted.isNone() || extracted.isNull()) {
+        return;
+    }
+
+    const LogicalType value_type = column->type();
+    std::string default_value_str;
+
+    if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
+        if (extracted.isString()) {
+            default_value_str = extracted.copyString();
+        } else {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
+        }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (value_type == TYPE_BOOLEAN) {
+        if (extracted.isString()) {
+            vpack::ValueLength len;
+            const char* str = extracted.getStringUnchecked(len);
+            StringParser::ParseResult parse_result;
+            auto as_int = StringParser::string_to_int<int32_t>(str, len, &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                default_value_str = (as_int != 0) ? "1" : "0";
+            } else {
+                bool b = StringParser::string_to_bool(str, len, &parse_result);
+                if (parse_result != StringParser::PARSE_SUCCESS) {
+                    return;
+                }
+                default_value_str = b ? "1" : "0";
+            }
+        } else if (extracted.isBool()) {
+            default_value_str = extracted.getBool() ? "1" : "0";
+        } else if (extracted.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
+        } else {
+            return;
+        }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (extracted.isString()) {
+        default_value_str = extracted.copyString();
+    } else if (extracted.isBool()) {
+        default_value_str = extracted.getBool() ? "1" : "0";
+    } else if (extracted.isNumber()) {
+        vpack::Options options = vpack::Options::Defaults;
+        options.singleLinePrettyPrint = true;
+        default_value_str = extracted.toJson(&options);
+    } else {
+        return;
+    }
+
+    column->set_default_value(default_value_str);
+}
+
+// Extend the schema fields based on the column access paths.
+// This ensures that only the necessary subfields required by the query are retained in the schema.
+Status OlapChunkSource::_extend_schema_by_access_paths() {
+    auto access_paths = _scan_ctx->column_access_paths();
+    bool need_extend =
+            std::any_of(access_paths->begin(), access_paths->end(), [](auto& path) { return path->is_extended(); });
+    if (!need_extend) {
+        return {};
+    }
+
+    TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
+    int field_number = tmp_schema->num_columns();
+    for (auto& path : *access_paths) {
+        if (!path->is_extended()) {
+            continue;
+        }
+        int root_column_index = _tablet_schema->field_index(path->path());
+        RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
+
+        LogicalType value_type = path->value_type().type;
+        TabletColumn column;
+        column.set_name(path->linear_path());
+        column.set_unique_id(++field_number);
+        column.set_type(value_type);
+        column.set_length(path->value_type().len);
+        column.set_is_nullable(true);
+        // Record root column unique id to make it robust across schema changes
+        int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
+        column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // Inherit default value from parent column if exists
+        const auto& root_column = _tablet_schema->column(static_cast<size_t>(root_column_index));
+        _inherit_default_value_from_json(&column, root_column, path.get());
+
+        // For UNIQUE/AGG tables, extended flat JSON subcolumns act as value columns and
+        // must have a valid aggregation method for pre-aggregation. Use REPLACE, which is
+        // consistent with value-column semantics in these models.
+        auto keys_type = _tablet_schema->keys_type();
+        if (keys_type == KeysType::UNIQUE_KEYS || keys_type == KeysType::AGG_KEYS) {
+            column.set_aggregation(StorageAggregateType::STORAGE_AGGREGATE_REPLACE);
+        }
+
+        tmp_schema->append_column(column);
+        VLOG(2) << "extend the access path column: " << path->linear_path();
+    }
+    _tablet_schema = tmp_schema;
+    return {};
+}
+
 Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
@@ -507,13 +666,20 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
             !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
             _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-            _tablet_schema =
-                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+            auto columns_desc_copy = _scan_node->thrift_olap_scan_node().columns_desc;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_desc_copy);
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in olap_chunk_source: "
+                             << preprocess_status.to_string();
+            }
+            _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_desc_copy);
         } else {
             _tablet_schema = _tablet->tablet_schema();
         }
     }
 
+    // Extend the tablet_schema with access path columns
+    RETURN_IF_ERROR(_extend_schema_by_access_paths());
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_reader_params(_scan_ctx->key_ranges()));
@@ -568,7 +734,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
@@ -609,7 +777,12 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
+        Status status = _prj_iter->get_next(chunk);
+        // update counter when eof or error
+        if (UNLIKELY(!status.ok())) {
+            _update_realtime_counter(chunk);
+            return status;
+        }
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
@@ -661,7 +834,9 @@ void OlapChunkSource::_update_realtime_counter(Chunk* chunk) {
         _runtime_state->update_num_bytes_load_from_source(bytes_usage);
     }
 
-    _chunk_buffer.update_limiter(chunk);
+    if (chunk != nullptr && num_rows > 0) {
+        _chunk_buffer.update_limiter(chunk);
+    }
 }
 
 void OlapChunkSource::_update_counter() {
@@ -716,8 +891,11 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
     COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 
-    COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);
-    COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
+    int64_t total_pages_num = _reader->stats().total_pages_num;
+    int64_t cached_pages_num = _reader->stats().cached_pages_num;
+    COUNTER_UPDATE(_read_pages_num_counter, total_pages_num);
+    COUNTER_UPDATE(_cached_pages_num_counter, cached_pages_num);
+    DataCacheHitRateCounter::instance()->update_page_cache_stat(cached_pages_num, total_pages_num);
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
@@ -747,10 +925,16 @@ void OlapChunkSource::_update_counter() {
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+        RuntimeProfile::Counter* count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DictDecodeCount", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
+        COUNTER_UPDATE(count, _reader->stats().decode_dict_count);
     }
     if (_reader->stats().late_materialize_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "LateMaterialize", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+        RuntimeProfile::Counter* rows =
+                ADD_CHILD_COUNTER(_runtime_profile, "LateMaterializeRows", TUnit::UNIT, IO_TASK_EXEC_TIMER_NAME);
+        COUNTER_UPDATE(rows, _reader->stats().late_materialize_rows);
     }
     if (_reader->stats().del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_CHILD_TIMER(_runtime_profile, "DeleteFilter", IO_TASK_EXEC_TIMER_NAME);
@@ -761,6 +945,7 @@ void OlapChunkSource::_update_counter() {
 
     if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
         std::string access_path_hits = "AccessPathHits";
+        auto _access_path_hits_counter = ADD_COUNTER(_runtime_profile, access_path_hits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
             std::string path = fmt::format("[Hit]{}", k);
@@ -784,6 +969,8 @@ void OlapChunkSource::_update_counter() {
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         std::string access_path_unhits = "AccessPathUnhits";
+        RuntimeProfile::Counter* _access_path_unhits_counter =
+                ADD_COUNTER(_runtime_profile, access_path_unhits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
             std::string path = fmt::format("[Unhit]{}", k);
@@ -795,6 +982,21 @@ void OlapChunkSource::_update_counter() {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+    }
+    if (_reader->stats().extract_json_hits.size() > 0) {
+        const std::string counter_name = "AccessPathExtract";
+        RuntimeProfile::Counter* counter = ADD_COUNTER(_runtime_profile, counter_name, TUnit::UNIT);
+        int64_t total = 0;
+        for (auto& [k, v] : _reader->stats().extract_json_hits) {
+            std::string path = fmt::format("[Extract]{}", k);
+            auto* path_counter = _runtime_profile->get_counter(path);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, path, TUnit::UNIT, counter_name);
+            }
+            total += v;
+            COUNTER_UPDATE(path_counter, v);
+        }
+        COUNTER_UPDATE(counter, total);
     }
 
     std::string parent_name = "SegmentRead";

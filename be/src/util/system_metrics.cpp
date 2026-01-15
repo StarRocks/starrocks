@@ -46,7 +46,7 @@
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
 #endif
-#include "cache/object_cache/page_cache.h"
+#include "cache/mem_cache/page_cache.h"
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
@@ -198,8 +198,9 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
 }
 
 void SystemMetrics::update() {
+    update_memory_metrics();
+
     _update_cpu_metrics();
-    _update_memory_metrics();
     _update_disk_metrics();
     _update_net_metrics();
     _update_fd_metrics();
@@ -301,10 +302,10 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     int64_t datacache_mem_bytes = 0;
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
-        LocalCacheEngine* local_cache = DataCache::GetInstance()->local_cache();
+        LocalMemCacheEngine* local_cache = DataCache::GetInstance()->local_mem_cache();
         if (local_cache != nullptr && local_cache->is_initialized()) {
             auto datacache_metrics = local_cache->cache_metrics();
-            datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes;
         }
 #ifdef USE_STAROS
         if (!config::datacache_unified_instance_enable) {
@@ -323,7 +324,7 @@ void SystemMetrics::_update_pagecache_mem_tracker() {
     }
 }
 
-void SystemMetrics::_update_memory_metrics() {
+void SystemMetrics::update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
@@ -386,9 +387,11 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(jit_cache_mem_tracker, jit_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(passthrough_mem_tracker, passthrough_mem_bytes)
+    SET_MEM_METRIC_VALUE(brpc_iobuf_mem_tracker, brpc_iobuf_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
+    SET_MEM_METRIC_VALUE(replication_mem_tracker, replication_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
 }
 

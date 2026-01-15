@@ -212,8 +212,82 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
-- **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+- **DEFAULT (\<expr\>)**: Use the result returned by a given expression or function as the default value. The following expressions are supported:
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md): Generate unique identifiers.
+  - ARRAY literal expressions (e.g., `[1, 2, 3]`): For ARRAY type columns.
+  - MAP expressions (e.g., `map{key: value}`): For MAP type columns.
+  - row() function (e.g., `row(val1, val2)`): For STRUCT type columns.
+- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. StarRocks supports specifying default values for different types:
+  
+  **Basic types**: Use string literals to specify default values.
+  
+  ```sql
+  -- Numeric types
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- String types
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- Date/time types
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- Boolean type
+  is_active BOOLEAN DEFAULT 'true'  -- Supports 'true'/'false'/'1'/'0'
+  ```
+  
+  **JSON type**: Use JSON-formatted strings to specify default values.
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY type**: Only empty string is supported as default value.
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP and HLL types**: Only empty string is supported as default value, only for AGGREGATE KEY tables.
+  
+  ```sql
+  -- In AGGREGATE KEY tables
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **Complex types (ARRAY/MAP/STRUCT)**: Use expression syntax to specify default values, only supported for OLAP tables.
+  
+  :::note
+  Default values for complex types are **only supported when `fast_schema_evolution = true`**. If the table's `fast_schema_evolution` property is explicitly set to `false`, adding default values for complex types will result in an error.
+  :::
+  
+  ```sql
+  -- ARRAY type
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP type
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT type
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- Complex nesting: STRUCT with nested STRUCT, ARRAY, and MAP
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **Limitations**:
+  
+  - TIME and VARIANT types do not support default values yet.
+  - Default values for complex types (ARRAY/MAP/STRUCT) are only supported for OLAP tables and require the `fast_schema_evolution` property to be enabled.
 
 **AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
 
@@ -561,6 +635,12 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
+:::note
+
+When the partition column is the INT type, its format must be `yyyyMMdd`, regardless of the partition time granularity.
+
+:::
+
 ### Bucket size with random bucketing
 
 Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
@@ -667,7 +747,8 @@ To use your StarRocks Shared-data cluster, you must create cloud-native tables w
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>"
+    "datacache.partition_duration" = "<string_value>",
+    "file_bundling" = "{ true | false }"
 )
 ```
 
@@ -686,6 +767,26 @@ PROPERTIES (
 
   :::note
   This property is available only when `datacache.enable` is set to `true`.
+  :::
+
+- `file_bundling` (Optional): Whether to enable the File Bundling optimization for the cloud-native table. Supported from v4.0 onwards. When this feature is enabled (setting to `true`), the system automatically bundles the data files generated by loading, Compaction, or Publish operations, thereby reducing the API cost caused by high-frequency access to the external storage system.
+
+  :::note
+  - File Bundling is available only for shared-data clusters with StarRocks v4.0 or later.
+  - File Bundling is enabled by default for tables created in v4.0 or later, controlled by FE configuration `enable_file_bundling` (Default: true).
+  - After File Bundling is enabled, you can only downgrade the cluster to v3.5.2 or later. If you want to downgrade to versions earlier than v3.5.2, you must first drop the tables that have enabled File Bundling.
+  - File Bundling remains disabled by default for the existing tables after the cluster is upgraded to v4.0.
+  - You can manually enable File Bundling for existing tables using the [ALTER TABLE](ALTER_TABLE.md) statement with the following restrictions:
+    - You cannot enable File Bundling for tables with Rollup Indexes created in versions earlier than v4.0. You can drop and recreate the indexes in v4.0 or later, and then enable File Bundling for the tables.
+    - You cannot modify the `file_bundling` property **repeatedly** within a specific period of time. Otherwise, the system returns an error. You can check if the `file_bundling` property is available for modification by executing the following SQL statement:
+
+      ```SQL
+      SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
+      ```
+
+      You are allowed to modify the `file_bundling` property only when `0` is returned. Non-zero values indicate that the data version corresponding to `METADATA_SWITCH_VERSION` is yet to be reclaimed by the GC mechanism. You must wait until the data version is reclaimed.
+
+      You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
 
 ### Fast schema evolution
@@ -760,27 +861,25 @@ To disable this feature, you can use the ALTER TABLE statement to set this prope
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### Configure flat json config (only support on shared-nothing clusters now)
+### Set Flat JSON properties on table level
 
-If you want to use flat json attributes, please specify it in properties. See [ Flat JSON ](../../../using_starrocks/Flat_json.md) for further information
+In v3.3, StarRocks introduced the [Flat JSON](../../../using_starrocks/Flat_json.md) feature to improve JSON data query efficiency and reduce the complexity of using JSON. This feature was controlled by specific BE configuration items and system variables. As a result, it can only be enabled (or disabled) globally.
+
+From v4.0 onwards, you can set the Flat JSON-related properties on table level.
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**Properties**
-
-| Property                    | Required | Description                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | No       | Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.                                                                                                 |
-| `flat_json.null.factor` | No      | The proportion of NULL values in the column to extract for Flat JSON. A column will not be extracted if its proportion of NULL value is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 0.3. |
-| `flat_json.sparsity.factor`     | No      | The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to true. Default value: 0.9.    |
-| `flat_json.column.max`       | No      | The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to true.  Default value: 100. |
+- `flat_json.enable` (Optional): Whether to enable the Flat JSON feature. After this feature is enabled, newly loaded JSON data will be automatically flattened, improving JSON query performance.
+- `flat_json.null.factor` (Optional): The proportion threshold of NULL values in the column. A column will not be extracted by Flat JSON if its proportion of NULL values is higher than this threshold. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
+- `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
+- `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
 ## Examples
 
@@ -1124,11 +1223,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### Table supporting flat JSON
-
-:::note
-Flat JSON is only support on shared-nothing clusters now.
-:::
+### Table with Flat JSON properties
 
 ```SQL
 CREATE TABLE example_db.example_table

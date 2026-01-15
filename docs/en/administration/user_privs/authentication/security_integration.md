@@ -5,11 +5,17 @@ sidebar_position: 20
 
 # Authenticate with Security Integration
 
+import SecurityIntegrationRangerLink from '../../../_assets/user_priv/security_integration_ranger_link.mdx'
+import SecurityIntegrationIntro from '../../../_assets/user_priv/security_integration_intro.mdx'
+import SecurityIntegrationJWT from '../../../_assets/user_priv/security_integration_jwt.mdx'
+import SecurityIntegrationOAuth from '../../../_assets/user_priv/security_integration_oauth.mdx'
+import SecurityIntegrationConnectSeeAlso from '../../../_assets/user_priv/security_integration_connect_see_also.mdx'
+
 Integrate StarRocks with external authentication systems using security integration.
 
 By creating a security integration within your StarRocks cluster, you can allow access of your external authentication service to StarRocks. With the security integration, you do not need to manually create users within StarRocks. When a user tries to log in using an external identity, StarRocks will use the corresponding security integration according to the configuration in `authentication_chain` to authenticate the user. After the authentication is successful and the user is allowed to log in, StarRocks creates a virtual user in the session for the user to perform subsequent operations.
 
-Please note that if you use the security integration to configure an external authentication method, you must also [integrate StarRocks with Apache Ranger](../authorization/ranger_plugin.md) to enable external authorization. Currently, integrating Security Integration with the StarRocks native authorization is not supported.
+<SecurityIntegrationRangerLink />
 
 You can also enable [Group Provider](../group_provider.md) for StarRocks to access the group information in you external authentication systems, thus allowing creating, authenticating, and authorizing user groups in StarRocks.
 
@@ -17,10 +23,7 @@ Manually creating and managing users with external authentication services are a
 
 ## Create a security integration
 
-Currently, StarRocks' security integration supports the following authentication systems:
-- LDAP
-- JSON Web Token (JWT)
-- OAuth 2.0
+<SecurityIntegrationIntro />
 
 :::note
 StarRocks does not offer connectivity checks when you create a security integration.
@@ -79,6 +82,19 @@ PROPERTIES (
 - Required: Yes
 - Description: The user's attribute used to log in to the LDAP service, for example, `uid`.
 
+:::note
+
+**DN Passing Mechanism**: LDAP security integration supports DN passing functionality.
+
+- After successful authentication, the system records both the user's login name and complete DN.
+- When combined with Group Provider, DN information is automatically passed to the Group Provider.
+- If `ldap_user_search_attr` is not configured for the Group Provider, DN will be used for group matching.
+- This mechanism is particularly suitable for complex LDAP environments like Microsoft AD.
+
+For more details, see the DN matching mechanism in [Authenticate User Groups](../group_provider.md).
+
+:::
+
 ##### authentication_ldap_simple_bind_root_dn
 
 - Required: Yes
@@ -119,141 +135,9 @@ PROPERTIES (
 - Required: No
 - Description: The description of the security integration.
 
-### Create a security integration with JWT
+<SecurityIntegrationJWT />
 
-#### Syntax
-
-```SQL
-CREATE SECURITY INTEGRATION <security_integration_name> 
-PROPERTIES (
-    "type" = "jwt",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
-    "comment" = ""
-)
-```
-
-#### Parameters
-
-##### security_integration_name
-
-- Required: Yes
-- Description: The name of the security integration.<br />**NOTE**<br />The security integration name is globally unique. You cannot specify this parameter as `native`.
-
-##### type
-
-- Required: Yes
-- Description: The type of the security integration. Specify it as `jwt`.
-
-##### jwks_url
-
-- Required: Yes
-- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `fe/conf` directory.
-
-##### principal_field
-
-- Required: Yes
-- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
-
-##### required_issuer
-
-- Required: No
-- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
-
-##### required_audience
-
-- Required: No
-- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
-
-##### comment
-
-- Required: No
-- Description: The description of the security integration.
-
-### Create a security integration with OAuth 2.0
-
-#### Syntax
-
-```SQL
-CREATE SECURITY INTEGRATION <security_integration_name> 
-PROPERTIES (
-    "type" = "authentication_oauth2",
-    "auth_server_url" = "",
-    "token_server_url" = "",
-    "client_id" = "",
-    "client_secret" = "",
-    "redirect_url" = "",
-    "jwks_url" = "",
-    "principal_field" = "",
-    "required_issuer" = "",
-    "required_audience" = ""
-    "comment" = ""
-)
-```
-
-#### Parameters
-
-##### security_integration_name
-
-- Required: Yes
-- Description: The name of the security integration.<br />**NOTE**<br />The security integration name is globally unique. You cannot specify this parameter as `native`.
-
-##### auth_server_url
-
-- Required: Yes
-- Description: The authorization URL. The URL to which the users’ browser will be redirected in order to begin the OAuth 2.0 authorization process.
-
-##### token_server_url
-
-- Required: Yes
-- Description: The URL of the endpoint on the authorization server from which StarRocks obtains the access token.
-
-##### client_id
-
-- Required: Yes
-- Description: The public identifier of the StarRocks client.
-
-##### client_secret
-
-- Required: Yes
-- Description: The secret used to authorize StarRocks client with the authorization server.
-
-##### redirect_url
-
-- Required: Yes
-- Description: The URL to which the users’ browser will be redirected after the OAuth 2.0 authentication succeeds. The authorization code will be sent to this URL. In most cases, it need to be configured as `http://<starrocks_fe_url>:<fe_http_port>/api/oauth2`.
-
-##### type
-
-- Required: Yes
-- Description: The type of the security integration. Specify it as `authentication_oauth2`.
-
-##### jwks_url
-
-- Required: Yes
-- Description: The URL to the JSON Web Key Set (JWKS) service or the path to the local file under the `fe/conf` directory.
-
-##### principal_field
-
-- Required: Yes
-- Description: The string used to identify the field that indicates the subject (`sub`) in the JWT. The default value is `sub`. The value of this field must be identical with the username for logging in to StarRocks.
-
-##### required_issuer
-
-- Required: No
-- Description: The list of strings used to identify the issuers (`iss`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT issuer.
-
-##### required_audience
-
-- Required: No
-- Description: The list of strings used to identify the audience (`aud`) in the JWT. The JWT is considered valid only if one of the values in the list match the JWT audience.
-
-##### comment
-
-- Required: No
-- Description: The description of the security integration.
+<SecurityIntegrationOAuth />
 
 ## Configure authentication chain
 
@@ -361,9 +245,4 @@ SHOW CREATE SECURITY INTEGRATION LDAP1；
 `ldap_bind_root_pwd` is masked when SHOW CREATE SECURITY INTEGRATION is executed.
 :::
 
-## See also
-
-- For instructions on how to manually authenticate users via LDAP in StarRocks, see [LDAP Authentication](./ldap_authentication.md).
-- For instructions on how to manually authenticate users via JSON Web Token in StarRocks, see [JSON Web Token Authentication](./jwt_authentication.md).
-- For instructions on how to manually authenticate users via OAuth 2.0 in StarRocks, see [OAuth 2.0 Authentication](./oauth2_authentication.md).
-- For instructions on how to authenticate user groups, see [Authenticate User Groups](../group_provider.md).
+<SecurityIntegrationConnectSeeAlso />

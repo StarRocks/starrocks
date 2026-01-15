@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -31,7 +31,7 @@ import java.util.Set;
 
 public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final JoinOperator joinType;
-    protected final ScalarOperator onPredicate;
+    protected ScalarOperator onPredicate;
     protected final String joinHint;
     protected boolean outputRequireHashPartition = true;
 
@@ -62,6 +62,10 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         return onPredicate;
     }
 
+    public void setOnPredicate(ScalarOperator onPredicate) {
+        this.onPredicate = onPredicate;
+    }
+
     public String getJoinHint() {
         return joinHint;
     }
@@ -74,6 +78,18 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         }
         return refs;
     }
+
+    public ColumnRefSet getJoinConditionUsedColumns() {
+        ColumnRefSet refs = new ColumnRefSet();
+        if (predicate != null) {
+            refs.union(predicate.getUsedColumns());
+        }
+        if (onPredicate != null) {
+            refs.union(onPredicate.getUsedColumns());
+        }
+        return refs;
+    }
+
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {

@@ -106,8 +106,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | **参数名称**     | **是否必选** | **参数说明**                                                 |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| column_separator | 否           | 用于指定源数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致。<br />**说明**<br />StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
-| row_delimiter    | 否           | 用于指定源数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。 |
+| column_separator | 否           | 用于指定源数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与源数据文件中的列分隔符一致。<br />**说明**<br />- StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。- 若数据文件使用连续的不可打印字符（例如 `\r\n`）作为列分隔符，则必须将此参数设置为 `\\x0D0A`。 |
+| row_delimiter    | 否           | 用于指定源数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。<br />**注意**<br />如果数据文件使用连续的不可打印字符（例如 `\r\n`）作为行分隔符，则必须将此参数设置为 `\\x0D0A`。 |
 | skip_header      | 否           | 用于指定跳过 CSV 文件最开头的几行数据。取值类型：INTEGER。默认值：`0`。<br />在某些 CSV 文件里，最开头的几行数据会用来定义列名、列类型等元数据信息。通过设置该参数，可以使 StarRocks 在导入数据时忽略 CSV 文件的前面几行。例如，如果设置该参数为 `1`，则 StarRocks 会在导入数据时忽略 CSV 文件的第一行。<br />这里的行所使用的分隔符须与您在导入命令中所设定的行分隔符一致。 |
 | trim_space       | 否           | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br />有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br />需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (<code class="language-text">&#124;</code>)，`enclose` 指定的字符是双引号 (`"`)：<br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br /><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br /><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br />如果设置 `trim_space` 为 `true`，则 StarRocks 处理后的结果数据如下：<br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br /><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br /><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
 | enclose          | 否           | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br />被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br />如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
@@ -137,12 +137,18 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 用于启用 Merge Commit 功能，在指定的时间窗口内合并多个并发的 Stream Load 请求，并将它们合并为一个事务。
 
+:::warning
+
+请注意 Merge Commit 优化适用于单张表上存在**并发** Stream Load 作业的场景。若并发数为 1，则不建议使用该优化。同时，将 `merge_commit_async` 设为 `false` 并为 `merge_commit_interval_ms` 赋予较大值时需谨慎考虑，此类设置可能导致导入性能下降。
+
+:::
+
 | **参数名称**              | **是否必选** | **参数说明**                                                 |
 | ------------------------ | ------------ | ------------------------------------------------------------ |
 | enable_merge_commit      | 否           | 是否为导入请求启用 Merge Commit。有效值：`true` 或 `false`（默认值）。 |
 | merge_commit_async       | 否           | 服务器返回模式。有效值：<ul><li>`true`：启用异步模式，服务器在接收到数据后立即返回，但不保证导入成功。</li><li>`false`（默认值）：启用同步模式，服务器在合并的事务提交完成后才返回，确保导入成功且数据可见。</li></ul> |
 | merge_commit_interval_ms | 是          | 合并时间窗口的大小。单位：毫秒。Merge Commit 会尝试将时间窗口内接收到的导入请求合并到一个事务中。窗口越大，合并效率越高，但延迟也会增加。 |
-| merge_commit_parallel    | 是          | 每个合并窗口创建的导入计划的并行度。可以根据导入负载调整该值。如果请求数量多，数据量大，可提高该值。并行度受 BE 节点数量限制，计算方式为 `max(merge_commit_parallel, BE 节点数量)`。 |
+| merge_commit_parallel    | 是          | 每个合并窗口创建的导入计划的并行度。可以根据导入负载调整该值。如果请求数量多，数据量大，可提高该值。并行度受 BE 节点数量限制，计算方式为 `min(merge_commit_parallel, BE 节点数量)`。 |
 
 :::note
 
@@ -352,7 +358,7 @@ StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次�
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:label4" \
     -H "Expect:100-continue" \
-    -H "columns: col1, col2，col3"\
+    -H "columns: col1, col2, col3"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
@@ -463,6 +469,23 @@ curl --location-trusted -u <username>:<password> -H "label:3875" \
     -H "columns: col2, col1, col3" \
     -T example9.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl9/_stream_load
+```
+
+#### 设置 `column_separator` 和 `row_delimiter`
+
+StarRocks 数据库 `test_db` 里的表 `table10` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example10.csv` 也包含三列，按顺序一一对应 `table10` 中的三列 `col1`、`col2`、`col3`。数据行中的列以逗号（`,`）分隔，数据行之间以两个连续的不可打印字符 `\r\n` 分隔。
+
+如果要把 `example10.csv` 中所有的数据都导入到 `table10` 中，可以执行如下命令：
+
+```Bash
+curl --location-trusted -u <username>:<password> -H "label:label10" \
+    -H "Expect:100-continue" \
+    -H "column_separator:," \
+    -H "row_delimiter:\\x0D0A" \
+    -T example10.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table10/_stream_load
 ```
 
 ### **导入 JSON 格式的数据**

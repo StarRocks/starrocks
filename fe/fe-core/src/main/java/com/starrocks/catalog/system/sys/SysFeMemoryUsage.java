@@ -14,22 +14,22 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeMemoryItem;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.TypeFactory;
 import org.apache.thrift.TException;
 
 
@@ -40,28 +40,20 @@ public class SysFeMemoryUsage {
         return new SystemTable(SystemId.MEMORY_USAGE_ID, NAME,
                 Table.TableType.SCHEMA,
                 SystemTable.builder()
-                        .column("module_name", ScalarType.createVarcharType(256))
-                        .column("class_name", ScalarType.createVarcharType(256))
-                        .column("current_consumption", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("peak_consumption", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("counter_info", ScalarType.createVarcharType(65532))
+                        .column("module_name", TypeFactory.createVarcharType(256))
+                        .column("class_name", TypeFactory.createVarcharType(256))
+                        .column("current_consumption", IntegerType.BIGINT)
+                        .column("peak_consumption", IntegerType.BIGINT)
+                        .column("counter_info", TypeFactory.createVarcharType(65532))
                         .build(),
                 TSchemaTableType.SYS_FE_MEMORY_USAGE);
     }
 
     public static TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
         TAuthInfo auth = request.getAuth_info();
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
-
+        ConnectContext context = new ConnectContext();
+        UserIdentityUtils.setAuthInfoFromThrift(context, auth);
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             throw new TException(e.getMessage(), e);

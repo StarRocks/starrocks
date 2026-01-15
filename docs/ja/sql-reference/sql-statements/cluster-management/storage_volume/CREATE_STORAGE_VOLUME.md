@@ -52,6 +52,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | aws.s3.secret_key                   | S3 バケットにアクセスするためのシークレットアクセスキーです。         |
 | aws.s3.iam_role_arn                 | データファイルが保存されている S3 バケットに対して権限を持つ IAM ロールの ARN です。 |
 | aws.s3.external_id                  | S3 バケットへのクロスアカウントアクセスに使用される AWS アカウントの外部 ID です。 |
+| aws.s3.enable_path_style_access     | Path Style を使用して S3 にアクセスするかどうか。<br />有効な値: `true` および `false`。デフォルト: `false`。 |
 | azure.blob.endpoint                 | Azure Blob Storage アカウントのエンドポイントです。例：`https://test.blob.core.windows.net`。 |
 | azure.blob.shared_key               | Azure Blob Storage へのリクエストを承認するために使用される共有キーです。 |
 | azure.blob.sas_token                | Azure Blob Storage へのリクエストを承認するために使用される共有アクセス署名 (SAS) です。 |

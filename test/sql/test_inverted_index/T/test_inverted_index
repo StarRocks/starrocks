@@ -1,4 +1,4 @@
--- name: test_basic_create_index @slow
+-- name: test_basic_create_index @slow @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -30,9 +30,9 @@ CREATE TABLE `t_test_basic_create_index_dup` (
   `id5` string NOT NULL COMMENT "",
   `id6` bigint(20) NOT NULL COMMENT "",
   `id7` string NOT NULL COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
-DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "enable_persistent_index" = "true",
@@ -80,10 +80,12 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
+show create table t_test_basic_create_index_replicated;
+
 DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 
--- name: test_query_gin_index
+-- name: test_query_gin_index @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -124,9 +126,16 @@ select count(*) from t_test_gin_index_query where query_none_analyzer like '%ed 
 select count(*) from t_test_gin_index_query where query_english match '%ed vi%';
 select count(*) from t_test_gin_index_query where query_english match '%teria%';
 
+select count(*) from t_test_gin_index_query where query_english match_any "hello";
+select count(*) from t_test_gin_index_query where query_english match_any "hello view test";
+select count(*) from t_test_gin_index_query where query_chinese match_any "中文 视图 分析";
+
+select count(*) from t_test_gin_index_query where query_english match_all "hello world";
+select count(*) from t_test_gin_index_query where query_chinese match_all "物化 视图";
+
 drop table t_test_gin_index_query;
 
--- name: test_gin_index_single_predicate_none
+-- name: test_gin_index_single_predicate_none @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -166,10 +175,12 @@ SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%ABC%";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "%BC";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column LIKE "AB%";
 SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match "AB%";
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "AB";
+SELECT * FROM t_gin_index_single_predicate_none WHERE text_column match_any "ABC ABD";
 
 DROP TABLE t_gin_index_single_predicate_none;
 
--- name: test_gin_index_single_predicate_english
+-- name: test_gin_index_single_predicate_english @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -212,7 +223,7 @@ SELECT * FROM t_gin_index_single_predicate_english WHERE text_column LIKE "thi%"
 
 DROP TABLE t_gin_index_single_predicate_english;
 
--- name: test_gin_index_multiple_predicate_none
+-- name: test_gin_index_multiple_predicate_none @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -249,10 +260,17 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "ABC" O
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" AND text_column LIKE "%C";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_all "ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match_any "abc ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "abc ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_all "abc ABC";
+SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column NOT match_any "This Index";
 
 DROP TABLE t_gin_index_multiple_predicate_none;
 
--- name: test_gin_index_multiple_predicate_english
+-- name: test_gin_index_multiple_predicate_english @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -278,13 +296,18 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 (5, NULL);
 
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_any "this abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match_any "this abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "this" OR text_column LIKE "abc";
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column LIKE "%this%" AND text_column LIKE "%is%";
 
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all "this Gin";
+SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_all "abc Gin";
+
 DROP TABLE t_gin_index_multiple_predicate_english;
 
--- name: test_gin_index_compaction
+-- name: test_gin_index_compaction @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -387,7 +410,7 @@ DROP TABLE t_gin_index_compaction_english_base;
 DROP TABLE t_gin_index_compaction_english_cumu;
 
 
--- name: test_gin_index_type
+-- name: test_gin_index_type @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -489,7 +512,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
--- name: test_clone_for_gin
+-- name: test_clone_for_gin @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -520,7 +543,7 @@ function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 
--- name: test_complex_predicate_for_gin
+-- name: test_complex_predicate_for_gin @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -552,6 +575,7 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 
+
 INSERT INTO t_complex_predicate_for_gin_none VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_none VALUES (2, "cbd edf");
 
@@ -570,6 +594,24 @@ SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("a
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match CONCAT("ab", "%");
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match "";
 SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match NULL;
+
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match_any "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match_any "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_any "abc";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_any "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any "";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_any NULL;
+
+SELECT * FROM t_complex_predicate_for_gin_none WHERE upper(text_column) match_all "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE lower(text_column) match_all "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_all "abc";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE CAST(id1 as STRING) match_all "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all "";
+SELECT * FROM t_complex_predicate_for_gin_none WHERE text_column match_all NULL;
 
 INSERT INTO t_complex_predicate_for_gin_english VALUES (1, "abc cbd");
 INSERT INTO t_complex_predicate_for_gin_english VALUES (2, "cbd edf");
@@ -590,10 +632,28 @@ SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match CONCAT
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match "";
 SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match NULL;
 
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match_any "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match_any "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_any "abc";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_any "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any "";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_any NULL;
+
+SELECT * FROM t_complex_predicate_for_gin_english WHERE upper(text_column) match_all "%CBD%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE lower(text_column) match_all "%cbd%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_all "abc";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE CAST(id1 as STRING) match_all "%abc%";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all CONCAT("ab", "c");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all CONCAT("ab", "%");
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all "";
+SELECT * FROM t_complex_predicate_for_gin_english WHERE text_column match_all NULL;
+
 DROP TABLE t_complex_predicate_for_gin_none;
 DROP TABLE t_complex_predicate_for_gin_english;
 
--- name: test_delete_and_column_prune
+-- name: test_delete_and_column_prune @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_delete_and_column_prune` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -616,7 +676,7 @@ SELECT id1 FROM t_delete_and_column_prune WHERE text_column MATCH "b";
 
 DROP TABLE t_delete_and_column_prune;
 
--- name: test_upper_case_column_name
+-- name: test_upper_case_column_name @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 set low_cardinality_optimize_v2 = false;
 set cbo_enable_low_cardinality_optimize = false;
@@ -641,9 +701,19 @@ SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH "b";
 SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH "b";
 SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH "b";
 
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH_ANY "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH_ANY "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ANY "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ANY "b";
+
+SELECT id1 FROM t_upper_case_column_name WHERE `TeXt` MATCH_ALL "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `Text` MATCH_ALL "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `TEXT` MATCH_ALL "b";
+SELECT id1 FROM t_upper_case_column_name WHERE `text` MATCH_ALL "b";
+
 DROP TABLE t_upper_case_column_name;
 
--- name: test_alter_replicated_storage
+-- name: test_alter_replicated_storage @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -663,7 +733,7 @@ ALTER TABLE t_alter_replicated_storage SET ("replicated_storage" = "true");
 SHOW CREATE TABLE t_alter_replicated_storage;
 DROP TABLE t_alter_replicated_storage;
 
--- name: test_disable_global_dict_rewrite
+-- name: test_disable_global_dict_rewrite @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_disable_global_dict_rewrite` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -689,19 +759,36 @@ SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 = "abc"
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 LIKE "%abc%";
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 IN ("abc", "ab");
 
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 = "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 LIKE "%abc%";
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" AND v1 IN ("abc", "ab");
+
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
 SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH_ANY "abc";
 
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
 SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
 
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" GROUP BY v1;
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" GROUP BY v2;
+
 SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
 SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
 
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ANY "abc" ORDER BY v1;
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ANY "abc" ORDER BY v2;
+
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH_ALL "abc" ORDER BY v1;
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH_ALL "abc" ORDER BY v2;
+
 DROP TABLE t_disable_global_dict_rewrite;
 
--- name: test_create_mv_with_match
+-- name: test_create_mv_with_match @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_create_mv_with_match` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -721,9 +808,11 @@ PROPERTIES (
 INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
 CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
 function: wait_materialized_view_cancel()
+CREATE MATERIALIZED VIEW mv1 AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH_ANY "abc bdc";
+function: wait_materialized_view_cancel()
 DROP TABLE t_create_mv_with_match;
 
--- name: test_alter_gin_col_into_other_type
+-- name: test_alter_gin_col_into_other_type @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_alter_gin_col_into_other_type` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -748,7 +837,7 @@ SHOW CREATE TABLE t_alter_gin_col_into_other_type;
 SELECT * FROM t_alter_gin_col_into_other_type;
 DROP TABLE t_alter_gin_col_into_other_type;
 
--- name: test_gin_var @sequential
+-- name: test_gin_var @sequential @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_var` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -817,7 +906,7 @@ PROPERTIES (
 );
 DROP TABLE t_gin_var;
 
--- name: test_gin_match_empty
+-- name: test_gin_match_empty @native
 CREATE TABLE `t_gin_match_empty` (
   `k` BIGINT NOT NULL COMMENT "",
   `v1` string COMMENT "",
@@ -826,7 +915,7 @@ CREATE TABLE `t_gin_match_empty` (
    INDEX idx1 (v1) USING GIN ('parser' = 'english'),
    INDEX idx2 (v2) USING GIN ('parser' = 'chinese'),
    INDEX idx3 (v3) USING GIN ('parser' = 'standard')
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
@@ -842,9 +931,17 @@ SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH "";
 SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH "";
 SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH "";
 
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH_ANY "";
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ANY "";
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ANY "";
+
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH_ALL "";
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH_ALL "";
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH_ALL "";
+
 DROP TABLE t_gin_match_empty;
 
--- name: test_gin_view
+-- name: test_gin_view @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_gin_view` (
   `id` bigint(20) NOT NULL COMMENT "",
@@ -882,20 +979,11 @@ function: wait_alter_table_finish()
 
 insert into duplicate_table_demo_datatype_not_replicated_all_varchar values ('1974-08-20 23:13:25', 'xIjfSXnegdnZiZGQMaxo', 'syHwIOMctmDLDGCibEun', 'hIbilUEGdLbCnaZASCVL', 6299, 25361.52081, 'QuTsacRyxiIkBjEmjhNu', -11.4812925061712, True, 'QcLRdQJMhtPXojJUjkUd', 'yUeFlbzomaPDwKeaHylx', 'WqQyGEjEYpvLzfBXYUCB', '', 8, '2015-11-03 16:31:47', [2621, 5950, 13171], '{"job": "Administrator, Civil Service", "company": "Morris-Anderson", "ssn": "823-67-5554", "residence": "59688 Hanna Shoal Apt. 586\nWest Waynefort, CO 69652", "current_location": ["-64.3777465", "21.079566"], "blood_group": "O-", "website": ["http://young.biz/", "https://cobb-bell.com/", "http://www.roberts-garrison.com/", "http://jones.com/"], "username": "howardarcher", "name": "John Mccullough", "sex": "M", "address": "1361 Susan Mountain\nJasonbury, MI 85084", "mail": "lovejennifer@gmail.com", "birthdate": "1928-06-25"}', null, null);
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 
 DROP VIEW test_view;
 DROP TABLE duplicate_table_demo_datatype_not_replicated_all_varchar;
 
--- name: test_vertical_compaction
+-- name: test_vertical_compaction @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
 CREATE TABLE `t_vertical_compaction` (
   `id1` bigint(20) NOT NULL COMMENT "",

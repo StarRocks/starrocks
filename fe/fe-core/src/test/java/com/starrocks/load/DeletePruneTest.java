@@ -16,13 +16,16 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -225,7 +228,10 @@ public class DeletePruneTest {
         // exceptional
         deleteSQL = "delete from test_delete3 where date in ('2020-01-01') ";
         deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSQL, ctx);
-        DeleteStmt exceptionStmt = new DeleteStmt(TableName.fromString("not_exists"), deleteStmt.getPartitionNames(),
+        TableName tableName = TableName.fromString("not_exists");
+        DeleteStmt exceptionStmt = new DeleteStmt(
+                new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), deleteStmt.getPartitionNames(),
                 deleteStmt.getWherePredicate());
         exceptionStmt.setDeleteConditions(deleteStmt.getDeleteConditions());
         res = deleteHandler.extractPartitionNamesByCondition(exceptionStmt, tbl);

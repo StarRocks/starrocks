@@ -52,7 +52,7 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
-StatusOr<ColumnPtr> ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
     return ConstColumn::create(this->_data->clone(), offsets.back());
 }
 
@@ -62,17 +62,6 @@ void ConstColumn::fill_default(const Filter& filter) {
 
 void ConstColumn::update_rows(const Column& src, const uint32_t* indexes) {
     throw std::runtime_error("ConstColumn does not support update_rows");
-}
-
-void ConstColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(_size > 0);
-    for (uint32_t i = from; i < to; ++i) {
-        _data->fnv_hash(&hash[i], 0, 1);
-    }
-}
-
-void ConstColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "Const column shouldn't call crc32 hash";
 }
 
 int64_t ConstColumn::xor_checksum(uint32_t from, uint32_t to) const {
@@ -104,16 +93,23 @@ void ConstColumn::check_or_die() const {
     _data->check_or_die();
 }
 
-StatusOr<ColumnPtr> ConstColumn::upgrade_if_overflow() {
+StatusOr<MutableColumnPtr> ConstColumn::upgrade_if_overflow() {
     if (_size > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ConstColumn exceed the limit");
     }
-
-    return upgrade_helper_func(&_data);
+    auto ret = upgrade_helper_func(_data->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _data = std::move(ret.value());
+    }
+    return ret;
 }
 
-StatusOr<ColumnPtr> ConstColumn::downgrade() {
-    return downgrade_helper_func(&_data);
+StatusOr<MutableColumnPtr> ConstColumn::downgrade() {
+    auto ret = downgrade_helper_func(_data->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _data = std::move(ret.value());
+    }
+    return ret;
 }
 
 } // namespace starrocks

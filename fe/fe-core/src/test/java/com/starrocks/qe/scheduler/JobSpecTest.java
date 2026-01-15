@@ -15,7 +15,6 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -23,6 +22,7 @@ import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.BulkLoadJob;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class JobSpecTest extends SchedulerTestBase {
@@ -120,7 +121,7 @@ public class JobSpecTest extends SchedulerTestBase {
         List<ScanNode> scanNodes = execPlan.getScanNodes();
 
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
         JobSpec jobSpec = coordinator.getJobSpec();
 
         QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(connectContext, sql, coordinator));
@@ -139,7 +140,7 @@ public class JobSpecTest extends SchedulerTestBase {
         Assertions.assertEquals(QUERY_RESOURCE_GROUP, jobSpec.getResourceGroup());
 
         coordinator = COORDINATOR_FACTORY.createInsertScheduler(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
         jobSpec = coordinator.getJobSpec();
         Assertions.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
     }
@@ -149,7 +150,7 @@ public class JobSpecTest extends SchedulerTestBase {
      */
     @Test
     public void testQueryResourceGroup() throws Exception {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(BACKEND1_ID, 16);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, BACKEND1_ID, 16);
         GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
 
         new MockUp<ResourceGroupMgr>() {
@@ -175,7 +176,7 @@ public class JobSpecTest extends SchedulerTestBase {
         // Check created jobSpec.
         {
             DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                    connectContext, fragments, scanNodes, descTable.toThrift());
+                    connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
             JobSpec jobSpec = coordinator.getJobSpec();
 
             TWorkGroup group = jobSpec.getResourceGroup();
@@ -188,7 +189,7 @@ public class JobSpecTest extends SchedulerTestBase {
             connectContext.getSessionVariable().setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
 
             DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
-                    connectContext, fragments, scanNodes, descTable.toThrift());
+                    connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
             JobSpec jobSpec = coordinator.getJobSpec();
 
             // Check created jobSpec.
@@ -213,7 +214,7 @@ public class JobSpecTest extends SchedulerTestBase {
         List<ScanNode> scanNodes = execPlan.getScanNodes();
 
         JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(
-                connectContext, fragments, scanNodes, descTable.toThrift());
+                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
 
         // Check created jobSpec.
         Assertions.assertEquals(queryId, jobSpec.getQueryId());

@@ -19,6 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
+#include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment.h"
 
@@ -32,6 +33,7 @@ namespace starrocks {
 
 class ColumnIterator;
 class SegmentMetaCollecter;
+class DeltaColumnGroupLoader;
 
 // Params for MetaReader
 // mainly include tablet
@@ -84,6 +86,8 @@ public:
         std::vector<int32_t> result_slot_ids;
     };
 
+    const TabletSchemaCSPtr& TEST_tablet_schema() { return _collect_context.seg_collecter_params.tablet_schema; }
+
 protected:
     CollectContext _collect_context;
     bool _is_init;
@@ -105,12 +109,26 @@ static const std::string META_MAX = "max";
 static const std::string META_DICT_MERGE = "dict_merge";
 static const std::string META_FLAT_JSON_META = "flat_json_meta";
 static const std::string META_COUNT_COL = "count";
+static const std::string META_COLUMN_SIZE = "column_size";
+static const std::string META_COLUMN_COMPRESSED_SIZE = "column_compressed_size";
+
+class SegmentMetaCollectOptions {
+public:
+    bool is_primary_keys = false;
+    uint64_t tablet_id = 0;
+    uint32_t segment_id = 0;
+    int64_t version = 0;
+    // used for primary key tablet to get delta column group
+    std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    uint32_t pk_rowsetid = 0; // for pk table
+    RowsetId rowsetid;        // for non-pk table
+};
 
 class SegmentMetaCollecter {
 public:
     SegmentMetaCollecter(SegmentSharedPtr segment);
     ~SegmentMetaCollecter();
-    Status init(const SegmentMetaCollecterParams* params);
+    Status init(const SegmentMetaCollecterParams* params, const SegmentMetaCollectOptions& options);
     Status open();
     Status collect(std::vector<Column*>* dsts);
 
@@ -121,22 +139,42 @@ public:
     using CollectFunc = std::function<Status(ColumnId, Column*, LogicalType)>;
     std::unordered_map<std::string, CollectFunc> support_collect_func;
 
+    // Friend class for testing
+    friend class SegmentMetaCollecterTest;
+
 private:
     Status _init_return_column_iterators();
     Status _collect(const std::string& name, ColumnId cid, Column* column, LogicalType type);
     Status _collect_dict(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_dict_for_flatjson(ColumnId cid, Column* column);
+    Status _collect_dict_for_column(ColumnIterator* column_iter, ColumnId cid, Column* column);
     Status _collect_max(ColumnId cid, Column* column, LogicalType type);
     Status _collect_min(ColumnId cid, Column* column, LogicalType type);
     Status _collect_count(ColumnId cid, Column* column, LogicalType type);
     Status _collect_rows(Column* column, LogicalType type);
     Status _collect_flat_json(ColumnId cid, Column* column);
+    Status _collect_column_size(ColumnId cid, Column* column, LogicalType type);
+    Status _collect_column_compressed_size(ColumnId cid, Column* column, LogicalType type);
     template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, Column* column, LogicalType type);
+    StatusOr<SegmentSharedPtr> _get_dcg_segment(uint32_t ucid);
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(const TabletColumn& column,
+                                                                       std::string* filename,
+                                                                       FileEncryptionInfo* encryption_info,
+                                                                       ColumnAccessPath* path);
+
+    // Recursive helper methods for collecting column sizes
+    size_t _collect_column_size_recursive(ColumnReader* col_reader);
+    int64_t _collect_column_compressed_size_recursive(ColumnReader* col_reader);
     SegmentSharedPtr _segment;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
     std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
+    std::unordered_map<std::string, SegmentSharedPtr> _dcg_segments;
+    std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
+    // For delta column group
+    DeltaColumnGroupList _dcgs;
 };
 
 } // namespace starrocks

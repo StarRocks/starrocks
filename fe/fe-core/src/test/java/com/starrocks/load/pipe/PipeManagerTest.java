@@ -17,7 +17,7 @@ package com.starrocks.load.pipe;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -26,6 +26,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
+import com.starrocks.persist.AlterPipeLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -47,7 +48,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -275,8 +276,8 @@ public class PipeManagerTest {
         Assertions.assertEquals(pm1.getPipesUnlock(), follower.getPipesUnlock());
         opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
         follower.getRepo().replay(opEntry);
-        opEntry = (PipeOpEntry) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_PIPE);
-        follower.getRepo().replay(opEntry);
+        AlterPipeLog alterLog = (AlterPipeLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_PIPE);
+        follower.getRepo().replayAlterPipe(alterLog);
         Assertions.assertEquals(pm2.getPipesUnlock(), follower.getPipesUnlock());
 
         // Validate pipe execution
@@ -854,7 +855,7 @@ public class PipeManagerTest {
         pm.createPipe(createStmt);
 
         // show
-        String sql = "show pipes";
+        String sql = "show pipes where name like 'show%'";
         ShowPipeStmt showPipeStmt = (ShowPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowResultSet result = ShowExecutor.execute(showPipeStmt, ctx);
         Assertions.assertEquals(
@@ -865,6 +866,29 @@ public class PipeManagerTest {
                 Arrays.asList("show_2", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(1).subList(2, result.numColumns() - 1));
+
+        // show by name like
+        String sqlShowByNameLike = "show pipes where name like 'show%'";
+        ShowPipeStmt showPipeStmtShowByNameLike = (ShowPipeStmt) UtFrameUtils.parseStmtWithNewParser(sqlShowByNameLike, ctx);
+        ShowResultSet resultShowByNameLike = ShowExecutor.execute(showPipeStmtShowByNameLike, ctx);
+        Assertions.assertEquals(
+                Arrays.asList("show_1", "RUNNING", "pipe_test_db.tbl1",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
+                resultShowByNameLike.getResultRows().get(0).subList(2, resultShowByNameLike.numColumns() - 1));
+        Assertions.assertEquals(
+                Arrays.asList("show_2", "RUNNING", "pipe_test_db.tbl1",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
+                resultShowByNameLike.getResultRows().get(1).subList(2, resultShowByNameLike.numColumns() - 1));
+
+        // show by name equal
+        String sqlShowByNameEqual = "show pipes where name = 'show_1'";
+        ShowPipeStmt showPipeStmtShowByNameEqual = (ShowPipeStmt) UtFrameUtils.parseStmtWithNewParser(sqlShowByNameEqual, ctx);
+        ShowResultSet resultShowByNameEqual = ShowExecutor.execute(showPipeStmtShowByNameEqual, ctx);
+        Assertions.assertEquals(1, resultShowByNameEqual.getResultRows().size());
+        Assertions.assertEquals(
+                Arrays.asList("show_1", "RUNNING", "pipe_test_db.tbl1",
+                        "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
+                resultShowByNameEqual.getResultRows().get(0).subList(2, resultShowByNameEqual.numColumns() - 1));
 
         // desc
         sql = "desc pipe show_1";

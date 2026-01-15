@@ -14,9 +14,11 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
@@ -57,6 +59,50 @@ public class StmtExecutorTest {
 
         Assertions.assertFalse(new StmtExecutor(new ConnectContext(),
                 SqlParser.parseSingleStatement("show frontends", SqlModeHelper.MODE_DEFAULT)).isForwardToLeader());
+    }
+
+    @Test
+    public void testForwardExplicitTxnSelectOnFollower(@Mocked GlobalStateMgr state,
+                                                       @Mocked ConnectContext ctx) {
+        StatementBase stmt;
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = state;
+
+                state.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
+
+                state.isLeader();
+                minTimes = 0;
+                result = false;
+
+                state.isInTransferringToLeader();
+                minTimes = 0;
+                result = false;
+
+                ctx.getSerializer();
+                minTimes = 0;
+                result = serializer;
+
+                ctx.getTxnId();
+                minTimes = 0;
+                result = 1L;
+
+                ctx.isQueryStmt((StatementBase) any);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        // Parse after expectations to ensure GlobalStateMgr.getSqlParser() is properly mocked
+        stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        Assertions.assertTrue(executor.isForwardToLeader());
     }
 
     @Test
@@ -116,5 +162,28 @@ public class StmtExecutorTest {
         Assertions.assertNotNull(summaryProfile);
         Assertions.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
+    }
+
+    @Test
+    public void testExecTimeout() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("select * from t1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+            Assertions.assertEquals(ctx.getSessionVariable().getQueryTimeoutS(), executor.getExecTimeout());
+        }
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("analyze table t1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+            Assertions.assertEquals(Config.statistic_collect_query_timeout, executor.getExecTimeout());
+        }
+        {
+            StatementBase stmt = SqlParser.parseSingleStatement("create table t2 as select * from t1",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
+            Assertions.assertEquals(ctx.getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
+        }
     }
 }

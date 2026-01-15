@@ -16,7 +16,7 @@
 
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
-#include "runtime/exec_env.cpp"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -40,6 +40,9 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
     ASSERT_EQ(group_usages.size(), 1);
     ASSERT_EQ(group_usages[0].group_id, default_wg->id());
     ASSERT_EQ(group_usages[0].cpu_core_used_permille, num_cores * 1000);
+    ASSERT_EQ(group_usages[0].mem_pool, workgroup::WorkGroup::DEFAULT_MEM_POOL);
+    ASSERT_EQ(group_usages[0].mem_limit_bytes, default_wg->mem_limit_bytes());
+    ASSERT_EQ(group_usages[0].mem_pool_mem_limit_bytes, default_wg->mem_limit_bytes());
 }
 
 } // namespace starrocks

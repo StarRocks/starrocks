@@ -1,0 +1,539 @@
+-- name: test_iceberg_variant_query_0
+
+-- iceberg catalog on hive does not variant yet.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/warehouse/");
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/warehouse/iceberg_variant > /dev/null
+
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+
+CREATE TABLE variant_test_cases (
+    case_id INT,
+    case_label STRING,
+    int_val INT,
+    string_val STRING,
+    float_val DOUBLE,
+    decimal_val DECIMAL(18, 4),
+    struct_val STRUCT<id INT, name STRING, counters MAP<STRING, INT>, status STRING>,
+    json_val STRING,
+    map_val MAP<STRING, STRING>,
+    array_val ARRAY<DOUBLE>,
+    variant_from_int VARIANT,
+    variant_from_string VARIANT,
+    variant_from_float VARIANT,
+    variant_from_decimal VARIANT,
+    variant_from_struct VARIANT,
+    variant_from_json VARIANT,
+    variant_from_map VARIANT,
+    variant_from_array VARIANT,
+    variant_mixed VARIANT,
+    deep_struct_val STRUCT<
+        profile STRUCT<
+            handle STRING,
+            contact STRUCT<
+                emails ARRAY<STRING>,
+                phones ARRAY<STRUCT<channel STRING, number STRING>>
+            >,
+            preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
+        >,
+        history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
+    >,
+    deep_map_val MAP<
+        STRING,
+        STRUCT<
+            limits MAP<STRING, INT>,
+            routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
+            metadata STRUCT<label STRING, path STRING>
+        >
+    >,
+    deep_array_val ARRAY<
+        STRUCT<
+            slot INT,
+            nodes ARRAY<
+                STRUCT<
+                    id STRING,
+                    status STRING,
+                    metrics MAP<STRING, DOUBLE>,
+                    transitions ARRAY<STRUCT<state STRING, at STRING>>
+                >
+            >
+        >
+    >,
+    deep_json_val STRING,
+    variant_deep_struct VARIANT,
+    variant_deep_map VARIANT,
+    variant_deep_array VARIANT,
+    variant_deep_json VARIANT
+) 
+properties(
+  'format-version' = '3'
+);
+
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet > /dev/null
+
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00000-0-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00001-1-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00002-2-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+alter table variant_test_cases execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/variant_query_0/data/00003-3-968ed6e2-3543-431b-ba6c-b41704fb5cd7-0-00001.parquet', file_format='parquet');
+
+
+-- ========================================
+-- Query 1: Scalar round-trip via get_variant_* helpers
+-- ========================================
+SELECT 'Query 1: Validate scalar round-trip extractions via get_variant_* helpers.' AS case_description;
+SELECT
+    case_id,
+    get_variant_int(variant_from_int, '$')          AS variant_int_value,
+    cast(variant_query(variant_from_int, '$') as bigint)          AS variant_int_as_bigint,
+    variant_typeof(variant_query(variant_from_float, '$'))          AS variant_float_type,
+    variant_typeof(variant_query(variant_from_decimal, '$'))          AS variant_decimal_type,
+    CAST(variant_query(variant_from_float, '$') as decimal(22, 8)) as variant_float_value,
+    CAST(variant_query(variant_from_decimal, '$') as decimal(22, 8)) as variant_decimal_value,
+    get_variant_double(variant_from_float, '$') as variant_float_value2,
+    get_variant_double(variant_from_decimal, '$') as variant_decimal_value2,
+    get_variant_string(variant_from_string, '$')    AS variant_string_value,
+    cast(variant_query(variant_from_string, '$') as string)    AS variant_string_as_string
+FROM variant_test_cases
+ORDER BY case_id;
+
+-- ========================================
+-- Query 2: Struct / Map / Array field extraction
+-- ========================================
+SELECT 'Query 2: Exercise struct/map/array field projection via get_variant_*.' AS case_description;
+SELECT
+    case_id,
+    get_variant_string(variant_from_struct, '$.name')             AS struct_name,
+    get_variant_int(variant_from_struct, '$.counters.success')    AS struct_success,
+    get_variant_string(variant_from_map, '$.tier')                AS tier_label,
+    variant_typeof(variant_query(variant_from_array, '$[0]'))                AS array_first_type,
+    variant_typeof(variant_query(variant_from_array, '$[2]'))                AS array_third_type,
+    CAST(variant_query(variant_from_array, '$[0]') as decimal(22, 8))                AS array_first_value,
+    CAST(variant_query(variant_from_array, '$[2]') as decimal(22, 8))               AS array_third_value,
+    get_variant_double(variant_from_array, '$[0]') AS array_first_value2,
+    get_variant_double(variant_from_array, '$[2]') AS array_third_value2
+FROM variant_test_cases
+ORDER BY case_id;
+
+-- ========================================
+-- Query 3: variant_query + CAST for nested payloads
+-- ========================================
+SELECT 'Query 3: Use variant_query + CAST to coerce nested payloads into primitives.' AS case_description;
+SELECT
+    case_id,
+    CAST(variant_query(variant_mixed, '$.thresholds.warn') AS INT)     AS warn_threshold,
+    CAST(variant_query(variant_mixed, '$.thresholds.critical') AS INT) AS critical_threshold,
+    CAST(variant_query(variant_mixed, '$.tags[0]') AS STRING)          AS first_tag,
+    CAST(variant_query(variant_mixed, '$.tags[1]') AS STRING)          AS second_tag,
+    CAST(variant_query(variant_mixed, '$.paths.first') AS STRING)      AS first_path_expr,
+    CAST(variant_query(variant_mixed, '$.composite.ints[1]') AS INT)   AS composite_midpoint
+FROM variant_test_cases
+ORDER BY case_id;
+
+-- ========================================
+-- Query 4: complex JSON path coverage (nested arrays/maps)
+-- ========================================
+SELECT 'Query 4: Cover complex JSON path navigation across nested arrays and maps.' AS case_description;
+SELECT
+    case_id,
+    CAST(variant_query(variant_mixed, '$.routing.routes[1].pattern') AS STRING)       AS nested_route_pattern,
+    CAST(variant_query(variant_mixed, '$.routing.routes[1].methods[1]') AS STRING)    AS nested_route_method,
+    CAST(variant_query(variant_mixed, '$.matrix[1][0].val') AS INT)                   AS matrix_value,
+    CAST(variant_query(variant_mixed, '$.deep.layers[1].payload.next.reasons[0]') AS STRING) AS deepest_reason,
+    CAST(variant_query(variant_mixed, '$.deep.flags["key.with.dot"].child.leaf') AS INT)    AS dotted_leaf,
+    CAST(variant_query(variant_mixed, '$.deep.flags["key-with-dash"]') AS BOOLEAN)          AS dashed_flag
+FROM variant_test_cases
+ORDER BY case_id;
+
+-- ========================================
+-- Query 5: Exhaustive CAST coverage across base types
+-- ========================================
+SELECT 'Query 5: Stress CAST combinations from Variant into the major primitive types.' AS case_description;
+SELECT
+    case_id,
+    CAST(variant_query(variant_mixed, '$.typed.bool_true') AS BOOLEAN)       AS cast_bool_true,
+    CAST(variant_query(variant_mixed, '$.typed.bool_false') AS BOOLEAN)      AS cast_bool_false,
+    CAST(get_variant_string(variant_mixed, '$.typed.int_as_string') as bigint)   AS cast_bigint_from_string,
+    CAST(variant_query(variant_mixed, '$.typed.decimal_text') AS DECIMAL(9, 3)) AS cast_decimal_text,    
+    CAST(variant_query(variant_mixed, '$.typed.timestamp_text') AS STRING) AS cast_timestamp,
+    CAST(variant_query(variant_mixed, '$.matrix[0][1].val') AS SMALLINT)     AS cast_smallint_nested
+FROM variant_test_cases
+ORDER BY case_id;
+
+-- ========================================
+-- Query 6: VARIANT -> STRUCT/MAP/ARRAY/JSON with deep path casts
+-- ========================================
+SELECT 'Query 6: Cast deeply nested Variant payloads into typed STRUCT/MAP/ARRAY/JSON constructs.' AS case_description;
+WITH variant_complex AS (
+    SELECT
+        case_id,
+        CAST(variant_deep_struct AS STRUCT<
+            profile STRUCT<
+                handle STRING,
+                contact STRUCT<
+                    emails ARRAY<STRING>,
+                    phones ARRAY<STRUCT<channel STRING, number STRING>>
+                >,
+                preferences MAP<STRING, STRUCT<enabled BOOLEAN, path STRING>>
+            >,
+            history ARRAY<STRUCT<ts STRING, status STRING, meta MAP<STRING, STRING>>>
+        >) AS struct_from_variant,
+        CAST(variant_deep_map AS MAP<
+            STRING,
+            STRUCT<
+                limits MAP<STRING, INT>,
+                routes ARRAY<STRUCT<pattern STRING, methods ARRAY<STRING>>>,
+                metadata STRUCT<label STRING, path STRING>
+            >
+        >) AS map_from_variant,
+        CAST(variant_deep_array AS ARRAY<
+            STRUCT<
+                slot INT,
+                nodes ARRAY<
+                    STRUCT<
+                        id STRING,
+                        status STRING,
+                        metrics MAP<STRING, DECIMAL>,
+                        transitions ARRAY<STRUCT<state STRING, at STRING>>
+                    >
+                >
+            >
+        >) AS array_from_variant,
+        CAST(variant_deep_json AS JSON) AS json_from_variant
+    FROM variant_test_cases
+)
+SELECT
+    case_id,
+    struct_from_variant.profile.contact.phones[2].number           AS variant_struct_second_phone,
+    struct_from_variant.profile.preferences['routing.deep'].path   AS variant_struct_shadow_path,
+    struct_from_variant.history[2].meta['ticket']                  AS variant_struct_ticket,
+    map_from_variant['svc.alpha'].routes[2].pattern                AS variant_map_alpha_route,
+    map_from_variant['svc.gamma.route'].limits['crit']             AS variant_map_gamma_crit,
+    array_from_variant[2].nodes[1].transitions[2].state            AS variant_array_recover_state,
+    array_from_variant[2].nodes[2].metrics['iops']                 AS variant_array_node3_iops,
+    CAST(json_query(json_from_variant, '$.envelope.layers[1].segments[0].steps[1].id') AS STRING) AS variant_json_dispatch_step,
+    CAST(json_query(json_from_variant, '$.flags."key.with.dot".child.leaf') AS INT)             AS variant_json_dotted_leaf
+FROM variant_complex
+ORDER BY case_id;
+
+-- -- ========================================
+-- -- Query 7: STRUCT/MAP/ARRAY/JSON -> VARIANT round-trip coverage
+-- -- ========================================
+-- SELECT 'Query 7: Round-trip complex types back into Variant and query nested members.' AS case_description;
+-- WITH typed_roundtrip AS (
+--     SELECT
+--         case_id,
+--         CAST(deep_struct_val AS VARIANT)     AS variant_from_struct_cast,
+--         CAST(deep_map_val AS VARIANT)        AS variant_from_map_cast,
+--         CAST(deep_array_val AS VARIANT)      AS variant_from_array_cast,
+--         CAST(PARSE_JSON(deep_json_val) AS VARIANT) AS variant_from_json_cast
+--     FROM variant_test_cases
+-- )
+-- SELECT
+--     case_id,
+--     CAST(variant_query(variant_from_struct_cast, '$.profile.contact.phones[0].channel') AS STRING) AS struct_cast_first_channel,
+--     CAST(variant_query(variant_from_struct_cast, '$.history[1].meta.ticket') AS STRING)            AS struct_cast_history_ticket,
+--     CAST(variant_query(variant_from_map_cast, '$["svc.beta"].routes[0].methods[0]') AS STRING)     AS map_cast_beta_method,
+--     CAST(variant_query(variant_from_map_cast, '$["svc.gamma.route"].limits.crit') AS INT)          AS map_cast_gamma_crit,
+--     CAST(variant_query(variant_from_array_cast, '$[1].nodes[0].metrics.cpu') AS DOUBLE)            AS array_cast_slot1_cpu,
+--     CAST(variant_query(variant_from_array_cast, '$[1].nodes[1].transitions[0].state') AS STRING)   AS array_cast_node_fail_state,
+--     CAST(variant_query(variant_from_json_cast, '$.matrix.grid[1][1].val') AS INT)                  AS json_cast_grid_val,
+--     CAST(variant_query(variant_from_json_cast, '$.envelope.layers[0].segments[0].path') AS STRING) AS json_cast_edge_path
+-- FROM typed_roundtrip
+-- ORDER BY case_id;
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_0/${uuid0}/ > /dev/null
+
+drop table variant_test_cases force;
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};
+
+
+-- use spark to generate those data files
+
+-- CREATE TABLE if not exists variant_test_cases (
+--     case_id INT,
+--     case_label STRING,
+--     int_val INT,
+--     string_val STRING,
+--     float_val DOUBLE,
+--     decimal_val DECIMAL(18, 4),
+--     struct_val STRUCT<id:INT, name:STRING, counters:MAP<STRING, INT>, status:STRING>,
+--     json_val STRING,
+--     map_val MAP<STRING, STRING>,
+--     array_val ARRAY<DOUBLE>,
+--     variant_from_int VARIANT,
+--     variant_from_string VARIANT,
+--     variant_from_float VARIANT,
+--     variant_from_decimal VARIANT,
+--     variant_from_struct VARIANT,
+--     variant_from_json VARIANT,
+--     variant_from_map VARIANT,
+--     variant_from_array VARIANT,
+--     variant_mixed VARIANT,
+--     deep_struct_val STRUCT<
+--         profile:STRUCT<
+--             handle:STRING,
+--             contact:STRUCT<
+--                 emails:ARRAY<STRING>,
+--                 phones:ARRAY<STRUCT<channel:STRING, number:STRING>>
+--             >,
+--             preferences:MAP<STRING, STRUCT<enabled:BOOLEAN, path:STRING>>
+--         >,
+--         history:ARRAY<STRUCT<ts:STRING, status:STRING, meta:MAP<STRING, STRING>>>
+--     >,
+--     deep_map_val MAP<
+--         STRING,
+--         STRUCT<
+--             limits:MAP<STRING, INT>,
+--             routes:ARRAY<STRUCT<pattern:STRING, methods:ARRAY<STRING>>>,
+--             metadata:STRUCT<label:STRING, path:STRING>
+--         >
+--     >,
+--     deep_array_val ARRAY<
+--         STRUCT<
+--             slot:INT,
+--             nodes:ARRAY<
+--                 STRUCT<
+--                     id:STRING,
+--                     status:STRING,
+--                     metrics:MAP<STRING, DOUBLE>,
+--                     transitions:ARRAY<STRUCT<state:STRING, at:STRING>>
+--                 >
+--             >
+--         >
+--     >,
+--     deep_json_val STRING,
+--     variant_deep_struct VARIANT,
+--     variant_deep_map VARIANT,
+--     variant_deep_array VARIANT,
+--     variant_deep_json VARIANT
+-- ) USING iceberg
+-- TBLPROPERTIES (
+--     'format-version' = '3',
+--     'write.format.default' = 'parquet',
+--     'engine.hive.enabled' = 'false'
+-- );
+
+-- INSERT INTO variant_test_cases VALUES
+--     (
+--         1,
+--         'positive_baseline',
+--         42,
+--         '42',
+--         3.5,
+--         CAST('9876.5432' AS DECIMAL(18, 4)),
+--         named_struct(
+--             'id', 1,
+--             'name', 'alpha',
+--             'counters', map('success', 10, 'error', 2),
+--             'status', 'ACTIVE'
+--         ),
+--         '{"event":"ingest","payload":{"bytes":1024,"ok":true}}',
+--         map('region', 'us-east-1', 'tier', 'hot'),
+--         array(1.5, 2.5, 3.5),
+--         parse_json('42'),
+--         parse_json('"42"'),
+--         parse_json('3.5'),
+--         parse_json('9876.5432'),
+--         parse_json('{"id":1,"name":"alpha","status":"ACTIVE","counters":{"success":10,"error":2}}'),
+--         parse_json('{"event":"ingest","payload":{"bytes":1024,"ok":true}}'),
+--         parse_json('{"region":"us-east-1","tier":"hot"}'),
+--         parse_json('[1.5,2.5,3.5]'),
+--         parse_json('{"sensors":[{"id":"s1","temp":24.625},{"id":"s2","temp":18.5}],"thresholds":{"warn":20,"critical":28},"tags":["prod","codex"]}'),
+--         NULL,
+--         NULL,
+--         NULL,
+--         NULL,
+--         parse_json('null'),
+--         parse_json('null'),
+--         parse_json('null'),
+--         parse_json('null')
+--     ),
+--     (
+--         2,
+--         'negative_and_nulls',
+--         -7,
+--         '-7',
+--         -0.125,
+--         CAST('-12.3400' AS DECIMAL(18, 4)),
+--         named_struct(
+--             'id', 2,
+--             'name', 'beta',
+--             'counters', map('success', 0, 'error', 5),
+--             'status', 'PAUSED'
+--         ),
+--         '{"event":"retry","payload":{"bytes":0,"ok":false,"reason":null}}',
+--         map('region', 'ap-south-1', 'tier', 'cold'),
+--         array(-0.5, NULL, 0.5),
+--         parse_json('-7'),
+--         parse_json('"-7"'),
+--         parse_json('-0.125'),
+--         parse_json('-12.3400'),
+--         parse_json('{"id":2,"name":"beta","status":"PAUSED","counters":{"success":0,"error":5}}'),
+--         parse_json('{"event":"retry","payload":{"bytes":0,"ok":false,"reason":null}}'),
+--         parse_json('{"region":"ap-south-1","tier":"cold"}'),
+--         parse_json('[-0.5,null,0.5]'),
+--         parse_json('{"composite":{"ints":[-7,0,7],"decimals":["-12.34",null],"struct":{"a":1,"b":[true,false,false]}},"tags":["staging"],"paths":{"first":"$.composite.ints[0]","second":"$.composite.struct.b[2]"}}'),
+--         NULL,
+--         NULL,
+--         NULL,
+--         NULL,
+--         parse_json('null'),
+--         parse_json('null'),
+--         parse_json('null'),
+--         parse_json('null')
+--     ),
+--     (
+--         3,
+--         'edge_empty',
+--         NULL,
+--         '',
+--         0.0,
+--         CAST('0.0000' AS DECIMAL(18, 4)),
+--         named_struct(
+--             'id', 3,
+--             'name', NULL,
+--             'counters', map('success', CAST(NULL AS INT)),
+--             'status', NULL
+--         ),
+--         '{"event":null,"payload":{}}',
+--         map('region', NULL, 'tier', NULL),
+--         array(CAST(NULL AS DOUBLE)),
+--         parse_json('null'),
+--         parse_json('""'),
+--         parse_json('0.0'),
+--         parse_json('0.0000'),
+--         parse_json('{"id":3,"name":null,"status":null,"counters":{}}'),
+--         parse_json('{"event":null,"payload":{}}'),
+--         parse_json('{}'),
+--         parse_json('[]'),
+--         parse_json('{"composite":{"ints":[]},"sensors":[],"tags":[]}'),
+--         NULL,
+--         NULL,
+--         NULL,
+--         NULL,
+--         parse_json('null'),
+--         parse_json('null'),
+--         parse_json('null'),
+--         parse_json('null')
+--     ),
+--     (
+--         4,
+--         'path_pattern',
+--         2048,
+--         '2048',
+--         99.875,
+--         CAST('1234.5678' AS DECIMAL(18, 4)),
+--         named_struct(
+--             'id', 4,
+--             'name', 'delta',
+--             'counters', map('success', 99, 'error', 1),
+--             'status', 'ACTIVE'
+--         ),
+--         '{"event":"fanout","payload":{"bytes":4096,"ok":true,"nested":{"arr":[{"k":"p","v":1},{"k":"q","v":2}]}}}',
+--         map('region', 'eu-central-1', 'tier', 'warm', 'env', 'test'),
+--         array(0.0, 1.0, 2.0),
+--         parse_json('2048'),
+--         parse_json('"2048"'),
+--         parse_json('99.875'),
+--         parse_json('1234.5678'),
+--         parse_json('{"id":4,"name":"delta","status":"ACTIVE","counters":{"success":99,"error":1}}'),
+--         parse_json('{"event":"fanout","payload":{"bytes":4096,"ok":true,"nested":{"arr":[{"k":"p","v":1},{"k":"q","v":2}]}}}'),
+--         parse_json('{"region":"eu-central-1","tier":"warm","env":"test"}'),
+--         parse_json('[0.0,1.0,2.0]'),
+--         parse_json('{"routing":{"routes":[{"pattern":"/health","methods":["GET"]},{"pattern":"/api/v1/{tenant}/jobs/**","methods":["POST","DELETE"]}]},"matrix":[[{"val":1},{"val":2}],[{"val":3},{"val":4}]],"deep":{"layers":[{"level":0,"payload":{"next":{"final":true}}},{"level":1,"payload":{"next":{"final":false,"reasons":["pending","quota"]}}}],"flags":{"key.with.dot":{"child":{"leaf":123}},"key-with-dash":false}},"typed":{"bool_true":true,"bool_false":false,"int_as_string":"512","decimal_text":"45.678","timestamp_text":"2024-05-01 12:34:56"}}'),
+--         named_struct(
+--             'profile', named_struct(
+--                 'handle', 'delta.ops',
+--                 'contact', named_struct(
+--                     'emails', array('delta-oncall@example.com', 'delta-pager@example.com'),
+--                     'phones', array(
+--                         named_struct('channel', 'sms', 'number', '+49-111-0001'),
+--                         named_struct('channel', 'voice', 'number', '+49-222-0002')
+--                     )
+--                 ),
+--                 'preferences', map(
+--                     'alert.route', named_struct('enabled', true, 'path', '/eu/central/**'),
+--                     'audit.route', named_struct('enabled', true, 'path', '/eu/audit/**'),
+--                     'routing.deep', named_struct('enabled', false, 'path', '/eu/**/shadow')
+--                 )
+--             ),
+--             'history', array(
+--                 named_struct('ts', '2024-03-01T00:00:00Z', 'status', 'created', 'meta', map('by', 'delta.bot', 'ticket', 'INC-900')),
+--                 named_struct('ts', '2024-04-11T09:45:00Z', 'status', 'scaled', 'meta', map('by', 'delta.ops', 'ticket', 'CHG-901'))
+--             )
+--         ),
+--         map(
+--             'svc.alpha', named_struct(
+--                 'limits', map('warn', 70, 'crit', 90),
+--                 'routes', array(
+--                     named_struct('pattern', '/health/**', 'methods', array('GET')),
+--                     named_struct('pattern', '/svc/alpha/**', 'methods', array('POST', 'DELETE'))
+--                 ),
+--                 'metadata', named_struct('label', 'alpha-core', 'path', '/svc/alpha/**')
+--             ),
+--             'svc.beta', named_struct(
+--                 'limits', map('warn', 60, 'crit', 80),
+--                 'routes', array(
+--                     named_struct('pattern', '/svc/beta/internal/**', 'methods', array('PATCH'))
+--                 ),
+--                 'metadata', named_struct('label', 'beta-sidecar', 'path', '/svc/beta/**')
+--             ),
+--             'svc.gamma.route', named_struct(
+--                 'limits', map('warn', 85, 'crit', 95),
+--                 'routes', array(
+--                     named_struct('pattern', '/svc/gamma/**', 'methods', array('PUT'))
+--                 ),
+--                 'metadata', named_struct('label', 'gamma-special', 'path', '/svc/gamma/**')
+--             )
+--         ),
+--         array(
+--             named_struct(
+--                 'slot', 0,
+--                 'nodes', array(
+--                     named_struct(
+--                         'id', 'node-g1',
+--                         'status', 'online',
+--                         'metrics', map('cpu', 0.56, 'mem', 0.72, 'iops', 220.0),
+--                         'transitions', array(
+--                             named_struct('state', 'boot', 'at', '2024-03-02T10:00:00Z'),
+--                             named_struct('state', 'ready', 'at', '2024-03-02T10:05:00Z')
+--                         )
+--                     )
+--                 )
+--             ),
+--             named_struct(
+--                 'slot', 1,
+--                 'nodes', array(
+--                     named_struct(
+--                         'id', 'node-g2',
+--                         'status', 'degraded',
+--                         'metrics', map('cpu', 0.91, 'mem', 0.88, 'iops', 540.0),
+--                         'transitions', array(
+--                             named_struct('state', 'drain', 'at', '2024-04-01T21:15:00Z'),
+--                             named_struct('state', 'recover', 'at', '2024-04-01T21:32:10Z')
+--                         )
+--                     ),
+--                     named_struct(
+--                         'id', 'node-g3',
+--                         'status', 'offline',
+--                         'metrics', map('cpu', 0.0, 'mem', 0.10, 'iops', 0.0),
+--                         'transitions', array(
+--                             named_struct('state', 'fail', 'at', '2024-04-04T03:45:00Z')
+--                         )
+--                     )
+--                 )
+--             )
+--         ),
+--         '{"envelope":{"layers":[{"name":"edge","segments":[{"path":"/edge/**","status":"ok"}]},{"name":"core","segments":[{"path":"/core/{tenant}/**","status":"warn","steps":[{"id":"prep","ok":true},{"id":"dispatch","ok":false}]}]}]},"matrix":{"grid":[[{"val":11},{"val":22}],[{"val":33},{"val":44}]]},"flags":{"key.with.dot":{"child":{"leaf":456}},"key-with-dash":true}}',
+--         parse_json('{"profile":{"handle":"delta.ops","contact":{"emails":["delta-oncall@example.com","delta-pager@example.com"],"phones":[{"channel":"sms","number":"+49-111-0001"},{"channel":"voice","number":"+49-222-0002"}]},"preferences":{"alert.route":{"enabled":true,"path":"/eu/central/**"},"audit.route":{"enabled":true,"path":"/eu/audit/**"},"routing.deep":{"enabled":false,"path":"/eu/**/shadow"}}},"history":[{"ts":"2024-03-01T00:00:00Z","status":"created","meta":{"by":"delta.bot","ticket":"INC-900"}},{"ts":"2024-04-11T09:45:00Z","status":"scaled","meta":{"by":"delta.ops","ticket":"CHG-901"}}]}'),
+--         parse_json('{"svc.alpha":{"limits":{"warn":70,"crit":90},"routes":[{"pattern":"/health/**","methods":["GET"]},{"pattern":"/svc/alpha/**","methods":["POST","DELETE"]}],"metadata":{"label":"alpha-core","path":"/svc/alpha/**"}},"svc.beta":{"limits":{"warn":60,"crit":80},"routes":[{"pattern":"/svc/beta/internal/**","methods":["PATCH"]}],"metadata":{"label":"beta-sidecar","path":"/svc/beta/**"}},"svc.gamma.route":{"limits":{"warn":85,"crit":95},"routes":[{"pattern":"/svc/gamma/**","methods":["PUT"]}],"metadata":{"label":"gamma-special","path":"/svc/gamma/**"}}}'),
+--         parse_json('[{"slot":0,"nodes":[{"id":"node-g1","status":"online","metrics":{"cpu":0.56,"mem":0.72,"iops":220.0},"transitions":[{"state":"boot","at":"2024-03-02T10:00:00Z"},{"state":"ready","at":"2024-03-02T10:05:00Z"}]}]},{"slot":1,"nodes":[{"id":"node-g2","status":"degraded","metrics":{"cpu":0.91,"mem":0.88,"iops":540.0},"transitions":[{"state":"drain","at":"2024-04-01T21:15:00Z"},{"state":"recover","at":"2024-04-01T21:32:10Z"}]},{"id":"node-g3","status":"offline","metrics":{"cpu":0.0,"mem":0.1,"iops":0.0},"transitions":[{"state":"fail","at":"2024-04-04T03:45:00Z"}]}]}]'),
+--         parse_json('{"envelope":{"layers":[{"name":"edge","segments":[{"path":"/edge/**","status":"ok"}]},{"name":"core","segments":[{"path":"/core/{tenant}/**","status":"warn","steps":[{"id":"prep","ok":true},{"id":"dispatch","ok":false}]}]}]},"matrix":{"grid":[[{"val":11},{"val":22}],[{"val":33},{"val":44}]]},"flags":{"key.with.dot":{"child":{"leaf":456}},"key-with-dash":true}}')
+--     );

@@ -16,7 +16,7 @@
 
 #include <utility>
 
-#include "exec/aggregator.h"
+#include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"
@@ -38,6 +38,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
+    Status prepare_local_state(RuntimeState* state) override { return Status::OK(); }
     void close(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;

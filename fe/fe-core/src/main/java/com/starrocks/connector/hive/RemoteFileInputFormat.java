@@ -30,8 +30,7 @@ public enum RemoteFileInputFormat {
     ORC,
     TEXTFILE,
     AVRO,
-    RCBINARY,
-    RCTEXT,
+    RCFILE,
     SEQUENCE,
     UNKNOWN;
     private static final ImmutableMap<String, RemoteFileInputFormat> CLASS_NAME_TO_INPUT_FORMAT =
@@ -40,7 +39,7 @@ public enum RemoteFileInputFormat {
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
                     .put(TEXT_INPUT_FORMAT_CLASS, TEXTFILE)
                     .put(AVRO_INPUT_FORMAT_CLASS, AVRO)
-                    .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
+                    .put(RCFILE_INPUT_FORMAT_CLASS, RCFILE)
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
                     .build();
     private static final ImmutableMap<String, Boolean> INPUT_FORMAT_SPLITTABLE =
@@ -73,32 +72,18 @@ public enum RemoteFileInputFormat {
     }
 
     public boolean isTextFormat() {
-        switch (this) {
-            case TEXTFILE:
-                return true;
-            default:
-                return false;
-        }
+        return this == RemoteFileInputFormat.TEXTFILE;
     }
 
     public THdfsFileFormat toThrift() {
-        switch (this) {
-            case PARQUET:
-                return THdfsFileFormat.PARQUET;
-            case ORC:
-                return THdfsFileFormat.ORC;
-            case TEXTFILE:
-                return THdfsFileFormat.TEXT;
-            case AVRO:
-                return THdfsFileFormat.AVRO;
-            case RCBINARY:
-                return THdfsFileFormat.RC_BINARY;
-            case RCTEXT:
-                return THdfsFileFormat.RC_TEXT;
-            case SEQUENCE:
-                return THdfsFileFormat.SEQUENCE_FILE;
-            default:
-                return THdfsFileFormat.UNKNOWN;
-        }
+        return switch (this) {
+            case PARQUET -> THdfsFileFormat.PARQUET;
+            case ORC -> THdfsFileFormat.ORC;
+            case TEXTFILE -> THdfsFileFormat.TEXT;
+            case AVRO -> THdfsFileFormat.AVRO;
+            case RCFILE -> THdfsFileFormat.RC_FILE;
+            case SEQUENCE -> THdfsFileFormat.SEQUENCE_FILE;
+            default -> THdfsFileFormat.UNKNOWN;
+        };
     }
 }

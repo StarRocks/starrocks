@@ -24,10 +24,11 @@
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/raw_container.h"
 #include "util/thrift_util.h"
@@ -40,7 +41,7 @@ static constexpr size_t kDefaultPageHeaderSize = 16 * 1024;
 // 16MB is borrowed from Arrow
 static constexpr size_t kMaxPageHeaderSize = 16 * 1024 * 1024;
 
-PageReader::PageReader(io::SeekableInputStream* stream, uint64_t start_offset, uint64_t length, uint64_t num_values,
+PageReader::PageReader(io::SeekableInputStream* stream, size_t start_offset, size_t length, size_t num_values,
                        const ColumnReaderOptions& opts, const tparquet::CompressionCodec::type codec)
         : _stream(stream),
           _finish_offset(start_offset + length),
@@ -91,7 +92,7 @@ Status PageReader::_deal_page_with_cache() {
             return Status::OK();
         }
         RETURN_IF_ERROR(_read_and_decompress_internal(true));
-        ObjectCacheWriteOptions opts{.evict_probability = _opts.datacache_options->datacache_evict_probability};
+        MemCacheWriteOptions opts{.evict_probability = _opts.datacache_options->datacache_evict_probability};
         auto st = _cache->insert(page_cache_key, _cache_buf, opts, &cache_handle);
         if (st.ok()) {
             _page_handle = PageHandle(std::move(cache_handle));

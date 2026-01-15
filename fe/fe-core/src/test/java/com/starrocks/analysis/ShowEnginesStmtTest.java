@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import org.junit.jupiter.api.Assertions;
@@ -46,7 +47,7 @@ public class ShowEnginesStmtTest {
     public void testNormal() throws StarRocksException {
         ShowEnginesStmt stmt = new ShowEnginesStmt();
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
+        ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertNotNull(metaData);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Engine", metaData.getColumn(0).getName());

@@ -314,6 +314,7 @@ public:
     SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
     std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
+    ScanNode* scan_node() { return _scan_node; }
 
 protected:
     ScanNode* const _scan_node;

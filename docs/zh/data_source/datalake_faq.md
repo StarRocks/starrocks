@@ -76,3 +76,24 @@ displayed_sidebar: docs
 | TotalHedgedReadOps             | 发起 Hedged Read 的次数。                                      |
 | TotalHedgedReadOpsInCurThread  | 由于 Hedged Read 线程池大小限制（通过 `hdfs_client_hedged_read_threadpool_size` 配置）而无法启动新线程、只能在当前线程内触发 Hedged Read 的次数。 |
 | TotalHedgedReadOpsWin          | Hedged Read 比原 Read 更早返回结果的次数。 |
+
+## 当查询 Hive Catalog 中的表时，如何解决错误“ERROR 1064 (HY000): Type mismatches on column [is_refund], JDBC result type is Integer, please set the type to one of tinyint,smallint,int,bigint”？
+
+此问题是由 JDBC 连接配置不正确引起的。将参数 `tinyInt1isBit=false` 添加到您的 JDBC URI 以防止此问题：
+
+```SQL
+"jdbc_uri" = "jdbc:mysql://xxx:3306?database=yl_spmibill&tinyInt1isBit=false"
+```
+
+## 为什么在 Iceberg Catalog 中无法查询到最新更新的数据（即使在刷新或重建 catalog 之后），我该如何排查？
+
+首先检查问题是否由启用 Data Cache 引起。按照以下步骤进行验证：
+
+1. 比较 StarRocks 和 Spark 之间扫描的数据文件：
+
+   - 在 StarRocks 中：`select file_path, spec_id from db.table_name$files;`
+   - 在 Spark 中：`select file_path, spec_id from db.table_name.files;`
+
+2. 如果结果一致，继续通过禁用 Data Cache 并再次查询来排查问题是否仍然存在。
+
+根本原因：更新 Iceberg 表数据是通过覆盖旧文件来实现的，这会破坏 Iceberg 的历史数据。正确的行为是在写入更新时生成新的文件名。StarRocks Data Cache 使用文件名、文件大小和修改时间来确定缓存数据是否有效。由于 Iceberg 不覆盖文件且修改时间始终为 0，StarRocks 错误地将文件视为未更改并从缓存中读取，导致查询结果过时。

@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -45,6 +46,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private TopNType topNType;
     private boolean isSplit;
     private boolean isEnforced;
+    private boolean perPipeline;
 
     // only set when rank <=1 with preAgg optimization is triggered, otherwise it's empty!
     // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
@@ -62,6 +64,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                                 TopNType topNType,
                                 boolean isSplit,
                                 boolean isEnforced,
+                                boolean perPipeline,
                                 ScalarOperator predicate,
                                 Projection projection,
                                 Map<ColumnRefOperator, CallOperator> analyticCall) {
@@ -74,6 +77,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.topNType = topNType;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
+        this.perPipeline = perPipeline;
         this.predicate = predicate;
         this.projection = projection;
         this.preAggCall = analyticCall;
@@ -111,6 +115,18 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return preAggCall;
     }
 
+    public boolean isPerPipeline() {
+        return perPipeline;
+    }
+
+    public boolean isTopNPushDownAgg() {
+        return isPerPipeline() || isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
@@ -132,7 +148,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced);
+        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit, isEnforced, perPipeline);
     }
 
     @Override
@@ -151,7 +167,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderSpec, that.orderSpec) &&
                 Objects.equals(preAggCall, that.preAggCall) &&
-                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced;
+                sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced &&
+                perPipeline == that.perPipeline;
     }
 
     @Override
@@ -207,6 +224,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
             builder.topNType = operator.topNType;
             builder.isSplit = operator.isSplit;
             builder.isEnforced = operator.isEnforced;
+            builder.perPipeline = operator.perPipeline;
+            builder.preAggCall = operator.preAggCall;
             return this;
         }
 

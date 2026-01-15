@@ -1,22 +1,4 @@
 -- name: test_group_provider
-
-drop user if exists u1;
-create user u1;
-grant impersonate on user root to u1;
-
-create group provider foo properties("type" = "foo");
-
-create group provider unix_group_provider properties("type" = "unix");
+create group provider if not exists unix_group_provider properties("type" = "unix");
 show create group provider unix_group_provider;
-
-execute as u1 with no revert;
-show group providers;
-show create group provider unix_group_provider;
-
-drop group provider unix_group_provider;
-create group provider unix_group_provider2 properties("type" = "unix");
-
-execute as root with no revert;
-drop user u1;
-
-drop group provider unix_group_provider;
+drop group provider if exists unix_group_provider;

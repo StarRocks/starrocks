@@ -21,12 +21,68 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
-#include "simdjson.h"
 #include "util/json_converter.h"
 #include "velocypack/ValueType.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
+
+JsonValue::JsonValue(const VSlice& slice) {
+    assign(Slice(slice.start(), slice.byteSize()));
+}
+
+void JsonValue::assign(const vpack::Builder& b) {
+    binary_.assign((const char*)b.data(), (size_t)b.size());
+}
+
+Status fromVPackException(const vpack::Exception& e) {
+    return Status::JsonFormatError(Slice(e.what()));
+}
+
+template <class Ret, class Fn>
+static inline StatusOr<Ret> callVPack(Fn fn) {
+    try {
+        return fn();
+    } catch (const vpack::Exception& e) {
+        return fromVPackException(e);
+    }
+}
+
+JsonType fromVPackType(vpack::ValueType type) {
+    switch (type) {
+    case vpack::ValueType::Null:
+    case vpack::ValueType::None:
+        return JsonType::JSON_NULL;
+    case vpack::ValueType::Bool:
+        return JsonType::JSON_BOOL;
+    case vpack::ValueType::Array:
+        return JsonType::JSON_ARRAY;
+    case vpack::ValueType::Object:
+        return JsonType::JSON_OBJECT;
+    case vpack::ValueType::Double:
+    case vpack::ValueType::Int:
+    case vpack::ValueType::UInt:
+    case vpack::ValueType::SmallInt:
+        return JsonType::JSON_NUMBER;
+    case vpack::ValueType::String:
+        return JsonType::JSON_STRING;
+    default:
+        DCHECK(false);
+        return JsonType::JSON_NULL;
+    }
+}
+
+vpack::Slice noneJsonSlice() {
+    return vpack::Slice::noneSlice();
+}
+
+vpack::Slice nullJsonSlice() {
+    return vpack::Slice::nullSlice();
+}
+
+vpack::Slice emptyStringJsonSlice() {
+    return vpack::Slice::emptyStringSlice();
+}
 
 static bool is_json_start_char(char ch) {
     return ch == '{' || ch == '[' || ch == '"';
@@ -163,6 +219,15 @@ static inline int cmpDouble(double left, double right) {
     return 0;
 }
 
+static inline int cmpInt64(int64_t left, int64_t right) {
+    if (left < right) {
+        return -1;
+    } else if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
 static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
     if (left.isObject() && right.isObject()) {
         for (auto it : vpack::ObjectIterator(left)) {
@@ -200,7 +265,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             case vpack::ValueType::SmallInt:
             case vpack::ValueType::Int:
             case vpack::ValueType::UInt:
-                return left.getInt() - right.getInt();
+                return cmpInt64(left.getInt(), right.getInt());
             case vpack::ValueType::Double: {
                 return cmpDouble(left.getDouble(), right.getDouble());
             }
@@ -211,7 +276,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return 0;
             }
         } else if (left.isInteger() && right.isInteger()) {
-            return left.getInt() - right.getInt();
+            return cmpInt64(left.getInt(), right.getInt());
         } else {
             return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
         }
@@ -254,6 +319,10 @@ int JsonValue::compare(const Slice& lhs, const Slice& rhs) {
     }
 
     return sliceCompare(ls, rs);
+}
+
+int JsonValue::compare(const VSlice& lhs, const VSlice& rhs) {
+    return sliceCompare(lhs, rhs);
 }
 
 int64_t JsonValue::hash() const {

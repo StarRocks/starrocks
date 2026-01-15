@@ -56,7 +56,7 @@ public class IsNullPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitIsNullPredicate(this, context);
+        return  visitor.visitIsNullPredicate(this, context);
     }
 
     @Override
@@ -71,6 +71,15 @@ public class IsNullPredicateOperator extends PredicateOperator {
             return false;
         }
         IsNullPredicateOperator that = (IsNullPredicateOperator) o;
+        return isNotNull == that.isNotNull;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        IsNullPredicateOperator that = (IsNullPredicateOperator) obj;
         return isNotNull == that.isNotNull;
     }
 

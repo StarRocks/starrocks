@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -59,6 +59,9 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
         if (!isTransformable((LogicalJoinOperator) input.getOp(), constantIndex)) {
             return false;
         }
@@ -91,7 +94,8 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         JoinOperator joinType = joinOperator.getJoinType();
         // anti/full outer join cannot be eliminated.
         // semi join needs to distinct output which cannot be eliminated.
-        if (joinType.isAntiJoin() || joinType.isFullOuterJoin() || joinType.isSemiJoin()) {
+        // ASOF join has temporal ordering semantics and cannot be eliminated with constants.
+        if (joinType.isAntiJoin() || joinType.isFullOuterJoin() || joinType.isSemiJoin() || joinType.isAsofJoin()) {
             return false;
         }
         if (constantIndex == 0) {
@@ -107,7 +111,6 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
                                        OptExpression otherOpt,
                                        OptExpression constantOpt,
                                        OptimizerContext context) {
-
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) joinOpt.getOp();
         Map<ColumnRefOperator, ScalarOperator> constants = getConstantInputs(constantOpt);
 
@@ -124,8 +127,12 @@ public class EliminateJoinWithConstantRule extends TransformationRule {
         joinOpt.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                 .forEach(ref -> outputs.put(ref, rewriter.rewrite(ref)));
         if (joinOperator.getJoinType().isOuterJoin()) {
+            // ensure value is a constant value, otherwise we cannot transform the join's on-predicate
+            if (constants.values().stream().anyMatch(op -> !op.isConstant())) {
+                return Lists.newArrayList();
+            }
             // transform join's on-predicate with case-when operator
-            constantOpt.getRowOutputInfo().getColumnRefMap().forEach((key, value) -> {
+            constants.forEach((key, value) -> {
                 ScalarOperator t = transformOuterJoinOnPredicate(joinOperator, value, rewrittenCondition);
                 outputs.put(key, t);
             });

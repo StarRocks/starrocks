@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "join_key_constructor.hpp"
+#include "exec/join/join_key_constructor.hpp"
+
+#include <optional>
 
 #include "serde/column_array_serde.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -60,10 +63,11 @@ void BuildKeyConstructorForSerialized::build_key(RuntimeState* state, JoinHashTa
     } else {
         table_items->build_key_nulls.resize(row_count + 1);
         auto* dest_is_nulls = table_items->build_key_nulls.data();
-        std::memcpy(dest_is_nulls, null_columns[0]->get_data().data(), (row_count + 1) * sizeof(NullColumn::ValueType));
+        std::memcpy(dest_is_nulls, null_columns[0]->immutable_data().data(),
+                    (row_count + 1) * sizeof(NullColumn::ValueType));
         for (uint32_t i = 1; i < null_columns.size(); i++) {
             for (uint32_t j = 1; j < 1 + row_count; j++) {
-                dest_is_nulls[j] |= null_columns[i]->get_data()[j];
+                dest_is_nulls[j] |= null_columns[i]->immutable_data()[j];
             }
         }
 
@@ -85,19 +89,20 @@ void ProbeKeyConstructorForSerialized::build_key(const JoinHashTableItems& table
     NullColumns null_columns;
 
     for (size_t i = 0; i < probe_state->key_columns->size(); i++) {
+        auto& key_column = (*probe_state->key_columns)[i];
         if (table_items.join_keys[i].is_null_safe_equal) {
             // this means build column is a nullable column and join condition is null safe equal
             // we need convert the probe column to a nullable column when it's a non-nullable column
             // to align the type between build and probe columns.
-            data_columns.emplace_back(NullableColumn::wrap_if_necessary((*probe_state->key_columns)[i]));
+            data_columns.emplace_back(NullableColumn::wrap_if_necessary(key_column));
         } else if ((*probe_state->key_columns)[i]->is_nullable()) {
-            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>((*probe_state->key_columns)[i]);
+            auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_column);
             data_columns.emplace_back(nullable_column->data_column());
-            if ((*probe_state->key_columns)[i]->has_null()) {
+            if (key_column->has_null()) {
                 null_columns.emplace_back(nullable_column->null_column());
             }
         } else {
-            data_columns.emplace_back((*probe_state->key_columns)[i]);
+            data_columns.emplace_back(key_column);
         }
     }
 
@@ -125,7 +130,7 @@ void ProbeKeyConstructorForSerialized::_probe_column(const JoinHashTableItems& t
         ptr += probe_state->probe_slice[i].size;
     }
 
-    probe_state->null_array = nullptr;
+    probe_state->null_array = std::nullopt;
 }
 
 void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTableItems& table_items,
@@ -135,11 +140,11 @@ void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTabl
     const uint32_t row_count = probe_state->probe_row_count;
 
     for (uint32_t i = 0; i < row_count; i++) {
-        probe_state->is_nulls[i] = null_columns[0]->get_data()[i];
+        probe_state->is_nulls[i] = null_columns[0]->immutable_data()[i];
     }
     for (uint32_t i = 1; i < null_columns.size(); i++) {
         for (uint32_t j = 0; j < row_count; j++) {
-            probe_state->is_nulls[j] |= null_columns[i]->get_data()[j];
+            probe_state->is_nulls[j] |= null_columns[i]->immutable_data()[j];
         }
     }
 
@@ -150,6 +155,69 @@ void ProbeKeyConstructorForSerialized::_probe_nullable_column(const JoinHashTabl
         }
     }
 
-    probe_state->null_array = &probe_state->is_nulls;
+    probe_state->null_array = probe_state->is_nulls;
 }
+
+template class ProbeKeyConstructorForOneKey<TYPE_BOOLEAN>;
+template class ProbeKeyConstructorForOneKey<TYPE_TINYINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_SMALLINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_INT>;
+template class ProbeKeyConstructorForOneKey<TYPE_BIGINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_LARGEINT>;
+template class ProbeKeyConstructorForOneKey<TYPE_FLOAT>;
+template class ProbeKeyConstructorForOneKey<TYPE_DOUBLE>;
+template class ProbeKeyConstructorForOneKey<TYPE_DATE>;
+template class ProbeKeyConstructorForOneKey<TYPE_DATETIME>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMALV2>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMAL32>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMAL64>;
+template class ProbeKeyConstructorForOneKey<TYPE_DECIMAL128>;
+template class ProbeKeyConstructorForOneKey<TYPE_VARCHAR>;
+
+template class BuildKeyConstructorForOneKey<TYPE_BOOLEAN>;
+template class BuildKeyConstructorForOneKey<TYPE_TINYINT>;
+template class BuildKeyConstructorForOneKey<TYPE_SMALLINT>;
+template class BuildKeyConstructorForOneKey<TYPE_INT>;
+template class BuildKeyConstructorForOneKey<TYPE_BIGINT>;
+template class BuildKeyConstructorForOneKey<TYPE_LARGEINT>;
+template class BuildKeyConstructorForOneKey<TYPE_FLOAT>;
+template class BuildKeyConstructorForOneKey<TYPE_DOUBLE>;
+template class BuildKeyConstructorForOneKey<TYPE_DATE>;
+template class BuildKeyConstructorForOneKey<TYPE_DATETIME>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMALV2>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMAL32>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMAL64>;
+template class BuildKeyConstructorForOneKey<TYPE_DECIMAL128>;
+template class BuildKeyConstructorForOneKey<TYPE_VARCHAR>;
+
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_BOOLEAN>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_TINYINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_SMALLINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_INT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_BIGINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_LARGEINT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_FLOAT>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DOUBLE>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DATE>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DATETIME>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMALV2>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMAL32>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMAL64>;
+template class BuildKeyConstructorForSerializedFixedSize<TYPE_DECIMAL128>;
+
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_BOOLEAN>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_TINYINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_SMALLINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_INT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_BIGINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_LARGEINT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_FLOAT>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DOUBLE>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DATE>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DATETIME>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMALV2>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMAL32>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMAL64>;
+template class ProbeKeyConstructorForSerializedFixedSize<TYPE_DECIMAL128>;
+
 } // namespace starrocks

@@ -19,8 +19,8 @@
 
 #include <memory>
 
-#include "cache/block_cache/test_cache_utils.h"
 #include "cache/datacache.h"
+#include "cache/disk_cache/test_cache_utils.h"
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
 #include "runtime/exec_env.h"
@@ -181,11 +181,11 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_FALSE(st.ok());
     }
 
-    std::shared_ptr<BlockCache> cache(new BlockCache);
+    std::shared_ptr<BlockCache> cache;
     {
-        CacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 20 * MB);
+        DiskCacheOptions options = TestCacheUtils::create_simple_options(256 * KB, 0, 20 * MB);
         options.inline_item_count_limit = 1000;
-        auto cache = TestCacheUtils::create_cache(options);
+        cache = TestCacheUtils::create_cache(options);
 
         const size_t cache_size = 1024;
         const std::string cache_key = "test_file";
@@ -194,8 +194,8 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_TRUE(st.ok());
 
         DataCache* cache_env = DataCache::GetInstance();
-        cache_env->_local_cache = cache->local_cache();
-        cache_env->_block_cache = cache;
+        cache_env->set_local_disk_cache(cache->local_cache());
+        cache_env->set_block_cache(cache);
     }
 
     {

@@ -137,8 +137,12 @@ public:
     /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                               const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                              CompoundNodeType pred_relation) {
-        row_ranges->add({0, static_cast<rowid_t>(num_rows())});
+                                              CompoundNodeType pred_relation, const Range<>* src_range = nullptr) {
+        if (src_range == nullptr) {
+            row_ranges->add({0, static_cast<rowid_t>(num_rows())});
+        } else {
+            row_ranges->add(*src_range);
+        }
         return Status::OK();
     }
 
@@ -215,13 +219,24 @@ public:
     // NOTE: The default implementation is not high-performant.
     virtual Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values);
 
+    // if column is low dictionary column
+    // this interface will return string if is local dictionary column
+    // and return glocal dict value if is global dictionary column
     Status fetch_values_by_rowid(const Column& rowids, Column* values);
 
+    // this interface will return local dict value with given rowids without any translate
+    // just like next_dict_codes but with given rowids
     virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
         return Status::NotSupported("");
     }
 
     Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
+
+    // used for predicate late-materialization
+    // for low dictionary column, predicate will be rewritten by local dictionary,
+    // so predicate evaluation needs to read local dictionary values if this is a low dictionary column,
+    // This method will return local dictionary value if this is a low dictionary column
+    virtual Status fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values);
 
     // for Struct type (Struct)
     virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) { return next_batch(n, dst); }
@@ -240,8 +255,28 @@ public:
         return nullptr;
     }
 
+    // Return the name of this column iterator for debugging and logging purposes
+    virtual std::string name() const { return "ColumnIterator"; }
+
+    virtual Status next_batch_with_filter(const SparseRange<>& range, Column* dst,
+                                          const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                          Buffer<uint8_t>* selection, Buffer<uint16_t>* selected_idx,
+                                          size_t* processed_rows) {
+        return Status::NotSupported("ColumnIterator Doesn't Support next_batch_with_filter");
+    }
+
+    virtual void reserve_col(size_t n, Column* column) { column->reserve(n); }
+
+    // Check if this column iterator supports push down predicate with given compound_and_predicates
+    // This is used to determine if next_batch_with_filter can be called for late materialization optimization
+    virtual bool support_push_down_predicate(const std::vector<const ColumnPredicate*>& compound_and_predicates) {
+        return false;
+    }
+
 protected:
     ColumnIteratorOptions _opts;
 };
+
+using ColumnIteratorUPtr = std::unique_ptr<ColumnIterator>;
 
 } // namespace starrocks

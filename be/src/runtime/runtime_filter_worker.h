@@ -187,7 +187,22 @@ inline std::string EventTypeToString(EventType type) {
 // - receive total RF and send it to RuntimeFilterPort
 // - send partitioned RF(for hash join node)
 // - close a query(delete runtime filter merger)
-struct RuntimeFilterWorkerEvent;
+struct RuntimeFilterWorkerEvent {
+    RuntimeFilterWorkerEvent() = default;
+    EventType type;
+    TUniqueId query_id;
+    // For OPEN_QUERY.
+    TQueryOptions query_options;
+    TRuntimeFilterParams create_rf_merger_request;
+    bool is_opened_by_pipeline;
+    // For SEND_PART_RF.
+    std::vector<TNetworkAddress> transmit_addrs;
+    std::vector<TRuntimeFilterDestination> destinations;
+    int transmit_timeout_ms;
+    int64_t transmit_via_http_min_size;
+    // For SEND_PART_RF, RECEIVE_PART_RF, and RECEIVE_TOTAL_RF.
+    PTransmitRuntimeFilterParams transmit_rf_request;
+};
 
 struct RuntimeFilterWorkerMetrics {
     void update_event_nums(EventType event_type, int64_t delta) { event_nums[event_type] += delta; }
@@ -228,7 +243,7 @@ public:
     const RuntimeFilterWorkerMetrics* metrics() const { return _metrics; }
 
 private:
-    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params);
+    void _receive_total_runtime_filter(PTransmitRuntimeFilterParams& params, int timeout_ms, int64_t rpc_http_min_size);
     void _process_send_broadcast_runtime_filter_event(PTransmitRuntimeFilterParams&& params,
                                                       std::vector<TRuntimeFilterDestination>&& destinations,
                                                       int timeout_ms, int64_t rpc_http_min_size);
@@ -239,7 +254,8 @@ private:
                                                  std::vector<TRuntimeFilterDestination>&& destinations, int timeout_ms,
                                                  int64_t rpc_http_min_size);
     void _deliver_broadcast_runtime_filter_local(PTransmitRuntimeFilterParams& params,
-                                                 const TRuntimeFilterDestination& destinations);
+                                                 const TRuntimeFilterDestination& destinations, int timeout_ms,
+                                                 int64_t rpc_http_min_size);
 
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,

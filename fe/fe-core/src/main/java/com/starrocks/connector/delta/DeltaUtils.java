@@ -18,13 +18,14 @@ package com.starrocks.connector.delta;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
 import io.delta.kernel.data.ArrayValue;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.internal.SnapshotImpl;
@@ -39,7 +40,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Locale;
 
 import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -77,7 +77,7 @@ public class DeltaUtils {
                 type = ColumnTypeConverter.fromDeltaLakeType(dataType, columnMappingMode);
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert delta type {} on {}.{}.{}", dataType.toString(), catalog, dbName, tblName, e);
-                type = Type.UNKNOWN_TYPE;
+                type = UnknownType.UNKNOWN_TYPE;
             }
             Column column = buildColumnWithColumnMapping(field, type, columnMappingMode);
             fullSchema.add(column);
@@ -97,7 +97,7 @@ public class DeltaUtils {
             String partitionColName = partitionColNameVector.getString(i);
             Preconditions.checkArgument(partitionColName != null && !partitionColName.isEmpty(),
                     "Expected non-null and non-empty partition column name");
-            partitionColumnNames.add(partitionColName.toLowerCase(Locale.ROOT));
+            partitionColumnNames.add(partitionColName);
         }
         return partitionColumnNames;
     }

@@ -119,7 +119,7 @@ private:
 };
 
 struct ByteBuffer {
-    static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size,
+    static StatusOr<ByteBufferPtr> allocate_with_tracker(size_t size, size_t padding = 0,
                                                          ByteBufferMetaType meta_type = ByteBufferMetaType::NONE) {
         auto tracker = CurrentThread::mem_tracker();
         if (tracker == nullptr) {
@@ -131,14 +131,14 @@ struct ByteBuffer {
             ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
             // if allocate buffer failed, meta will be deleted
             DeferOp defer([&]() { delete_meta_safely(meta); });
-            ByteBufferPtr ptr(new ByteBuffer(size, meta), MemTrackerDeleter(tracker));
+            ByteBufferPtr ptr(new ByteBuffer(size, padding, meta), MemTrackerDeleter(tracker));
             // set meta to nullptr to avoid being deleted
             meta = nullptr;
             return ptr;
         });
 #else
         ASSIGN_OR_RETURN(auto meta, ByteBufferMeta::create(meta_type));
-        ByteBufferPtr ptr(new ByteBuffer(size, meta), MemTrackerDeleter(tracker));
+        ByteBufferPtr ptr(new ByteBuffer(size, padding, meta), MemTrackerDeleter(tracker));
         Status ret = Status::OK();
         TEST_SYNC_POINT_CALLBACK("ByteBuffer::allocate_with_tracker", &ret);
         if (ret.ok()) {
@@ -150,9 +150,10 @@ struct ByteBuffer {
     }
 
     static StatusOr<ByteBufferPtr> reallocate_with_tracker(const ByteBufferPtr& old_ptr, size_t new_size) {
-        if (new_size <= old_ptr->capacity) return old_ptr;
+        size_t new_capacity = new_size + old_ptr->padding;
+        if (new_capacity <= old_ptr->capacity) return old_ptr;
 
-        ASSIGN_OR_RETURN(ByteBufferPtr ptr, allocate_with_tracker(new_size, old_ptr->meta()->type()));
+        ASSIGN_OR_RETURN(ByteBufferPtr ptr, allocate_with_tracker(new_size, old_ptr->padding, old_ptr->meta()->type()));
         ptr->put_bytes(old_ptr->ptr, old_ptr->pos);
         RETURN_IF_ERROR(ptr->meta()->copy_from(old_ptr->meta()));
         return ptr;
@@ -174,24 +175,46 @@ struct ByteBuffer {
         DCHECK(pos <= limit);
     }
 
-    void flip() {
+    void flip_to_read() {
         limit = pos;
         pos = 0;
+    }
+
+    void flip_to_write() {
+        if (pos > 0) {
+            if (has_remaining()) {
+                size_t size = remaining();
+                std::memmove(ptr, ptr + pos, size);
+                pos = size;
+            } else {
+                pos = 0;
+            }
+        } else {
+            pos = limit;
+        }
+        limit = capacity - padding;
     }
 
     size_t remaining() const { return limit - pos; }
     bool has_remaining() const { return limit > pos; }
 
-    ByteBufferMeta* meta() { return _meta; }
+    ByteBufferMeta* meta() const { return _meta; }
+
+    char* write_ptr() const { return ptr + pos; }
 
     char* const ptr;
     size_t pos{0};
     size_t limit;
-    size_t capacity;
+    const size_t padding;
+    const size_t capacity;
 
 private:
-    ByteBuffer(size_t capacity_, ByteBufferMeta* meta = NoneByteBufferMeta::instance())
-            : ptr(new char[capacity_]), limit(capacity_), capacity(capacity_), _meta(meta) {
+    ByteBuffer(size_t size_, size_t padding_ = 0, ByteBufferMeta* meta = NoneByteBufferMeta::instance())
+            : ptr(new char[size_ + padding_]),
+              limit(size_),
+              padding(padding_),
+              capacity(size_ + padding_),
+              _meta(meta) {
         DCHECK(_meta != nullptr);
     };
 

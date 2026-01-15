@@ -66,7 +66,7 @@ read_var_from_conf() {
 
 export_env_from_conf() {
     while read line; do
-        envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
+        envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | grep -E "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
         envline=`eval "echo $envline"`
         if [[ $envline == *"="* ]]; then
             eval 'export "$envline"'
@@ -75,9 +75,6 @@ export_env_from_conf() {
 }
 
 export_shared_envvars() {
-    # compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-    export DORIS_HOME="$STARROCKS_HOME"
-
     # ===================================================================================
     # initialization of environment variables before exporting env variables from be.conf
     # For most cases, you should put default environment variables in this section.

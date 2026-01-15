@@ -12,7 +12,9 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 Since version 3.3.0, StarRocks supports full-text inverted indexes, which can break the text into smaller words, and create an index entry for each word that can show the mapping relationship between the word and its corresponding row number in the data file. For full-text searches, StarRocks queries the inverted index based on the search keywords, quickly locating the data rows that match the keywords.
 
-The full-text inverted index is not yet supported in Primary Key tables and shared-data clusters.
+Primary Key tables support full-text inverted indexes from v4.0 onwards.
+
+The full-text inverted index is not yet supported in shared-data clusters.
 
 ## Overview
 
@@ -26,13 +28,17 @@ During full-text searches, StarRocks can locate index entries containing the sea
 
 ### Create full-text inverted index
 
-Before creating a fulltext inverted index, you need to enable FE configuration item `enable_experimental_gin`.
+Before creating a full-text inverted index, you need to enable FE configuration item `enable_experimental_gin`.
 
 ```sql
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 ```
 
-Also, a fulltext inverted index can only be created in the Duplicate Key table and the table property `replicated_storage` needs to be `false`.
+:::note
+When creating a full-text inverted index for a table, you must disable the `replicated_storage` feature for the table.
+- For v4.0 and later, this feature is automatically disabled when you create the index.
+- for versions earlier than v4.0, you must manually set the table property `replicated_storage` to `false`.
+:::
 
 #### Create full-text Inverted Index at table creation
 
@@ -92,8 +98,12 @@ After creating a full-text inverted index, you need to ensure that the system va
 
 #### Supported queries when indexed column is tokenized
 
-If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 'standard|english|chinese'`, only the `MATCH` predicate is supported for data filtering using full-text inverted indexes, and the format needs to be `<col_name> (NOT) MATCH '%keyword%'`. The `keyword` must be a string literal, and does not support expressions .
+When a full-text inverted index column is enabled with tokenization (`parser` = `standard` | `english` | `chinese`), only the `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicates are supported for filtering. The supported formats are:
+- `<col_name> (NOT) MATCH '%keyword%'`
+- `<col_name> (NOT) MATCH_ANY 'keyword1, keyword2'`
+- `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
+Here, keyword must be a string literal; expressions are not supported.
 1. Create a table and insert a few rows of test data.
 
       ```SQL
@@ -129,7 +139,21 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "data%";
     ```
+  
+3. Use the `MATCH_ANY` predicate for querying.
 
+- Query data rows whose `value` column contains the keyword `database` or `data`.
+
+    ```SQL
+    MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ANY "database data";
+    ```
+4. Use the `MATCH_ALL` predicate for querying.
+
+- Query data rows whose `value` column contains both the keyword `database` and `data`.
+
+    ```SQL
+    MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH_ALL "database data";
+    ```
 **Notes:**
 
 - During queries, keywords can be matched fuzzily using `%`, in the format of `%keyword%`. However, the keyword must contain a part of a word. For example, if the keyword is <code>starrocks&nbsp;</code>, it cannot match the word `starrocks` because it contains spaces.
@@ -175,7 +199,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
     1 row in set (0.01 sec)
     ```
 
-- The `MATCH` predicate in the query conditions must be used as a pushdown predicate, so it must be in the WHERE clause and be performed against the indexed column.
+- The `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicate in the query conditions must be used as a pushdown predicate, so it must be in the WHERE clause and be performed against the indexed column.
 
     Take the following table and test data as an example:
 
@@ -198,14 +222,14 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
     The following query statements do not meet the requirement:
 
-    - Because the `MATCH` predicate in the query statement is not in the WHERE clause, it can not be pushed down, resulting in a query error.
+    - Because the `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicate in the query statement is not in the WHERE clause, it can not be pushed down, resulting in a query error.
 
         ```SQL
         MySQL [test]> SELECT value MATCH "test" FROM t_match;
         ERROR 1064 (HY000): Match can only be used as a pushdown predicate on a column with GIN in a single query.
         ```
 
-    - Because the column `value_test` against which the `MATCH` predicate in the query statement is performed is not an indexed column, the query fails.
+    - Because the column `value_test` against which the `MATCH`, `MATCH_ANY`, or `MATCH_ALL` predicate in the query statement is performed is not an indexed column, the query fails.
 
         ```SQL
         MySQL [test]> SELECT * FROM t_match WHERE value_test match "test";
@@ -216,7 +240,7 @@ If the full-text inverted index tokenizes indexed columns, that is, `'parser' = 
 
 If the full-text inverted index does not tokenize the indexed column, that is, `'parser' = 'none'`, all pushdown predicates in the query conditions listed below can be used for data filtering using the full-text inverted index:
 
-- Expression predicates: (NOT) LIKE, (NOT) MATCH
+- Expression predicates: (NOT) LIKE, (NOT) MATCH, (NOT) MATCH_ANY, (NOT) MATCH_ALL
   
   :::note
 
@@ -225,6 +249,6 @@ If the full-text inverted index does not tokenize the indexed column, that is, `
   :::
 - Regular predicates: `==`, `!=`, `<=`, `>=`, `NOT IN`, `IN`, `IS NOT NULL`, `NOT NULL`
 
-## How to verify whether the full-text inverted index  accelerates queries
+## Verify whether a query is accelerated by the full-text inverted index
 
 After executing the query, you can view the detailed metrics `GinFilterRows` and `GinFilter` in the scan node of the Query Profile to see the number of rows filtered and the filtering time using the full-text inverted index.

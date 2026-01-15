@@ -15,9 +15,6 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -33,9 +30,12 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.BrokerPropertiesPersistInfo;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.task.ExportExportingTask;
@@ -81,7 +81,7 @@ public class ExportJobTest {
                                          @Mocked Tablet tablet,
                                          @Mocked OlapScanNode scanNode,
                                          @Mocked PlanFragment fragment,
-                                         @Mocked BrokerDesc brokerDesc) {
+                                         @Mocked BrokerPropertiesPersistInfo brokerDescPersistInfo) {
         // tabletId  backendId  dataSize
         //     1        0           1
         //     2        0           2
@@ -97,7 +97,7 @@ public class ExportJobTest {
                 result = tabletMeta;
                 tablet.getDataSize(true);
                 returns(1L, 2L, 3L, 4L, 5L);
-                brokerDesc.hasBroker();
+                brokerDescPersistInfo.hasBroker();
                 result = true;
             }
         };
@@ -119,12 +119,11 @@ public class ExportJobTest {
         }
 
 
-
         ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
         Deencapsulation.setField(job, "tabletLocations", locationsList);
         Deencapsulation.setField(job, "exportTable", table);
         Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
-        Deencapsulation.setField(job, "brokerDesc", brokerDesc);
+        Deencapsulation.setField(job, "brokerPersistInfo", brokerDescPersistInfo);
 
         // 1 task: (1,2,3,4,5)
         List<PlanFragment> fragments = Lists.newArrayList();
@@ -160,7 +159,7 @@ public class ExportJobTest {
                                          @Mocked Tablet tablet,
                                          @Mocked OlapScanNode scanNode,
                                          @Mocked PlanFragment fragment,
-                                         @Mocked BrokerDesc brokerDesc) {
+                                         @Mocked BrokerPropertiesPersistInfo brokerDesc) {
         // tabletId  backendId  dataSize
         //     1        0           1
         //     2        0           2
@@ -208,7 +207,7 @@ public class ExportJobTest {
         Deencapsulation.setField(job, "tabletLocations", locationsList);
         Deencapsulation.setField(job, "exportTable", table);
         Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
-        Deencapsulation.setField(job, "brokerDesc", brokerDesc);
+        Deencapsulation.setField(job, "brokerPersistInfo", brokerDesc);
         Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, job.getComputeResource());
 
         // 1 task: (1,2,3,4,5)

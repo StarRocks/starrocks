@@ -18,8 +18,9 @@ import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.FailedPredicateException;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
+import org.antlr.v4.runtime.Token;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 class ErrorHandler extends BaseErrorListener {
 
@@ -31,12 +32,28 @@ class ErrorHandler extends BaseErrorListener {
         String tokenName;
 
         if (e instanceof FailedPredicateException) {
-            tokenName = SqlParser.getTokenDisplay(e.getOffendingToken());
+            tokenName = getTokenDisplay(e.getOffendingToken());
             detailMsg = PARSER_ERROR_MSG.failedPredicate(tokenName, ((FailedPredicateException) e).getPredicate());
         } else {
             // other unknown error, use the message return by Antlr
         }
 
         throw new ParsingException(detailMsg, pos);
+    }
+
+    public static String getTokenDisplay(Token t) {
+        if (t == null) {
+            return "<no token>";
+        }
+
+        String s = t.getText();
+        if (s == null) {
+            if (t.getType() == Token.EOF) {
+                s = "<EOF>";
+            } else {
+                s = "<" + t.getType() + ">";
+            }
+        }
+        return s;
     }
 }

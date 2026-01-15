@@ -70,6 +70,9 @@ struct StringFunctionsState {
     DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     bool use_hyperscan = false;
+    bool use_hyperscan_vec = false;
+    std::optional<std::string> opt_const_rpl{};
+    bool global_mode = true;
     int size_of_pattern = -1;
 
     // a pointer to the generated database that responsible for parsed expression.
@@ -252,6 +255,13 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(reverse);
+
+    /**
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(initcap);
 
     /**
      * @param: [string_value]
@@ -620,6 +630,15 @@ public:
     static Status field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     template <LogicalType Type>
     static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * Format byte count as human-readable string with appropriate units
+     *
+     * @param: [bytes]
+     * @paramType: [BigIntColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(format_bytes);
 
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,

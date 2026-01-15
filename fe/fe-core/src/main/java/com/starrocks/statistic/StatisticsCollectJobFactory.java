@@ -16,22 +16,23 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
+import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.util.PropertyUtil;
@@ -112,7 +113,7 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties,
-                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 List<StatisticsType> statisticsTypes,
                                                                  List<List<String>> columnGroup,
                                                                  boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {

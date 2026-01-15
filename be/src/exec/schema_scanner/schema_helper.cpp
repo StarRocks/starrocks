@@ -192,6 +192,13 @@ Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const
     });
 }
 
+Status SchemaHelper::get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                    TGetFeThreadsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getFeThreads(*response, request);
+    });
+}
+
 Status SchemaHelper::get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
                                     TGetRoleEdgesResponse* response) {
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
@@ -211,6 +218,12 @@ Status SchemaHelper::get_partitions_meta(const SchemaScannerState& state, const 
     return _call_rpc(state, [&var_params, &var_result](FrontendServiceConnection& client) {
         client->getPartitionsMeta(*var_result, var_params);
     });
+}
+
+Status SchemaHelper::listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                            TListRecycleBinCatalogsResult* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->listRecycleBinCatalogs(*res, req); });
 }
 
 Status SchemaHelper::get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
@@ -264,6 +277,12 @@ Status SchemaHelper::get_warehouse_queries(const SchemaScannerState& state, cons
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
         client->getWarehouseQueries(*response, request);
     });
+}
+
+Status SchemaHelper::get_tablet_reshard_jobs_info(const SchemaScannerState& state, const TTabletReshardJobsRequest& req,
+                                                  TTabletReshardJobsResponse* res) {
+    return _call_rpc(state,
+                     [&req, &res](FrontendServiceConnection& client) { client->getTabletReshardJobsInfo(*res, req); });
 }
 
 void fill_data_column_with_null(Column* data_column) {

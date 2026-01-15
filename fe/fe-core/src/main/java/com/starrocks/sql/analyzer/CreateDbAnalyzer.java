@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -34,7 +35,8 @@ public class CreateDbAnalyzer {
         String catalogName = statement.getCatalogName();
         if (Strings.isNullOrEmpty(catalogName)) {
             catalogName = context.getCurrentCatalog();
-            statement.setCatalogName(catalogName);
+            String normalizedCatalogName = Util.normalizeName(catalogName);
+            statement.setCatalogName(normalizedCatalogName);
         }
 
         MetaUtils.checkCatalogExistAndReport(catalogName);

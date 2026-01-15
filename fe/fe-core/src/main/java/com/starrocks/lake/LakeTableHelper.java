@@ -214,12 +214,12 @@ public class LakeTableHelper {
      * @param table the table to restore column unique id
      */
     public static void restoreColumnUniqueIdIfNeeded(OlapTable table) {
-        for (MaterializedIndexMeta indexMeta : table.getIndexIdToMeta().values()) {
+        for (MaterializedIndexMeta indexMeta : table.getIndexMetaIdToMeta().values()) {
             List<Column> indexMetaSchema = indexMeta.getSchema();
             // check and restore column unique id for each schema
             if (restoreColumnUniqueId(indexMetaSchema)) {
-                LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
-                        table.getName(), indexMeta.getIndexId(), indexMetaSchema.size());
+                LOG.info("Column unique ids in table {} with index meta {} have been restored, columns size: {}",
+                        table.getName(), indexMeta.getIndexMetaId(), indexMetaSchema.size());
             }
         }
     }
@@ -257,6 +257,11 @@ public class LakeTableHelper {
                 sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
                 sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
                 sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
+    }
+
+    // for now, only loading txn and compaction txn support combined txn log
+    public static boolean isTransactionSupportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return isLoadingTransaction(sourceType) || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION;
     }
 
     // if one of the tables in tableIdList is LakeTable with file bundling, return true

@@ -20,10 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -35,10 +31,14 @@ import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SinglePartitionDesc;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.NotImplementedException;
@@ -559,8 +559,7 @@ public class ListPartitionInfo extends PartitionInfo {
                     }
                     this.idToIsTempPartition.put(partitionId, isTempPartition);
                     super.addPartition(partitionId, partitionDesc.getPartitionDataProperty(),
-                            partitionDesc.getReplicationNum(), partitionDesc.isInMemory(),
-                            partitionDesc.getDataCacheInfo());
+                            partitionDesc.getReplicationNum(), partitionDesc.getDataCacheInfo());
                 }
             }
         } catch (Exception e) {
@@ -575,8 +574,7 @@ public class ListPartitionInfo extends PartitionInfo {
         long partitionId = partition.getId();
         this.idToIsTempPartition.put(partitionId, partitionPersistInfo.isTempPartition());
         super.addPartition(partitionId, partitionPersistInfo.getDataProperty(),
-                partitionPersistInfo.getReplicationNum(), partitionPersistInfo.isInMemory(),
-                partitionPersistInfo.getDataCacheInfo());
+                partitionPersistInfo.getReplicationNum(), partitionPersistInfo.getDataCacheInfo());
 
         List<List<String>> multiValues = partitionPersistInfo.getMultiValues();
         if (multiValues != null && multiValues.size() > 0) {
@@ -608,9 +606,9 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(Map<ColumnId, Column> idToColumn, long partitionId, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, DataCacheInfo dataCacheInfo, List<String> values,
+                             short replicationNum, DataCacheInfo dataCacheInfo, List<String> values,
                              List<List<String>> multiValues) throws AnalysisException {
-        super.addPartition(partitionId, dataProperty, replicationNum, isInMemory, dataCacheInfo);
+        super.addPartition(partitionId, dataProperty, replicationNum, dataCacheInfo);
         if (multiValues != null && !multiValues.isEmpty()) {
             this.idToMultiValues.put(partitionId, multiValues);
             this.setMultiLiteralExprValues(idToColumn, partitionId, multiValues);
@@ -631,7 +629,7 @@ public class ListPartitionInfo extends PartitionInfo {
             idToValues.put(partitionId, Collections.emptyList());
             idToLiteralExprValues.put(partitionId, Collections.emptyList());
         }
-        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum), false,
+        super.addPartition(partitionId, new DataProperty(TStorageMedium.HDD), Short.valueOf(replicateNum),
                 new DataCacheInfo(true, false));
     }
 

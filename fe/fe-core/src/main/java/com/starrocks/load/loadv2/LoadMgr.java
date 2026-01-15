@@ -144,11 +144,10 @@ public class LoadMgr implements MemoryTrackable {
                         "There are more than " + Config.desired_max_waiting_jobs + " load jobs in waiting queue, "
                                 + "please retry later.");
             }
-            createLoadJob(loadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         } finally {
             writeUnlock();
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
 
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
@@ -253,7 +252,8 @@ public class LoadMgr implements MemoryTrackable {
                                                EstimateStats estimateStats,
                                                long timeout,
                                                long warehouseId,
-                                               Coordinator coordinator) throws StarRocksException {
+                                               Coordinator coordinator,
+                                               InsertLoadTxnCallback insertLoadTxnCallback) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -263,19 +263,15 @@ public class LoadMgr implements MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
-                    createTimestamp, timeout, warehouseId, coordinator);
+                    createTimestamp, timeout, warehouseId, coordinator, insertLoadTxnCallback);
             loadJob.setLoadFileInfo(estimateStats.estimateFileNum, estimateStats.estimateFileSize);
             loadJob.setEstimateScanRow(estimateStats.estimateScanRows);
             loadJob.setTransactionId(txnId);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
-        addLoadJob(loadJob);
-        if (!loadJob.isCompleted()) {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
-        }
         // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         return loadJob;
     }
 
@@ -329,7 +325,12 @@ public class LoadMgr implements MemoryTrackable {
                 .build());
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -345,7 +346,12 @@ public class LoadMgr implements MemoryTrackable {
 
         if (isJobExpired(job, System.currentTimeMillis())) {
             LOG.info("remove expired job: {}", job);
-            unprotectedRemoveJobReleatedMeta(job);
+            writeLock();
+            try {
+                unprotectedRemoveJobReleatedMeta(job);
+            } finally {
+                writeUnlock();
+            }
         }
     }
 
@@ -389,15 +395,18 @@ public class LoadMgr implements MemoryTrackable {
 
         // 2. remove from dbIdToLabelToLoadJobs
         Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
-        List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
-        sameLabelJobs.remove(job);
-        if (sameLabelJobs.isEmpty()) {
-            labelToLoadJobs.remove(label);
+        if (labelToLoadJobs != null) {
+            List<LoadJob> sameLabelJobs = labelToLoadJobs.get(label);
+            if (sameLabelJobs != null) {
+                sameLabelJobs.remove(job);
+                if (sameLabelJobs.isEmpty()) {
+                    labelToLoadJobs.remove(label);
+                }
+            }
+            if (labelToLoadJobs.isEmpty()) {
+                dbIdToLabelToLoadJobs.remove(dbId);
+            }
         }
-        if (labelToLoadJobs.isEmpty()) {
-            dbIdToLabelToLoadJobs.remove(dbId);
-        }
-
         // 3. remove spark launcher log
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
@@ -473,13 +482,31 @@ public class LoadMgr implements MemoryTrackable {
             // remove the ones that finished earlier
             int numJobsToRemove = idToLoadJob.size() - Config.label_keep_max_num;
             if (numJobsToRemove > 0) {
-                LOG.info("remove {} jobs from {}", numJobsToRemove, jobs.size());
+                LOG.debug("remove {} jobs from {}", numJobsToRemove, jobs.size());
                 Iterator<LoadJob> iterator = jobs.iterator();
                 for (int i = 0; i != numJobsToRemove && iterator.hasNext(); ++i) {
                     LoadJob job = iterator.next();
-                    LOG.info("remove redundant job: {}", job.getLabel());
+                    LOG.debug("remove redundant job: {}", job.getLabel());
                     unprotectedRemoveJobReleatedMeta(job);
                 }
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void removeLoadJobsByDb(long dbId) {
+        writeLock();
+        try {
+            // Get all jobs belonging to the database
+            List<LoadJob> jobsToRemove = idToLoadJob.values().stream()
+                    .filter(job -> job.getDbId() == dbId)
+                    .collect(Collectors.toList());
+
+            // Remove each job
+            for (LoadJob job : jobsToRemove) {
+                LOG.info("remove load job {} of database {}", job.getLabel(), dbId);
+                unprotectedRemoveJobReleatedMeta(job);
             }
         } finally {
             writeUnlock();

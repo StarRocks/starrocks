@@ -345,35 +345,35 @@ select count(1) from test_mv13;
 -- result:
 29
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
+function: print_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
 -- result:
-None
+True
 -- !result
-select dt, s1 from test_mv1 order by 1;
+select dt, s1 from test_mv1 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
@@ -386,14 +386,14 @@ select dt, s1 from test_mv1 order by 1;
 2024-03-18	16
 2024-04-10	131
 -- !result
-select dt, s1 from test_mv2 order by 1;
+select dt, s1 from test_mv2 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
 2024-03-12	4
 2024-03-13	7
 -- !result
-select dt, s1 from test_mv3 order by 1;
+select dt, s1 from test_mv3 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
@@ -402,28 +402,28 @@ select dt, s1 from test_mv3 order by 1;
 2024-03-14	8
 2024-04-10	131
 -- !result
-select dt, s1 from test_mv4 order by 1;
+select dt, s1 from test_mv4 order by 1, 2;
 -- result:
 2024-03-16	13
 2024-03-17	14
 2024-03-18	16
 -- !result
-select dt, s1 from test_mv5 order by 1;
+select dt, s1 from test_mv5 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-18	16
 2024-04-10	131
 -- !result
-select dt, s1 from test_mv6 order by 1;
+select dt, s1 from test_mv6 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
 2024-03-12	4
 -- !result
-select dt, province from test_mv7 order by 1;
+select dt, province from test_mv7 order by 1, 2;
 -- result:
-2024-01-01	guangdong
 2024-01-01	beijing
+2024-01-01	guangdong
 2024-01-02	guangdong
 -- !result
 select dt, count(1) from test_mv11 group by dt order by 1;
@@ -649,39 +649,39 @@ select count(1) from test_mv13;
 -- result:
 29
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
+function: print_hit_materialized_view("select dt, province, sum(age) from u7 group by dt, province;", "test_mv7")
 -- result:
-None
+True
 -- !result
-select dt, s1 from test_mv1 order by 1;
+select dt, s1 from test_mv1 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
@@ -694,14 +694,14 @@ select dt, s1 from test_mv1 order by 1;
 2024-03-18	16
 2024-04-10	131
 -- !result
-select dt, s1 from test_mv2 order by 1;
+select dt, s1 from test_mv2 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
 2024-03-12	4
 2024-03-13	7
 -- !result
-select dt, s1 from test_mv3 order by 1;
+select dt, s1 from test_mv3 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2
@@ -710,19 +710,19 @@ select dt, s1 from test_mv3 order by 1;
 2024-03-14	8
 2024-04-10	131
 -- !result
-select dt, s1 from test_mv4 order by 1;
+select dt, s1 from test_mv4 order by 1, 2;
 -- result:
 2024-03-16	13
 2024-03-17	14
 2024-03-18	16
 -- !result
-select dt, s1 from test_mv5 order by 1;
+select dt, s1 from test_mv5 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-18	16
 2024-04-10	131
 -- !result
-select dt, s1 from test_mv6 order by 1;
+select dt, s1 from test_mv6 order by 1, 2;
 -- result:
 2024-03-10	1
 2024-03-11	2

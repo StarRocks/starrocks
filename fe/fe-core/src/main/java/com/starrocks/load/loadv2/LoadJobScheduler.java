@@ -64,7 +64,7 @@ public class LoadJobScheduler extends FrontendDaemon {
     private LinkedBlockingQueue<LoadJob> needScheduleJobs = Queues.newLinkedBlockingQueue();
 
     public LoadJobScheduler() {
-        super("Load job scheduler", Config.load_checker_interval_second * 1000L);
+        super("load-job-scheduler", Config.load_checker_interval_second * 1000L);
     }
 
     @Override

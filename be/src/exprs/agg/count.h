@@ -92,7 +92,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
-        this->data(state).count += input_column->get_data()[row_num];
+        this->data(state).count += input_column->immutable_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -124,8 +124,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* column = down_cast<Int64Column*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* column = down_cast<Int64Column*>(dst.get());
         column->get_data().assign(chunk_size, 1);
     }
 
@@ -298,7 +298,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
-        this->data(state).count += input_column->get_data()[row_num];
+        this->data(state).count += input_column->immutable_data()[row_num];
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -330,8 +330,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* column = down_cast<Int64Column*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* column = down_cast<Int64Column*>(dst.get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if (nullable_column->has_null()) {

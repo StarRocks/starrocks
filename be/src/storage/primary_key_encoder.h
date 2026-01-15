@@ -17,8 +17,79 @@
 #include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "gutil/endian.h"
 
 namespace starrocks {
+
+// Utility functions for encoding various data types with order-preserving encoding
+namespace encoding_utils {
+
+// Endian conversion utilities
+template <class UT>
+inline UT to_bigendian(UT v) {
+    return v;
+}
+
+template <>
+inline uint8_t to_bigendian(uint8_t v) {
+    return v;
+}
+
+template <>
+inline uint16_t to_bigendian(uint16_t v) {
+    return BigEndian::FromHost16(v);
+}
+
+template <>
+inline uint32_t to_bigendian(uint32_t v) {
+    return BigEndian::FromHost32(v);
+}
+
+template <>
+inline uint64_t to_bigendian(uint64_t v) {
+    return BigEndian::FromHost64(v);
+}
+
+template <>
+inline uint128_t to_bigendian(uint128_t v) {
+    return BigEndian::FromHost128(v);
+}
+
+// Integral encoding with order-preserving transformation
+template <class T>
+inline void encode_integral(const T& v, std::string* dest) {
+    if constexpr (std::is_signed<T>::value) {
+        typedef typename std::make_unsigned<T>::type UT;
+        UT uv = v;
+        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
+        uv = to_bigendian(uv);
+        dest->append(reinterpret_cast<const char*>(&uv), sizeof(uv));
+    } else {
+        T nv = to_bigendian(v);
+        dest->append(reinterpret_cast<const char*>(&nv), sizeof(nv));
+    }
+}
+
+// Integral decoding with order-preserving transformation
+template <class T>
+inline void decode_integral(Slice* src, T* v) {
+    if constexpr (std::is_signed<T>::value) {
+        typedef typename std::make_unsigned<T>::type UT;
+        UT uv = *(UT*)(src->data);
+        uv = to_bigendian(uv);
+        uv ^= static_cast<UT>(1) << (sizeof(UT) * 8 - 1);
+        *v = uv;
+    } else {
+        T nv = *(T*)(src->data);
+        *v = to_bigendian(nv);
+    }
+    src->remove_prefix(sizeof(T));
+}
+
+// Slice encoding with SSE optimizations for middle fields
+void encode_slice(const Slice& s, std::string* dst, bool is_last);
+
+} // namespace encoding_utils
 
 // Utility methods to encode composite primary key into single binary key, while
 // preserving original sort order.

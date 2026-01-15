@@ -15,14 +15,15 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.TableName;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+import java.util.Map;
 
 public class CreateViewStmt extends DdlStmt {
-    private final TableName tableName;
+    private TableRef tableRef;
     private final List<ColWithComment> colWithComments;
     private final boolean ifNotExists;
     private final boolean replace;
@@ -33,39 +34,57 @@ public class CreateViewStmt extends DdlStmt {
     //Resolved by Analyzer
     protected List<Column> columns;
     private String inlineViewDef;
+    private Map<String, String> properties;
 
     public CreateViewStmt(boolean ifNotExists,
                           boolean replace,
-                          TableName tableName,
+                          TableRef tableRef,
                           List<ColWithComment> colWithComments,
                           String comment,
                           boolean security,
                           QueryStatement queryStmt,
                           NodePosition pos) {
+        this(ifNotExists, replace, tableRef, colWithComments, comment, security, queryStmt, pos, Maps.newHashMap());
+    }
+
+    public CreateViewStmt(boolean ifNotExists,
+                          boolean replace,
+                          TableRef tableRef,
+                          List<ColWithComment> colWithComments,
+                          String comment,
+                          boolean security,
+                          QueryStatement queryStmt,
+                          NodePosition pos,
+                          Map<String, String> properties) {
         super(pos);
         this.ifNotExists = ifNotExists;
         this.replace = replace;
-        this.tableName = tableName;
+        this.tableRef = tableRef;
         this.colWithComments = colWithComments;
         this.comment = Strings.nullToEmpty(comment);
         this.security = security;
         this.queryStatement = queryStmt;
+        this.properties = properties != null ? properties : Maps.newHashMap();
+    }
+
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public String getCatalog() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDbName() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTable() {
-        return tableName.getTbl();
-    }
-
-    public TableName getTableName() {
-        return tableName;
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public List<ColWithComment> getColWithComments() {
@@ -92,6 +111,14 @@ public class CreateViewStmt extends DdlStmt {
         return queryStatement;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
     public void setColumns(List<Column> columns) {
         this.columns = columns;
     }
@@ -109,6 +136,6 @@ public class CreateViewStmt extends DdlStmt {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateViewStatement(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitCreateViewStatement(this, context);
     }
 }

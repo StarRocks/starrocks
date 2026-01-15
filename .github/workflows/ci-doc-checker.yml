@@ -75,7 +75,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -92,16 +92,31 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
-          node-version: 18
+          node-version: 22
 
-      - uses: articulate/actions-markdownlint@v1.1.0
+      - uses: tj-actions/changed-files@v47
+        id: changed-files
         with:
-          config: "docs/.markdownlint.json"
-          files: 'docs/**/*.md'
-          ignore: node_modules
-          version: 0.28.1
+          files: |
+            docs/en/**/*.md
+            docs/ja/**/*.md
+            docs/zh/**/*.md
+          separator: ","
+      - name: List all changed files
+        env:
+          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          for file in ${ALL_CHANGED_FILES}; do
+            echo "$file was changed"
+          done
+      - uses: DavidAnson/markdownlint-cli2-action@v21
+        if: steps.changed-files.outputs.any_changed == 'true'
+        with:
+          config: 'docs/.markdownlint.json'
+          globs: ${{ steps.changed-files.outputs.all_changed_files }}
+          separator: ","
 
       - name: docusaurus-mdx-checker
         if: always()
@@ -121,6 +136,7 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=8192
           DISABLE_VERSIONING: true
+          DOCUSAURUS_IGNORE_SSG_WARNINGS: true
         working-directory: ./docs/docusaurus
         run: |
           rm -rf ./docs

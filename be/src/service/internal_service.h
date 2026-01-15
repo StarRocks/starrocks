@@ -36,6 +36,7 @@
 
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
+#include <google/protobuf/service.h>
 
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -197,6 +198,8 @@ public:
     void update_transaction_state(google::protobuf::RpcController* controller,
                                   const PUpdateTransactionStateRequest* request,
                                   PUpdateTransactionStateResponse* response, google::protobuf::Closure* done) override;
+    void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
+                google::protobuf::Closure* done) override;
 
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
@@ -233,7 +236,8 @@ private:
     void _get_file_schema(google::protobuf::RpcController* controller, const PGetFileSchemaRequest* request,
                           PGetFileSchemaResult* response, google::protobuf::Closure* done);
 
-    Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request);
+    Status _exec_plan_fragment(brpc::Controller* cntl, const PExecPlanFragmentRequest* request,
+                               PExecPlanFragmentResult* response);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
@@ -248,6 +252,9 @@ private:
     // short circuit
     Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
                                PExecShortCircuitResult* response);
+
+    Status _prepare_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
+                                              const TExecPlanFragmentParams& t_unique_request);
 
 protected:
     ExecEnv* _exec_env;

@@ -108,8 +108,10 @@ Status StreamPipelineTest::prepare() {
 
 Status StreamPipelineTest::execute() {
     VLOG_ROW << "ExecutePipeline";
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        CHECK_OK(driver->prepare(state));
+        CHECK_OK(driver->prepare_local_state(state));
+    });
 
     // CHECK_OK(_fragment_ctx->submit_active_drivers(_exec_env->wg_driver_executor()));
     _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {

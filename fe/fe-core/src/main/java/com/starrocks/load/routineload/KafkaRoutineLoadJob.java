@@ -43,7 +43,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -57,7 +56,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -68,12 +66,12 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.Load;
-import com.starrocks.load.RoutineLoadDesc;
-import com.starrocks.qe.OriginStatement;
+import com.starrocks.metric.RoutineLoadLagTimeMetricMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -82,12 +80,10 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -303,7 +299,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
                 // change job state to running
                 if (result.size() != 0) {
-                    unprotectUpdateState(JobState.RUNNING, null, false);
+                    unprotectUpdateState(JobState.RUNNING, null);
                 }
             } else {
                 LOG.debug("Ignore to divide routine load job while job state {}", state);
@@ -368,13 +364,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
 
         // For compatible reason, the default behavior of empty load is still returning
-        // "No partitions have data available for loading" and abort transaction.
+        // "No rows were imported from upstream" and abort transaction.
         // In this situation, we also need update commit info.
         if (txnStatusChangeReason != null &&
-                txnStatusChangeReason == TxnStatusChangeReason.NO_PARTITIONS) {
+                txnStatusChangeReason == TxnStatusChangeReason.NO_ROWS_IMPORTED) {
             // Because the max_filter_ratio of routine load task is always 1.
             // Therefore, under normal circumstances, routine load task will not return the error "too many filtered rows".
-            // If no data is imported, the error "No partitions have data available for loading" may only be returned.
+            // If no data is imported, the error "No rows were imported from upstream" may only be returned.
             // In this case, the status of the transaction is ABORTED,
             // but we still need to update the offset to skip these error lines.
             Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.ABORTED,
@@ -448,8 +444,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                             .build(), e);
                     if (this.state == JobState.NEED_SCHEDULE) {
                         unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg),
-                                false /* not replay */);
+                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                     }
                     return false;
                 }
@@ -505,6 +500,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 Long.valueOf((totalRows - errorRows - unselectedRows) * 1000 / totalTaskExcutionTimeMs));
         summary.put("committedTaskNum", Long.valueOf(committedTaskNum));
         summary.put("abortedTaskNum", Long.valueOf(abortedTaskNum));
+        summary.put("partitionLagTime", new HashMap<>(getRoutineLoadLagTime()));
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(summary);
     }
@@ -567,7 +563,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 // check file
                 if (!smallFileMgr.containsFile(dbId, KAFKA_FILE_CATALOG, file)) {
                     throw new DdlException("File " + file + " does not exist in db "
-                            + dbId + " with globalStateMgr: " + KAFKA_FILE_CATALOG);
+                            + dbId + " with catalog: " + KAFKA_FILE_CATALOG);
                 }
             }
         }
@@ -770,69 +766,54 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-        Text.writeString(out, brokerList);
-        Text.writeString(out, topic);
-
-        out.writeInt(customKafkaPartitions.size());
-        for (Integer partitionId : customKafkaPartitions) {
-            out.writeInt(partitionId);
+    protected void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties) throws DdlException {
+        if (!dataSourceProperties.hasAnalyzedProperties()) {
+            return;
         }
 
-        out.writeInt(customProperties.size());
-        for (Map.Entry<String, String> property : customProperties.entrySet()) {
-            Text.writeString(out, "property." + property.getKey());
-            Text.writeString(out, property.getValue());
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        brokerList = Text.readString(in);
-        topic = Text.readString(in);
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            customKafkaPartitions.add(in.readInt());
-        }
-
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            String propertyKey = Text.readString(in);
-            String propertyValue = Text.readString(in);
-            if (propertyKey.startsWith("property.")) {
-                this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
+        // check kafka partition offsets
+        // If customKafkaPartition is specified, only the specific partitions can be modified
+        // otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
+        List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
+        if (customKafkaPartitions != null && !customKafkaPartitions.isEmpty()) {
+            for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
+                if (!customKafkaPartitions.contains(pair.first)) {
+                    throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
+                }
+            }
+        } else {
+            // check if partition is validate
+            try {
+                checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+            } catch (StarRocksException e) {
+                throw new DdlException("The specified partition is not in the consumed partitions ", e);
             }
         }
-    }
 
-    /**
-     * add extra parameter check for changing kafka offset
-     * 1. if customKafkaParition is specified, only the specific partitions can be modified
-     * 2. otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
-     */
-    @Override
-    public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
-                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatement originStatement,
-                          boolean isReplay) throws DdlException {
-        if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
-            List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
-            if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
-                for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
-                    if (!customKafkaPartitions.contains(pair.first)) {
-                        throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
-                    }
-                }
-            } else {
-                // check if partition is validate
-                try {
-                    checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
-                } catch (StarRocksException e) {
-                    throw new DdlException("The specified partition is not in the consumed partitions ", e);
+        Map<String, String> changedProperties = dataSourceProperties.getCustomKafkaProperties();
+        // check kafka default offsets
+        if (changedProperties.containsKey(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS)) {
+            try {
+                CreateRoutineLoadStmt.getKafkaOffset(
+                        changedProperties.get(CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS));
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
+
+        // check file existence
+        SmallFileMgr smallFileMgr = GlobalStateMgr.getCurrentState().getSmallFileMgr();
+        for (Map.Entry<String, String> entry : changedProperties.entrySet()) {
+            if (entry.getValue().startsWith("FILE:")) {
+                // convert FILE:file_name -> FILE:file_id:md5
+                String file = entry.getValue().substring(entry.getValue().indexOf(":") + 1);
+                // check file
+                if (!smallFileMgr.containsFile(dbId, KAFKA_FILE_CATALOG, file)) {
+                    throw new DdlException("File " + file + " does not exist in db "
+                            + dbId + " with catalog: " + KAFKA_FILE_CATALOG);
                 }
             }
         }
-        super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }
 
     @Override
@@ -888,5 +869,69 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             }
         }
         updateSubstate(JobSubstate.STABLE, null);
+    }
+
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+        super.afterVisible(txnState, txnOperated);
+        // Update lag time metrics when Kafka transaction becomes visible
+        if (Config.enable_routine_load_lag_time_metrics) {
+            updateLagTimeMetricsFromProgress();
+        }
+    }
+
+    /**
+     * Update lag time metrics using current Kafka progress
+     */
+    private void updateLagTimeMetricsFromProgress() {
+        try {
+            KafkaProgress progress = (KafkaProgress) getTimestampProgress();
+            if (progress == null) {
+                LOG.warn("Progres is null for Kafka job {}:{}", id, name);
+                return;
+            }
+            Map<Integer, Long> partitionTimestamps = progress.getPartitionIdToOffset();
+            Map<Integer, Long> partitionLagTimes = Maps.newHashMap();
+            
+            long now = System.currentTimeMillis();
+            for (Map.Entry<Integer, Long> entry : partitionTimestamps.entrySet()) {
+                int partition = entry.getKey();
+                Long timestampValue = entry.getValue();
+                long lag = 0L;
+                //   Check for clock drift (future timestamps)
+                if (timestampValue > now) {
+                    long clockDrift = timestampValue - now;
+                    LOG.warn("Clock drift detected for job {} ({}) partition {}: " +
+                            "timestamp {}ms is {}ms ahead of current time {}ms. ",
+                            id, name, partition, timestampValue, clockDrift, now);
+                } else {
+                    lag = (now - timestampValue) / 1000; // convert to seconds
+                } 
+                partitionLagTimes.put(partition, lag);
+            }
+            
+            if (!partitionLagTimes.isEmpty()) {
+                RoutineLoadLagTimeMetricMgr.getInstance()
+                        .updateRoutineLoadLagTimeMetric(this.getDbId(), this.getName(), partitionLagTimes);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to update lag time metrics for Kafka job {} ({}): {}", id, name, e.getMessage(), e);
+        }
+    }
+
+    private Map<Integer, Long> getRoutineLoadLagTime() {
+        try {
+            RoutineLoadLagTimeMetricMgr metricMgr = RoutineLoadLagTimeMetricMgr.getInstance();
+            Map<Integer, Long> lagTimes = metricMgr.getPartitionLagTimes(this.getDbId(), this.getName());
+            return lagTimes != null ? lagTimes : Maps.newHashMap();
+        } catch (Exception e) {
+            LOG.warn("Failed to get routine load lag time for job {} ({}): {}", id, name, e.getMessage(), e);
+            // Return empty map as fallback
+            return Maps.newHashMap();
+        }
+    }
+
+    protected Long getKafkaDefaultOffSet() {
+        return kafkaDefaultOffSet;
     }
 }

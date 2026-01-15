@@ -48,6 +48,7 @@ using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
 struct ConnectorScanOperatorMemShareArbitrator;
+class GlobalLateMaterilizationContextMgr;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -71,6 +72,7 @@ public:
     }
 
     void count_down_fragments();
+    void count_down_fragments(QueryContextManager* query_context_mgr);
     int num_active_fragments() const { return _num_active_fragments.load(); }
     bool has_no_active_instances() { return _num_active_fragments.load() == 0; }
 
@@ -174,6 +176,7 @@ public:
                           std::optional<double> spill_mem_limit = std::nullopt, workgroup::WorkGroup* wg = nullptr,
                           RuntimeState* state = nullptr, int connector_scan_node_number = 1);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
+    const std::shared_ptr<MemTracker>& mem_tracker() const { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     Status init_spill_manager(const TQueryOptions& query_options);
@@ -208,6 +211,10 @@ public:
     }
 
     void update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes);
+    void incr_read_stats(int64_t read_local_cnt, int64_t read_remote_cnt) {
+        _total_read_local_cnt += read_local_cnt;
+        _total_read_remote_cnt += read_remote_cnt;
+    }
     void update_push_rows_stats(int32_t plan_node_id, int64_t push_rows) {
         auto it = _node_exec_stats.find(plan_node_id);
         if (it != _node_exec_stats.end()) {
@@ -255,6 +262,8 @@ public:
     int64_t get_scan_bytes() const { return _total_scan_bytes; }
     std::atomic_int64_t* mutable_total_spill_bytes() { return &_total_spill_bytes; }
     int64_t get_spill_bytes() { return _total_spill_bytes; }
+    int64_t get_read_local_cnt() { return _total_read_local_cnt; }
+    int64_t get_read_remote_cnt() { return _total_read_remote_cnt; }
     int64_t get_transmitted_bytes() { return _total_transmitted_bytes; }
 
     // Query start time, used to check how long the query has been running
@@ -293,6 +302,10 @@ public:
         return _connector_scan_operator_mem_share_arbitrator;
     }
 
+    GlobalLateMaterilizationContextMgr* global_late_materialization_ctx_mgr() const {
+        return _global_late_materialization_ctx_mgr;
+    }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -300,6 +313,7 @@ private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
+    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
@@ -333,6 +347,8 @@ private:
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
     std::atomic<int64_t> _total_spill_bytes = 0;
+    std::atomic<int64_t> _total_read_local_cnt = 0;
+    std::atomic<int64_t> _total_read_remote_cnt = 0;
     std::atomic<int64_t> _total_transmitted_bytes = 0;
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
@@ -379,10 +395,10 @@ private:
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
-    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
-
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
+
+    GlobalLateMaterilizationContextMgr* _global_late_materialization_ctx_mgr = nullptr;
 };
 
 // TODO: use brpc::TimerThread refactor QueryContext

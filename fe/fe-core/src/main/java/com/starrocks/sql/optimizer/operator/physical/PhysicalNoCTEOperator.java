@@ -67,4 +67,9 @@ public class PhysicalNoCTEOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId);
     }
+
+    @Override
+    public String toString() {
+        return "PhysicalNoCTEOperator[" + cteId + "]";
+    }
 }

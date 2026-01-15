@@ -54,6 +54,7 @@ import com.github.benmanes.caffeine.cache.Weigher;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.gcp.GCPCloudConfigurationProvider;
 import com.starrocks.fs.azure.AzBlobURI;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -125,6 +126,10 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         wrappedIO = new ResolvingFileIO();
         wrappedIO.initialize(properties);
 
+        if (conf != null) {
+            wrappedIO.setConf(conf.get());
+        }
+
         if (ENABLE_DISK_CACHE) {
             this.fileContentCache = TwoLevelCacheHolder.INSTANCE;
         } else {
@@ -154,6 +159,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public void setConf(Configuration conf) {
         this.conf = new SerializableConfiguration(conf)::get;
+        if (wrappedIO != null) {
+            wrappedIO.setConf(conf);
+        }
     }
 
     @Override
@@ -207,8 +215,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
         // build Hadoop configuration from properties for HadoopFileIO
         Configuration copied = new Configuration(conf.get());
         for (Map.Entry<String, String> entry : properties.entrySet()) {
-            // Handle Azure ADLS SAS token
             if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
+                // Handle Azure ADLS SAS token
                 String endpoint = entry.getKey().substring(ADLS_SAS_TOKEN.length());
                 copied.set(String.format("fs.azure.account.auth.type.%s", endpoint),
                         "SAS");
@@ -216,10 +224,19 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                         entry.getValue());
                 return copied;
             } else if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && (entry.getKey().endsWith(BLOB_ENDPOINT))) {
+                // Handle Azure Blob SAS token
                 AzBlobURI uri = AzBlobURI.parse(path);
                 String key =
                         String.format("fs.azure.sas.%s.%s.blob.core.windows.net", uri.getContainer(), uri.getAccount());
                 copied.set(key, entry.getValue());
+                return copied;
+            } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
+                // Handle GCS access token
+                copied.set("fs.gs.auth.access.token.provider.impl", GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, entry.getValue());
+                copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
+                        properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
+                                String.valueOf(Long.MAX_VALUE)));
                 return copied;
             }
         }

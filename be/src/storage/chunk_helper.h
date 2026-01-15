@@ -14,17 +14,12 @@
 
 #pragma once
 
+// NOTE: This file is included by 200+ files. Be cautious when adding more includes to avoid unnecessary recompilation or increased build dependencies.
 #include <memory>
-#include <mutex>
-#include <queue>
 
-#include "column/column_visitor.h"
-#include "column/column_visitor_adapter.h"
-#include "column/datum.h"
-#include "column/fixed_length_column_base.h"
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
-#include "storage/olap_type_infra.h"
 #include "tablet_schema.h"
 
 namespace starrocks {
@@ -65,16 +60,29 @@ public:
 
     static ColumnId max_column_id(const Schema& schema);
 
-    // Create an empty chunk according to the |schema| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
-
-    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
-    static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+    // a wrapper of new_chunk_pooled with memory check
+    static StatusOr<Chunk*> new_chunk_pooled_checked(const Schema& schema, size_t n);
 
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
+    // Create an empty chunk according to the |schema| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(const Schema& schema, size_t n);
+    // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
+    static ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    // a wrapper of new_chunk with memory check
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<ChunkUniquePtr> new_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
 
-    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+    // Create an empty mutable chunk according to the |slots| and reserve it of size |n|.
+    static MutableChunkPtr new_mutable_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static MutableChunkPtr new_mutable_chunk(const Schema& schema, size_t n);
+    static MutableChunkPtr new_mutable_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    // a wrapper of new_mutable_chunk with memory check
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const Schema& schema, size_t n);
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static StatusOr<MutableChunkPtr> new_mutable_chunk_checked(const TupleDescriptor& tuple_desc, size_t n);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
@@ -219,6 +227,31 @@ private:
     SegmentedColumns _columns;
 
     const size_t _segment_size;
+};
+
+class ExprContext;
+/**
+ * RAII guard for evaluating common expressions on a chunk.
+ * 
+ * This class provides automatic scope management for evaluating common expressions
+ * that are temporarily used during expression computation. Common expressions are
+ * computed once and reused across multiple expressions to avoid redundant computation,
+ * but they are only needed during the computation phase and should be cleaned up
+ * from the chunk after computation completes.
+ * 
+ * The destructor automatically removes the common expressions from the chunk
+ * to prevent memory leaks and ensure proper cleanup.
+ */
+class CommonExprEvalScopeGuard {
+public:
+    CommonExprEvalScopeGuard(const ChunkPtr& chunk, const std::map<SlotId, ExprContext*>& common_expr_ctxs);
+    ~CommonExprEvalScopeGuard();
+
+    Status evaluate();
+
+private:
+    const ChunkPtr& _chunk;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
 };
 
 } // namespace starrocks

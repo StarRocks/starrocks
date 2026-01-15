@@ -33,6 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
+class ParallelPublishContext;
 
 class TabletLoader {
 public:
@@ -100,14 +101,16 @@ struct IOStat {
     uint64_t flush_or_wal_cost = 0;
     uint64_t compaction_cost = 0;
     uint64_t reload_meta_cost = 0;
+    uint64_t total_file_size = 0;
 
     std::string print_str() {
         return fmt::format(
                 "IOStat read_iops: {} filtered_kv_cnt: {} get_in_shard_cost: {} read_io_bytes: {} "
                 "l0_write_cost: {} "
-                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {}",
+                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} total_file_size: "
+                "{}",
                 read_iops, filtered_kv_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost,
-                flush_or_wal_cost, compaction_cost, reload_meta_cost);
+                flush_or_wal_cost, compaction_cost, reload_meta_cost, total_file_size);
     }
 };
 
@@ -727,7 +730,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, ParallelPublishContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array
@@ -781,7 +784,8 @@ public:
     // just for unit test
     bool has_bf() { return _l1_vec.empty() ? false : _l1_vec[0]->has_bf(); }
 
-    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex);
+    Status major_compaction(DataDir* data_dir, int64_t tablet_id, std::shared_timed_mutex* mutex,
+                            IOStat* stat = nullptr);
 
     Status TEST_major_compaction(PersistentIndexMetaPB& index_meta);
 
@@ -823,6 +827,8 @@ public:
     void test_calc_memory_usage() { return _calc_memory_usage(); }
 
     void test_force_dump();
+
+    bool need_rebuild() const { return _need_rebuild; }
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
@@ -902,6 +908,8 @@ private:
 
     size_t _get_encoded_fixed_size(const Schema& schema);
 
+    void _set_need_rebuild(bool need_rebuild) { _need_rebuild = need_rebuild; }
+
 protected:
     // index storage directory
     std::string _path;
@@ -948,6 +956,8 @@ private:
     int64_t _latest_compaction_time = 0;
     // Re-calculated when commit end
     std::atomic<size_t> _memory_usage{0};
+
+    std::atomic<bool> _need_rebuild{false};
 };
 
 } // namespace starrocks

@@ -17,6 +17,8 @@ frontends:
 compute_nodes:
   - host: 172.26.92.11
     heartbeat_service_port: 9050
+    warehouse: default_warehouse
+    cngroup: default_cngroup
   - host: 172.26.92.12
     heartbeat_service_port: 9050
 

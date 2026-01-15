@@ -1,4 +1,4 @@
--- name: test_sort_key_pri_tbl;
+-- name: test_sort_key_pri_tbl; @native
 create database sort_key_test_pri;
 -- result:
 -- !result

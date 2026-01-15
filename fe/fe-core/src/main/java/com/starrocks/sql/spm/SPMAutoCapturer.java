@@ -17,8 +17,8 @@ package com.starrocks.sql.spm;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.qe.ConnectContext;
@@ -51,7 +51,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
     private ConnectContext connect;
 
     public SPMAutoCapturer() {
-        super("SPMAutoCapturer");
+        super("spm-auto-capturer");
     }
 
     @Override
@@ -120,6 +120,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 if (tables.size() < 2) {
                     continue;
                 }
+
                 if (!tables.keySet().stream()
                         .allMatch(t -> checkPattern.matcher(t.getDb() + "." + t.getTbl()).find())) {
                     continue;

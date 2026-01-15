@@ -17,25 +17,24 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.SchemaChangeProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,7 +47,7 @@ public class ShowAlterStmtAnalyzer {
         new ShowAlterStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowAlterStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowAlterStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
@@ -81,15 +80,7 @@ public class ShowAlterStmtAnalyzer {
                 sb.append("/optimize");
             }
 
-            // create show proc stmt
-            // '/jobs/db_name/rollup|schema_change/
-            ProcNodeInterface node = null;
-            try {
-                node = ProcService.getInstance().open(sb.toString());
-            } catch (AnalysisException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_PROC_PATH, sb.toString());
-            }
-            statement.setNode(node);
+            statement.setProcPath(sb.toString());
         }
 
         public void analyzeSyntax(ShowAlterStmt statement, ConnectContext context) {
@@ -162,7 +153,8 @@ public class ShowAlterStmtAnalyzer {
                                     + "\"2019-12-02|2019-12-02 14:54:00\"");
                 }
                 try {
-                    subExpr.setChild(1, ((StringLiteral) subExpr.getChild(1)).castTo(Type.DATETIME));
+                    subExpr.setChild(1,
+                            ExprCastFunction.castTo((StringLiteral) subExpr.getChild(1), DateType.DATETIME));
                 } catch (AnalysisException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                 }
@@ -179,7 +171,7 @@ public class ShowAlterStmtAnalyzer {
             }
             if (subExpr instanceof CompoundPredicate) {
                 CompoundPredicate cp = (CompoundPredicate) subExpr;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                if (cp.getOp() != CompoundPredicate.Operator.AND) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Only allow compound predicate with operator AND");
                 }

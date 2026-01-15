@@ -23,7 +23,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterLoadAnalyzer {
 

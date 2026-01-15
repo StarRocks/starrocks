@@ -26,12 +26,11 @@ under the License.
     <parent>
         <groupId>com.starrocks</groupId>
         <artifactId>starrocks-fe</artifactId>
-        <version>3.4.0</version>
+        <version>main</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>fe-core</artifactId>
-    <version>3.4.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -40,9 +39,15 @@ under the License.
         <maven.compiler.release>17</maven.compiler.release>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-        <jacoco.version>0.8.8</jacoco.version>
+        <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
         <python>python</python>
+        
+        <!-- async-profiler in UT -->
+        <async.profiler.enabled>${env.ASYNC_PROFILER_ENABLED:-false}</async.profiler.enabled>
+        <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
+        <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
+        <async.profiler.arg></async.profiler.arg>
     </properties>
 
     <profiles>
@@ -94,9 +99,41 @@ under the License.
                 <python>${env.PYTHON}</python>
             </properties>
         </profile>
+        <profile>
+            <id>async-profiler-enabled</id>
+            <activation>
+                <property>
+                    <name>env.ASYNC_PROFILER_ENABLED</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-grammar</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-type</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-parser</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>fe-spi</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>spark-dpp</artifactId>
@@ -400,6 +437,12 @@ under the License.
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jul-to-slf4j</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.github.oshi/oshi-core -->
         <dependency>
             <groupId>com.github.oshi</groupId>
@@ -561,12 +604,6 @@ under the License.
             <groupId>com.google.cloud.bigdataoss</groupId>
             <artifactId>gcs-connector</artifactId>
             <classifier>shaded</classifier>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.antlr/antlr4-runtime -->
-        <dependency>
-            <groupId>org.antlr</groupId>
-            <artifactId>antlr4-runtime</artifactId>
         </dependency>
 
         <dependency>
@@ -881,10 +918,30 @@ under the License.
             <artifactId>zero-allocation-hashing</artifactId>
             <version>0.16</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.jacoco</groupId>
+            <artifactId>org.jacoco.agent</artifactId>
+            <version>${jacoco.version}</version>
+            <classifier>runtime</classifier>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.vertical-blank</groupId>
+            <artifactId>sql-formatter</artifactId>
+            <version>2.0.4</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.google.api-client/google-api-client -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.8.1</version>
+        </dependency>
     </dependencies>
 
     <build>
-        <finalName>starrocks-fe</finalName>
         <plugins>
             <!-- fe proto precompile plugin-->
             <plugin>
@@ -910,22 +967,47 @@ under the License.
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
+                <configuration>
+                    <dataFile>${project.build.directory}/jacoco.exec</dataFile>
+                    <outputDirectory>${project.build.directory}/jacoco-report</outputDirectory>
+                </configuration>
                 <executions>
+
                     <execution>
-                        <id>default-prepare-agent</id>
+                        <id>instrument</id>
+                        <phase>process-classes</phase>
                         <goals>
-                            <goal>prepare-agent</goal>
+                            <goal>instrument</goal>
                         </goals>
                         <configuration>
-                            <propertyName>jacocoArgLine</propertyName>
+                            <includes>
+                                <include>com/starrocks/**</include>
+                            </includes>
+                            <excludes>
+                                <exclude>com/starrocks/proto/**</exclude>
+                                <exclude>**/*$$JProtoBufClass</exclude>
+                                <exclude>**/*$$JProtoBuf*</exclude>
+                            </excludes>
+                            <append>true</append>
                         </configuration>
                     </execution>
+
                     <execution>
                         <id>default-report</id>
+                        <phase>verify</phase>
                         <goals>
                             <goal>report</goal>
                         </goals>
                     </execution>
+
+                    <execution>
+                        <id>restore</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>restore-instrumented-classes</goal>
+                        </goals>
+                    </execution>
+
                     <execution>
                         <id>default-check</id>
                         <goals>
@@ -936,11 +1018,11 @@ under the License.
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
-                                        <limit>
+                                        <!-- <limit>
                                             <counter>COMPLEXITY</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.60</minimum>
-                                        </limit>
+                                        </limit> -->
                                     </limits>
                                 </rule>
                             </rules>
@@ -973,45 +1055,24 @@ under the License.
                 </executions>
             </plugin>
 
-            <!--antlr-->
-            <plugin>
-                <groupId>org.antlr</groupId>
-                <artifactId>antlr4-maven-plugin</artifactId>
-                <version>${antlr.version}</version>
-                <executions>
-                    <execution>
-                        <id>antlr</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>antlr4</goal>
-                        </goals>
-                        <configuration>
-                            <sourceDirectory>src/main/java/com/starrocks/sql/parser</sourceDirectory>
-                            <visitor>true</visitor>
-                            <arguments>
-                                <argument>-package</argument>
-                                <argument>com.starrocks.sql.parser</argument>
-                                <argument>-o</argument>
-                                <argument>${project.build.directory}/generated-sources/antlr4/com/starrocks/sql/parser</argument>
-                            </arguments>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
             <!-- jmockit -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.22.2</version>
+                <version>${maven.surefire.plugin.version}</version>
                 <configuration>
                     <!-->set larger, eg, 3, to reduce the time or running FE unit tests<-->
                     <forkCount>${fe_ut_parallel}</forkCount>
+                    <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
+
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        ${async.profiler.arg}
                         -Xmx4096m
-                        -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
+                        -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
+                        -Duser.timezone=Asia/Shanghai
+                        -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
@@ -1073,8 +1134,6 @@ under the License.
                                 <exec executable="${ant.python}">
                                     <env key="JAVA_HOME" value="${java.home}"/>
                                     <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
-                                    <arg value="--cpp"/>
-                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                     <arg value="--java"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
@@ -1119,30 +1178,6 @@ under the License.
                 </executions>
             </plugin>
 
-            <!-- copy all dependency libs to target lib dir -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.1.1</version>
-                <executions>
-                    <execution>
-                        <id>copy-dependencies</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
-                            <overWriteReleases>false</overWriteReleases>
-                            <overWriteSnapshots>false</overWriteSnapshots>
-                            <overWriteIfNewer>true</overWriteIfNewer>
-                            <skip>${skip.plugin}</skip>
-                            <!-- exclude test only jars(junit&mysql-connector), GPL jar(mysql-connector) must be excluded in release package -->
-                            <includeScope>runtime</includeScope>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
 
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

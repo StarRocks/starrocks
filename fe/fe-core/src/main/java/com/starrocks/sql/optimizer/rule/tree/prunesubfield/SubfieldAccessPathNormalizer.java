@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.tree.prunesubfield;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
@@ -27,6 +26,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.thrift.TAccessPathType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.Type;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.text.StrTokenizer;
 
@@ -49,7 +51,7 @@ public class SubfieldAccessPathNormalizer {
 
     private static class AccessPath {
         private final ScalarOperator root;
-        private Type valueType = Type.INVALID;
+        private Type valueType = InvalidType.INVALID;
         private final List<String> paths = Lists.newArrayList();
         private final List<TAccessPathType> pathTypes = Lists.newArrayList();
 
@@ -87,7 +89,7 @@ public class SubfieldAccessPathNormalizer {
                 .sorted((o1, o2) -> Integer.compare(o2.paths.size(), o1.paths.size()))
                 .collect(Collectors.toList());
 
-        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, Type.INVALID);
+        ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName, InvalidType.INVALID);
         for (AccessPath accessPath : paths) {
             ColumnAccessPath parentPath = rootPath;
             for (int i = 0; i < accessPath.paths.size(); i++) {
@@ -128,8 +130,8 @@ public class SubfieldAccessPathNormalizer {
      */
     private Type deriverCompatibleJsonType(Type first, Type second) {
         // only json type used, other semi-type are explicit types, so we set INVALID
-        if (first == Type.INVALID || second == Type.INVALID) {
-            return Type.INVALID;
+        if (first == InvalidType.INVALID || second == InvalidType.INVALID) {
+            return InvalidType.INVALID;
         }
 
         if (first.getPrimitiveType() == second.getPrimitiveType()) {
@@ -140,7 +142,7 @@ public class SubfieldAccessPathNormalizer {
         // the be can't promise cast(cast(xx as IntermediateType) as TargetType) is same as cast(xx as TargetType)
         // e.g: cast(cast("1.1" as double) as int) is different with cast("1.1" as int)
         // so we use JSON as the compatible type
-        return Type.JSON;
+        return JsonType.JSON;
     }
 
     public boolean hasPath(ColumnRefOperator root) {
@@ -216,7 +218,7 @@ public class SubfieldAccessPathNormalizer {
                     if (isOverflown || FunctionSet.JSON_LENGTH.equals(call.getFnName())
                             || FunctionSet.GET_JSON_BOOL.equals(call.getFnName())
                             || FunctionSet.JSON_EXISTS.equals(call.getFnName())) {
-                        p.setValueType(Type.JSON);
+                        p.setValueType(JsonType.JSON);
                     } else {
                         p.setValueType(call.getType());
                     }
@@ -241,7 +243,7 @@ public class SubfieldAccessPathNormalizer {
         //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
         //  a.b.c -> [a, b, c]
         // when meet some unsupported path, return null
-        public boolean formatJsonPath(String path, List<String> result) {
+        private boolean formatJsonPath(String path, List<String> result) {
             path = StringUtils.trimToEmpty(path);
             if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path) ||
                     StringUtils.countMatches(path, "\"") % 2 != 0) {
@@ -249,7 +251,7 @@ public class SubfieldAccessPathNormalizer {
                 // unpaired quota char
                 return false;
             }
-            
+
             StrTokenizer tokenizer = new StrTokenizer(path, '.', '"');
             String[] tokens = tokenizer.getTokenArray();
 
@@ -308,6 +310,44 @@ public class SubfieldAccessPathNormalizer {
                     .map(Optional::get).forEach(accessPaths::add);
             return currentPath;
         }
+    }
+
+    // eg.
+    //  $.a.b -> [a, b]
+    //  $.a[0].b -> [a[0], b] -- don't support array index
+    //  $."a.b".c -> ["a.b", c]
+    //  $.a#b.c -> [a#b, c]
+    //  $.a.b.c.d.e.f -> [a, b] -- don't support overflown JSON_FLATTEN_DEPTH
+    //  a.b.c -> [a, b, c]
+    public static List<String> parseSimpleJsonPath(String path) {
+        List<String> result = Lists.newArrayList();
+        path = StringUtils.trimToEmpty(path);
+        if (StringUtils.isBlank(path) || StringUtils.contains(path, "..") || StringUtils.equals("$", path) ||
+                StringUtils.countMatches(path, "\"") % 2 != 0) {
+            // .. is recursive search in json path, not supported
+            // unpaired quota char
+            return result;
+        }
+
+        StrTokenizer tokenizer = new StrTokenizer(path, '.', '"');
+        String[] tokens = tokenizer.getTokenArray();
+
+        if (tokens.length < 1) {
+            return result;
+        }
+        int i = 0;
+        if (tokens[0].equals("$")) {
+            i++;
+        }
+        for (; i < tokens.length; i++) {
+            if (tokens[i].contains(".")) {
+                result.add("\"" + tokens[i] + "\"");
+                continue;
+            } else {
+                result.add(tokens[i]);
+            }
+        }
+        return result;
     }
 
     public void collect(List<ScalarOperator> scalarOperators) {

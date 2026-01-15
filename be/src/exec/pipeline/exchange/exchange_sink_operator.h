@@ -52,11 +52,14 @@ public:
                          const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
                          bool enable_exchange_perf, FragmentContext* const fragment_ctx,
-                         const std::vector<int32_t>& output_columns, std::atomic<int32_t>& num_sinkers);
+                         const std::vector<int32_t>& output_columns,
+                         const std::vector<TBucketProperty>& bucket_properties, std::atomic<int32_t>& num_sinkers);
 
     ~ExchangeSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
+
+    Status prepare_local_state(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
@@ -87,11 +90,16 @@ public:
 
     std::string get_name() const override;
 
+    bool releaseable() const override { return true; }
+
+    void set_execute_mode(int performance_level) override;
+
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
         return sz > runtime_state()->chunk_size() * 512;
     }
+    void _calc_hash_values_and_bucket_ids();
 
 private:
     class Channel;
@@ -147,6 +155,8 @@ private:
     const int32_t _sender_id;
     const PlanNodeId _dest_node_id;
     int32_t _encode_level = 0;
+    // Hash function version for exchange shuffle: 0=fnv_hash (default), 1=xxh3_hash
+    int32_t _exchange_hash_function_version = 0;
     // Will set in prepare
     int32_t _be_number = 0;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>, StdHash<int64_t>> _instance_id2channel;
@@ -186,6 +196,7 @@ private:
     RuntimeProfile::Counter* _raw_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _serialized_bytes_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _pass_through_buffer_peak_mem_usage = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;
@@ -210,6 +221,10 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t>& _output_columns;
+    const std::vector<TBucketProperty>& _bucket_properties;
+    std::vector<uint32_t> _round_hashes;
+    std::vector<uint32_t> _round_ids;
+    std::vector<uint32_t> _bucket_ids;
 
     std::unique_ptr<Shuffler> _shuffler;
 
@@ -224,7 +239,8 @@ public:
                                 bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
                                 bool enable_exchange_pass_through, bool enable_exchange_perf,
-                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns);
+                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns,
+                                std::vector<TBucketProperty> bucket_properties);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -257,6 +273,7 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t> _output_columns;
+    const std::vector<TBucketProperty> _bucket_properties;
 
     std::atomic<int32_t> _num_sinkers = 0;
 };

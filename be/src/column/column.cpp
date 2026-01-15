@@ -16,9 +16,23 @@
 
 #include <fmt/format.h>
 
+#include "column/column_hash/column_hash.h"
 #include "common/statusor.h"
 
 namespace starrocks {
+
+size_t Column::serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                           uint32_t max_row_size, size_t start, size_t count,
+                                                           const uint8_t* null_masks) const {
+    for (size_t i = start; i < start + count; i++) {
+        if (null_masks[i] == 0) {
+            serialize(i, dst + (i - start) * byte_interval + byte_offset + 1);
+        } else {
+            serialize_default(dst + (i - start) * byte_interval + byte_offset + 1);
+        }
+    }
+    return type_size();
+}
 
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                              uint32_t max_one_row_size, const uint8_t* null_masks,
@@ -43,31 +57,29 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-StatusOr<ColumnPtr> Column::downgrade_helper_func(Ptr* col) {
-    auto ret = (*col)->downgrade();
+StatusOr<Column::MutablePtr> Column::downgrade_helper_func(Column* col) {
+    auto ret = col->downgrade();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
         return nullptr;
     } else {
-        (*col) = ret.value();
-        return nullptr;
+        return std::move(ret.value());
     }
 }
 
-StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
-    auto ret = (*col)->upgrade_if_overflow();
+StatusOr<Column::MutablePtr> Column::upgrade_helper_func(Column* col) {
+    auto ret = col->upgrade_if_overflow();
     if (!ret.ok()) {
         return ret;
     } else if (ret.value() == nullptr) {
         return nullptr;
     } else {
-        (*col) = ret.value();
-        return nullptr;
+        return std::move(ret.value());
     }
 }
 
-bool Column::empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets) {
+bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
     DCHECK_EQ(null_data.size(), this->size());
     if (!is_array() && !is_map()) {
         throw std::runtime_error("empty_null_in_complex_column() only works for array and map column.");
@@ -105,6 +117,46 @@ bool Column::empty_null_in_complex_column(const Filter& null_data, const Buffer<
         swap_column(*new_column.get());
     }
     return need_empty;
+}
+
+void Column::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    fnv_hash_column(*this, seed, from, to);
+}
+
+void Column::fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+    fnv_hash_column_with_selection(*this, seed, selection, from, to);
+}
+
+void Column::fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+    fnv_hash_column_selective(*this, seed, sel, sel_size);
+}
+
+void Column::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
+    crc32_hash_column(*this, seed, from, to);
+}
+
+void Column::crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+    crc32_hash_column_with_selection(*this, seed, selection, from, to);
+}
+
+void Column::crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+    crc32_hash_column_selective(*this, seed, sel, sel_size);
+}
+
+void Column::murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const {
+    murmur_hash3_x86_32_column(*this, hash, from, to);
+}
+
+void Column::xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    xxh3_64_column(*this, hash, from, to);
+}
+
+void Column::xxh3_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    xxh3_64_column_with_selection(*this, hash, selection, from, to);
+}
+
+void Column::xxh3_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    xxh3_64_column_selective(*this, hash, sel, sel_size);
 }
 
 } // namespace starrocks

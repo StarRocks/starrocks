@@ -98,7 +98,7 @@ public:
 
     ~Impl();
 
-    void init_or_die();
+    Status init();
 
     void stop();
 
@@ -160,7 +160,7 @@ private:
     const bool _is_compute_node;
 };
 
-void AgentServer::Impl::init_or_die() {
+Status AgentServer::Impl::init() {
     if (!_is_compute_node) {
         for (auto& path : _exec_env->store_paths()) {
             try {
@@ -175,14 +175,18 @@ void AgentServer::Impl::init_or_die() {
         }
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
-    do {                                                                                 \
-        auto st = ThreadPoolBuilder(#name)                                               \
-                          .set_min_threads(min_threads)                                  \
-                          .set_max_threads(max_threads)                                  \
-                          .set_max_queue_size(queue_size)                                \
-                          .build(&(pool));                                               \
-        CHECK(st.ok()) << st;                                                            \
-        REGISTER_THREAD_POOL_METRICS(name, pool);                                        \
+    BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, \
+                                             ThreadPoolDefaultIdleTimeoutMS, pool)
+
+#define BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(name, min_threads, max_threads, queue_size, idle_timeout, pool) \
+    do {                                                                                                         \
+        RETURN_IF_ERROR(ThreadPoolBuilder(#name)                                                                 \
+                                .set_min_threads(min_threads)                                                    \
+                                .set_max_threads(max_threads)                                                    \
+                                .set_max_queue_size(queue_size)                                                  \
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(idle_timeout))                     \
+                                .build(&pool));                                                                  \
+        REGISTER_THREAD_POOL_METRICS(name, pool);                                                                \
     } while (false)
 
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
@@ -197,9 +201,10 @@ void AgentServer::Impl::init_or_die() {
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
         int min_publish_version_worker_count =
                 std::max(config::transaction_publish_version_thread_pool_num_min, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
-        BUILD_DYNAMIC_TASK_THREAD_POOL(publish_version, min_publish_version_worker_count,
-                                       max_publish_version_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_publish_version);
+        BUILD_DYNAMIC_TASK_THREAD_POOL_WITH_IDLE(publish_version, min_publish_version_worker_count,
+                                                 max_publish_version_worker_count, std::numeric_limits<int>::max(),
+                                                 config::transaction_publish_version_thread_pool_idle_time_ms,
+                                                 _thread_pool_publish_version);
 #endif
         int real_drop_tablet_worker_count = (config::drop_tablet_worker_count > 0)
                                                     ? config::drop_tablet_worker_count
@@ -302,6 +307,8 @@ void AgentServer::Impl::init_or_die() {
                           REPORT_DATACACHE_METRICS_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
+
+    return Status::OK();
 }
 
 void AgentServer::Impl::stop() {
@@ -444,22 +451,35 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         }
     }
 
-#define HANDLE_TASK(t_task_type, all_tasks, do_func, AGENT_REQ, request, env)                                      \
-    for (auto* task : all_tasks) {                                                                                 \
-        auto pool = get_thread_pool(t_task_type);                                                                  \
-        auto signature = task->signature;                                                                          \
-        std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);                          \
-        if (register_pair.first) {                                                                                 \
-            LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature                \
-                      << ", task_count_in_queue=" << register_pair.second;                                         \
-            ret_st = pool->submit_func(                                                                            \
-                    std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
-            if (!ret_st.ok()) {                                                                                    \
-                LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;         \
-            }                                                                                                      \
-        } else {                                                                                                   \
-            LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
-        }                                                                                                          \
+#define HANDLE_TASK(t_task_type, all_tasks, do_func, AGENT_REQ, request, env)                                          \
+    {                                                                                                                  \
+        std::string submit_log = "Submit task success. type=" + to_string(t_task_type) + ", signatures=";              \
+        size_t log_count = 0;                                                                                          \
+        size_t queue_len = 0;                                                                                          \
+        for (auto* task : all_tasks) {                                                                                 \
+            auto pool = get_thread_pool(t_task_type);                                                                  \
+            auto signature = task->signature;                                                                          \
+            std::pair<bool, size_t> register_pair = register_task_info(task_type, signature);                          \
+            if (register_pair.first) {                                                                                 \
+                if (log_count++ < 100) {                                                                               \
+                    submit_log += std::to_string(signature) + ",";                                                     \
+                }                                                                                                      \
+                queue_len = register_pair.second;                                                                      \
+                ret_st = pool->submit_func(                                                                            \
+                        std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
+                if (!ret_st.ok()) {                                                                                    \
+                    LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;         \
+                }                                                                                                      \
+            } else {                                                                                                   \
+                LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
+            }                                                                                                          \
+        }                                                                                                              \
+        if (queue_len > 0) {                                                                                           \
+            if (log_count >= 100) {                                                                                    \
+                submit_log += "...,";                                                                                  \
+            }                                                                                                          \
+            LOG(INFO) << submit_log << " task_count_in_queue=" << queue_len;                                           \
+        }                                                                                                              \
     }
 
     // batch submit tasks
@@ -799,8 +819,8 @@ void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
     return _impl->stop_task_worker_pool(type);
 }
 
-void AgentServer::init_or_die() {
-    return _impl->init_or_die();
+Status AgentServer::init() {
+    return _impl->init();
 }
 
 void AgentServer::stop() {

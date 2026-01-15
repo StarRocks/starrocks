@@ -17,7 +17,7 @@ The following fields are provided in `views`:
 | CHECK_OPTION         | The value of the `CHECK_OPTION` attribute. The value is one of `NONE`, `CASCADE`, or `LOCAL`. |
 | IS_UPDATABLE         | Whether the view is updatable. The flag is set to `YES` (true) if `UPDATE` and `DELETE` (and similar operations) are legal for the view. Otherwise, the flag is set to `NO` (false). If a view is not updatable, statements such `UPDATE`, `DELETE`, and `INSERT` are illegal and are rejected. |
 | DEFINER              | The user of the user who created the view.                   |
-| SECURITY_TYPE        | The view `SQL SECURITY` characteristic. The value is one of `DEFINER` or `INVOKER`. |
+| SECURITY_TYPE        |                                                              |
 | CHARACTER_SET_CLIENT |                                                              |
 | COLLATION_CONNECTION |                                                              |
 

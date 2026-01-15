@@ -15,12 +15,14 @@
 
 package com.starrocks.planner.stream;
 
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.Expr;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.operator.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -58,23 +60,23 @@ public class StreamAggNode extends PlanNode {
         if (CollectionUtils.isNotEmpty(aggInfo.getMaterializedAggregateExprs())) {
             output.append(detailPrefix)
                     .append("output: ")
-                    .append(getExplainString(aggInfo.getAggregateExprs()))
+                    .append(explainExpr(aggInfo.getAggregateExprs()))
                     .append("\n");
         }
         output.append(detailPrefix)
                 .append("group_by: ")
-                .append(getExplainString(aggInfo.getGroupingExprs()))
+                .append(explainExpr(aggInfo.getGroupingExprs()))
                 .append("\n");
         if (!conjuncts.isEmpty()) {
-            output.append(detailPrefix).append("having: ").append(getExplainString(conjuncts)).append("\n");
+            output.append(detailPrefix).append("having: ").append(explainExpr(conjuncts)).append("\n");
         }
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             if (detailImt != null) {
-                output.append(detailPrefix).append("detail_imt: ").append(detailImt.toString()).append("\n");
+                output.append(detailPrefix).append("detail_imt: ").append(detailImt).append("\n");
             }
             if (aggImt != null) {
-                output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
+                output.append(detailPrefix).append("agg_imt: ").append(aggImt).append("\n");
             }
         }
         return output.toString();
@@ -85,21 +87,23 @@ public class StreamAggNode extends PlanNode {
         msg.node_type = TPlanNodeType.STREAM_AGG_NODE;
 
         List<TExpr> aggregateFunctions =
-                aggInfo.getMaterializedAggregateExprs().stream().map(Expr::treeToThrift).collect(Collectors.toList());
+                aggInfo.getMaterializedAggregateExprs().stream()
+                        .map(ExprToThrift::treeToThrift)
+                        .collect(Collectors.toList());
         msg.stream_agg_node = new TStreamAggregationNode();
         msg.stream_agg_node.setAggregate_functions(aggregateFunctions);
 
         // Aggregate expression
         String sqlAggFunctions =
-                aggInfo.getMaterializedAggregateExprs().stream().map(Expr::toSql).collect(Collectors.joining(","));
+                aggInfo.getMaterializedAggregateExprs().stream().map(ExprToSql::toSql).collect(Collectors.joining(","));
         msg.stream_agg_node.setSql_aggregate_functions(sqlAggFunctions);
 
         // Grouping expression
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (CollectionUtils.isNotEmpty(groupingExprs)) {
-            msg.stream_agg_node.setGrouping_exprs(Expr.treesToThrift(groupingExprs));
+            msg.stream_agg_node.setGrouping_exprs(ExprToThrift.treesToThrift(groupingExprs));
         }
-        String groupingStr = groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
+        String groupingStr = groupingExprs.stream().map(ExprToSql::toSql).collect(Collectors.joining(", "));
         msg.stream_agg_node.setSql_grouping_keys(groupingStr);
 
         msg.stream_agg_node.setAgg_func_set_version(3);

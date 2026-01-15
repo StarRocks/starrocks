@@ -40,7 +40,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.persist.DropBackendInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.UpdateBackendInfo;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import mockit.Expectations;
@@ -65,13 +68,13 @@ public class BackendProcNodeTest {
     public void setUp() {
         new Expectations() {
             {
-                editLog.logAddBackend((Backend) any);
+                editLog.logAddBackend((Backend) any, (WALApplier) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((Backend) any);
+                editLog.logDropBackend((DropBackendInfo) any, (WALApplier) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((Backend) any);
+                editLog.logBackendStateChange((UpdateBackendInfo) any, (WALApplier) any);
                 minTimes = 0;
 
                 globalStateMgr.getNextId();

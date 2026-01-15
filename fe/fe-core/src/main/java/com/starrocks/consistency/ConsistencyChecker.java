@@ -111,7 +111,7 @@ public class ConsistencyChecker extends FrontendDaemon {
     private final Map<Long, Integer> creatingTableCounters = new ConcurrentHashMap<>();
 
     public ConsistencyChecker() {
-        super("consistency checker");
+        super("consistency-checker");
 
         jobs = Maps.newHashMap();
         jobsLock = new ReentrantReadWriteLock();
@@ -408,7 +408,7 @@ public class ConsistencyChecker extends FrontendDaemon {
             if (jobs.containsKey(job.getTabletId())) {
                 return false;
             } else {
-                LOG.info("add tablet[{}] to check consistency", job.getTabletId());
+                LOG.debug("add tablet[{}] to check consistency", job.getTabletId());
                 jobs.put(job.getTabletId(), job);
                 return true;
             }
@@ -525,7 +525,12 @@ public class ConsistencyChecker extends FrontendDaemon {
                                 // sort tablets
                                 Queue<MetaObject> tabletQueue =
                                         new PriorityQueue<>(Math.max(index.getTablets().size(), 1), COMPARATOR);
-                                tabletQueue.addAll(index.getTablets());
+                                long startCheckTime = System.currentTimeMillis();
+                                long cooldownedTimeMs = startCheckTime - Config.consistency_check_cooldown_time_second * 1000;
+                                List<Tablet> cooldownedTablets = index.getTablets().stream()
+                                        .filter(t -> t.getLastCheckTime() < cooldownedTimeMs)
+                                        .toList();
+                                tabletQueue.addAll(cooldownedTablets);
 
                                 while ((chosenOne = tabletQueue.poll()) != null) {
                                     LocalTablet tablet = (LocalTablet) chosenOne;

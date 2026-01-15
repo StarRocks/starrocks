@@ -16,18 +16,9 @@
 package com.starrocks.connector.analyzer;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -38,13 +29,14 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
-import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -56,7 +48,18 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -72,7 +75,7 @@ public class SimpleQueryAnalyzer {
         new Visitor().process(node);
     }
 
-    private static class Visitor implements AstVisitor<Void, Void> {
+    private static class Visitor implements AstVisitorExtendInterface<Void, Void> {
         public Void process(ParseNode node) {
             return node.accept(this, null);
         }
@@ -159,7 +162,8 @@ public class SimpleQueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(joinEqual, "JOIN");
                 AnalyzerUtils.verifyNoGroupingFunctions(joinEqual, "JOIN");
 
-                if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
+                if (!joinEqual.getType().matchesType(BooleanType.BOOLEAN)
+                        && !joinEqual.getType().matchesType(NullType.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
@@ -318,7 +322,7 @@ public class SimpleQueryAnalyzer {
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
 
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {

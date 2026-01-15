@@ -20,6 +20,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_scan_node.h"
+#include "runtime/current_thread.h"
+#include "service/backend_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/predicate_parser.h"
@@ -144,6 +146,8 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
+    _params.enable_predicate_col_late_materialize =
+            _runtime_state->query_options().enable_predicate_col_late_materialize;
     auto parser = _pool.add(new OlapPredicateParser(_tablet_schema));
 
     ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
@@ -396,21 +400,21 @@ void TabletScanner::update_counter() {
     if (_reader->stats().flat_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("FlatJsonHits");
 
-        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+        for (const auto& [k, v] : _reader->stats().flat_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("FlatJsonUnhits");
-        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+        for (const auto& [k, v] : _reader->stats().dynamic_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }
     }
     if (_reader->stats().merge_json_hits.size() > 0) {
         auto path_profile = _parent->_scan_profile->create_child("MergeJsonUnhits");
-        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+        for (const auto& [k, v] : _reader->stats().merge_json_hits) {
             RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
             COUNTER_SET(path_counter, v);
         }

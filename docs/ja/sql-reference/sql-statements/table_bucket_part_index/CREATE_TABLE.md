@@ -211,8 +211,82 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 **DEFAULT "default_value"**: 列のデフォルト値。StarRocks にデータをロードする際、列にマッピングされたソースフィールドが空の場合、StarRocks は自動的にデフォルト値を列に埋めます。次のいずれかの方法でデフォルト値を指定できます：
 
 - **DEFAULT current_timestamp**: 現在の時刻をデフォルト値として使用します。詳細については、[current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) を参照してください。
-- **DEFAULT `<default_value>`**: 列のデータタイプの与えられた値をデフォルト値として使用します。たとえば、列のデータタイプが VARCHAR の場合、`DEFAULT "beijing"` のように、デフォルト値として beijing という VARCHAR 文字列を指定できます。デフォルト値は ARRAY、BITMAP、JSON、HLL、および BOOLEAN タイプにはできません。
-- **DEFAULT (\<expr\>)**: 与えられた関数の結果をデフォルト値として使用します。サポートされているのは [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 式のみです。
+- **DEFAULT (\<expr\>)**: 与えられた式または関数の結果をデフォルト値として使用します。次の式がサポートされています：
+  - [uuid()](../../sql-functions/utility-functions/uuid.md) および [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md)：一意の識別子を生成します。
+  - ARRAY リテラル式（例：`[1, 2, 3]`）：ARRAY 型の列用。
+  - MAP 式（例：`map{key: value}`）：MAP 型の列用。
+  - row() 関数（例：`row(val1, val2)`）：STRUCT 型の列用。
+- **DEFAULT `<default_value>`**: 列のデータタイプの与えられた値をデフォルト値として使用します。StarRocks はさまざまなタイプのデフォルト値の指定をサポートしています：
+  
+  **基本タイプ**: 文字列リテラルを使用してデフォルト値を指定します。
+  
+  ```sql
+  -- 数値型
+  age INT DEFAULT '18'
+  price DECIMAL(10,2) DEFAULT '99.99'
+  
+  -- 文字列型
+  name VARCHAR(50) DEFAULT 'Anonymous'
+  
+  -- 日付/時刻型
+  created_at DATETIME DEFAULT '2024-01-01 00:00:00'
+  
+  -- ブール型
+  is_active BOOLEAN DEFAULT 'true'  -- 'true'/'false'/'1'/'0' をサポート
+  ```
+  
+  **JSON 型**: JSON 形式の文字列を使用してデフォルト値を指定します。
+  
+  ```sql
+  metadata JSON DEFAULT '{"status": "active"}'
+  tags JSON DEFAULT '[1, 2, 3]'
+  ```
+  
+  **VARBINARY 型**: デフォルト値として空文字列のみサポートされます。
+  
+  ```sql
+  binary_data VARBINARY DEFAULT ''
+  ```
+  
+  **BITMAP および HLL 型**: デフォルト値として空文字列のみサポートされます。AGGREGATE KEY テーブル専用です。
+  
+  ```sql
+  -- AGGREGATE KEY テーブル内
+  bm BITMAP BITMAP_UNION DEFAULT ''
+  h HLL HLL_UNION DEFAULT ''
+  ```
+  
+  **複合型 (ARRAY/MAP/STRUCT)**: 式構文を使用してデフォルト値を指定します。OLAP テーブルのみサポートされます。
+  
+  :::note
+  複合型のデフォルト値は **`fast_schema_evolution = true` の場合にのみサポート**されます。テーブルの `fast_schema_evolution` プロパティが明示的に `false` に設定されている場合、複合型のデフォルト値を追加するとエラーが発生します。
+  :::
+  
+  ```sql
+  -- ARRAY 型
+  tags ARRAY<VARCHAR(20)> DEFAULT ['tag1', 'tag2']
+  scores ARRAY<INT> DEFAULT [90, 85, 92]
+  
+  -- MAP 型
+  attrs MAP<VARCHAR(20), INT> DEFAULT map{'age': 25, 'score': 100}
+  
+  -- STRUCT 型
+  person STRUCT<name VARCHAR(20), age INT> DEFAULT row('John', 30)
+  
+  -- 複雑なネスト：STRUCT、ARRAY、MAP を含むネストされた STRUCT
+  user_profile STRUCT<
+    id INT, 
+    name VARCHAR(50), 
+    contact STRUCT<email VARCHAR(100), phone VARCHAR(20)>,
+    tags ARRAY<VARCHAR(20)>,
+    attributes MAP<VARCHAR(20), VARCHAR(50)>
+  > DEFAULT row(1, 'Alice', row('alice@example.com', '123-456-7890'), ['admin', 'user'], map{'level': 'premium', 'status': 'active'})
+  ```
+
+  **制限事項**:
+  
+  - TIME および VARIANT 型はまだデフォルト値をサポートしていません。
+  - 複合型 (ARRAY/MAP/STRUCT) のデフォルト値は OLAP テーブルのみでサポートされ、`fast_schema_evolution` プロパティを有効にする必要があります。
 
 **AUTO_INCREMENT**: `AUTO_INCREMENT` 列を指定します。`AUTO_INCREMENT` 列のデータタイプは BIGINT でなければなりません。自動インクリメントされた ID は 1 から始まり、1 のステップで増加します。`AUTO_INCREMENT` 列の詳細については、[AUTO_INCREMENT](auto_increment.md) を参照してください。v3.0 以降、StarRocks は `AUTO_INCREMENT` 列をサポートしています。
 
@@ -558,6 +632,12 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | 動的パーティションの名前に追加されるプレフィックス。デフォルト値: `p`。 |
 | dynamic_partition.buckets   | No       | 動的パーティションごとのバケット数。デフォルト値は、予約語 `BUCKETS` によって決定されるバケット数と同じか、StarRocks によって自動的に設定されます。 |
 
+:::note
+
+パーティション列が INT 型の場合、その形式は必ず `yyyyMMdd` でなければなりません。パーティション時間の粒度に関わらず、この形式が適用されます。
+
+:::
+
 ### ランダムバケット法によるバケットサイズ
 
 v3.2 以降、ランダムバケット法が設定されたテーブルの場合、テーブル作成時に `PROPERTIES` の `bucket_size` パラメータを使用してバケットサイズを指定し、バケット数のオンデマンドおよび動的な増加を有効にできます。単位: B。
@@ -664,7 +744,8 @@ StarRocks 共有データクラスタを使用するには、次のプロパテ�
 PROPERTIES (
     "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
-    "datacache.partition_duration" = "<string_value>"
+    "datacache.partition_duration" = "<string_value>",
+    "file_bundling" = "{ true | false }"
 )
 ```
 
@@ -683,6 +764,26 @@ PROPERTIES (
 
   :::note
   このプロパティは、`datacache.enable` が `true` に設定されている場合にのみ利用可能です。
+  :::
+
+- `file_bundling` (オプション): クラウドネイティブテーブルに対してファイルバンドリング最適化を有効にするかどうか。v4.0 以降でサポートされています。この機能を有効に設定（`true` に設定）すると、システムはロード、コンパクション、またはパブリッシュ操作によって生成されたデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減します。
+
+  :::note
+  - ファイルバンドリングは、StarRocks v4.0 以降を搭載した共有データクラスターでのみ利用可能です。
+  - ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。これは FE 設定の `enable_file_bundling`（デフォルト: true）によって制御されます。
+  - ファイルバンドリングを有効化した後、クラスターを v3.5.2 以降にダウングレードできます。v3.5.2 より前のバージョンにダウングレードしたい場合は、まずファイルバンドリングを有効化したテーブルを削除する必要があります。
+  - クラスターを v4.0 にアップグレードした後、既存のテーブルに対してファイルバンドリングはデフォルトで無効のままです。
+  - 既存のテーブルに対して、[ALTER TABLE](ALTER_TABLE.md) ステートメントを使用して手動でファイルバンドリングを有効にできます。ただし、以下の制限事項があります：
+    - v4.0 以前に作成されたロールアップインデックスを持つテーブルでは、ファイルバンドリングを有効にできません。v4.0 以降でインデックスを削除し再作成した後、そのテーブルでファイルバンドリングを有効にできます。
+    - 特定の期間内に `file_bundling` プロパティを **繰り返し **変更することはできません。そうでない場合、システムはエラーを返します。`file_bundling` プロパティが変更可能かどうかを確認するには、次の SQL ステートメントを実行してください：
+
+      ```SQL
+      SELECT METADATA_SWITCH_VERSION FROM information_schema.partitions_meta WHERE TABLE_NAME = '<table_name>';
+      ```
+
+      `file_bundling` プロパティを変更できるのは、`0` が返される場合のみです。非ゼロ値は、`METADATA_SWITCH_VERSION` に対応するデータバージョンが GC メカニズムによってまだ回収されていないことを示します。データバージョンが回収されるまで待つ必要があります。
+
+      この間隔を短縮するには、FE の動的設定 `lake_autovacuum_grace_period_minutes` の値を低く設定します。ただし、`file_bundling` プロパティを変更した後は、設定を元の値に戻すことを忘れないでください。
   :::
 
 ### 高速スキーマ進化
@@ -757,27 +858,25 @@ v3.5.0 以降、StarRocks 内部テーブルは共通パーティション式 TT
 ALTER TABLE tbl SET('partition_retention_condition' = '');
 ```
 
-### フラット JSON 設定の構成 (現在は共有なしクラスタのみサポート)
+### テーブルレベルの Flat JSON プロパティを設定
 
-フラット JSON 属性を使用したい場合、`properties` で指定してください。詳細については、[Flat JSON](../../../using_starrocks/Flat_json.md) を参照してください。
+v3.3 から、StarRocks は JSON データクエリの効率を向上させ、JSON の使用複雑さを軽減するため、[Flat JSON](../../../using_starrocks/Flat_json.md) 機能を導入しました。この機能は、特定の B E設定項目とシステム変数によって制御されていました。そのため、グローバルにのみ有効化（または無効化）可能です。
+
+v4.0 以降、テーブルレベルで Flat JSON 関連のプロパティを設定できます。
 
 ```SQL
 PROPERTIES (
-    "flat_json.enable" = "true|false",
-    "flat_json.null.factor" = "0-1",
-    "flat_json.sparsity.factor" = "0-1",
-    "flat_json.column.max" = "${integer_value}"
+    "flat_json.enable" = "{ true | false }",
+    "flat_json.null.factor" = "",
+    "flat_json.sparsity.factor" = "",
+    "flat_json.column.max" = ""
 )
 ```
 
-**プロパティ**
-
-| プロパティ                    | 必須 | 説明                                                                                                                                                                                                                                                       |
-| --------------------------- |----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `flat_json.enable`    | No       | フラット JSON 機能を有効にするかどうか。この機能が有効になると、新しくロードされた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。                                                                                                 |
-| `flat_json.null.factor` | No      | フラット JSON のために抽出する列の NULL 値の割合。このしきい値を超える NULL 値の割合を持つ列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 0.3。 |
-| `flat_json.sparsity.factor`     | No      | フラット JSON のために同じ名前を持つ列の割合。この値より低い割合を持つ同じ名前の列は抽出されません。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。デフォルト値: 0.9。    |
-| `flat_json.column.max`       | No      | フラット JSON によって抽出できるサブフィールドの最大数。このパラメータは `flat_json.enable` が true に設定されている場合にのみ有効です。 デフォルト値: 100。 |
+- `flat_json.enable` (オプション): Flat JSON 機能を有効にするかどうか。この機能を有効にすると、新たに読み込まれた JSON データが自動的にフラット化され、JSON クエリのパフォーマンスが向上します。
+- `flat_json.null.factor` (オプション): 列内の NULL 値の割合の閾値。この閾値を超えるNULL値の割合を持つ列は、Flat JSON によって抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `0.3`。
+- `flat_json.sparsity.factor` (オプション): 同じ名前を持つ列の割合の閾値。同じ名前を持つ列の割合がこの値未満の場合、Flat JSON ではその列が抽出されません。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。デフォルト値: `0.3`。
+- `flat_json.column.max` (オプション): Flat JSON で抽出可能なサブフィールドの最大数。このパラメーターは、`flat_json.enable` が `true` に設定されている場合のみ有効になります。 デフォルト値: `100`。
 
 ## 例
 
@@ -1121,11 +1220,7 @@ PARTITION BY RANGE (k1)
 DISTRIBUTED BY HASH(k2);
 ```
 
-### フラット JSON をサポートするテーブル
-
-:::note
-フラット JSON は現在、共有なしクラスタのみでサポートされています。
-:::
+### Flat JSON プロパティを持つテーブル
 
 ```SQL
 CREATE TABLE example_db.example_table

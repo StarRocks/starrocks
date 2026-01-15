@@ -18,17 +18,12 @@ package com.starrocks.scheduler.mv;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -61,12 +56,6 @@ public class BinlogConsumeStateVO implements Writable {
     public Map<BinlogIdVO, BinlogLSNVO> getBinlogMap() {
         return binlogMap;
     }
-
-    public static BinlogConsumeStateVO read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);
-    }
-
-
 
     @Override
     public boolean equals(Object o) {
@@ -110,14 +99,8 @@ public class BinlogConsumeStateVO implements Writable {
             this.tabletId = tabletId;
         }
 
-        public static BinlogIdVO read(DataInput input) throws IOException {
-            return GsonUtils.GSON.fromJson(Text.readString(input), BinlogIdVO.class);
-        }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        }
+
 
         public long getTabletId() {
             return tabletId;
@@ -168,15 +151,8 @@ public class BinlogConsumeStateVO implements Writable {
             return res;
         }
 
-        public static BinlogLSNVO read(DataInput input) throws IOException {
-            String json = Text.readString(input);
-            return GsonUtils.GSON.fromJson(json, BinlogLSNVO.class);
-        }
 
-        @Override
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, GsonUtils.GSON.toJson(this));
-        }
+
 
         @Override
         public int compareTo(@NotNull BinlogLSNVO o) {

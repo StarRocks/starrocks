@@ -23,6 +23,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -47,7 +49,7 @@ public class JDBCTableTest {
         resourceName = "jdbc0";
 
         columns = Lists.newArrayList();
-        Column column = new Column("col1", Type.BIGINT, true);
+        Column column = new Column("col1", IntegerType.BIGINT, true);
         columns.add(column);
 
         properties = Maps.newHashMap();
@@ -244,7 +246,7 @@ public class JDBCTableTest {
                     "jdbc_uri", "jdbc:postgresql://172.26.194.237:5432/db_pg_select"
             );
             List<Column> schema = new ArrayList<>();
-            schema.add(new Column("id", Type.INT));
+            schema.add(new Column("id", IntegerType.INT));
             JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
             TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
             TJDBCTable table = tableDescriptor.getJdbcTable();
@@ -275,7 +277,7 @@ public class JDBCTableTest {
                             "://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com/db_pg_select"
             );
             List<Column> schema = new ArrayList<>();
-            schema.add(new Column("id", Type.INT));
+            schema.add(new Column("id", IntegerType.INT));
             JDBCTable jdbcTable = new JDBCTable(10, "tbl", schema, "db", "jdbc_catalog", properties);
             TTableDescriptor tableDescriptor = jdbcTable.toThrift(null);
             TJDBCTable table = tableDescriptor.getJdbcTable();
@@ -288,5 +290,12 @@ public class JDBCTableTest {
             System.out.println(e.getMessage());
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testGetSupportedOperationsWithoutResource() throws Exception {
+        Map<String, String> jdbcProperties = getMockedJDBCProperties("jdbc:mysql://127.0.0.1:3306");
+        JDBCTable table = new JDBCTable(2000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        Assertions.assertEquals(Set.of(TableOperation.READ, TableOperation.ALTER), table.getSupportedOperations());
     }
 }

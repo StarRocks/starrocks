@@ -74,7 +74,11 @@ public:
 
     bool is_index() const { return _type == TAccessPathType::type::INDEX; }
 
+    bool is_root() const { return _type == TAccessPathType::type::ROOT; }
+
     bool is_from_predicate() const { return _from_predicate; }
+
+    bool is_extended() const { return _extended; }
 
     const std::string& absolute_path() const { return _absolute_path; }
 
@@ -86,6 +90,10 @@ public:
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
 
     ColumnAccessPath* get_child(const std::string& path);
+
+    // For linear path like a.b.c
+    std::string linear_path() const;
+    const TypeDescriptor& leaf_value_type() const;
 
     const std::string to_string() const;
 
@@ -110,6 +118,8 @@ private:
     bool _from_predicate;
 
     bool _from_compaction = false;
+
+    bool _extended = false;
 
     // the data type of the subfield
     TypeDescriptor _value_type;

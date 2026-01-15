@@ -19,21 +19,20 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TTabletType;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -70,15 +69,13 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
         DataOutputStream out = new DataOutputStream(Files.newOutputStream(file.toPath()));
 
         List<Column> columns = new LinkedList<Column>();
-        columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        columns.add(new Column("k2", IntegerType.SMALLINT, true, null, "", ""));
+        columns.add(new Column("v1", IntegerType.INT, false, AggregateType.SUM, "", ""));
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
-        partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
         refreshScheme.setMoment(MaterializedView.RefreshMoment.DEFERRED);
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
@@ -89,7 +86,7 @@ public class ChangeMaterializedViewRefreshSchemeLogTest {
                 partitionInfo, distributionInfo, refreshScheme);
         ChangeMaterializedViewRefreshSchemeLog changeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-        changeLog.write(out);
+        Text.writeString(out, GsonUtils.GSON.toJson(changeLog, ChangeMaterializedViewRefreshSchemeLog.class));
         out.flush();
         out.close();
 

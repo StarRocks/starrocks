@@ -5,7 +5,7 @@ keywords: ['Stream Load']
 
 # Load data from a local file system
 
-import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 
 StarRocks provides two methods of loading data from a local file system:
 
@@ -246,6 +246,12 @@ import Beta from '../_assets/commonMarkdown/_beta.mdx'
 <Beta />
 
 From v3.4.0, the system supports merging multiple Stream Load requests.
+
+:::warning
+
+Note that the Merge Commit optimization is suitable for the scenario with **concurrent** Stream Load jobs on a single table. It is not recommended if the concurrency is one. Meanwhile, think twice before setting `merge_commit_async` to `false` and `merge_commit_interval_ms` to a large value because they may cause load performance degradation.
+
+:::
 
 Merge Commit is an optimization for Stream Load, designed for high-concurrency, small-batch (from KB to tens of MB) real-time loading scenarios. In earlier versions, each Stream Load request would generate a transaction and a data version, which led to the following issues in high-concurrency loading scenarios:
 

@@ -90,7 +90,7 @@ public class InPredicateOperator extends PredicateOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitInPredicate(this, context);
+        return  visitor.visitInPredicate(this, context);
     }
 
     @Override
@@ -113,6 +113,15 @@ public class InPredicateOperator extends PredicateOperator {
             return false;
         }
         InPredicateOperator that = (InPredicateOperator) o;
+        return isNotIn == that.isNotIn && isSubquery == that.isSubquery;
+    }
+
+    @Override
+    public boolean equivalent(Object obj) {
+        if (!super.equivalent(obj)) {
+            return false;
+        }
+        InPredicateOperator that = (InPredicateOperator) obj;
         return isNotIn == that.isNotIn && isSubquery == that.isSubquery;
     }
 

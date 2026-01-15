@@ -40,7 +40,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +56,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /*
@@ -71,7 +73,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public static final TabletMeta NOT_EXIST_TABLET_META = new TabletMeta(NOT_EXIST_VALUE, NOT_EXIST_VALUE,
             NOT_EXIST_VALUE, NOT_EXIST_VALUE, TStorageMedium.HDD);
 
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final QueryableReentrantReadWriteLock lock = new QueryableReentrantReadWriteLock();
 
     // tablet id -> tablet meta
     private final Map<Long, TabletMeta> tabletMetaMap = new Long2ObjectOpenHashMap<>();
@@ -92,19 +94,19 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     public void readLock() {
-        this.lock.readLock().lock();
+        lock.sharedLockDetectingSlowLock(Config.slow_lock_threshold_ms, TimeUnit.MILLISECONDS);
     }
 
     public void readUnlock() {
-        this.lock.readLock().unlock();
+        lock.sharedUnlock();
     }
 
     private void writeLock() {
-        this.lock.writeLock().lock();
+        lock.exclusiveLockDetectingSlowLock(Config.slow_lock_threshold_ms, TimeUnit.MILLISECONDS);
     }
 
     private void writeUnlock() {
-        this.lock.writeLock().unlock();
+        lock.exclusiveUnlock();
     }
 
     public Long getTabletIdByReplica(long replicaId) {
@@ -371,6 +373,14 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+    /**
+     * Get the number of tablets on the specified backend and pathHash
+     * @param backendId the ID of the backend
+     * @param pathHash the hash of the path
+     * @return the number of tablets as a long value
+     *
+     * @implNote Linear scan, invoke this interface with caution if the number of replicas is large
+     */
     public long getTabletNumByBackendIdAndPathHash(long backendId, long pathHash) {
         readLock();
         try {
@@ -379,6 +389,27 @@ public class TabletInvertedIndex implements MemoryTrackable {
         } finally {
             readUnlock();
         }
+    }
+
+    /**
+     * Get the number of tablets on the specified backend, grouped by pathHash
+     * @param backendId the ID of the backend
+     * @return Map<pathHash, tabletNum> the number of tablets grouped by pathHash
+     *
+     * @implNote Linear scan, invoke this interface with caution if the number of replicas is large
+     */
+    public Map<Long, Long> getTabletNumByBackendIdGroupByPathHash(long backendId) {
+        Map<Long, Long> pathHashToTabletNum = Maps.newHashMap();
+        readLock();
+        try {
+            Map<Long, Replica> replicaMetaWithBackend = row(backingReplicaMetaTable, backendId);
+            for (Replica r : replicaMetaWithBackend.values()) {
+                pathHashToTabletNum.compute(r.getPathHash(), (k, v) -> v == null ? 1L : v + 1);
+            }
+        } finally {
+            readUnlock();
+        }
+        return pathHashToTabletNum;
     }
 
     public Map<TStorageMedium, Long> getReplicaNumByBeIdAndStorageMedium(long backendId) {
@@ -416,6 +447,15 @@ public class TabletInvertedIndex implements MemoryTrackable {
         readLock();
         try {
             return this.replicaToTabletMap.size();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public Map<Long, Replica> getReplicas(long tabletId) {
+        readLock();
+        try {
+            return this.replicaMetaTable.get(tabletId);
         } finally {
             readUnlock();
         }

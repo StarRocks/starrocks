@@ -14,11 +14,15 @@
 
 #include "storage/lake/horizontal_compaction_task.h"
 
+#include "agent/master_info.h"
+#include "common/config.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
@@ -27,6 +31,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
 #include "util/defer_op.h"
+#include "util/time.h"
 
 namespace starrocks::lake {
 
@@ -34,9 +39,11 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     int64_t total_num_rows = 0;
+    int64_t input_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         _context->stats->read_segment_count += rowset->num_segments();
+        input_bytes += rowset->data_size_after_deletion();
     }
 
     ASSIGN_OR_RETURN(auto chunk_size, calculate_chunk_size());
@@ -61,6 +68,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
                                                     _tablet_schema /** output rowset schema**/))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
+
+    if (should_enable_pk_index_eager_build(input_bytes)) {
+        writer->try_enable_pk_index_eager_build();
+    }
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
@@ -111,6 +122,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
+
+    // Close reader to ensure IO statistics are updated via SegmentIterator::_update_stats() before collecting
+    reader.close();
+
     _context->stats->collect(reader.stats());
     _context->stats->collect(writer->stats());
 
@@ -135,7 +150,18 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     }
 
     LOG(INFO) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-              << ", statistics: " << _context->stats->to_json_stats();
+              << ", statistics: " << _context->stats->to_json_stats() << ", table_id: " << _context->table_id
+              << ", partition_id: " << _context->partition_id;
+
+    if (config::enable_tablet_write_log) {
+        int64_t begin_time = _context->start_time.load(std::memory_order_relaxed) * 1000; // Convert to ms
+        int64_t finish_time = UnixMillis();
+        TabletWriteLogManager::instance()->add_compaction_log(
+                get_backend_id().value_or(0), _txn_id, _tablet.id(), _context->table_id, _context->partition_id,
+                total_num_rows, input_bytes, writer->num_rows(), writer->data_size(),
+                _context->stats->read_segment_count, writer->segments().size(), 0, "horizontal", begin_time,
+                finish_time);
+    }
 
     return Status::OK();
 }

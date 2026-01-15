@@ -20,12 +20,14 @@ package com.starrocks.transaction;
 import com.starrocks.persist.EditLog;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 public final class FakeTransactionIDGenerator extends MockUp<TransactionIdGenerator> {
+    private static final Logger LOG = LogManager.getLogger(FakeTransactionIDGenerator.class);
 
     private long nextId = 1000L;
 
@@ -41,17 +43,12 @@ public final class FakeTransactionIDGenerator extends MockUp<TransactionIdGenera
 
     @Mock
     public synchronized long getNextTransactionId() {
-        System.out.println("getNextTransactionId is called");
+        LOG.info("getNextTransactionId is called");
         return nextId++;
     }
 
     @Mock
     public void write(DataOutput out) throws IOException {
-        // do nothing
-    }
-
-    @Mock
-    public void readFields(DataInput in) throws IOException {
         // do nothing
     }
 

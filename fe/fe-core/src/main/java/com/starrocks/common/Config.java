@@ -34,7 +34,7 @@
 
 package com.starrocks.common;
 
-import com.starrocks.StarRocksFE;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
@@ -45,6 +45,11 @@ import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
 
 public class Config extends ConfigBase {
+
+    /**
+     *  STARROCKS_HOME is the root dir of starrocks installation.
+     */
+    public static final String STARROCKS_HOME_DIR = System.getenv("STARROCKS_HOME");
 
     /**
      * The max size of one sys log and audit log
@@ -87,7 +92,7 @@ public class Config extends ConfigBase {
      *      default is false. if true, then compress fe.log & fe.warn.log by gzip
      */
     @ConfField
-    public static String sys_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String sys_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static String sys_log_level = "INFO";
     @ConfField
@@ -153,7 +158,13 @@ public class Config extends ConfigBase {
      *      default is false. if true, then compress fe.audit.log by gzip
      */
     @ConfField
-    public static String audit_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static boolean enable_audit_sql = true;
+    @ConfField
+    public static boolean enable_internal_sql = true;
+    @ConfField
+    public static boolean enable_sql_desensitize_in_log = false;
+    @ConfField
+    public static String audit_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int audit_log_roll_num = 90;
     @ConfField
@@ -191,7 +202,7 @@ public class Config extends ConfigBase {
      * This specifies FE MV/Statistics log dir.
      */
     @ConfField
-    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String internal_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int internal_log_roll_num = 90;
     @ConfField
@@ -200,6 +211,8 @@ public class Config extends ConfigBase {
     public static String internal_log_roll_interval = "DAY";
     @ConfField
     public static String internal_log_delete_age = "7d";
+    @ConfField(mutable = true)
+    public static boolean internal_log_json_format = false;
 
     /**
      * dump_log_dir:
@@ -225,7 +238,7 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
-    public static String dump_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String dump_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int dump_log_roll_num = 10;
     @ConfField
@@ -265,7 +278,7 @@ public class Config extends ConfigBase {
      * 120s    120 seconds
      */
     @ConfField
-    public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String big_query_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int big_query_log_roll_num = 10;
     @ConfField
@@ -297,7 +310,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_profile_log = true;
     @ConfField
-    public static String profile_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String profile_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static int profile_log_roll_num = 5;
     @ConfField
@@ -307,8 +320,25 @@ public class Config extends ConfigBase {
     @ConfField
     public static int profile_log_roll_size_mb = 1024; // 1 GB in MB
 
-    @ConfField
-    public static boolean enable_profile_log_compress = false;
+    @ConfField(mutable = true, comment = "Enable automatic log cleaning based on disk usage. " +
+            "When enabled, logs will be cleaned when disk usage exceeds the threshold.")
+    public static boolean log_cleaner_disk_util_based_enable = false;
+
+    @ConfField(mutable = true, comment = "Disk usage threshold (percentage) to trigger log cleaning. " +
+            "When disk usage exceeds this threshold, log cleaning will start. Default is 80, meaning 80%.")
+    public static int log_cleaner_disk_usage_threshold = 80;
+
+    @ConfField(mutable = true, comment = "Target disk usage (percentage) after log cleaning. " +
+            "Log cleaning will continue until disk usage drops below this threshold. Default is 60, meaning 60%.")
+    public static int log_cleaner_disk_usage_target = 60;
+
+    @ConfField(mutable = true, comment = "Minimum retention days for audit log files. " +
+            "Audit log files newer than this will not be deleted even if disk usage is high. Default is 3 days.")
+    public static int log_cleaner_audit_log_min_retention_days = 3;
+
+    @ConfField(mutable = true, comment = "Interval in seconds to check disk usage and clean logs. " +
+            "Default is 300 seconds (5 minutes).")
+    public static int log_cleaner_check_interval_second = 300;
 
     /**
      * Log the COSTS plan, if the query is cancelled due to a crash of the backend or RpcException.
@@ -341,6 +371,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean plugin_enable = true;
+
+    @ConfField
+    public static String ext_dir = System.getenv("STARROCKS_HOME") + "/lib";
 
     /**
      * Labels of finished or cancelled load jobs will be removed
@@ -400,8 +433,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "task ttl")
     public static int task_ttl_second = 24 * 3600;         // 1 day
 
+    @ConfField(mutable = true, comment = "Max consecutive fail count of a task after which the task will be paused")
+    public static int max_task_consecutive_fail_count = 10;
+
     @ConfField(mutable = true, comment = "task run ttl")
     public static int task_runs_ttl_second = 7 * 24 * 3600;     // 7 day
+
+    @ConfField(mutable = true, comment = "task run execute timeout, default 4 hours")
+    public static int task_runs_timeout_second = 4 * 3600;     // 4 hour
 
     @ConfField(mutable = true, comment = "max number of task run history. ")
     public static int task_runs_max_history_number = 10000;
@@ -417,6 +456,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
+
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // if task count is big, mask process can be time consuming
+    @ConfField(mutable = true)
+    public static boolean enable_task_info_mask_credential = true;
 
     /**
      * The max keep time of some kind of jobs.
@@ -440,14 +484,14 @@ public class Config extends ConfigBase {
      * 2. Safe (RAID)
      */
     @ConfField
-    public static String meta_dir = StarRocksFE.STARROCKS_HOME_DIR + "/meta";
+    public static String meta_dir = Config.STARROCKS_HOME_DIR + "/meta";
 
     /**
      * temp dir is used to save intermediate results of some process, such as backup and restore process.
      * file in this dir will be cleaned after these process is finished.
      */
     @ConfField
-    public static String tmp_dir = StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir";
+    public static String tmp_dir = Config.STARROCKS_HOME_DIR + "/temp_dir";
 
     /**
      * Edit log type.
@@ -702,11 +746,50 @@ public class Config extends ConfigBase {
     public static boolean net_use_ipv6_when_priority_networks_empty = false;
 
     /**
+     * DNS cache TTL (Time-To-Live) in seconds for successful DNS lookups.
+     * This sets the Java security property 'networkaddress.cache.ttl' which controls
+     * how long the JVM caches successful DNS lookups.
+     * Default is 60 seconds. Set to -1 to cache forever, 0 to disable caching.
+     * Note: This is a static configuration and requires FE restart to take effect.
+     */
+    @ConfField
+    public static int dns_cache_ttl_seconds = 60;
+
+    /**
      * Fe http port
      * Currently, all FEs' http port must be same.
      */
     @ConfField
     public static int http_port = 8030;
+
+    /**
+     * Fe https port
+     * Currently, all FEs' https port must be the same.
+     */
+    @ConfField
+    public static int https_port = 8443;
+
+    /**
+     *  https enable flag. false by default.
+     *  If the value is false, http is supported. Otherwise, https is supported.
+     */
+    @ConfField(comment = "enable https flag. false by default. If true then http " +
+            "and https are both enabled on different ports. Otherwise, only http is enabled.")
+    public static boolean enable_https = false;
+
+    /**
+     *  Property to whitelist ssl cipher suites, comma separated list, with regex support.
+     *  If both whitelist and blacklist are set, blacklist takes precedence.
+     */
+    @ConfField
+    public static String ssl_cipher_whitelist = "";
+
+    /**
+     *  Property to blacklist ssl cipher suites, comma separated list, with regex support.
+     *  If both whitelist and blacklist are set, blacklist takes precedence.
+     */
+    @ConfField
+    public static String ssl_cipher_blacklist = "";
 
     /**
      * Configs for query queue v2.
@@ -912,6 +995,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean mysql_service_nio_enable_keep_alive = true;
 
+    @ConfField
+    public static boolean mysql_service_kill_after_disconnect = true;
+
     /**
      * max num of thread to handle task in mysql.
      */
@@ -1083,6 +1169,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int prepared_transaction_default_timeout_second = 86400; // 1day
 
+    @ConfField(mutable = true)
+    public static int finish_transaction_default_lock_timeout_ms = 1000; // 1000ms
     /**
      * Max load timeout applicable to all type of load except for stream load and lake compaction
      */
@@ -1100,7 +1188,7 @@ public class Config extends ConfigBase {
      * Default spark dpp version
      */
     @ConfField
-    public static String spark_dpp_version = "1.0.0";
+    public static String spark_dpp_version = "main";
     /**
      * Default spark load timeout
      */
@@ -1111,7 +1199,7 @@ public class Config extends ConfigBase {
      * Default spark home dir
      */
     @ConfField
-    public static String spark_home_default_dir = StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x";
+    public static String spark_home_default_dir = Config.STARROCKS_HOME_DIR + "/lib/spark2x";
 
     /**
      * Default spark dependencies path
@@ -1129,7 +1217,7 @@ public class Config extends ConfigBase {
      * Default yarn client path
      */
     @ConfField
-    public static String yarn_client_path = StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn";
+    public static String yarn_client_path = Config.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn";
 
     /**
      * Default yarn config file directory
@@ -1137,7 +1225,7 @@ public class Config extends ConfigBase {
      * config file exists under this path, and if not, create them.
      */
     @ConfField
-    public static String yarn_config_dir = StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config";
+    public static String yarn_config_dir = Config.STARROCKS_HOME_DIR + "/lib/yarn-config";
 
     /**
      * Default number of waiting jobs for routine load and version 2 of load
@@ -1153,6 +1241,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_running_txn_num_per_db = 1000;
+
+    @ConfField(mutable = true, comment = "A comma-separated list of transaction latency metric groups to report. " +
+            "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
+            "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +
+            "Common groups include 'stream_load', 'routine_load', 'broker_load', 'insert', and 'compaction' " +
+            "(for shared-data clusters). e.g. \"stream_load,routine_load\"")
+    public static String txn_latency_metric_report_groups = "";
 
     /**
      * The load task executor pool size. This pool size limits the max running load tasks.
@@ -1220,6 +1315,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long catalog_trash_expire_second = 86400L; // 1day
+
+    /**
+     * The retention time for partition dropped by insert overwrite/mv rewrite etc.
+     */
+    @ConfField(mutable = true)
+    public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
 
     /**
      * Parallel load fragment instance num in single host
@@ -1292,6 +1393,11 @@ public class Config extends ConfigBase {
     public static long check_consistency_default_timeout_second = 600; // 10 min
     @ConfField(mutable = true)
     public static long consistency_tablet_meta_check_interval_ms = 2 * 3600 * 1000L; // every 2 hours
+    /**
+     * tablet can be checked only one time on one day, to avoid too many disk io in be
+     */
+    @ConfField(mutable = true)
+    public static long consistency_check_cooldown_time_second = 24 * 3600L; // every 1 day
 
     // Configurations for query engine
     /**
@@ -1315,8 +1421,9 @@ public class Config extends ConfigBase {
     /**
      * control materialized view refresh order
      */
-    @ConfField(mutable = true)
-    public static boolean materialized_view_refresh_ascending = true;
+    @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in ascending order or not, " +
+            "false by default")
+    public static boolean materialized_view_refresh_ascending = false;
 
     @ConfField(mutable = true, comment = "An internal optimization for external table refresh, " +
             "only refresh affected partitions of external table, instead of all of them ")
@@ -1449,6 +1556,12 @@ public class Config extends ConfigBase {
     public static long proc_profile_file_retained_size_bytes = 2L * 1024 * 1024 * 1024;
 
     /**
+     * Maximum Java stack depth for proc profile collection
+     */
+    @ConfField(mutable = true, comment = "Maximum Java stack depth for proc profile collection, default is 128")
+    public static int proc_profile_jstack_depth = 128;
+
+    /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
      * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
@@ -1458,6 +1571,19 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The interval of create partition batch, to avoid too frequent")
     public static long mv_create_partition_batch_interval_ms = 1000;
+
+    @ConfField(mutable = true, comment = "Whether to prefer string type for fixed length varchar column " +
+            "in materialized view creation/ctas")
+    public static boolean transform_type_prefer_string_for_varchar = true;
+
+    @ConfField(mutable = true, comment = "Whether materialized view rewrite should consider underlying table data layout " +
+            "(e.g., colocation property, table sort keys) when deciding rewrite applicability: enable/disable/force"
+    )
+    public static String mv_rewrite_consider_data_layout_mode = "enable";
+
+    @ConfField(mutable = true, comment = "Whether to enable automatic repairing of materialized views " +
+            "that are broken due to base table schema changes")
+    public static boolean enable_mv_automatic_repairing_for_broken_base_tables = true;
 
     /**
      * The number of query retries.
@@ -1551,7 +1677,7 @@ public class Config extends ConfigBase {
      * One master daemon thread will update database used data quota for db txn manager
      * every db_used_data_quota_update_interval_secs
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval to update the database used data quota in seconds")
     public static int db_used_data_quota_update_interval_secs = 300;
 
     /**
@@ -1750,13 +1876,27 @@ public class Config extends ConfigBase {
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
      * so that other threads can get the lock.
+     * TODO: deprecate this configuration after ColocateTableBalancer.java module is optimized by lock holding time.
      */
     @ConfField(mutable = true)
     public static int tablet_checker_partition_batch_num = 500;
 
+    /**
+     * Default 1000ms provides a good balance between lock fairness and overhead.
+     * Allows processing hundreds of partitions while preventing lock monopolization.
+     */
+    @ConfField(mutable = true, comment = "The maximum lock hold time per cycle for tablet checker before releasing " +
+            "and reacquiring the table lock in milliseconds, default is 1000 (ms). " +
+            "Values less than 100 will be treated as 100")
+    public static int tablet_checker_lock_time_per_cycle_ms = 1000;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
+
+    @ConfField(mutable = true, comment = "Whether to enable the collection of tablet numbers"
+            + " for each disk in the 'SHOW PROC /BACKENDS/{id}' command")
+    public static boolean enable_collect_tablet_num_in_show_proc_backend_disk_path = true;
 
     /**
      * If set to true, metric collector will be run as a daemon timer to collect metrics at fix interval
@@ -1849,7 +1989,7 @@ public class Config extends ConfigBase {
      * Save small files
      */
     @ConfField
-    public static String small_file_dir = StarRocksFE.STARROCKS_HOME_DIR + "/small_files";
+    public static String small_file_dir = Config.STARROCKS_HOME_DIR + "/small_files";
 
     /**
      * control rollup job concurrent limit
@@ -1886,7 +2026,7 @@ public class Config extends ConfigBase {
      * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
-    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
+    public static String[] authentication_chain = {SecurityIntegration.AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
     /**
      * If set to true, the granularity of auth check extends to the column level
@@ -2013,13 +2153,45 @@ public class Config extends ConfigBase {
     public static boolean enable_temporary_table_statistic_collect = true;
 
     /**
-     * auto statistic collect on first load flag
+     * Controls automatic statistics collection and maintenance triggered by data loading operations.
+     * This includes:
+     * 1. Statistics collection when data is loaded into a partition for the first time (version == 2)
+     * 2. Statistics collection for empty partitions during data loading
+     * 3. Statistics copying/updating for INSERT OVERWRITE operations
+     *
+     * Decision Policy for Statistics Collection Type:
+     * - For INSERT OVERWRITE:
+     *   deltaRatio = |targetRows - sourceRows| / (sourceRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection, copy existing stats
+     *   - Else if targetRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * - For First Load:
+     *   deltaRatio = loadRows / (totalRows + 1)
+     *   - If deltaRatio < statistic_sample_collect_ratio_threshold_of_first_load: No collection
+     *   - Else if loadRows > statistic_sample_collect_rows: Use SAMPLE statistics
+     *   - Else: Use FULL statistics
+     *
+     * Synchronization Behavior:
+     * - DML statements (INSERT/INSERT OVERWRITE): sync=true, useLock=true
+     *   Waits for statistics collection to complete (up to semi_sync_collect_statistic_await_seconds)
+     * - Stream load and broker load: sync=false, useLock=false
+     *   Statistics collection runs asynchronously without blocking the load
+     *
+     * Note: Disabling this will prevent all loading-triggered statistics operations, including
+     * statistics maintenance for INSERT OVERWRITE, which may leave tables without statistics.
      */
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect_on_first_load = true;
 
+    @ConfField(mutable = true, comment = "Whether trigger statistic collection on update statement")
+    public static boolean enable_statistic_collect_on_update = true;
+
     /**
-     * max await time for collect statistic for loading
+     * Max await time for semi-sync statistics collection during data loading (DML operations).
+     * This applies to INSERT and INSERT OVERWRITE statements where sync=true.
+     * Stream load and broker load use async mode and are not affected by this setting.
+     * If statistics collection exceeds this timeout, the load continues without waiting.
      */
     @ConfField(mutable = true)
     public static long semi_sync_collect_statistic_await_seconds = 30;
@@ -2041,6 +2213,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_manager_sleep_time_sec = 60; // 60s
+
+    /**
+     * The interval of TabletWriteLogHistorySyncer to sync tablet write log history.
+     */
+    @ConfField(mutable = true)
+    public static long tablet_write_log_history_sync_interval_sec = 60;
 
     /**
      * Analyze status keep time in catalog
@@ -2079,6 +2257,10 @@ public class Config extends ConfigBase {
             "columns after this period")
     public static long statistic_predicate_columns_ttl_hours = 24;
 
+    @ConfField(mutable = true, comment = "Enable predicate columns collection. If disabled, predicate columns " +
+            "will not be recorded during query optimization")
+    public static boolean enable_predicate_columns_collection = true;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
@@ -2086,7 +2268,9 @@ public class Config extends ConfigBase {
     public static int statistic_analyze_task_pool_size = 3;
 
     /**
-     * statistic collect query timeout
+     * statistic collect query timeout (in seconds)
+     * This is the total timeout for the entire analyze job, not for individual SQL tasks.
+     * Each SQL task within the job will use the remaining time based on the job start time.
      */
     @ConfField(mutable = true)
     public static long statistic_collect_query_timeout = 3600; // 1h
@@ -2095,10 +2279,16 @@ public class Config extends ConfigBase {
     public static long statistic_cache_columns = 100000;
 
     /**
+     * The max number of io tasks for each connector operator in collect statistic
+     */
+    @ConfField(mutable = true)
+    public static int collect_stats_io_tasks_per_connector_operator = 4;
+
+    /**
      * The size of the thread-pool which will be used to refresh statistic caches
      */
     @ConfField
-    public static int statistic_cache_thread_pool_size = 10;
+    public static int statistic_cache_thread_pool_size = 5;
 
     @ConfField
     public static int slot_manager_response_thread_pool_size = 16;
@@ -2108,6 +2298,15 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
+
+    @ConfField
+    public static int dict_collect_queue_size = 4096;
+
+    // Dictionary Collection Rejection Policy
+    // ignore: ignore the task and print the log.
+    // queue: Queue until the task is consumed. The maximum length is dict_collect_queue_size.
+    @ConfField
+    public static String dict_collect_reject_policy = "ignore";
 
     @ConfField
     public static int dict_collect_thread_pool_for_lake_size = 4;
@@ -2120,6 +2319,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
+
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_cache_refresh_after_write = false;
 
     @ConfField(mutable = true)
     public static long statistic_collect_too_many_version_sleep = 600000; // 10min
@@ -2184,7 +2386,11 @@ public class Config extends ConfigBase {
     public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
 
     /**
-     * The row number of sample collect, default 20w rows
+     * The row count threshold for deciding between SAMPLE and FULL statistics collection.
+     * Default 200,000 rows (20w).
+     * - If loaded/changed rows > this threshold: Use SAMPLE statistics collection
+     * - If loaded/changed rows <= this threshold: Use FULL statistics collection
+     * Used in conjunction with enable_statistic_collect_on_first_load.
      */
     @ConfField(mutable = true)
     public static long statistic_sample_collect_rows = 200000;
@@ -2197,13 +2403,16 @@ public class Config extends ConfigBase {
             NDVEstimator.NDVEstimatorDesc.defaultConfig().name();
 
     /**
-     * The partition size of sample collect, default 1k partitions
+     * The partition size of sample collect, default 300 partitions
      */
     @ConfField(mutable = true)
-    public static int statistic_sample_collect_partition_size = 1000;
+    public static int statistic_sample_collect_partition_size = 300;
 
-    @ConfField(mutable = true, comment = "If changed ratio of a table/partition is larger than this threshold, " +
-            "we would use sample statistics instead of full statistics")
+    @ConfField(mutable = true, comment = "The change ratio threshold for triggering statistics collection. " +
+            "For INSERT OVERWRITE: deltaRatio = |targetRows - sourceRows| / (sourceRows + 1). " +
+            "For first load: deltaRatio = loadRows / (totalRows + 1). " +
+            "If deltaRatio < this threshold (default 0.1 or 10%), statistics collection is skipped. " +
+            "Used in conjunction with enable_statistic_collect_on_first_load.")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
     @ConfField(mutable = true)
@@ -2217,6 +2426,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether to allow auto collection of the NDV of array columns")
     public static boolean enable_auto_collect_array_ndv = false;
+
+    @ConfField(mutable = true, comment = "Maximum number of partitions to include in partition_id filter " +
+            "when loading statistics. If a table has more partitions than this threshold, " +
+            "the partition_id filter will be skipped to avoid performance overhead. Default 1000.")
+    public static int statistic_load_max_partition_filter_num = 1000;
 
     @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
     public static boolean enable_sync_statistics_load = false;
@@ -2244,6 +2458,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
+
+    /**
+     * collect distinct count in histogram buckets
+     */
+    @ConfField(mutable = true)
+    public static String histogram_collect_bucket_ndv_mode = "none";
 
     @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample to collect statistics")
     public static boolean enable_use_table_sample_collect_statistics = true;
@@ -2316,7 +2536,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -2343,16 +2563,18 @@ public class Config extends ConfigBase {
     public static long hive_meta_cache_refresh_interval_s = 60;
 
     /**
+     * Implicit for users
      * Hive metastore cache ttl
      */
     @ConfField
     public static long hive_meta_cache_ttl_s = 3600L * 24L;
 
     /**
+     * Implicit for users
      * Remote file's metadata from hdfs or s3 cache ttl
      */
     @ConfField
-    public static long remote_file_cache_ttl_s = 3600 * 36L;
+    public static long remote_file_cache_ttl_s = 3600 * 24L;
 
     /**
      * The maximum number of partitions to fetch from the metastore in one RPC.
@@ -2479,13 +2701,13 @@ public class Config extends ConfigBase {
      * iceberg metadata cache dir
      */
     @ConfField(mutable = true)
-    public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
+    public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
-     * iceberg metadata memory cache total size, default 512MB
+     * iceberg metadata memory cache total size, default 0MB (turn off)
      */
     @ConfField(mutable = true)
-    public static long iceberg_metadata_memory_cache_capacity = 536870912L;
+    public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
@@ -2512,10 +2734,10 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_disk_cache_expiration_seconds = 7L * 24L * 60L * 60L;
 
     /**
-     * iceberg metadata cache max entry size, default 8MB
+     * iceberg metadata cache max entry size, default 0L (turn off)
      */
     @ConfField(mutable = true)
-    public static long iceberg_metadata_cache_max_entry_size = 8388608L;
+    public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
      * paimon metadata cache preheat, default false
@@ -2575,6 +2797,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_routine_load_lag_metrics = false;
 
+    /**
+     * Whether to collect routine load latency metrics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_routine_load_lag_time_metrics = false;
+
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
@@ -2589,7 +2817,7 @@ public class Config extends ConfigBase {
     public static int query_cost_predictor_healthchk_interval = 30;
 
     @ConfField
-    public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    public static String feature_log_dir = Config.STARROCKS_HOME_DIR + "/log";
     @ConfField
     public static String feature_log_roll_interval = "DAY";
     @ConfField
@@ -2604,8 +2832,11 @@ public class Config extends ConfigBase {
             comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
     public static boolean enable_sql_digest = false;
 
-    @ConfField(mutable = true, comment = "explain level of query plan in this detail")
+    @ConfField(mutable = true, comment = "explain level of query plan in query_detail API")
     public static String query_detail_explain_level = "COSTS";
+
+    @ConfField(mutable = true, comment = "explain level of query plan")
+    public static String query_explain_level = "NORMAL";
 
     /**
      * StarRocks-manager pull queries every 1 second
@@ -2782,6 +3013,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
 
+    @ConfField(mutable = true, comment = "Number of threads for handling gRPC server I/O")
+    public static int starmgr_grpc_server_max_worker_threads = 1024;
+
     @ConfField(mutable = true)
     public static int star_client_read_timeout_seconds = 15;
 
@@ -2837,7 +3071,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to false, when the load is empty, success is returned.
-     * Otherwise, `No partitions have data available for loading` is returned.
+     * Otherwise, `No rows were imported from upstream` is returned.
      */
     @ConfField(mutable = true)
     public static boolean empty_load_as_error = true;
@@ -2943,15 +3177,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
 
-    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
-    public static int lake_publish_version_max_threads = 512;
+    @ConfField(mutable = true, comment = "the max number of threads for publishing version",
+            aliases = {"lake_publish_version_max_threads"})
+    public static int publish_version_max_threads = 512;
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    @ConfField(mutable = false, comment = "whether allow using publish thread pool for shared-nothing")
+    public static boolean shared_nothing_publish_use_thread_pool = false;
+
     @ConfField(mutable = true, comment =
-            "Consider balancing between workers during tablet migration in shared data mode. Default: false")
-    public static boolean lake_enable_balance_tablets_between_workers = false;
+            "Consider balancing between workers during tablet migration in shared data mode. Default: true")
+    public static boolean lake_enable_balance_tablets_between_workers = true;
 
     @ConfField(mutable = true, comment =
             "Threshold of considering the balancing between workers in shared-data mode, The imbalance factor is " +
@@ -2974,6 +3212,9 @@ public class Config extends ConfigBase {
     @ConfField(comment = "how many partitions can autovacuum be executed simultaneously at most")
     public static int lake_autovacuum_parallel_partitions = 8;
 
+    @ConfField(comment = "how many partitions can fullvacuum execute simultaneously at most")
+    public static int lake_fullvacuum_parallel_partitions = 16;
+
     @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
@@ -2990,9 +3231,18 @@ public class Config extends ConfigBase {
                     "Only takes effect for tables in clusters with run_mode=shared_data.\n")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
-    @ConfField(mutable = true, comment = 
+    @ConfField(mutable = true, comment =
             "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
     public static boolean lake_autovacuum_detect_vaccumed_version = true;
+
+    @ConfField(mutable = true, comment = "the minimum delay between full vacuum runs on any given partition")
+    public static long lake_fullvacuum_partition_naptime_seconds = 3600L * 24L;
+
+    @ConfField(mutable = true, comment = "metadata expired time from full vacuum begin running")
+    public static long lake_fullvacuum_meta_expired_seconds = 3600L * 24L * 2L;
+
+    @ConfField(mutable = true, comment = "Whether to enable full vacuum daemon")
+    public static boolean lake_enable_fullvacuum = false;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
@@ -3163,8 +3413,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static double flat_json_null_factor = 0.3;
 
-    @ConfField
-    public static double flat_json_sparsity_factory = 0.9;
+    @ConfField public static double flat_json_sparsity_factory = 0.3;
 
     @ConfField
     public static int flat_json_column_max = 100;
@@ -3310,8 +3559,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
-    @ConfField(mutable = true, comment = "materialized view can refresh at most 10 partition at a time")
-    public static int mv_max_partitions_num_per_refresh = 10;
+    @ConfField(mutable = true, comment = "materialized view can refresh at most 64 partition at a time")
+    public static int mv_max_partitions_num_per_refresh = 64;
 
     @ConfField(mutable = true, comment = "materialized view can refresh at most 100_000_000 rows of data at a time")
     public static long mv_max_rows_per_refresh = 100_000_000L;
@@ -3330,7 +3579,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")
-    public static int max_mv_task_run_meta_message_values_length = 16;
+    public static int max_mv_task_run_meta_message_values_length = 8;
 
     @ConfField(mutable = true, comment = "Whether enable to use list partition rather than range partition for " +
             "all external table partition types")
@@ -3342,11 +3591,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int default_mv_partition_refresh_number = 1;
 
+    @ConfField(mutable = true, comment = "The default refresh strategy for materialized view partition refresh, " +
+            "adaptive by default")
+    public static String default_mv_partition_refresh_strategy = "adaptive";
+
     @ConfField(mutable = true)
-    public static String default_mv_partition_refresh_strategy = "strict";
+    public static String default_mv_refresh_mode = "pct";
 
     @ConfField(mutable = true, comment = "Check the schema of materialized view's base table strictly or not")
-    public static boolean enable_active_materialized_view_schema_strict_check = true;
+    public static boolean enable_active_materialized_view_schema_strict_check = false;
 
     @ConfField(mutable = true,
             comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
@@ -3355,6 +3608,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable to cache mv query context or not")
     public static boolean enable_mv_query_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Whether enable to cache mv global context or not which its lifecycle is " +
+            "as the same with the mv")
+    public static boolean enable_mv_global_context_cache = true;
+
+    @ConfField(mutable = true, comment = "Max materialized view global context cache size during one mv's lifecycle.")
+    public static long mv_global_context_cache_max_size = 5000;
 
     @ConfField(mutable = true, comment = "Mv refresh fails if there is filtered data, true by default")
     public static boolean mv_refresh_fail_on_filter_data = true;
@@ -3371,11 +3631,21 @@ public class Config extends ConfigBase {
             " If one base mv has done reload, no need to do it again while other mv that related to it is reloading ")
     public static boolean enable_mv_post_image_reload_cache = true;
 
+    @ConfField(mutable = true, comment = "The timeout for waiting async mv reload done, 3 min by default")
+    public static int mv_async_reload_wait_timeout_second = 3 * 60; // 3 min
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
     @ConfField(mutable = true)
     public static boolean mv_auto_analyze_async = true;
+
+    /**
+     * Creator-based: record the creator(user) of MV, refresh the MV with same user
+     * Root-based: always use the ROOT to refresh the MV
+     */
+    @ConfField(mutable = true, comment = "Whether to use the creator-based authorization or root for MV refresh")
+    public static boolean mv_use_creator_based_authorization = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
@@ -3411,7 +3681,7 @@ public class Config extends ConfigBase {
     public static long mv_plan_cache_expire_interval_sec = 24L * 60L * 60L;
 
     @ConfField(mutable = true, comment = "The default thread pool size of mv plan cache")
-    public static int mv_plan_cache_thread_pool_size = 3;
+    public static int mv_plan_cache_thread_pool_size = 8;
 
     /**
      * mv plan cache expire interval in seconds
@@ -3458,7 +3728,7 @@ public class Config extends ConfigBase {
      * Number of Hash of Lock Table
      */
     @ConfField
-    public static int lock_manager_lock_table_num = 32;
+    public static int lock_manager_lock_table_num = 256;
 
     /**
      * Whether to enable deadlock unlocking operation.
@@ -3536,6 +3806,9 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_parser_context_cache = true;
+
+    @ConfField
+    public static boolean enable_concurrent_parse_optimization = false;
 
     // Whether restore tables into colocate group if the
     // backuped table is colocated
@@ -3615,6 +3888,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_max_service_task_threads_num = 4096;
 
+    // Maximum time in milliseconds that a subsequent query on the same Arrow Flight SQL connection will wait
+    // for the previous query to finish before returning an error.
+    @ConfField(mutable = true)
+    public static long arrow_flight_sql_connection_query_wait_timeout_ms = 10_000;
+
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 
@@ -3639,7 +3917,7 @@ public class Config extends ConfigBase {
     public static String jwt_principal_field = "sub";
 
     /**
-     * Specifies a list of string. One of that must match the value of the JWT’s issuer (iss) field in order to consider
+     * Specifies a list of string. One of that must match the value of the JWT's issuer (iss) field in order to consider
      * this JWT valid. The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
@@ -3653,7 +3931,7 @@ public class Config extends ConfigBase {
     public static String[] jwt_required_audience = {};
 
     /**
-     * The authorization URL. The URL a user’s browser will be redirected to in order to begin the OAuth2 authorization process
+     * The authorization URL. The URL a user's browser will be redirected to in order to begin the OAuth2 authorization process
      */
     @ConfField(mutable = false)
     public static String oauth2_auth_server_url = "";
@@ -3705,14 +3983,14 @@ public class Config extends ConfigBase {
     public static String oauth2_principal_field = "sub";
 
     /**
-     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * Specifies a string that must match the value of the JWT's issuer (iss) field in order to consider this JWT valid.
      * The iss field in the JWT identifies the principal that issued the JWT.
      */
     @ConfField(mutable = false)
     public static String oauth2_required_issuer = "";
 
     /**
-     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * Specifies a string that must match the value of the JWT's Audience (aud) field in order to consider this JWT valid.
      * The aud field in the JWT identifies the recipients that the JWT is intended for.
      */
     @ConfField(mutable = false)
@@ -3760,35 +4038,44 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
 
-    /**
-     * The default scheduler interval for dynamic tablet jobs.
-     */
-    @ConfField(mutable = false, comment = "The default scheduler interval for dynamic tablet jobs.")
-    public static long dynamic_tablet_job_scheduler_interval_ms = 10;
+    @ConfField(mutable = true)
+    public static long default_statistics_output_row_count = 1L;
 
     /**
-     * The max keep time of dynamic tablet history jobs.
+     * Whether enable range distribution.
      */
-    @ConfField(mutable = true, comment = "The max keep time of dynamic tablet history jobs.")
-    public static long dynamic_tablet_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
+    @ConfField(mutable = true, comment = "Whether enable range distribution.")
+    public static boolean enable_range_distribution = false;
+
+    /**
+     * The default scheduler interval for tablet reshard jobs.
+     */
+    @ConfField(mutable = false, comment = "The default scheduler interval for tablet reshard jobs.")
+    public static long tablet_reshard_job_scheduler_interval_ms = 10;
+
+    /**
+     * The max keep time of tablet reshard history jobs.
+     */
+    @ConfField(mutable = true, comment = "The max keep time of tablet reshard history jobs.")
+    public static long tablet_reshard_history_job_keep_max_ms = 3 * 24 * 3600 * 1000; // 3 days
 
     /**
      * The max number of tablets can do tablet splitting and merging in parallel.
      */
     @ConfField(mutable = true, comment = "The max number of tablets can do tablet splitting and merging in parallel.")
-    public static long dynamic_tablet_max_parallel_tablets = 10 * 1024;
+    public static long tablet_reshard_max_parallel_tablets = 10 * 1024;
 
     /**
-     * Tablets with size larger than this value will be considered to split.
+     * Tablet splitting and merging will make tablet size around this value.
      */
-    @ConfField(mutable = true, comment = "Tablets with size larger than this value will be considered to split.")
-    public static long dynamic_tablet_split_size = 4 * 1024 * 1024 * 1024;
+    @ConfField(mutable = true, comment = "Tablet splitting and merging will make tablet size around this value.")
+    public static long tablet_reshard_target_size = 1024L * 1024L * 1024L;
 
     /**
      * The max number of new tablets that an old tablet can be split into.
      */
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
-    public static int dynamic_tablet_max_split_count = 1024;
+    public static int tablet_reshard_max_split_count = 1024;
 
     /**
      * Whether to enable tracing historical nodes when cluster scale
@@ -3809,4 +4096,20 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int deploy_serialization_queue_size = -1;
+
+    @ConfField(comment = "Enable case-insensitive catalog/database/table names. " +
+            "Only configurable during cluster initialization, immutable once set.")
+    public static boolean enable_table_name_case_insensitive = false;
+
+    @ConfField(mutable = true, comment = "Enable desensitize sql in query dump")
+    public static boolean enable_desensitize_query_dump = false;
+
+    @ConfField(mutable = true, comment = "The threshold to flatten compound predicate from deep tree to a balanced tree to " +
+            "avoid stack over flow")
+    public static int compound_predicate_flatten_threshold = 512;
+
+    @ConfField public static int ui_queries_sql_statement_max_length = 128;
+
+    @ConfField(mutable = true)
+    public static boolean enable_hudi_lib_internal_metadata_table = true;
 }

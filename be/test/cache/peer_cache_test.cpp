@@ -15,13 +15,9 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <cstring>
-#include <filesystem>
-
-#include "cache/block_cache/io_buffer.h"
-#include "cache/cache_options.h"
+#include "cache/disk_cache/io_buffer.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
 #include "cache/peer_cache_engine.h"
-#include "common/logging.h"
 #include "common/statusor.h"
 
 namespace starrocks {
@@ -44,7 +40,7 @@ TEST_F(PeerCacheTest, unsupported_op) {
 
 TEST_F(PeerCacheTest, io_adaptor) {
     PeerCacheEngine peer_cache;
-    CacheOptions options;
+    RemoteCacheOptions options;
     options.skip_read_factor = 1.0;
     Status st = peer_cache.init(options);
     ASSERT_TRUE(st.ok());
@@ -54,7 +50,7 @@ TEST_F(PeerCacheTest, io_adaptor) {
         peer_cache.record_read_remote(1024, 1000);
     }
 
-    ReadCacheOptions read_options;
+    DiskCacheReadOptions read_options;
     read_options.use_adaptor = true;
     IOBuffer buf;
     st = peer_cache.read("test_key", 0, 100, &buf, &read_options);

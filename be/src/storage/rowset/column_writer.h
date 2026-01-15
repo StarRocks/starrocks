@@ -43,7 +43,10 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_writer.h"
+#endif
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -72,6 +75,7 @@ struct ColumnWriterOptions {
     // space saving = 1 - compressed_size / uncompressed_size
     double compression_min_space_saving = 0.1;
     bool need_zone_map = false;
+    bool zone_map_truncate_string = false; // truncate string at write time to reduce comparison/metadata overhead.
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
     bool need_vector_index = false;
@@ -86,7 +90,9 @@ struct ColumnWriterOptions {
 
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
-    GlobalDictMap* global_dict = nullptr;
+    const GlobalDictMap* global_dict = nullptr;
+    // map<sub_column_name, dict> for FlatJSON
+    std::unordered_map<std::string, const GlobalDictMap> flat_json_dicts;
 
     bool is_compaction = false;
     bool need_flat = false;
@@ -297,11 +303,12 @@ private:
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
     std::unique_ptr<BitmapIndexWriter> _bitmap_index_builder;
     std::unique_ptr<BloomFilterIndexWriter> _bloom_filter_index_builder;
+#ifndef __APPLE__
     std::unique_ptr<InvertedWriter> _inverted_index_builder;
+#endif
 
     // _zone_map_index_builder != NULL || _bitmap_index_builder != NULL || _bloom_filter_index_builder != NULL
     bool _has_index_builder = false;
-    bool _has_inverted_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 

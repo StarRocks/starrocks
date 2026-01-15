@@ -5,6 +5,8 @@ sidebar_position: 30
 
 # LDAP 認証
 
+import LDAPSSLLink from '../../../_assets/commonMarkdown/ldap_ssl_link.mdx'
+
 StarRocks は、ネイティブなパスワードベースの認証に加えて、LDAP 認証もサポートしています。
 
 このトピックでは、StarRocks で LDAP を使用してユーザーを手動で作成し、認証する方法について説明します。セキュリティインテグレーションを使用して StarRocks を LDAP サービスと統合する方法については、[Authenticate with Security Integration](./security_integration.md) を参照してください。LDAP サービスでユーザーグループを認証する方法については、[Authenticate User Groups](../group_provider.md) を参照してください。
@@ -33,11 +35,31 @@ StarRocks が LDAP システム内でユーザーを直接取得する方法で�
 authentication_ldap_simple_bind_base_dn =
 # LDAP オブジェクト内でユーザーを識別する属性の名前を追加します。デフォルトは uid です。
 authentication_ldap_simple_user_search_attr =
-# ユーザーを取得する際に使用する管理者アカウントの DN を追加します。
+# ユーザーを取得するための管理者 DN を追加します。
 authentication_ldap_simple_bind_root_dn =
-# ユーザーを取得する際に使用する管理者アカウントのパスワードを追加します。
+# ユーザーを取得するための管理者パスワードを追加します。
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+## DN マッチングメカニズム
+
+v3.5.0 以降、StarRocks は LDAP 認証時にユーザーの識別名 (DN) 情報を記録および渡す機能をサポートし、より正確なグループ解決を実現します。
+
+### 動作原理
+
+1. **認証フェーズ**: LDAPAuthProviderは、ユーザー認証成功後に以下の2つの情報を記録します：
+   - ログインユーザー名（従来のグループマッチング用）
+   - ユーザーの完全なDN（DNベースのグループマッチング用）
+
+2. **グループ解決フェーズ**: LDAPGroupProvider は、`ldap_user_search_attr` パラメータの設定に基づいてマッチング戦略を決定します:
+   - **`ldap_user_search_attr` が設定されている場合**、グループマッチングのキーとしてユーザー名を使用します。
+   - **`ldap_user_search_attr` が設定されていない場合**、グループマッチングのキーとして DN を使用します。
+
+### 使用例
+
+- **従来の LDAP 環境**: グループメンバーは単純なユーザー名（`cn` 属性など）を使用します。管理者は `ldap_user_search_attr` を設定する必要があります。
+- **Microsoft AD 環境**: グループメンバーにユーザー名属性が存在しない場合があります。`ldap_user_search_attr` は設定できません。システムは直接 DN を使用して照合を行います。
+- **混合環境**: 両方の照合方法を柔軟に切り替えることがサポートされています。
 
 ## LDAP でユーザーを作成する
 
@@ -73,32 +95,31 @@ LDAP 認証では、クライアントがクリアテキストのパスワード
 実行時に `--default-auth mysql_clear_password --enable-cleartext-plugin` を追加します。
 
 ```sql
-mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -utom -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ```
 
-### JDBC クライアントから LDAP で接続する
+### JDBC/ODBC クライアントから LDAP で接続する
 
 - **JDBC**
 
-JDBC のデフォルトの MysqlClearPasswordPlugin は SSL トランスポートを必要とするため、カスタムプラグインが必要です。
+<LDAPSSLLink />
+
+JDBC 5:
 
 ```java
-public class MysqlClearPasswordPluginWithoutSSL extends MysqlClearPasswordPlugin {
-    @Override  
-    public boolean requiresConfidentiality() {
-        return false;
-    }
-}
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.jdbc.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");
 ```
 
-接続後、カスタムプラグインをプロパティに設定します。
+JDBC 8:
 
 ```java
-...
-Properties properties = new Properties();// パッケージ名を xxx.xxx.xxx に置き換えます
-properties.put("authenticationPlugins", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("defaultAuthenticationPlugin", "xxx.xxx.xxx.MysqlClearPasswordPluginWithoutSSL");
-properties.put("disabledAuthenticationPlugins", "com.mysql.jdbc.authentication.MysqlNativePasswordPlugin");DriverManager.getConnection(url, properties);
+Properties properties = new Properties();
+properties.put("authenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("defaultAuthenticationPlugin", "com.mysql.cj.protocol.a.authentication.MysqlClearPasswordPlugin");
+properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authentication.MysqlNativePasswordPlugin");
 ```
 
 - **ODBC**

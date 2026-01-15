@@ -78,7 +78,7 @@ public class TestBucketShuffleRightJoin {
         String plan = explainAndExecPlan.first;
         ExecPlan execPlan = explainAndExecPlan.second;
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
-                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
+                ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
         coord.prepareExec();
 
         boolean bucketShuffleRightJoinPresent = coord.getExecutionDAG().getFragmentsInPreorder()

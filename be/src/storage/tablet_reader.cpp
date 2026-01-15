@@ -219,7 +219,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                 const auto* col_pred = child_node.col_pred();
                 const auto cid = col_pred->column_id();
                 if (cid < tablet_schema->num_key_columns() && col_pred->type() == PredicateType::kEQ) {
-                    auto& column = keys->get_column_by_id(cid);
+                    auto* column = keys->get_column_raw_ptr_by_id(cid);
                     if (column->size() != 0) {
                         return Status::NotSupported(
                                 strings::Substitute("multiple eq predicates on same pk column columnId=$0", cid));
@@ -368,6 +368,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.vector_search_option = params.vector_search_option;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -590,13 +591,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }
-            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
-            if (pred == nullptr) {
-                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
-                             << "], condition_op[" << cond.condition_op << "], condition_values["
-                             << cond.condition_values[0] << "].";
-                continue;
-            }
+            ASSIGN_OR_RETURN(ColumnPredicate * pred, pred_parser.parse_thrift_cond(cond));
             conjunctions.add(pred);
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
@@ -614,13 +609,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             for (const auto& value : in_predicate.values()) {
                 cond.condition_values.push_back(value);
             }
-            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
-            if (pred == nullptr) {
-                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
-                             << "], condition_op[" << cond.condition_op << "], condition_values["
-                             << cond.condition_values[0] << "].";
-                continue;
-            }
+            ASSIGN_OR_RETURN(ColumnPredicate * pred, pred_parser.parse_thrift_cond(cond));
             conjunctions.add(pred);
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
@@ -697,7 +686,7 @@ Status TabletReader::parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
         SeekTuple upper;
         RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
         RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
-        ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
+        ranges->emplace_back(std::move(lower), std::move(upper));
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);
     }

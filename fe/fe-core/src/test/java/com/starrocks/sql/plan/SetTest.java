@@ -567,7 +567,7 @@ public class SetTest extends PlanTestBase {
         // order by null literal with limit offset
         sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  6:EXCHANGE\n" +
                 "     offset: 10\n" +
                 "     limit: 20");
 
@@ -721,5 +721,29 @@ public class SetTest extends PlanTestBase {
         assertContains(plan, "constant exprs: \n"
                 + "         row([1,2,3], [4,5,6]) | row([1,2,3], [4,5,6]).col1[true]\n"
                 + "         row([5,6,7], [6,7]) | row([5,6,7], [6,7]).col1[true]");
+    }
+
+    @Test
+    public void testUnionMulNull() throws Exception {
+        String sql = "WITH\n" +
+                "`CTE_0` AS (\n" +
+                "    SELECT \"table\" AS `TABLE_NAME`\n" +
+                "),\n" +
+                "`CTE_1` AS (\n" +
+                "    SELECT `TABLE_NAME` AS `TABLE_NAME`\n" +
+                "    FROM `CTE_0`\n" +
+                "    LIMIT 2147483646\n" +
+                ")\n" +
+                "SELECT `TABLE_NAME` FROM `CTE_1`\n" +
+                "    UNION ALL (SELECT NULL)\n" +
+                "    UNION ALL (SELECT NULL)\n" +
+                "    UNION ALL (SELECT NULL)";
+        final String plan = getCostExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [14, VARCHAR, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [4: TABLE_NAME, VARCHAR, false]\n" +
+                "  |      [17: TABLE_NAME, VARCHAR, true]");
     }
 }

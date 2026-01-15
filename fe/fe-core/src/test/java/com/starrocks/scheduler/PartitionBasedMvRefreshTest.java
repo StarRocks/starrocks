@@ -16,19 +16,20 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,8 +37,6 @@ import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -154,11 +153,10 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                             if (i == 0) {
                                 taskRun = TaskRunBuilder.newBuilder(task).build();
                             }
-                            System.out.println("start to execute task run:" + i);
+                            logSysInfo("start to execute task run:" + i);
                             Assertions.assertTrue(taskRun != null);
                             initAndExecuteTaskRun(taskRun);
-                            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                                        taskRun.getProcessor();
+                            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                             MvTaskRunContext mvContext = processor.getMvContext();
                             ExecPlan execPlan = mvContext.getExecPlan();
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -188,8 +186,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t1 union all select * from t2;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -204,8 +202,8 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                     ")" +
                     "as " +
                     " select * from t2 union all select * from t1;";
-        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 0, 0, 1, 1, 1);
-        List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1, 1, 1, 0, 0);
+        List<Integer> t1PartitionNums = ImmutableList.of(1, 1, 1, 0, 0, 0, 0);
+        List<Integer> t2PartitionNums = ImmutableList.of(0, 0, 1, 1, 1, 1, 1);
         testRefreshUnionAllWithDefaultRefreshNumber(sql, t1PartitionNums, t2PartitionNums);
     }
 
@@ -230,11 +228,10 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                             if (i == 0) {
                                 taskRun = TaskRunBuilder.newBuilder(task).build();
                             }
-                            System.out.println("start to execute task run:" + i);
+                            logSysInfo("start to execute task run:" + i);
                             Assertions.assertTrue(taskRun != null);
                             initAndExecuteTaskRun(taskRun);
-                            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                                        taskRun.getProcessor();
+                            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                             MvTaskRunContext mvContext = processor.getMvContext();
                             ExecPlan execPlan = mvContext.getExecPlan();
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -272,11 +269,11 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
 
                         Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
                         int mvRefreshTimes = 3;
-                        List<Integer> t1PartitionNums = ImmutableList.of(0, 0, 1);
+                        List<Integer> t1PartitionNums = ImmutableList.of(1, 0, 0);
                         List<Integer> t2PartitionNums = ImmutableList.of(1, 1, 1);
                         TaskRun taskRun = null;
                         for (int i = 0; i < mvRefreshTimes; i++) {
-                            System.out.println("start to execute task run:" + i);
+                            logSysInfo("start to execute task run:" + i);
                             if (i == 0) {
                                 taskRun = TaskRunBuilder.newBuilder(task).build();
                                 initAndExecuteTaskRun(taskRun, "2020-10-12", "2020-10-23");
@@ -286,8 +283,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                                 String partitionEnd = executeOption.getTaskRunProperties().get(TaskRun.PARTITION_END);
                                 initAndExecuteTaskRun(taskRun, partitionStart, partitionEnd);
                             }
-                            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
-                                        taskRun.getProcessor();
+                            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
                             MvTaskRunContext mvContext = processor.getMvContext();
                             ExecPlan execPlan = mvContext.getExecPlan();
                             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -333,7 +329,7 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
         MaterializedView mv = starRocksAssert.getMv("test", "join_mv1");
         Assertions.assertEquals(3, mv.getPartitionNames().size());
         Set<Range<PartitionKey>> ranges =
-                mv.getRangePartitionMap().values().stream().collect(Collectors.toSet());
+                toRangeMap(mv.getRangePartitionMap()).values().stream().collect(Collectors.toSet());
         Assertions.assertEquals(3, ranges.size());
         PartitionKey p0 = new PartitionKey(ImmutableList.of(new DateLiteral(0, 1, 1)),
                 ImmutableList.of(PrimitiveType.DATE));
@@ -375,20 +371,11 @@ public class PartitionBasedMvRefreshTest extends MVTestBase {
                                 "JOIN join_base_t2 t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2")
         );
         // TODO(fix me): throw a better stack
-        System.out.println(e.getMessage());
+        logSysInfo(e.getMessage());
         Assertions.assertTrue(e.getMessage().contains("Must be range partitioned table"));
 
         starRocksAssert.dropTable("join_base_t1");
         starRocksAssert.dropTable("join_base_t2");
         starRocksAssert.dropMaterializedView("join_mv1");
-    }
-
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
     }
 }

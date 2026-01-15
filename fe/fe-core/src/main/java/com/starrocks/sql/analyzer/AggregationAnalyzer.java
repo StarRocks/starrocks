@@ -16,43 +16,44 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AnalyticExpr;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrowExpr;
-import com.starrocks.analysis.BetweenPredicate;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CaseExpr;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.CloneExpr;
-import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DictQueryExpr;
-import com.starrocks.analysis.ExistsPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LikePredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchExpr;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.TimestampArithmeticExpr;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.sql.ast.ArrayExpr;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.DictionaryGetExpr;
-import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.ArrowExpr;
+import com.starrocks.sql.ast.expression.BetweenPredicate;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.CaseExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.CloneExpr;
+import com.starrocks.sql.ast.expression.CollectionElementExpr;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
+import com.starrocks.sql.ast.expression.ExistsPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.FieldReference;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
+import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.VariableExpr;
 
 import java.util.List;
 import java.util.Map;
@@ -60,7 +61,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 /**
  * AggregationAnalyzer is used to analyze aggregation
@@ -104,14 +105,14 @@ public class AggregationAnalyzer {
 
     private void analyze(Expr expression) {
         if (!new VerifyExpressionVisitor().visit(expression)) {
-            throw new SemanticException(PARSER_ERROR_MSG.shouldBeAggFunc(expression.toSql()), expression.getPos());
+            throw new SemanticException(PARSER_ERROR_MSG.shouldBeAggFunc(ExprToSql.toSql(expression)), expression.getPos());
         }
     }
 
     /**
      * visitor returns true if all expressions are constant with respect to the group.
      */
-    private class VerifyExpressionVisitor implements AstVisitor<Boolean, Void> {
+    private class VerifyExpressionVisitor implements AstVisitorExtendInterface<Boolean, Void> {
         @Override
         public Boolean visit(ParseNode expr) {
             if (groupingExpressions.stream().anyMatch(expr::equals)) {
@@ -122,7 +123,7 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitFieldReference(FieldReference node, Void context) {
-            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName().toString();
+            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName();
             throw new SemanticException(colInfo + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
@@ -132,7 +133,8 @@ public class AggregationAnalyzer {
             if (node instanceof Parameter) {
                 return true;
             }
-            throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function",
+            throw new SemanticException(
+                    ExprToSql.toSql(node) + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
 
@@ -243,7 +245,7 @@ public class AggregationAnalyzer {
                 List<FunctionCallExpr> aggFunc = Lists.newArrayList();
                 if (expr.getChildren().stream().anyMatch(childExpr -> {
                     childExpr.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                            arg.getFn() instanceof AggregateFunction, aggFunc);
+                            ((FunctionCallExpr) arg).getFn() instanceof AggregateFunction, aggFunc);
                     return !aggFunc.isEmpty();
                 })) {
                     throw new SemanticException(PARSER_ERROR_MSG.unsupportedNestAgg("aggregation function"), expr.getPos());
@@ -264,7 +266,7 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
             if (orderByScope != null) {
-                throw new SemanticException(PARSER_ERROR_MSG.unsupportedExprWithInfo(node.toSql(), "ORDER BY"),
+                throw new SemanticException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(node), "ORDER BY"),
                         node.getPos());
             }
 
@@ -329,7 +331,7 @@ public class AggregationAnalyzer {
                             SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
                         if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
                             throw new SemanticException(
-                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(expr.toSql(), node.toSql()),
+                                    PARSER_ERROR_MSG.unsupportedNoGroupBySubquery(ExprToSql.toSql(expr), ExprToSql.toSql(node)),
                                     expr.getPos());
                         }
                     } else {

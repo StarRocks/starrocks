@@ -34,7 +34,6 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,14 +54,16 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
          * create all rollup indexes. and set state.
          * After setting, Tables' state will be ROLLUP
          */
-        int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
+        int baseSchemaHash = olapTable.getSchemaHashByIndexMetaId(baseIndexMetaId);
         // mvSchemaVersion will keep same with the src MaterializedIndex
-        int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
+        int mvSchemaVersion = olapTable.getIndexMetaByMetaId(baseIndexMetaId).getSchemaVersion();
         int mvSchemaHash = Util.schemaHash(0 /* init schema version */, rollupColumns, olapTable.getBfColumnNames(),
                 olapTable.getBfFpp());
+        // initially, index id and index meta id are the same
+        long rollupIndexId = rollupIndexMetaId;
 
         AlterJobV2 mvJob = new LakeRollupJob(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutMs,
-                baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
+                baseIndexMetaId, rollupIndexMetaId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
         mvJob.setComputeResource(computeResource);
@@ -72,13 +73,13 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
             // create shard group
             long shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
-                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexId);
+                        createShardGroup(dbId, olapTable.getId(), partitionId, rollupIndexMetaId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
                         MaterializedIndex.IndexState.SHADOW, shardGroupId);
-                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexId);
+                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexMetaId);
 
                 // create shard
                 Map<String, String> shardProperties = new HashMap<>();
@@ -105,22 +106,16 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
 
                 TabletMeta shadowTabletMeta =
                         new TabletMeta(dbId, olapTable.getId(), physicalPartitionId, rollupIndexId, medium, true);
-                Map<Long, Long> tabletIdMap = new HashMap<>();
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
                     mvIndex.addTablet(shadowTablet, shadowTabletMeta);
                     mvJob.addTabletIdMap(physicalPartitionId, shadowTablet.getId(), originTablet.getId());
-                    tabletIdMap.put(originTablet.getId(), shadowTablet.getId());
                 }
-
-                List<Long> virtualBuckets = new ArrayList<>(baseIndex.getVirtualBuckets());
-                virtualBuckets.replaceAll(tabletId -> tabletIdMap.get(tabletId));
-                mvIndex.setVirtualBuckets(virtualBuckets);
 
                 mvJob.addMVIndex(physicalPartitionId, mvIndex);
                 LOG.debug("create materialized view index {} based on index {} in partition {}:{}",
-                        rollupIndexId, baseIndexId, partitionId, physicalPartitionId);
+                        rollupIndexMetaId, baseIndexMetaId, partitionId, physicalPartitionId);
             } // end for baseTablets
         }
         return mvJob;

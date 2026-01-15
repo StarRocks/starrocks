@@ -53,3 +53,7 @@ The n-gram bloom filter index is a special type of Bloom filter index, typically
 ### [Full-Text inverted indexes](./inverted_index.md)
 
 A full-text inverted index can quickly locate data rows that match keywords, thereby speeding up full-text searches.
+
+### [Vector indexes](./vector_index.md)
+
+A vector index allows you to perform an approximate nearest neighbor search (ANNS) with StarRocks.

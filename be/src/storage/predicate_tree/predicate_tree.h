@@ -18,6 +18,7 @@
 #include <set>
 #include <vector>
 
+#include "column/chunk.h"
 #include "common/overloaded.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
@@ -329,6 +330,8 @@ public:
     size_t size() const;
     /// Whether there is no ColumnPredicates in the tree.
     bool empty() const;
+
+    bool has_or_predicate() const;
 
     const PredicateAndNode& root() const { return _root; }
     /// Release the ownership of all the nodes.

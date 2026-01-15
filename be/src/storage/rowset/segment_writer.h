@@ -46,8 +46,10 @@
 #include "gutil/macros.h"
 #include "io/input_stream.h"
 #include "runtime/global_dict/types.h"
+#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/row_store_encoder_factory.h"
 #include "storage/tablet_schema.h"
+#include "storage/variant_tuple.h"
 
 namespace starrocks {
 
@@ -155,12 +157,21 @@ public:
 
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
 
+    bool has_key() { return _has_key; }
+
+    const VariantTuple& get_sort_key_min() { return _sort_key_min; }
+
+    const VariantTuple& get_sort_key_max() { return _sort_key_max; }
+
 private:
     Status _write_short_key_index();
     Status _write_footer();
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column);
     void _verify_footer();
+
+    // Check global dictionary validity for a single column writer
+    void _check_column_global_dict_valid(ColumnWriter* column_writer, uint32_t column_index);
 
     uint32_t _segment_id;
     TabletSchemaCSPtr _tablet_schema;
@@ -174,6 +185,8 @@ private:
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
+    VariantTuple _sort_key_min;
+    VariantTuple _sort_key_max;
     std::unique_ptr<Schema> _schema_without_full_row_column;
 
     // num rows written when appending [partial] columns

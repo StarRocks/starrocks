@@ -24,74 +24,88 @@ namespace starrocks::connector {
 
 ConnectorChunkSink::ConnectorChunkSink(std::vector<std::string> partition_columns,
                                        std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                                       std::unique_ptr<LocationProvider> location_provider,
-                                       std::unique_ptr<formats::FileWriterFactory> file_writer_factory,
-                                       int64_t max_file_size, RuntimeState* state, bool support_null_partition)
+                                       std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory,
+                                       RuntimeState* state, bool support_null_partition)
         : _partition_column_names(std::move(partition_columns)),
           _partition_column_evaluators(std::move(partition_column_evaluators)),
-          _location_provider(std::move(location_provider)),
-          _file_writer_factory(std::move(file_writer_factory)),
-          _max_file_size(max_file_size),
+          _partition_chunk_writer_factory(std::move(partition_chunk_writer_factory)),
           _state(state),
           _support_null_partition(support_null_partition) {}
 
 Status ConnectorChunkSink::init() {
+    init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
-    RETURN_IF_ERROR(_file_writer_factory->init());
-    _op_mem_mgr->init(&_writer_stream_pairs, _io_poller,
+    RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
+    _op_mem_mgr->init(&_partition_chunk_writers, _io_poller,
                       [this](const CommitResult& r) { this->callback_on_commit(r); });
     return Status::OK();
 }
 
+void ConnectorChunkSink::init_profile() {
+    if (_profile == nullptr) {
+        _profile = _state->obj_pool()->add(new RuntimeProfile("ConnectorChunkSink"));
+    }
+
+    std::string partition_names = fmt::format("{}", fmt::join(_partition_column_names, ","));
+    _profile->add_info_string("PartitionColumns", partition_names);
+
+    _sink_profile = _state->obj_pool()->add(new connector::ConnectorSinkProfile());
+    _sink_profile->runtime_profile = _profile;
+    _sink_profile->partition_writer_counter = ADD_COUNTER(_profile, "PartitionWriters", TUnit::UNIT);
+    _sink_profile->write_file_counter = ADD_COUNTER(_profile, "WriteFiles", TUnit::UNIT);
+    _sink_profile->write_file_record_counter = ADD_COUNTER(_profile, "WriteFileRecords", TUnit::UNIT);
+    _sink_profile->write_file_bytes = ADD_COUNTER(_profile, "WriteFileBytes", TUnit::BYTES);
+
+    // Timer metrics
+    _sink_profile->write_file_timer = ADD_TIMER(_profile, "WriteFileTime");
+    _sink_profile->commit_file_timer = ADD_TIMER(_profile, "CommitFileTime");
+    _sink_profile->sort_timer = ADD_TIMER(_profile, "SortTime");
+    _sink_profile->spill_chunk_timer = ADD_TIMER(_profile, "SpillChunkTime");
+    _sink_profile->merge_blocks_timer = ADD_TIMER(_profile, "MergeBlocksTime");
+
+    // Memory usage peak metrics
+    _sink_profile->spilling_bytes_usage_peak = ADD_PEAK_COUNTER(_profile, "SpillingBytesUsagePeak", TUnit::BYTES);
+}
+
 Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
-                                                 const std::vector<int8_t>& partition_field_null_list, Chunk* chunk) {
+                                                 const std::vector<int8_t>& partition_field_null_list,
+                                                 const ChunkPtr& chunk) {
     // partition_field_null_list is used to distinguish with the secenario like NULL and string "null"
     // They are under the same dir path, but should not in the same data file.
     // We should record them in different files so that each data file could has its own meta info.
     // otherwise, the scanFileTask may filter data incorrectly.
-    auto it = _writer_stream_pairs.find(std::make_pair(partition, partition_field_null_list));
-    if (it != _writer_stream_pairs.end()) {
-        Writer* writer = it->second.first.get();
-        if (writer->get_written_bytes() >= _max_file_size) {
-            string null_fingerprint(partition_field_null_list.size(), '0');
-            std::transform(partition_field_null_list.begin(), partition_field_null_list.end(), null_fingerprint.begin(),
-                           [](int8_t b) { return b + '0'; });
-            callback_on_commit(writer->commit().set_extra_data(null_fingerprint));
-            _writer_stream_pairs.erase(it);
-            auto path =
-                    !_partition_column_names.empty() ? _location_provider->get(partition) : _location_provider->get();
-            ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-            std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
-            std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
-            RETURN_IF_ERROR(new_writer->init());
-            RETURN_IF_ERROR(new_writer->write(chunk));
-            _writer_stream_pairs[std::make_pair(partition, partition_field_null_list)] =
-                    std::make_pair(std::move(new_writer), new_stream.get());
-            _io_poller->enqueue(std::move(new_stream));
-        } else {
-            RETURN_IF_ERROR(writer->write(chunk));
-        }
+    PartitionKey partition_key = std::make_pair(partition, partition_field_null_list);
+    auto it = _partition_chunk_writers.find(partition_key);
+    if (it != _partition_chunk_writers.end()) {
+        return it->second->write(chunk);
     } else {
-        auto path = !_partition_column_names.empty() ? _location_provider->get(partition) : _location_provider->get();
-        ASSIGN_OR_RETURN(auto new_writer_and_stream, _file_writer_factory->create(path));
-        std::unique_ptr<Writer> new_writer = std::move(new_writer_and_stream.writer);
-        std::unique_ptr<Stream> new_stream = std::move(new_writer_and_stream.stream);
-        RETURN_IF_ERROR(new_writer->init());
-        RETURN_IF_ERROR(new_writer->write(chunk));
-        _writer_stream_pairs[std::make_pair(partition, partition_field_null_list)] =
-                std::make_pair(std::move(new_writer), new_stream.get());
-        _io_poller->enqueue(std::move(new_stream));
+        auto writer = _partition_chunk_writer_factory->create(partition, partition_field_null_list);
+        auto commit_callback = [this](const CommitResult& r) { this->callback_on_commit(r); };
+        auto error_handler = [this](const Status& s) { this->set_status(s); };
+        writer->set_commit_callback(commit_callback);
+        writer->set_error_handler(error_handler);
+        writer->set_io_poller(_io_poller);
+        writer->set_sink_profile(_sink_profile);
+        auto st = writer->init();
+        if (!st.ok()) {
+            set_status(st);
+            return st;
+        }
+        // save the writer to the map, so errors from subsequent write() can be correctly handled.
+        _partition_chunk_writers[partition_key] = writer;
+        COUNTER_UPDATE(_sink_profile->partition_writer_counter, 1);
+        RETURN_IF_ERROR(writer->write(chunk));
     }
     return Status::OK();
 }
 
-Status ConnectorChunkSink::add(Chunk* chunk) {
+Status ConnectorChunkSink::add(const ChunkPtr& chunk) {
     std::string partition = DEFAULT_PARTITION;
     bool partitioned = !_partition_column_names.empty();
     if (partitioned) {
         ASSIGN_OR_RETURN(partition,
-                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators, chunk,
-                                                        _support_null_partition));
+                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators,
+                                                        chunk.get(), _support_null_partition));
     }
 
     RETURN_IF_ERROR(
@@ -100,19 +114,58 @@ Status ConnectorChunkSink::add(Chunk* chunk) {
 }
 
 Status ConnectorChunkSink::finish() {
-    for (auto& [partition_key, writer_and_stream] : _writer_stream_pairs) {
-        string extra_data(partition_key.second.size(), '0');
-        std::transform(partition_key.second.begin(), partition_key.second.end(), extra_data.begin(),
-                       [](int8_t b) { return b + '0'; });
-        callback_on_commit(writer_and_stream.first->commit().set_extra_data(extra_data));
+    // Flushing data to disk to make more memory space for subsequent merge operations.
+    for (auto& [partition_key, writer] : _partition_chunk_writers) {
+        RETURN_IF_ERROR(writer->flush());
+    }
+    for (auto& [partition_key, writer] : _partition_chunk_writers) {
+        RETURN_IF_ERROR(writer->wait_flush());
+    }
+    for (auto& [partition_key, writer] : _partition_chunk_writers) {
+        RETURN_IF_ERROR(writer->finish());
     }
     return Status::OK();
 }
 
+void ConnectorChunkSink::push_rollback_action(const std::function<void()>& action) {
+    // Not a very frequent operation, so use unique_lock here is ok.
+    std::unique_lock<std::shared_mutex> wlck(_mutex);
+    _rollback_actions.push_back(std::move(action));
+}
+
 void ConnectorChunkSink::rollback() {
+    std::shared_lock<std::shared_mutex> rlck(_mutex);
     for (auto& action : _rollback_actions) {
         action();
     }
+}
+
+void ConnectorChunkSink::set_status(const Status& status) {
+    std::unique_lock<std::shared_mutex> wlck(_mutex);
+    _status = status;
+}
+
+Status ConnectorChunkSink::status() {
+    std::shared_lock<std::shared_mutex> rlck(_mutex);
+    return _status;
+}
+
+bool ConnectorChunkSink::is_finished() {
+    for (auto& [partition_key, writer] : _partition_chunk_writers) {
+        if (!writer->is_finished()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ConnectorChunkSink::set_profile(RuntimeProfile* profile) {
+    if (_profile != nullptr) {
+        LOG(WARNING) << "ConnectorChunkSink profile is set duplicated, query_id: " << print_id(_state->query_id())
+                     << ", fragment_instance_id: " << print_id(_state->fragment_instance_id());
+        return;
+    }
+    _profile = profile;
 }
 
 } // namespace starrocks::connector

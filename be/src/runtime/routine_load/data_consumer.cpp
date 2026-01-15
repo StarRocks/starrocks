@@ -92,7 +92,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
         return Status::OK();
     };
 
-    RETURN_IF_ERROR(set_conf("metadata.broker.list", ctx->kafka_info->brokers));
+    RETURN_IF_ERROR(set_conf("bootstrap.servers", ctx->kafka_info->brokers));
     RETURN_IF_ERROR(set_conf("group.id", _group_id));
     // For transaction producer, producer will append one control msg to the group of msgs,
     // but the control msg will not return to consumer,
@@ -107,8 +107,6 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     // TODO: set it larger than 0 after we set rd_kafka_conf_set_stats_cb()
     RETURN_IF_ERROR(set_conf("statistics.interval.ms", "0"));
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
-    RETURN_IF_ERROR(set_conf("api.version.request", "true"));
-    RETURN_IF_ERROR(set_conf("api.version.fallback.ms", "0"));
     if (config::dependency_librdkafka_debug_enable) {
         RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
     }
@@ -487,6 +485,7 @@ bool KafkaDataConsumer::match(StreamLoadContext* ctx) {
 }
 
 // init pulsar consumer will only set common configs
+#ifndef __APPLE__
 Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
     std::unique_lock<std::mutex> l(_lock);
     if (_init) {
@@ -704,5 +703,6 @@ bool PulsarDataConsumer::match(StreamLoadContext* ctx) {
 
     return true;
 }
+#endif
 
 } // end namespace starrocks

@@ -19,7 +19,7 @@ plugins {
 
 allprojects {
     group = "com.starrocks"
-    version = "3.4.0"
+    version = "main"
 
     repositories {
         mavenCentral()
@@ -58,23 +58,25 @@ subprojects {
         set("hikaricp.version", "3.4.5")
         set("hive-apache.version", "3.1.2-22")
         set("hudi.version", "1.0.2")
-        set("iceberg.version", "1.9.0")
-        set("io.netty.version", "4.1.118.Final")
+        set("iceberg.version", "1.10.0")
+        set("io.netty.version", "4.1.128.Final")
         set("jackson.version", "2.15.2")
         set("jetty.version", "9.4.57.v20241219")
         set("jprotobuf-starrocks.version", "1.0.0")
-        set("kafka-clients.version", "3.4.0")
+        set("junit.version", "5.8.2")
+        set("kafka-clients.version", "3.9.1")
         set("kudu.version", "1.17.1")
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
-        set("paimon.version", "1.0.1")
+        set("paimon.version", "1.3.1")
         set("parquet.version", "1.15.2")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.5")
-        set("staros.version", "3.5-rc2")
+        set("staros.version", "4.0.0")
         set("tomcat.version", "8.5.70")
+        set("lz4-java.version", "1.10.1")
         // var sync end
     }
 
@@ -82,6 +84,8 @@ subprojects {
         implementation(platform("com.azure:azure-sdk-bom:${project.ext["azure.version"]}"))
         implementation(platform("io.opentelemetry:opentelemetry-bom:1.14.0"))
         implementation(platform("software.amazon.awssdk:bom:${project.ext["aws-v2-sdk.version"]}"))
+        // Enforce the same JUnit 5 versions as Maven (via `junit.version`) across all FE subprojects.
+        testImplementation(enforcedPlatform("org.junit:junit-bom:${project.ext["junit.version"]}"))
 
         constraints {
             // dependency sync start
@@ -119,11 +123,11 @@ subprojects {
             implementation("com.qcloud:chdfs_hadoop_plugin_network:3.2")
             implementation("com.squareup.okhttp3:okhttp:4.10.0")
             implementation("com.squareup.okio:okio:3.4.0")
-            implementation("com.starrocks:fe-common:1.0.0")
-            implementation("com.starrocks:hive-udf:1.0.0")
+            implementation("com.starrocks:fe-testing:${project.version}")
+            implementation("com.starrocks:hive-udf:${project.version}")
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
-            implementation("com.starrocks:plugin-common:1.0.0")
-            implementation("com.starrocks:spark-dpp:1.0.0")
+            implementation("com.starrocks:fe-utils:${project.version}")
+            implementation("com.starrocks:spark-dpp:${project.version}")
             implementation("com.starrocks:starclient:${project.ext["staros.version"]}")
             implementation("com.starrocks:starmanager:${project.ext["staros.version"]}")
             implementation("com.starrocks:starrocks-bdb-je:18.3.20")
@@ -222,7 +226,7 @@ subprojects {
             implementation("org.jboss.xnio:xnio-nio:3.8.16.Final")
             implementation("org.jdom:jdom2:2.0.6.1")
             implementation("org.json:json:20231013")
-            implementation("org.junit.jupiter:junit-jupiter:5.8.2")
+            implementation("org.junit.jupiter:junit-jupiter:${project.ext["junit.version"]}")
             implementation("org.mariadb.jdbc:mariadb-java-client:3.3.2")
             implementation("org.owasp.encoder:encoder:1.3.1")
             implementation("org.postgresql:postgresql:42.4.4")
@@ -232,7 +236,24 @@ subprojects {
             implementation("org.xerial.snappy:snappy-java:1.1.10.5")
             implementation("software.amazon.awssdk:bundle:${project.ext["aws-v2-sdk.version"]}")
             implementation("tools.profiler:async-profiler:${project.ext["async-profiler.version"]}")
+            implementation("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
             // dependency sync end
+        }
+    }
+
+    // Resolve capability conflicts: at.yawk.lz4:lz4-java replaces org.lz4:lz4-java and org.lz4:lz4-pure-java
+    configurations.all {
+        resolutionStrategy.capabilitiesResolution {
+            withCapability("org.lz4:lz4-java") {
+                select("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
+                because("Use at.yawk.lz4:lz4-java instead of vulnerable org.lz4:lz4-java")
+            }
+        }
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("org.lz4:lz4-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-java with at.yawk.lz4:lz4-java")
+            substitute(module("org.lz4:lz4-pure-java")).using(module("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}"))
+                .because("Replace org.lz4:lz4-pure-java with at.yawk.lz4:lz4-java")
         }
     }
 

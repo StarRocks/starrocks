@@ -15,11 +15,8 @@
 
 package com.starrocks.sql.common.mv;
 
-import com.google.common.collect.Range;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-
-import java.util.Map;
+import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.type.PrimitiveType;
 
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
@@ -43,9 +40,9 @@ public abstract class MVRangePartitionMapper {
      * @param partitionType mv partition expr's type
      * @return mv partition range map
      */
-    public abstract Map<String, Range<PartitionKey>> toMappingRanges(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                                     String granularity,
-                                                                     PrimitiveType partitionType);
+    public abstract PCellSortedSet toMappingRanges(PCellSortedSet baseRangeMap,
+                                                   String granularity,
+                                                   PrimitiveType partitionType);
 
     /**
      * Get the mv range partition mapper instance.

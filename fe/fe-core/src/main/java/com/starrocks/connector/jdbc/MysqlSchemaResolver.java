@@ -18,12 +18,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.jetbrains.annotations.NotNull;
 
 import java.sql.Connection;
@@ -133,10 +133,10 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DECIMAL32;
                 break;
             case Types.CHAR:
-                return ScalarType.createCharType(columnSize);
+                return TypeFactory.createCharType(columnSize);
             case Types.VARCHAR:
             case Types.LONGVARCHAR: //text type in mysql
-                return ScalarType.createVarcharType(columnSize);
+                return TypeFactory.createVarcharType(columnSize);
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -146,20 +146,24 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
+            case Types.BINARY:
+            case Types.VARBINARY:
+                primitiveType = PrimitiveType.VARBINARY;
+                break;
             default:
                 // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
                 // However, the mariadb-java-client does not handle the JSON type,
                 // so it will be converted to Types.Other. Here, in order to handle JSON, for the Types.Other,
                 // it is uniformly converted to Types.LONGVARCHAR(1073741824).
                 // If later mariadb-java-client support json, this code can be reverted.
-                return ScalarType.createVarcharType(1073741824);
+                return TypeFactory.createVarcharType(1073741824);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
+            return TypeFactory.createType(primitiveType);
         } else {
             int precision = columnSize + max(-digits, 0);
-            return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
+            return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }
     }
 

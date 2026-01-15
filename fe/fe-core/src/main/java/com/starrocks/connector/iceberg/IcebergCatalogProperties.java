@@ -33,12 +33,16 @@ public class IcebergCatalogProperties {
     public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     public static final String ENABLE_ICEBERG_METADATA_CACHE = "enable_iceberg_metadata_cache";
-    public static final String ICEBERG_META_CACHE_TTL = "iceberg_meta_cache_ttl_sec";
+    public static final String ENABLE_ICEBERG_TABLE_CACHE = "enable_iceberg_table_cache";
+    public static final String ICEBERG_META_CACHE_TTL = "iceberg_meta_cache_ttl_sec"; // implicit for user
+    public static final String ICEBERG_TABLE_CACHE_REFRESH_INVERVAL_SEC = "iceberg_table_cache_refresh_interval_sec";
     public static final String ICEBERG_JOB_PLANNING_THREAD_NUM = "iceberg_job_planning_thread_num";
     public static final String REFRESH_OTHER_FE_ICEBERG_CACHE_THREAD_NUM = "refresh_other_fe_iceberg_cache_thread_num";
     public static final String BACKGROUND_ICEBERG_JOB_PLANNING_THREAD_NUM = "background_iceberg_job_planning_thread_num";
     public static final String ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS = "iceberg_manifest_cache_with_column_statistics";
     public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
+    public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
+    public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
 
     // internal config
     public static final String ICEBERG_TABLE_CACHE_TTL = "iceberg_table_cache_ttl_sec";
@@ -52,17 +56,19 @@ public class IcebergCatalogProperties {
     private final Map<String, String> properties;
     private IcebergCatalogType catalogType;
     private boolean enableIcebergMetadataCache;
+    private boolean enableIcebergTableCache;
     private long icebergMetaCacheTtlSec;
     private int icebergJobPlanningThreadNum;
     private int backgroundIcebergJobPlanningThreadNum;
     private int refreshOtherFeIcebergCacheThreadNum;
     private boolean icebergManifestCacheWithColumnStatistics;
-    private long icebergTableCacheTtlSec;
-    private long icebergManifestCacheMaxNum;
     private long refreshIcebergManifestMinLength;
     private long localPlanningMaxSlotBytes;
     private boolean enableDistributedPlanLoadColumnStatsWithEqDelete;
     private boolean enableCacheDataFileIdentifierColumnStatistics;
+    private double icebergDataFileCacheMemoryUsageRatio;
+    private double icebergDeleteFileCacheMemoryUsageRatio;
+    private long icebergTableCacheRefreshIntervalSec;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -90,12 +96,19 @@ public class IcebergCatalogProperties {
 
     private void initIcebergMetadataCache() {
         this.enableIcebergMetadataCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_METADATA_CACHE, true);
+        this.enableIcebergTableCache = PropertyUtil.propertyAsBoolean(properties, ENABLE_ICEBERG_TABLE_CACHE, true);
 
-        this.icebergMetaCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_META_CACHE_TTL, 48 * 60 * 60);
-        this.icebergTableCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_TABLE_CACHE_TTL, 1800L);
-        this.icebergManifestCacheMaxNum = PropertyUtil.propertyAsLong(properties, ICEBERG_MANIFEST_CACHE_MAX_NUM, 100000);
+        // one day default, for all meta including tables.
+        this.icebergMetaCacheTtlSec = PropertyUtil.propertyAsLong(properties, ICEBERG_META_CACHE_TTL, 24L * 60 * 60); 
+        // one min default, used for refreshAfterWrite, the same as other lakes.
+        this.icebergTableCacheRefreshIntervalSec = PropertyUtil.propertyAsLong(
+                    properties, ICEBERG_TABLE_CACHE_REFRESH_INVERVAL_SEC, 60L);
+        this.icebergDataFileCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
+                    properties, ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
+        this.icebergDeleteFileCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
+                    properties, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
-                properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, false);
+                properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
                 2 * 1024 * 1024);
         this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,
@@ -127,10 +140,17 @@ public class IcebergCatalogProperties {
         return enableIcebergMetadataCache;
     }
 
+    public boolean enableIcebergTableCache() {
+        return enableIcebergTableCache;
+    }
+
     public long getIcebergMetaCacheTtlSec() {
         return icebergMetaCacheTtlSec;
     }
 
+    public long getIcebergTableCacheRefreshIntervalSec() {
+        return icebergTableCacheRefreshIntervalSec;
+    }
 
     public int getIcebergJobPlanningThreadNum() {
         return icebergJobPlanningThreadNum;
@@ -148,16 +168,20 @@ public class IcebergCatalogProperties {
         return icebergManifestCacheWithColumnStatistics;
     }
 
-    public long getIcebergTableCacheTtlSec() {
-        return icebergTableCacheTtlSec;
-    }
-
     public boolean isEnableIcebergMetadataCache() {
         return enableIcebergMetadataCache;
     }
 
-    public long getIcebergManifestCacheMaxNum() {
-        return icebergManifestCacheMaxNum;
+    public boolean isEnableIcebergTableCache() {
+        return enableIcebergTableCache;
+    }
+
+    public double getIcebergDataFileCacheMemoryUsageRatio() {
+        return icebergDataFileCacheMemoryUsageRatio;
+    }
+
+    public double getIcebergDeleteFileCacheMemoryUsageRatio() {
+        return icebergDeleteFileCacheMemoryUsageRatio;
     }
 
     public long getRefreshIcebergManifestMinLength() {

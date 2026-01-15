@@ -28,7 +28,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/utils.h"
@@ -213,7 +213,8 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
 void FileReader::_prepare_read_columns(std::unordered_set<std::string>& existed_column_names) {
     _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols,
                                        existed_column_names);
-    _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
+    _no_materialized_column_scan =
+            (_group_reader_param.read_cols.empty() && _scanner_ctx->reserved_field_slots.empty());
 }
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
@@ -262,6 +263,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.partition_columns = &fd_scanner_ctx.partition_columns;
     _group_reader_param.partition_values = &fd_scanner_ctx.partition_values;
     _group_reader_param.not_existed_slots = &fd_scanner_ctx.not_existed_slots;
+    _group_reader_param.reserved_field_slots = &fd_scanner_ctx.reserved_field_slots;
     // for pageIndex
     _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
     _group_reader_param.predicate_tree = &fd_scanner_ctx.predicate_tree;
@@ -269,20 +271,27 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.modification_time = _datacache_options.modification_time;
     _group_reader_param.file_size = _file_size;
     _group_reader_param.datacache_options = &_datacache_options;
+    _group_reader_param.scan_range_id = fd_scanner_ctx.scan_range_id;
 
+    int64_t row_group_first_row_id = _scanner_ctx->scan_range->first_row_id;
     int64_t row_group_first_row = 0;
     // select and create row group readers.
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         if (i > 0) {
             row_group_first_row += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
+            row_group_first_row_id += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
         }
 
         if (!_select_row_group(_file_metadata->t_metadata().row_groups[i])) {
             continue;
         }
 
-        auto row_group_reader =
-                std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx, row_group_first_row);
+        if (_file_metadata->t_metadata().row_groups[i].num_rows == 0) {
+            continue;
+        }
+
+        auto row_group_reader = std::make_shared<GroupReader>(_group_reader_param, i, _skip_rows_ctx,
+                                                              row_group_first_row, row_group_first_row_id);
         RETURN_IF_ERROR(row_group_reader->init());
 
         _group_reader_param.stats->parquet_total_row_groups += 1;

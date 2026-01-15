@@ -14,7 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ExplainTest extends PlanTestBase {
@@ -44,5 +49,110 @@ public class ExplainTest extends PlanTestBase {
                 + "   - AGGREGATE(LOCAL) [1:v1] {rows: 1}\n"
                 + "    - SCAN [t0] => [1:v1] {rows: 1}\n"
                 + "      |partitionRatio: 0/1, tabletRatio: 0/0");
+    }
+
+    @Test
+    public void testDesensitizeExplain() throws Exception {
+        connectContext.getSessionVariable().setEnableDesensitizeExplain(true);
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 WHERE t0.v1 > 1000";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 1: v1 > ?\n");
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4 and t0.v2 + t1.v5 > 1000";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "other join predicates: 2: v2 + 5: v5 > ?");
+
+        sql = "SELECT MIN(pow(t0.v1, 2)) FROM t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "min(pow(CAST(1: v1 AS DOUBLE), ?))");
+
+    }
+
+    @Test
+    public void testExplainCosts() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        String plan = getCostExplain(sql);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  2:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [1: v1, BIGINT, true]\n" +
+                "     cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 1\n" +
+                "     column statistics: \n" +
+                "     * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"), plan);
+    }
+
+    @Test
+    public void testExplainCostsWithLabels() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 LEFT JOIN t1 ON t0.v1 = t1.v4";
+        String plan = getCostExplainWithLabels(sql);
+        Assertions.assertTrue(plan.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  2:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [1: v1, BIGINT, true]\n" +
+                "     cardinality: 1"), plan);
+        Assertions.assertTrue(plan.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 1\n" +
+                "     column statistics: \n" +
+                "     * v1-->[MIN: -Infinity, MAX: Infinity, NULLS: 0.0, ROS: 1.0, NDV: 1.0] UNKNOWN"), plan);
+    }
+
+    @Test
+    public void testExplainUsesConfiguredDefaultLevel() throws Exception {
+        String originalLevel = Config.query_explain_level;
+        Config.query_explain_level = "LOGICAL";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                    "EXPLAIN SELECT * FROM t0", connectContext);
+            Assertions.assertTrue(statementBase instanceof QueryStatement);
+            QueryStatement queryStatement = (QueryStatement) statementBase;
+            Assertions.assertTrue(queryStatement.isExplain());
+            Assertions.assertEquals(StatementBase.ExplainLevel.LOGICAL, queryStatement.getExplainLevel());
+        } finally {
+            Config.query_explain_level = originalLevel;
+        }
+
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(
+                "EXPLAIN SELECT * FROM t0", connectContext);
+        Assertions.assertTrue(statementBase instanceof QueryStatement);
+        QueryStatement queryStatement = (QueryStatement) statementBase;
+        Assertions.assertTrue(queryStatement.isExplain());
+        Assertions.assertEquals(StatementBase.ExplainLevel.NORMAL, queryStatement.getExplainLevel());
+
     }
 }

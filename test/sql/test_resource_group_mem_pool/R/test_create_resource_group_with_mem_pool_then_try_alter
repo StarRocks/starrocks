@@ -1,0 +1,46 @@
+-- name: test_create_resource_group_with_mem_pool_then_try_alter
+
+[UC] drop resource group shared_resource_group_for_james;
+
+[UC] create resource group shared_resource_group_for_james
+to (user='james') 
+with (
+  'cpu_weight' = '9',
+  'mem_limit' = '66%',
+  'max_cpu_cores' = "8", 
+  'mem_pool' = 'mem_pool_for_james'
+);
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_james.+9.+66(\.\d+)?%.+8.+NORMAL.+\(id=\d+,.+user=james\)\s*(mem_pool_for_james)
+-- !result
+
+alter resource group shared_resource_group_for_james with (
+    'mem_limit' = '99%',
+    'mem_pool' = 'other_pool'
+);
+-- result:
+E: (1064, 'Property `mem_pool` cannot be altered [mem_pool_for_james].')
+-- !result
+
+
+alter resource group shared_resource_group_for_james with (
+    'mem_limit' = '99%'
+);
+-- result:
+E: (1064, 'Property `mem_limit` cannot be altered for resource groups with mem_pool [mem_pool_for_james].')
+-- !result
+
+alter resource group shared_resource_group_for_james with (
+    'max_cpu_cores' = "1"
+);
+-- result:
+-- !result
+
+show verbose resource groups all;
+-- result:
+[REGEX]shared_resource_group_for_james.+9.+66(\.\d+)?%.+1.+NORMAL.+\(id=\d+,.+user=james\)\s*(mem_pool_for_james)
+-- !result
+
+[UC] drop resource group shared_resource_group_for_james;

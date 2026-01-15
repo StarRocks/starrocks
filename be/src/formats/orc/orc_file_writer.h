@@ -18,31 +18,20 @@
 #include <orc/Writer.hh>
 #include <util/priority_thread_pool.hpp>
 
+#include "column/column.h"
 #include "formats/file_writer.h"
-#include "orc_memory_pool.h"
+#include "formats/orc/orc_memory_pool.h"
+#include "gen_cpp/Types_types.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+class ColumnEvaluator;
+class FileSystem;
+class RuntimeState;
+class TypeDescriptor;
+} // namespace starrocks
 
 namespace starrocks::formats {
-
-class OrcOutputStream : public orc::OutputStream {
-public:
-    OrcOutputStream(std::unique_ptr<starrocks::WritableFile> wfile);
-
-    ~OrcOutputStream() override;
-
-    uint64_t getLength() const override;
-
-    uint64_t getNaturalWriteSize() const override;
-
-    void write(const void* buf, size_t length) override;
-
-    void close() override;
-
-    const std::string& getName() const override;
-
-private:
-    std::unique_ptr<starrocks::WritableFile> _wfile;
-    bool _is_closed = false;
-};
 
 class AsyncOrcOutputStream : public orc::OutputStream {
 public:
@@ -83,6 +72,8 @@ public:
 
     int64_t get_allocated_bytes() override;
 
+    int64_t get_flush_batch_size() override;
+
     Status write(Chunk* chunk) override;
 
     CommitResult commit() override;
@@ -100,19 +91,22 @@ private:
 
     StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(Chunk* chunk);
 
-    Status _write_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type_desc);
+    Status _write_column(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column, const TypeDescriptor& type_desc);
 
     template <LogicalType Type, typename VectorBatchType>
-    Status _write_number(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_number(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column);
 
-    Status _write_string(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_string(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column);
 
     template <LogicalType DecimalType, typename VectorBatchType, typename T>
-    Status _write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, int precision, int scale);
+    Status _write_decimal32or64or128(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column, int precision,
+                                     int scale);
 
-    Status _write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_date(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column);
 
-    Status _write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPtr& column);
+    Status _write_datetime(orc::ColumnVectorBatch& orc_column, const ColumnPtr& column);
+
+    Status _write_map(const TypeDescriptor& type, orc::ColumnVectorBatch& orc_column, const ColumnPtr& column);
 
     inline static const std::string STARROCKS_ORC_WRITER_VERSION_KEY = "starrocks.writer.version";
 

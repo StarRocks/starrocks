@@ -222,13 +222,37 @@ public class TaskRunScheduler {
         return GsonUtils.GSON.toJson(this);
     }
 
+    /**
+     * Get all runnable task count group by warehouse id
+     */
     public Map<Long, Long> getAllRunnableTaskCount() {
+        try {
+            return getAllRunnableTaskCountImpl();
+        } catch (Exception e) {
+            LOG.warn("failed to get all runnable task count", e);
+            return Maps.newHashMap();
+        }
+    }
+
+    private Map<Long, Long> getAllRunnableTaskCountImpl() {
         Map<Long, Long> result = new HashMap<>();
         for (TaskRun taskRun : runningTaskRunMap.values()) {
+            if (taskRun == null) {
+                continue;
+            }
+            if (taskRun.getRunCtx() == null) {
+                continue;
+            }
             result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
                     (key, value) -> value == null ? 1L : value + 1);
         }
         for (TaskRun taskRun : runningSyncTaskRunMap.values()) {
+            if (taskRun == null) {
+                continue;
+            }
+            if (taskRun.getRunCtx() == null) {
+                continue;
+            }
             result.compute(taskRun.getRunCtx().getCurrentWarehouseId(),
                     (key, value) -> value == null ? 1L : value + 1);
         }

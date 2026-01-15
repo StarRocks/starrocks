@@ -18,10 +18,11 @@
 
 #include <map>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "connector/connector_sink_profile.h"
+#include "connector/partition_chunk_writer.h"
 #include "connector/utils.h"
-#include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 
@@ -30,20 +31,14 @@ namespace starrocks::connector {
 class AsyncFlushStreamPoller;
 class SinkOperatorMemoryManager;
 
-using Writer = formats::FileWriter;
-using Stream = io::AsyncFlushOutputStream;
-using WriterStreamPair = std::pair<std::unique_ptr<Writer>, Stream*>;
 using PartitionKey = std::pair<std::string, std::vector<int8_t>>;
-using CommitResult = formats::FileWriter::CommitResult;
-using CommitFunc = std::function<void(const CommitResult& result)>;
 
 class ConnectorChunkSink {
 public:
     ConnectorChunkSink(std::vector<std::string> partition_columns,
                        std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                       std::unique_ptr<LocationProvider> location_provider,
-                       std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
-                       RuntimeState* state, bool support_null_partition);
+                       std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory, RuntimeState* state,
+                       bool support_null_partition);
 
     void set_io_poller(AsyncFlushStreamPoller* poller) { _io_poller = poller; }
 
@@ -53,32 +48,46 @@ public:
 
     Status init();
 
-    virtual Status add(Chunk* chunk);
+    virtual Status add(const ChunkPtr& chunk);
 
-    Status finish();
+    virtual Status finish();
 
     void rollback();
+
+    virtual bool is_finished();
 
     virtual void callback_on_commit(const CommitResult& result) = 0;
 
     Status write_partition_chunk(const std::string& partition, const vector<int8_t>& partition_field_null_list,
-                                 Chunk* chunk);
+                                 const ChunkPtr& chunk);
+
+    Status status();
+
+    void set_status(const Status& status);
+
+    void set_profile(RuntimeProfile* profile);
 
 protected:
+    void push_rollback_action(const std::function<void()>& action);
+    void init_profile();
+
     AsyncFlushStreamPoller* _io_poller = nullptr;
     SinkOperatorMemoryManager* _op_mem_mgr = nullptr;
 
     std::vector<std::string> _partition_column_names;
     std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
-    std::unique_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
-    int64_t _max_file_size = 1024L * 1024 * 1024;
+    std::unique_ptr<PartitionChunkWriterFactory> _partition_chunk_writer_factory;
     RuntimeState* _state = nullptr;
     bool _support_null_partition{false};
     std::vector<std::function<void()>> _rollback_actions;
 
-    std::map<PartitionKey, WriterStreamPair> _writer_stream_pairs;
+    std::map<PartitionKey, PartitionChunkWriterPtr> _partition_chunk_writers;
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
+
+    std::shared_mutex _mutex;
+    Status _status;
+    RuntimeProfile* _profile = nullptr;
+    ConnectorSinkProfile* _sink_profile = nullptr;
 };
 
 struct ConnectorChunkSinkContext {

@@ -33,7 +33,7 @@ public class MaterializedViewMetricsRegistry {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsRegistry.class);
 
     private final MetricRegistry metricRegistry = new MetricRegistry();
-    private final Map<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
+    private final Map<MvId, IMaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
 
@@ -53,12 +53,20 @@ public class MaterializedViewMetricsRegistry {
         LOG.info("Removing materialized view metrics for mvId: {}", mvId);
         idToMVMetrics.remove(mvId);
     }
-
-    public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
+    private IMaterializedViewMetricsEntity initMaterializedViewMetricsEntity(MvId mvId) {
         if (!Config.enable_materialized_view_metrics_collect) {
             return new MaterializedViewMetricsBlackHoleEntity();
+        } else {
+            return new MaterializedViewMetricsEntity(metricRegistry, mvId);
         }
-        return idToMVMetrics.computeIfAbsent(mvId, k -> new MaterializedViewMetricsEntity(metricRegistry, mvId));
+    }
+
+    public synchronized void registerMetricsEntity(MvId mvId) {
+        idToMVMetrics.put(mvId, initMaterializedViewMetricsEntity(mvId));
+    }
+
+    public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
+        return idToMVMetrics.computeIfAbsent(mvId, k -> initMaterializedViewMetricsEntity(k));
     }
 
     private class MetricsCleaner extends TimerTask {
@@ -73,7 +81,7 @@ public class MaterializedViewMetricsRegistry {
     private static void doCollectMetrics(MvId mvId, MaterializedViewMetricsEntity entity,
                                        MetricVisitor visitor, boolean minifyMetrics) {
         if (!entity.initDbAndTableName()) {
-            LOG.debug("Invalid materialized view metrics entity, mvId: {}", mvId);
+            LOG.warn("Invalid materialized view metrics entity, mvId: {}", mvId);
             return;
         }
 
@@ -94,23 +102,16 @@ public class MaterializedViewMetricsRegistry {
             }
             m.addLabel(new MetricLabel("db_name", entity.dbNameOpt.get()))
                     .addLabel(new MetricLabel("mv_name", entity.mvNameOpt.get()))
-                    .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())));
+                    .addLabel(new MetricLabel("mv_id", String.valueOf(mvId.getId())))
+                    .addLabel(new MetricLabel("warehouse_name", entity.warehouseNameOpt.orElse("")));
             visitor.visit(m);
-        }
-
-        // Histogram metrics should only output once
-        if (!minifyMetrics) {
-            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                    .metricRegistry.getHistograms().entrySet()) {
-                visitor.visitHistogram(e.getKey(), e.getValue());
-            }
         }
     }
 
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
         MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
-        for (Map.Entry<MvId, MaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
+        for (Map.Entry<MvId, IMaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
             IMaterializedViewMetricsEntity mvEntity = entry.getValue();
             if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
                 continue;
@@ -122,6 +123,14 @@ public class MaterializedViewMetricsRegistry {
             } catch (Exception e) {
                 LOG.warn("Failed to collect materialized view metrics for mvId: {}", entry.getKey(),
                         DebugUtil.getStackTrace(e));
+            }
+        }
+
+        // Histogram metrics should only output once
+        if (!minifyMetrics) {
+            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                    .metricRegistry.getHistograms().entrySet()) {
+                visitor.visitHistogram(e.getKey(), e.getValue());
             }
         }
     }

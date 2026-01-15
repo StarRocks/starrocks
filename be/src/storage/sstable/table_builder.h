@@ -44,7 +44,7 @@ public:
     // Add key,value to the table being constructed.
     // REQUIRES: key is after any previously added key according to comparator.
     // REQUIRES: Finish(), Abandon() have not been called
-    void Add(const Slice& key, const Slice& value);
+    Status Add(const Slice& key, const Slice& value);
 
     // Advanced operation: flush any buffered key/value pairs to file.
     // Can be used to ensure that two adjacent entries never live in
@@ -73,6 +73,10 @@ public:
     // Size of the file generated so far.  If invoked after a successful
     // Finish() call, returns the size of the final generated file.
     uint64_t FileSize() const;
+
+    // The caller must be careful not to use these slices after
+    // the TableBuilder is destroyed
+    std::pair<Slice, Slice> KeyRange() const;
 
 private:
     bool ok() const { return status().ok(); }

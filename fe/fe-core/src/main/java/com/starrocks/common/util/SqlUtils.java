@@ -17,9 +17,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InformationFunction;
-import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;
@@ -27,6 +25,9 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import org.apache.commons.lang3.StringUtils;
 
 public class SqlUtils {
@@ -79,7 +80,9 @@ public class SqlUtils {
                             return true;
                         } else if (itemExpr instanceof InformationFunction informationFunction) {
                             return informationFunction.getFuncType().equalsIgnoreCase("connection_id")
-                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id");
+                                    || informationFunction.getFuncType().equalsIgnoreCase("session_id")
+                                    ||
+                                    informationFunction.getFuncType().equalsIgnoreCase(FunctionSet.CURRENT_WAREHOUSE);
                         }
                     }
                 }

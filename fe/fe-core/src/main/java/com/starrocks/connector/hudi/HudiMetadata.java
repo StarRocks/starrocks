@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -30,7 +31,6 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
-import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -131,7 +132,10 @@ public class HudiMetadata implements ConnectorMetadata {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
             LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            return null;
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
+            throw new StarRocksConnectorException(String.format("Failed to get hudi table %s.%s.%s. %s",
+                    catalogName, dbName, tblName, errMsg), e);
         }
 
         return table;
@@ -189,7 +193,7 @@ public class HudiMetadata implements ConnectorMetadata {
                                          Table table,
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
-                                         ScalarOperator predicate, long limit, TableVersionRange version) {
+                                         ScalarOperator predicate, long limit, TvrVersionRange version) {
         if (!properties.enableGetTableStatsFromExternalMetadata()) {
             return StatisticsUtils.buildDefaultStatistics(columns.keySet());
         }

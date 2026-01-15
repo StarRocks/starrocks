@@ -280,6 +280,117 @@ capacityCoefficient= 2 * Disk utilization - 0.5
 
 Each time Tablet Scheduler schedules tablets, it selects a certain number of healthy tablets as the candidate tablets to be balanced through Load Balancer. Next time when scheduling tablets, Tablet Scheduler balances these healthy tablets.
 
+### View System Balance Status
+
+You can view the current overall balance status of the system and the details of different balance types.
+
+- **View the current overall balance status of the system:**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/balance_stat';
+  ```
+
+  Example:
+
+  ```Plain
+  +---------------+--------------------------------+----------+----------------+----------------+
+  | StorageMedium | BalanceType                    | Balanced | PendingTablets | RunningTablets |
+  +---------------+--------------------------------+----------+----------------+----------------+
+  | HDD           | inter-node disk usage          | true     | 0              | 0              |
+  | HDD           | inter-node tablet distribution | true     | 0              | 0              |
+  | HDD           | intra-node disk usage          | true     | 0              | 0              |
+  | HDD           | intra-node tablet distribution | true     | 0              | 0              |
+  | HDD           | colocation group               | true     | 0              | 0              |
+  | HDD           | label-aware location           | true     | 0              | 0              |
+  +---------------+--------------------------------+----------+----------------+----------------+
+  ```
+
+  - `StorageMedium`: Storage medium.
+  - `BalanceType`: Type of balance.
+  - `Balanced`: Whether the balanced state is achieved.
+  - `PendingTablets`: Number of tablets with task status Pending.
+  - `RunningTablets`: Number of tablets with task status Running.
+
+- **View the balance of disk utilization by node:**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/cluster_load_stat';
+  ```
+
+  Example:
+
+  ```Plain
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  | StorageMedium | ClusterDiskBalanceStat                                                                                               |
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  | HDD           | {"balanced":false,"maxBeId":1,"minBeId":2,"maxUsedPercent":0.9,"minUsedPercent":0.1,"type":"INTER_NODE_DISK_USAGE"}  |
+  | SSD           | {"balanced":true}                                                                                                    |
+  +---------------+----------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `StorageMedium`: Storage medium.
+  - `ClusterDiskBalanceStat`: Balance status across nodes based on disk usage. If not balanced, displays the maximum and minimum disk utilization and the corresponding BEs.
+
+- **View the balance of disk usage within node:**
+
+  ```SQL
+  SHOW PROC '/cluster_balance/cluster_load_stat/HDD';
+  ```
+
+  Example:
+
+  ```Plain
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | BeId  | Cluster         | Available | UsedCapacity | Capacity     | UsedPercent | ReplicaNum | CapCoeff | ReplCoeff | Score | Class | BackendDiskBalanceStat                                                                                                                      |
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  | 10004 | default_cluster | true      | 651509602    | 243695955810 | 0.267       | 339        | 0.5      | 0.5       | 1.0   | MID   | {"maxUsedPercent":0.9,"minUsedPercent":0.1,"beId":1,"maxPath":"/disk1","minPath":"/disk2","type":"INTRA_NODE_DISK_USAGE","balanced":false}  |
+  | 10005 | default_cluster | true      | 651509602    | 243695955810 | 0.267       | 339        | 0.5      | 0.5       | 1.0   | MID   | {"balanced":true}                                                                                                                           |
+  +-------+-----------------+-----------+--------------+--------------+-------------+------------+----------+-----------+-------+-------+---------------------------------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `BeId`: ID of the BE node.
+  - `BackendDiskBalanceStat`: Balance status between disks within the node based on disk utilization. If not balanced, displays the maximum and minimum disk usage and the corresponding disk paths.
+
+- **View balanced distribution by tablet:**
+
+  ```SQL
+  SHOW PROC '/dbs/ssb/lineorder/partitions/lineorder';
+  ```
+
+  Example:
+
+  ```Plain
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  | IndexId | IndexName | State  | LastConsistencyCheckTime | TabletBalanceStat                                                                                                                                  |
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  | 11129   | lineorder | NORMAL | NULL                     | {"maxTabletNum":23,"minTabletNum":21,"maxBeId":10012,"minBeId":10013,"type":"INTER_NODE_TABLET_DISTRIBUTION","balanced":false}                     |
+  | 11230   | lineorder | NORMAL | NULL                     | {"maxTabletNum":23,"minTabletNum":21,"beId":10012,"maxPath":"/disk1","minPath":"/disk2","type":"INTRA_NODE_TABLET_DISTRIBUTION","balanced":false}  |
+  | 10432   | lineorder | NORMAL | NULL                     | {"tabletId":10435,"currentBes":[10002,10004],"expectedBes":[10003,10004],"type":"COLOCATION_GROUP","balanced":false}                               |
+  | 10436   | lineorder | NORMAL | NULL                     | {"tabletId":10438,"currentBes":[10005,10006],"expectedLocations":{"rack":["rack1","rack2"]},"type":"LABEL_AWARE_LOCATION","balanced":false}        |
+  +---------+-----------+--------+--------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  ```
+
+  - `IndexId`: ID of the Materialized Index within the partition.
+  - `TabletBalanceStat`: Balance status of tablet distribution between nodes or within nodes. If not balanced, displays the details of the imbalance, including Colocation Group, Label-aware Location.
+
+- **View partitions with imbalanced tablet distribution:**
+
+  ```SQL
+  SELECT DB_NAME, TABLE_NAME, PARTITION_NAME, TABLET_BALANCED FROM information_schema.partitions_meta WHERE TABLET_BALANCED = 0;
+  ```
+
+  Example:
+
+  ```Plain
+  +--------------+---------------+----------------+-----------------+
+  | DB_NAME      | TABLE_NAME    | PARTITION_NAME | TABLET_BALANCED |
+  +--------------+---------------+----------------+-----------------+
+  | ssb          | lineorder     | lineorder      |               0 |
+  +--------------+---------------+----------------+-----------------+
+  ```
+
+  - `TABLET_BALANCED`: whether the tablet distribution is balanced.
+
 ### Check tablet scheduling tasks
 
 You can check tablet scheduling tasks that are pending, running, and finished.

@@ -36,22 +36,22 @@ Status GlobalDictCodeColumnIterator::decode_dict_codes(const Column& codes, Colu
 Status GlobalDictCodeColumnIterator::decode_array_dict_codes(const Column& codes, Column* words) {
     auto* code_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(&codes));
     auto* words_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(words));
-    words_array->offsets_column()->resize(0); // array offset set 0 default
-    words_array->offsets_column()->append(code_array->offsets(), 0, code_array->offsets().size());
+    words_array->offsets_column_raw_ptr()->resize(0); // array offset set 0 default
+    words_array->offsets_column_raw_ptr()->append(code_array->offsets(), 0, code_array->offsets().size());
 
     if (codes.is_nullable()) {
         DCHECK(words->is_nullable());
         auto* code_null = down_cast<const NullableColumn*>(&codes);
         auto* words_null = down_cast<NullableColumn*>(words);
-        words_null->mutable_null_column()->append(code_null->null_column_ref(), 0, code_null->size());
+        words_null->null_column_raw_ptr()->append(code_null->null_column_ref(), 0, code_null->size());
         words_null->set_has_null(code_null->has_null());
     }
 
-    return decode_string_dict_codes(*code_array->elements_column(), words_array->elements_column().get());
+    return decode_string_dict_codes(*code_array->elements_column(), words_array->elements_column_raw_ptr());
 }
 
 Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& codes, Column* words) {
-    const auto& code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->get_data();
+    const auto code_data = down_cast<const Int32Column*>(ColumnHelper::get_data_column(&codes))->immutable_data();
     const size_t size = code_data.size();
 
     auto* low_card = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(words));
@@ -75,13 +75,11 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
 
     if (output_nullable) {
         // reserve null data
-        auto word_nulls = down_cast<NullableColumn*>(words)->mutable_null_column();
+        auto word_nulls = down_cast<NullableColumn*>(words)->null_column_raw_ptr();
         down_cast<NullableColumn*>(words)->set_has_null(codes.has_null());
-        const auto& null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
+        const auto null_data = down_cast<const NullableColumn&>(codes).immutable_null_column_data();
         word_nulls->resize(0);
-        for (size_t i = 0; i < size; ++i) {
-            word_nulls->append(null_data[i]);
-        }
+        word_nulls->append(null_data);
         if (codes.has_null()) {
             // assign code 0 if input data is null
             for (size_t i = 0; i < size; ++i) {

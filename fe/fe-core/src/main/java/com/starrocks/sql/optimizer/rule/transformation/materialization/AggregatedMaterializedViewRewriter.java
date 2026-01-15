@@ -630,17 +630,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         // add projection to make sure that the output columns keep the same with the origin query
         if (queryAgg.getProjection() == null) {
             for (int i = 0; i < originalGroupKeys.size(); i++) {
-                newProjection.put(originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
+                addIntoProjection(newProjection, originalGroupKeys.get(i), newGroupByKeyColumnRefs.get(i));
             }
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
-                newProjection.put(entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
+                addIntoProjection(newProjection, entry.getKey(), queryColumnRefToScalarMap.get(entry.getKey()));
             }
         } else {
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
                 ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
-                newProjection.put(entry.getKey(), rewritten);
+                addIntoProjection(newProjection, entry.getKey(), rewritten);
             }
         }
         Projection projection = new Projection(newProjection);
@@ -751,7 +751,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
 
                 ColumnRefOperator outerProject = context.getQueryRefFactory()
                                 .create(copyProject, copyProject.getType(), copyProject.isNullable());
-                newProjection.put(outerProject, copyProject);
+                addIntoProjection(newProjection, outerProject, copyProject);
                 newAggregations.put(innerAgg, realAggregate);
 
                 // replace original projection
@@ -768,9 +768,15 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                 // aggColRefToAggMap:  oldCol1 -> coalesce(newCol1, 0)
                 // It will generate new projections as below:
                 // newProjections: oldCol1 -> coalesce(newCol1, 0)
-                ScalarOperator newProjectOp = mvRewriteContext.isInAggregatePushDown() ?
-                        newAggColRef : genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
-                aggColRefToAggMap.put(origColRef, newProjectOp);
+                if (mvRewriteContext.isInAggregatePushDown()) {
+                    // it's safe to change origColRef's type here because it's copied in agg push down rule
+                    // and origColRef will be removed after rewrite.
+                    origColRef.setType(newAggColRef.getType());
+                    aggColRefToAggMap.put(origColRef, newAggColRef);
+                } else {
+                    ScalarOperator newProjectOp = genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
+                    aggColRefToAggMap.put(origColRef, newProjectOp);
+                }
             }
         }
 
@@ -851,7 +857,7 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                     aggColRef.isNullable());
             aggregateMapping.put(aggColRef, newAggColRef);
             rewrittens.put(newAggColRef, newAggregate);
-            newProjection.put(newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
+            addIntoProjection(newProjection, newAggColRef, genRollupProject(aggCall, newAggColRef, hasGroupByKeys));
         }
 
         return rewrittens;

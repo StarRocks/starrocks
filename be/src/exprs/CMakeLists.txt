@@ -27,10 +27,12 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp
+  agg/factory/aggregate_resolver_distinct.cpp
   agg/factory/aggregate_resolver_stream.cpp
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
+  agg/combinator/agg_state_utils.cpp
   base64.cpp
   binary_functions.cpp
   expr_context.cpp
@@ -73,6 +75,8 @@ set(EXPR_FILES
   is_null_predicate.cpp
   json_functions.cpp
   jsonpath.cpp
+  variant_functions.cpp
+  variant_path_parser.cpp
   like_predicate.cpp
   literal.cpp
   locate.cpp
@@ -96,6 +100,7 @@ set(EXPR_FILES
   java_function_call_expr.cpp
   lambda_function.cpp
   array_map_expr.cpp
+  array_sort_lambda_expr.cpp
   subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp
@@ -105,7 +110,10 @@ set(EXPR_FILES
   dictionary_get_expr.cpp
   ngram.cpp
   match_expr.cpp
+  bit_functions.cpp
+  hash_functions.cpp
   gin_functions.cpp
+  ai_functions.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
@@ -116,4 +124,4 @@ if(STARROCKS_JIT_ENABLE)
 
 endif()
 
-add_library(Exprs ${EXPR_FILES})
+ADD_BE_LIB(Exprs ${EXPR_FILES})

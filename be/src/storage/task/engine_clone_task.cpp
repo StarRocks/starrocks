@@ -269,6 +269,8 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                 LOG(WARNING) << "Fail to load tablet from dir: " << status << " tablet:" << _clone_req.tablet_id
                              << ". schema_hash_dir='" << schema_hash_dir;
                 _error_msgs->push_back("load tablet from dir failed.");
+                (void)fs::remove_all(tablet_dir);
+                return status;
             }
 
             std::string dcgs_snapshot_file = strings::Substitute("$0/$1.dcgs_snapshot", schema_hash_dir, tablet_id);
@@ -282,6 +284,11 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                 }
 
                 auto new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+                if (new_tablet == nullptr) {
+                    std::string error_msg = strings::Substitute("tablet: $0 is not exist", tablet_id);
+                    LOG(WARNING) << error_msg;
+                    return Status::InternalError(error_msg);
+                }
 
                 auto data_dir = new_tablet->data_dir();
                 rocksdb::WriteBatch wb;
@@ -648,6 +655,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     if (total_time_ms > 0) {
         copy_rate = total_file_size / ((double)total_time_ms) / 1000;
     }
+    _copy_size = (int64_t)total_file_size;
+    _copy_time_ms = (int64_t)total_time_ms;
     LOG(INFO) << "Copied tablet " << _signature << " files=" << file_name_list.size() << ". bytes=" << total_file_size
               << " cost=" << total_time_ms << " ms"
               << " rate=" << copy_rate << " MB/s";
@@ -994,7 +1003,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
-            if (!st.ok()) {
+            if (!clear_st.ok()) {
                 LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
             }
         }

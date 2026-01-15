@@ -146,11 +146,11 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr&
 }
 
 Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
-                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery,
+                              bool is_shadow) {
     auto scoped =
             trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
-    return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
-                      tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery);
+    return commit_txn(tablet, partition_id, transaction_id, load_id, rowset_ptr, is_recovery, is_shadow);
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
@@ -206,7 +206,7 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     // not found load id
     // case 1: user start a new txn, rowset_ptr = null
     // case 2: loading txn from meta env
-    TabletTxnInfo load_info(load_id, nullptr);
+    TabletTxnInfo load_info(load_id, nullptr, false);
     txn_tablet_map[key][tablet_info] = load_info;
     _insert_txn_partition_map_unlocked(transaction_id, partition_id);
 
@@ -215,9 +215,17 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transac
     return Status::OK();
 }
 
-Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                              TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
-                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
+Status TxnManager::commit_txn(const TabletSharedPtr& tablet, TPartitionId partition_id, TTransactionId transaction_id,
+                              const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery,
+                              bool is_shadow) {
+    if (tablet == nullptr) {
+        return Status::InternalError("tablet not exist during commit txn");
+    }
+    auto meta = tablet->data_dir()->get_meta();
+    auto tablet_id = tablet->tablet_id();
+    auto schema_hash = tablet->schema_hash();
+    auto tablet_uid = tablet->tablet_uid();
+
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "Invalid commit req "
                    << " partition_id=" << partition_id << " txn_id: " << transaction_id << " tablet_id=" << tablet_id;
@@ -242,6 +250,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
                 // found load for txn,tablet
                 // case 1: user commit rowset, then the load id must be equal
                 TabletTxnInfo& load_info = load_itr->second;
+                load_info.is_shadow = is_shadow;
                 // check if load id is equal
                 if (load_info.load_id.hi() == load_id.hi() && load_info.load_id.lo() == load_id.lo() &&
                     load_info.rowset != nullptr && load_info.rowset->rowset_id() == rowset_ptr->rowset_id()) {
@@ -267,10 +276,6 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // if not in recovery mode, then should persist the meta to meta env
     // save meta need access disk, it maybe very slow, so that it is not in global txn lock
     // it is under a single txn lock
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
-    if (tablet == nullptr) {
-        return Status::InternalError("tablet not exist during commit txn");
-    }
     if (!is_recovery) {
         Status st;
         RowsetMetaPB rowset_meta_pb;
@@ -312,13 +317,14 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
         auto& tablet_txn_infos = txn_tablet_map[key];
         auto itr = tablet_txn_infos.find(tablet_info);
         if (itr == tablet_txn_infos.end()) {
-            TabletTxnInfo info(load_id, rowset_ptr);
+            TabletTxnInfo info(load_id, rowset_ptr, is_shadow);
             info.commit_time = UnixSeconds();
             tablet_txn_infos[tablet_info] = info;
         } else {
             itr->second.load_id = load_id;
             itr->second.rowset = rowset_ptr;
             itr->second.commit_time = UnixSeconds();
+            itr->second.is_shadow = is_shadow;
         }
         // [tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
@@ -647,7 +653,7 @@ void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tab
 }
 
 void TxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_id,
-                                         std::map<TabletInfo, RowsetSharedPtr>* tablet_infos) {
+                                         std::map<TabletInfo, std::pair<RowsetSharedPtr, bool>>* tablet_infos) {
     // get tablets in this transaction
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     std::shared_lock txn_rdlock(_get_txn_map_lock(transaction_id));
@@ -665,7 +671,7 @@ void TxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TP
         const TabletInfo& tablet_info = load_info.first;
         // must not check rowset == null here, because if rowset == null
         // publish version should failed
-        tablet_infos->emplace(tablet_info, load_info.second.rowset);
+        tablet_infos->emplace(tablet_info, std::make_pair(load_info.second.rowset, load_info.second.is_shadow));
     }
 }
 

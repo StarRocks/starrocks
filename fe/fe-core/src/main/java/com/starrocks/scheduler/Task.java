@@ -12,24 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.scheduler.persist.TaskSchedule;
-import com.starrocks.sql.ast.UserIdentity;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class Task implements Writable {
+public class Task implements Writable, GsonPostProcessable {
 
     @SerializedName("id")
     private long id;
@@ -79,6 +77,17 @@ public class Task implements Writable {
 
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
+
+    // the last time this task is scheduled, unit: second
+    @SerializedName("lastScheduleTime")
+    private long lastScheduleTime = -1;
+
+    // the next time this task is to be scheduled, unit: second
+    @SerializedName("nextScheduleTime")
+    private long nextScheduleTime = -1;
+
+    // consecutive failure count, used to mark a task as PAUSE when it exceeds the threshold
+    private volatile AtomicInteger consecutiveFailCount = new AtomicInteger();
 
     public Task() {}
 
@@ -216,9 +225,36 @@ public class Task implements Writable {
         this.postRun = postRun;
     }
 
-    public static Task read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, Task.class);
+    // unit: second
+    public long getLastScheduleTime() {
+        return lastScheduleTime;
+    }
+
+    // unit: second
+    public void setLastScheduleTime(long lastScheduleTime) {
+        this.lastScheduleTime = lastScheduleTime;
+    }
+
+    // unit: second
+    public long getNextScheduleTime() {
+        return nextScheduleTime;
+    }
+
+    // unit: second
+    public void setNextScheduleTime(long nextScheduleTime) {
+        this.nextScheduleTime = nextScheduleTime;
+    }
+
+    public int getConsecutiveFailCount() {
+        return consecutiveFailCount.get();
+    }
+
+    public int incConsecutiveFailCount() {
+        return consecutiveFailCount.incrementAndGet();
+    }
+
+    public void resetConsecutiveFailCount() {
+        this.consecutiveFailCount.set(0);
     }
 
     @Override
@@ -237,6 +273,16 @@ public class Task implements Writable {
                 ", expireTime=" + expireTime +
                 ", source=" + source +
                 ", createUser='" + createUser + '\'' +
+                ", lastScheduleTime=" + lastScheduleTime +
+                ", nextScheduleTime=" + nextScheduleTime +
+                ", consecutiveFailCount='" + consecutiveFailCount + '\'' +
                 '}';
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (consecutiveFailCount == null) {
+            this.consecutiveFailCount = new AtomicInteger();
+        }
     }
 }

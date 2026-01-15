@@ -38,6 +38,19 @@ namespace java com.starrocks.thrift
 include "Types.thrift"
 include "Exprs.thrift"
 
+enum TRowPositionType {
+    ICEBERG_V3_ROW_POSITION,
+}
+
+// used to describe row position for different tables
+struct TRowPositionDescriptor {
+    1: optional TRowPositionType row_position_type;
+    // which node used to do fetch operation
+    2: optional Types.TSlotId row_source_slot;
+    3: optional list<Types.TSlotId> fetch_ref_slots;
+    4: optional list<Types.TSlotId> lookup_ref_slots;
+}
+
 struct TSlotDescriptor {
   1: optional Types.TSlotId id
   2: optional Types.TTupleId parent
@@ -68,9 +81,11 @@ struct TTupleDescriptor {
 
 enum THdfsFileFormat {
   TEXT = 0,
-  LZO_TEXT = 1,
-  RC_BINARY = 2,
-  RC_TEXT = 3,
+  LZO_TEXT = 1, // Deprecated
+  RC_FILE = 2,
+  // THdfsFileFormat is only used to represent FileFormat, not SerializeFormat,
+  // so there is no need to split it into RC_BINARY and RC_TEXT.
+  RC_TEXT = 3, // Deprecated
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
@@ -187,6 +202,13 @@ enum TSchemaTableType {
 
     SCH_WAREHOUSE_METRICS,
     SCH_WAREHOUSE_QUERIES,
+
+    SCH_TABLET_RESHARD_JOBS,
+    SCH_RECYCLEBIN_CATALOGS,
+
+    SCH_FE_THREADS,
+
+    SCH_BE_TABLET_WRITE_LOG
 }
 
 enum THdfsCompression {
@@ -204,6 +226,14 @@ enum TIndexType {
   GIN,
   NGRAMBF,
   VECTOR,
+}
+
+// Not define UNKNOWN type for better compatibility with
+// DistributionInfo.DistributionInfoType definition
+enum TOlapTableDistributionType {
+    HASH,
+    RANDOM,
+    RANGE,
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -237,16 +267,29 @@ struct TColumn {
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    // Default value expression for complex types (array/map/struct).
+    // If set, BE will evaluate this expression and convert to JSON string for storage.
+    // For simple types, use |default_value| (field 6) instead.
+    22: optional Exprs.TExpr default_expr
+}
+
+// Key information for locating a specific table schema version.
+struct TTableSchemaKey {
+  1: optional i64 db_id
+  2: optional i64 table_id
+  3: optional i64 schema_id
+}
+
+struct TOlapTableTablet {
+    1: optional i64 id // tablet id
+    2: optional Types.TTabletRange range
 }
 
 struct TOlapTableIndexTablets {
     1: required i64 index_id
-    2: required list<i64> tablets
-
-    // Virtual buckets. There is a tablet id for each virtual bucket,
-    // which means this virtual bucket's data is stored in this tablet.
-    3: optional list<i64> virtual_buckets
+    2: required list<i64> tablet_ids
+    3: optional list<TOlapTableTablet> tablets
 }
 
 // its a closed-open range
@@ -288,6 +331,8 @@ struct TOlapTablePartitionParam {
     8: optional list<Exprs.TExpr> partition_exprs
 
     9: optional bool enable_automatic_partition
+
+    10: optional TOlapTableDistributionType distribution_type
 }
 
 struct TOlapTableColumnParam {
@@ -489,6 +534,8 @@ struct TTableFunctionTable {
 
     10: optional bool parquet_use_legacy_encoding
     11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
 }
 
 struct TIcebergSchemaField {
@@ -526,6 +573,12 @@ struct TIcebergPartitionInfo {
     4: optional Exprs.TExpr partition_expr
 }
 
+struct TSortOrder {
+    1: optional list<i32> sort_key_idxes
+    2: optional list<bool> is_ascs;
+    3: optional list<bool> is_null_firsts;
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -549,6 +602,9 @@ struct TIcebergTable {
     7: optional TIcebergSchema iceberg_equal_delete_schema
 
     8: optional list<TIcebergPartitionInfo> partition_info
+
+    // Iceberg sort order, used to sort data before writing to Iceberg
+    9: optional TSortOrder sort_order
 }
 
 struct THudiTable {

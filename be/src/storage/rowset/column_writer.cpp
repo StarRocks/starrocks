@@ -37,16 +37,14 @@
 #include <cstddef>
 #include <memory>
 
-#include "column/array_column.h"
-#include "column/column_helper.h"
-#include "column/hash_set.h"
 #include "column/nullable_column.h"
-#include "common/logging.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "storage/index/inverted/inverted_index_option.h"
+#ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
+#endif
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -258,7 +256,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 class DictColumnWriter final : public ColumnWriter {
@@ -301,7 +299,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
@@ -394,6 +392,9 @@ Status ScalarColumnWriter::init() {
     if (_opts.need_zone_map) {
         _has_index_builder = true;
         _zone_map_index_builder = ZoneMapIndexWriter::create(type_info());
+        if (_opts.zone_map_truncate_string) {
+            _zone_map_index_builder->enable_truncate_string();
+        }
     }
     if (_opts.need_bitmap_index) {
         _has_index_builder = true;
@@ -427,6 +428,7 @@ Status ScalarColumnWriter::init() {
         }
         RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_options, _type_info, &_bloom_filter_index_builder));
     }
+#ifndef __APPLE__
     if (_opts.need_inverted_index) {
         _has_index_builder = true;
         TabletIndex& inverted_tablet_index = _opts.tablet_index.at(GIN);
@@ -440,6 +442,7 @@ Status ScalarColumnWriter::init() {
             RETURN_IF_ERROR(_inverted_index_builder->init());
         }
     }
+#endif
     return Status::OK();
 }
 
@@ -463,9 +466,11 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
     if (_bloom_filter_index_builder != nullptr) {
         size += _bloom_filter_index_builder->size();
     }
+#ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
         size += _inverted_index_builder->size();
     }
+#endif
     return size;
 }
 
@@ -570,9 +575,11 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 }
 
 Status ScalarColumnWriter::write_inverted_index() {
+#ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
-        return _inverted_index_builder->finish();
+        return _inverted_index_builder->finish(_wfile, _opts.meta);
     }
+#endif
     return Status::OK();
 }
 
@@ -697,7 +704,7 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     // In memory, it will be transformed by actual offset(0, 3, 6)
     // In disk, offset is stored as length array(3, 3)
     auto& offsets = down_cast<const UInt32Column&>(column);
-    auto& data = offsets.get_data();
+    auto& data = offsets.immutable_data();
 
     std::vector<uint32_t> array_size;
     raw::make_room(&array_size, offsets.size() - 1);
@@ -781,12 +788,16 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
                     INDEX_ADD_NULLS(_zone_map_index_builder, run);
                     INDEX_ADD_NULLS(_bitmap_index_builder, run);
                     INDEX_ADD_NULLS(_bloom_filter_index_builder, run);
+#ifndef __APPLE__
                     INDEX_ADD_NULLS(_inverted_index_builder, run);
+#endif
                 } else {
                     INDEX_ADD_VALUES(_zone_map_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bitmap_index_builder, pdata, run);
                     INDEX_ADD_VALUES(_bloom_filter_index_builder, pdata, run);
+#ifndef __APPLE__
                     INDEX_ADD_VALUES(_inverted_index_builder, pdata, run);
+#endif
                 }
                 pdata += type_info()->size() * run;
             }
@@ -794,7 +805,9 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
             INDEX_ADD_VALUES(_zone_map_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bitmap_index_builder, data, num_written);
             INDEX_ADD_VALUES(_bloom_filter_index_builder, data, num_written);
+#ifndef __APPLE__
             INDEX_ADD_VALUES(_inverted_index_builder, data, num_written);
+#endif
         }
 
         _next_rowid += num_written;
@@ -1033,7 +1046,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
         using CppType = typename RunTimeTypeTraits<Type>::CppType;
         phmap::flat_hash_set<CppType> hash_set;
         for (size_t i = 0; i < row_count; i++) {
-            CppType value = numerical_col->get_data()[i];
+            CppType value = numerical_col->immutable_data()[i];
             hash_set.insert(value);
             if (hash_set.size() > max_card) {
                 return BIT_SHUFFLE;

@@ -84,6 +84,7 @@ public:
         auto index = _open_request.mutable_schema()->add_indexes();
         index->set_id(kIndexId);
         index->set_schema_hash(0);
+        index->set_schema_id(_schema_id);
         for (int i = 0, sz = metadata->schema().column_size(); i < sz; i++) {
             auto slot = _open_request.mutable_schema()->add_slot_descs();
             slot->set_id(i);
@@ -209,7 +210,7 @@ protected:
         _tablet_manager->prune_metacache();
     }
 
-    std::shared_ptr<Chunk> read_segment(int64_t tablet_id, const std::string& filename) {
+    ChunkUniquePtr read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_test_directory));
         auto path = _location_provider->segment_location(tablet_id, filename);
@@ -281,6 +282,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -345,6 +347,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     finish_request.set_sender_id(0);
     finish_request.set_eos(true);
     finish_request.set_packet_seq(1);
+    finish_request.set_timeout_ms(60000);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
 
@@ -395,6 +398,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -416,6 +420,7 @@ TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {
     finish_request.set_sender_id(0);
     finish_request.set_eos(true);
     finish_request.set_packet_seq(1);
+    finish_request.set_timeout_ms(60000);
     // Does not contain partition 11
     finish_request.add_partition_ids(10);
 
@@ -459,6 +464,7 @@ TEST_F(LakeTabletsChannelTest, test_write_bundling_file) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -480,6 +486,7 @@ TEST_F(LakeTabletsChannelTest, test_write_bundling_file) {
     finish_request.set_sender_id(0);
     finish_request.set_eos(true);
     finish_request.set_packet_seq(1);
+    finish_request.set_timeout_ms(60000);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
 
@@ -530,6 +537,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
             add_chunk_request.set_sender_id(sender_id);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(i);
+            add_chunk_request.set_timeout_ms(60000);
 
             for (int j = 0; j < kChunkSize; j++) {
                 int64_t tablet_id = 10086 + (j / kChunkSizePerTablet);
@@ -551,6 +559,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
         finish_request.set_sender_id(sender_id);
         finish_request.set_eos(true);
         finish_request.set_packet_seq(kLookCount);
+        finish_request.set_timeout_ms(60000);
         finish_request.add_partition_ids(10);
         finish_request.add_partition_ids(11);
 
@@ -598,6 +607,7 @@ TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
             add_chunk_request.set_sender_id(0);
             add_chunk_request.set_eos(false);
             add_chunk_request.set_packet_seq(packet_seq++);
+            add_chunk_request.set_timeout_ms(60000);
 
             for (int i = 0; i < kChunkSize; i++) {
                 int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -623,6 +633,7 @@ TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
         finish_request.set_packet_seq(packet_seq++);
         finish_request.add_partition_ids(10);
         finish_request.add_partition_ids(11);
+        finish_request.set_timeout_ms(60000);
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
         ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
         ASSERT_TRUE(close_channel);
@@ -659,7 +670,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
-
+    add_chunk_request.set_timeout_ms(60000);
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
         add_chunk_request.add_tablet_ids(tablet_id);
@@ -690,6 +701,46 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10088, kTxnId)));
 }
 
+TEST_F(LakeTabletsChannelTest, test_tablet_not_existed) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    // 4 tablets opened: 10086/10087/10088/10089
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int num_rows = 128;
+    PTabletWriterAddChunkRequest add_chunk_request;
+    PTabletWriterAddBatchResult add_chunk_response;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
+
+    for (int i = 0; i < num_rows; i++) {
+        // generate tablet_id: [10086,10087,10088,10089,10090], 10090 not opened in open_request
+        int64_t tablet_id = 10086 + i % 5;
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    {
+        // `chunk` is only available inside the scope, will be released out of the scope to simulate resource release after RPC done.
+        auto chunk = generate_data(num_rows);
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+        bool close_channel;
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+        ASSERT_EQ(TStatusCode::INTERNAL_ERROR, add_chunk_response.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
+
+    _tablets_channel->abort();
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10086, kTxnId)));
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10087, kTxnId)));
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10088, kTxnId)));
+}
+
 TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
@@ -705,6 +756,7 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     // Only tablet 10086 has data
     for (int i = 0; i < kChunkSize; i++) {
@@ -728,6 +780,7 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     finish_request.set_packet_seq(1);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
+    finish_request.set_timeout_ms(60000);
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
     ASSERT_TRUE(finish_response.status().status_code() == TStatusCode::OK);
@@ -773,6 +826,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(false);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     // Only tablet 10086 has data
     for (int i = 0; i < kChunkSize; i++) {
@@ -799,6 +853,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     finish_request.set_packet_seq(1);
     finish_request.add_partition_ids(10);
     finish_request.add_partition_ids(11);
+    finish_request.set_timeout_ms(60000);
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
     ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
@@ -822,6 +877,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         add_chunk_request.set_sender_id(0);
         add_chunk_request.set_eos(true);
         add_chunk_request.set_packet_seq(0);
+        add_chunk_request.set_timeout_ms(60000);
 
         for (int i = 0; i < kChunkSize; i++) {
             int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -850,6 +906,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         finish_request.set_sender_id(1);
         finish_request.set_eos(true);
         finish_request.set_packet_seq(0);
+        finish_request.set_timeout_ms(60000);
 
         bool close_channel;
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
@@ -882,6 +939,7 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     add_chunk_request.set_sender_id(0);
     add_chunk_request.set_eos(true);
     add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(60000);
 
     for (int i = 0; i < kChunkSize; i++) {
         int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
@@ -896,18 +954,100 @@ TEST_F(LakeTabletsChannelTest, test_profile) {
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
     ASSERT_TRUE(close_channel);
-    _tablets_channel->update_profile();
 
-    auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
-    ASSERT_NE(nullptr, profile);
-    ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
-    ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
-    ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
-    ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
-    auto* replicas_profile = profile->get_child("PeerReplicas");
-    ASSERT_NE(nullptr, replicas_profile);
-    ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
+    // profile should be same if there is no new data no matter how many times we update the profile
+    for (int i = 0; i < 3; i++) {
+        _tablets_channel->update_profile();
+        auto* profile = _root_profile->get_child(fmt::format("Index (id={})", kIndexId));
+        ASSERT_NE(nullptr, profile);
+        ASSERT_EQ(1, profile->get_counter("OpenRpcCount")->value());
+        ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
+        ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
+        ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
+        ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
+        auto* replicas_profile = profile->get_child("PeerReplicas");
+        ASSERT_NE(nullptr, replicas_profile);
+        ASSERT_EQ(4, replicas_profile->get_counter("TabletsNum")->value());
+        ASSERT_EQ(8, replicas_profile->get_counter("WriterTaskCount")->value());
+        ASSERT_EQ(chunk.num_rows(), replicas_profile->get_counter("RowCount")->value());
+        ASSERT_EQ(4, replicas_profile->get_counter("MemtableInsertCount")->value());
+        ASSERT_EQ(4, replicas_profile->get_counter("MemtableFlushedCount")->value());
+    }
+}
+
+TEST_F(LakeTabletsChannelTest, test_missing_timeout_ms) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 32;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    PTabletWriterAddBatchResult resp;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &resp, &close_channel);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, resp.status().status_code());
+    ASSERT_GE(resp.status().error_msgs_size(), 1);
+    {
+        const auto& msg = resp.status().error_msgs(0);
+        ASSERT_TRUE(msg.find("missing timeout_ms") != std::string::npos) << msg;
+    }
+    ASSERT_FALSE(close_channel);
+}
+
+TEST_F(LakeTabletsChannelTest, test_negative_timeout_ms) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 32;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+
+    PTabletWriterAddChunkRequest add_chunk_request;
+    add_chunk_request.set_index_id(kIndexId);
+    add_chunk_request.set_sender_id(0);
+    add_chunk_request.set_eos(false);
+    add_chunk_request.set_packet_seq(0);
+    add_chunk_request.set_timeout_ms(-1);
+
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        add_chunk_request.add_tablet_ids(tablet_id);
+        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+    bool close_channel;
+    PTabletWriterAddBatchResult resp;
+    _tablets_channel->add_chunk(&chunk, add_chunk_request, &resp, &close_channel);
+    ASSERT_EQ(TStatusCode::INVALID_ARGUMENT, resp.status().status_code());
+    ASSERT_GE(resp.status().error_msgs_size(), 1);
+    {
+        const auto& msg = resp.status().error_msgs(0);
+        ASSERT_TRUE(msg.find("negtive timeout_ms") != std::string::npos) << msg;
+    }
+    ASSERT_FALSE(close_channel);
 }
 
 struct Param {

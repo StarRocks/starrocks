@@ -1,4 +1,4 @@
--- name: test_array_sortby_1
+-- name: test_array_sortby_1 @mac
 CREATE TABLE t1 (
     id INT(11) not null,
     array_col1 ARRAY<INT>,

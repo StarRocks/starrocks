@@ -56,7 +56,7 @@ CREATE TABLE partition_unixtime (
 PARTITION BY RANGE(from_unixtime(create_time))(
 START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 );
--- name: test_partition_by_expr_unixtime_ms
+-- name: test_partition_by_expr_unixtime_ms @native
 CREATE TABLE partition_unixtime_ms (
         create_time bigint,
         sku_id varchar(100),

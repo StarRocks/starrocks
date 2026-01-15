@@ -39,6 +39,7 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
     // do array-expresion first, then string expression
     if (_children.size() == 2) {
         auto target_column = ptr->get_column_by_slot_id(slot_id());
+        DCHECK(!target_column->only_null());
         auto data_column = ColumnHelper::get_data_column(target_column.get());
 
         if (data_column->is_binary()) {
@@ -47,7 +48,9 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
         } else if (dict_func_expr != nullptr) {
             return dict_func_expr->evaluate_checked(context, ptr);
         } else {
-            return Status::InternalError("unreachable path, dict_func_expr shouldn't be nullptr");
+            // This should never happen, only when DictOptimizeParser::rewrite_conjuncts or DictMappingExpr::open function is not called.
+            return Status::InternalError(
+                    fmt::format("unreachable path, dict_func_expr shouldn't be nullptr: {}", debug_string()));
         }
     } else if (_children.size() == 3) {
         // array -> string
@@ -57,7 +60,9 @@ StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chun
         if (dict_func_expr != nullptr) {
             return dict_func_expr->evaluate_checked(context, &cc);
         } else {
-            return Status::InternalError("unreachable path, array_dict_func_expr shouldn't be nullptr");
+            // This should never happen, only when DictOptimizeParser::rewrite_conjuncts or DictMappingExpr::open function is not called.
+            return Status::InternalError(
+                    fmt::format("unreachable path, array_dict_func_expr shouldn't be nullptr: {}", debug_string()));
         }
     }
 

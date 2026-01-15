@@ -17,6 +17,7 @@
 #include <string>
 
 #include "common/status.h"
+#include "fs/fs.h"
 #include "storage/chunk_iterator.h"
 #include "storage/del_vector.h"
 
@@ -25,6 +26,7 @@ namespace starrocks {
 class DelvecLoader;
 class Schema;
 class PrimaryIndex;
+class Segment;
 
 struct CompactConflictResolveParams {
     int64_t tablet_id = 0;
@@ -38,15 +40,27 @@ struct CompactConflictResolveParams {
 class PrimaryKeyCompactionConflictResolver {
 public:
     virtual ~PrimaryKeyCompactionConflictResolver() = default;
-    virtual StatusOr<std::string> filename() const = 0;
+    // Returns FileInfo instead of string to support both local and remote storage
+    // WHY: Changed from string to FileInfo to include optional file size.
+    // BENEFIT: For remote storage (S3/HDFS), having size upfront avoids expensive
+    // get_size() metadata calls (~10-50ms each), significantly improving performance
+    // during parallel pk index execution where hundreds of mapper files are accessed.
+    virtual StatusOr<FileInfo> filename() const = 0;
     virtual Schema generate_pkey_schema() = 0;
     virtual Status breakpoint_check() { return Status::OK(); }
     virtual Status segment_iterator(
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>&
                     handler) = 0;
+    // This function won't read data from each segment files. Only need to get segment's row count.
+    virtual Status segment_iterator(
+            const std::function<
+                    Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
+                           const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) = 0;
 
     Status execute();
+
+    Status execute_without_update_index();
 };
 
 } // namespace starrocks

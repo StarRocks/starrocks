@@ -12,54 +12,52 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class OptimizeClause extends AlterTableClause {
     private KeysDesc keysDesc;
     private PartitionDesc partitionDesc;
     private DistributionDesc distributionDesc;
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
     private OptimizeRange range;
 
-    @SerializedName(value = "sourcePartitionIds")
     private List<Long> sourcePartitionIds = Lists.newArrayList();
 
-    @SerializedName(value = "isTableOptimize")
     private boolean isTableOptimize = false;
 
-    private List<String> sortKeys = null;
+    // It saves the original sort order elements parsing from the order by clause.
+    // Because other sort properties, such as sort-direction and null-orders, are not supported in optimize clause now.
+    // We extract its sort columns to `sortKeys` in analyze phase and use the `sortKeys` instead of it in most places.
+    private List<OrderByElement> orderByElements;
+    // It will be set based on `orderByElements` in analyze
+    private List<String> sortKeys;
 
     public OptimizeClause(KeysDesc keysDesc,
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
-                          List<String> sortKeys,
-                          PartitionNames partitionNames,
+                          List<OrderByElement> orderByElements,
+                          PartitionRef partitionNames,
                           OptimizeRange range) {
-        this(keysDesc, partitionDesc, distributionDesc, sortKeys, partitionNames, range, NodePosition.ZERO);
+        this(keysDesc, partitionDesc, distributionDesc, orderByElements, partitionNames, range, NodePosition.ZERO);
     }
 
     public OptimizeClause(KeysDesc keysDesc,
                           PartitionDesc partitionDesc,
                           DistributionDesc distributionDesc,
-                          List<String> sortKeys,
-                          PartitionNames partitionNames,
+                          List<OrderByElement> orderByElements,
+                          PartitionRef partitionNames,
                           OptimizeRange range,
                           NodePosition pos) {
-        super(AlterOpType.OPTIMIZE, pos);
+        super(pos);
         this.keysDesc = keysDesc;
         this.partitionDesc = partitionDesc;
         this.distributionDesc = distributionDesc;
-        this.sortKeys = sortKeys;
+        this.orderByElements = orderByElements;
         this.partitionNames = partitionNames;
         this.range = range;
     }
@@ -85,6 +83,14 @@ public class OptimizeClause extends AlterTableClause {
         return this.distributionDesc;
     }
 
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public void setSortKeys(List<String> sortKeys) {
+        this.sortKeys = sortKeys;
+    }
+
     public List<String> getSortKeys() {
         return sortKeys;
     }
@@ -97,7 +103,7 @@ public class OptimizeClause extends AlterTableClause {
         this.partitionDesc = partitionDesc;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -117,34 +123,8 @@ public class OptimizeClause extends AlterTableClause {
         isTableOptimize = tableOptimize;
     }
 
-    public static OptimizeClause read(DataInput in) throws IOException {
-        throw new RuntimeException("OptimizeClause serialization is not supported anymore.");
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER ");
-        if (partitionDesc != null) {
-            sb.append(partitionDesc.toString());
-        }
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toString());
-        }
-        if (keysDesc != null) {
-            sb.append(keysDesc.toSql());
-        }
-        if (sortKeys != null && !sortKeys.isEmpty()) {
-            sb.append(String.join(",", sortKeys));
-        }
-        if (range != null) {
-            sb.append(range.toString());
-        }
-        return sb.toString();
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitOptimizeClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitOptimizeClause(this, context);
     }
 }

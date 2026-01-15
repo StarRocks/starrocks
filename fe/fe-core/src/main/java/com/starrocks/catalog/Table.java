@@ -42,13 +42,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -65,6 +66,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -270,7 +272,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException();
     }
 
-    public Optional<String> mayGetDatabaseName() {
+    public Optional<Long> mayGetDatabaseId() {
         return Optional.empty();
     }
 
@@ -306,7 +308,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isOlapTable() {
-        return type == TableType.OLAP;
+        return getType() == TableType.OLAP;
     }
 
     public boolean isOlapExternalTable() {
@@ -443,6 +445,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public List<Column> getFullSchema() {
         return fullSchema;
+    }
+
+    public List<Column> getFullVisibleSchema() {
+        return fullSchema.stream().filter(column -> !column.isHidden()).collect(Collectors.toList());
     }
 
     // should override in subclass if necessary
@@ -688,7 +694,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         // Do nothing by default.
     }
 
-    public void onCreate(Database database) {
+    /**
+     * This method is called right after the calling of {@link com.starrocks.server.LocalMetastore#onCreate)}.
+     * If error occurs, DdlException should be thrown to abort the creation of the table.
+     * @param database database where the table is created
+     * @throws DdlException thrown if any error occurs during onCreate
+     */
+    public void onCreate(Database database) throws DdlException  {
         onReload();
     }
 
@@ -709,7 +721,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      */
     public void onDrop(Database db, boolean force, boolean replay) {
         // inactive relative materialized views if the base table/view/external table is dropped.
-        AlterMVJobExecutor.inactiveRelatedMaterializedView(this,
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(this,
                 MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()), replay);
     }
 
@@ -830,6 +842,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
                 !isConnectorView();
+    }
+
+    /**
+     * Get the set of operations supported by this table type.
+     * Subclasses can override this method to define their own supported operations.
+     * By default, tables support read operations.
+     *
+     * @return Set of supported operations
+     */
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ);
+    }
+
+    /**
+     * Check if this table supports the specified operation.
+     *
+     * @param operation The operation to check
+     * @return true if the operation is supported, false otherwise
+     */
+    public boolean supportsOperation(TableOperation operation) {
+        return getSupportedOperations().contains(operation);
     }
 
     public boolean isSupportBackupRestore() {

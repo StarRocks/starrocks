@@ -16,27 +16,14 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.Parameter;
-import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
@@ -44,15 +31,31 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.Parameter;
+import com.starrocks.sql.ast.expression.Predicate;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.IntegerType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -154,7 +157,7 @@ public class DeleteAnalyzer {
     }
 
     private static void analyzeNonPrimaryKey(DeleteStmt deleteStatement) {
-        PartitionNames partitionNames = deleteStatement.getPartitionNames();
+        PartitionRef partitionNames = deleteStatement.getPartitionNames();
         if (partitionNames != null) {
             if (partitionNames.isTemp()) {
                 throw new SemanticException("Do not support deleting temp partitions", partitionNames.getPos());
@@ -194,17 +197,87 @@ public class DeleteAnalyzer {
         properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
     }
 
+    /**
+     * Analyze Iceberg table delete statement.
+     * For Iceberg delete, we convert:
+     *   DELETE FROM table WHERE condition
+     * to:
+     *   INSERT INTO iceberg_delete_sink
+     *   SELECT _file, _pos FROM table WHERE condition
+     */
+    private static void analyzeIcebergTable(DeleteStmt deleteStatement, Table table, ConnectContext session) {
+        deleteStatement.setTable(table);
+
+        if (deleteStatement.getWherePredicate() == null) {
+            throw new SemanticException("Delete must specify where clause to prevent full table delete");
+        }
+        if (deleteStatement.getPartitionNames() != null) {
+            throw new SemanticException("Delete for Iceberg table do not support specifying partitions",
+                    deleteStatement.getPartitionNames().getPos());
+        }
+        if (deleteStatement.getUsingRelations() != null) {
+            throw new SemanticException("Delete for Iceberg table do not support `using` clause");
+        }
+        if (deleteStatement.getCommonTableExpressions() != null) {
+            throw new SemanticException("Delete for Iceberg table do not support `with` clause");
+        }
+
+        TableName tableName = TableName.fromTableRef(deleteStatement.getTableRef());
+        // Create select list: SELECT _file, _pos, partition_col1, partition_col2, ...
+        SelectList selectList = new SelectList();
+        // Add _file column
+        SlotRef filePathColumn = new SlotRef(tableName, IcebergTable.FILE_PATH);
+        selectList.addItem(new SelectListItem(filePathColumn, IcebergTable.FILE_PATH));
+
+        // Add _pos column
+        SlotRef posColumn = new SlotRef(tableName, IcebergTable.ROW_POSITION);
+        selectList.addItem(new SelectListItem(posColumn, IcebergTable.ROW_POSITION));
+
+        // Add partition columns for shuffle
+        List<Column> partitionColumns = table.getPartitionColumns().stream().filter(java.util.Objects::nonNull).toList();
+        for (Column partitionCol : partitionColumns) {
+            SlotRef partitionColumnRef = new SlotRef(tableName, partitionCol.getName());
+            selectList.addItem(new SelectListItem(partitionColumnRef, partitionCol.getName()));
+        }
+
+        // Create table relation with WHERE predicate
+        TableRelation tableRelation = new TableRelation(tableName);
+        SelectRelation selectRelation = new SelectRelation(
+                selectList,
+                tableRelation,
+                deleteStatement.getWherePredicate(),
+                null,
+                null
+        );
+
+        // Create query statement
+        QueryStatement queryStatement = new QueryStatement(selectRelation);
+        queryStatement.setIsExplain(deleteStatement.isExplain(), deleteStatement.getExplainLevel());
+
+        // Analyze the query statement
+        new QueryAnalyzer(session).analyze(queryStatement);
+        deleteStatement.setQueryStatement(queryStatement);
+    }
+
+
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         analyzeProperties(deleteStatement, session);
 
-        TableName tableName = deleteStatement.getTableName();
-        MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
+        TableRef tableRef = deleteStatement.getTableRef();
+        TableName tableName = TableName.fromTableRef(tableRef);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.DELETE);
+
+        // Handle Iceberg table delete
+        if (table instanceof IcebergTable) {
+            analyzeIcebergTable(deleteStatement, table, session);
+            return;
+        }
 
         if (table instanceof MaterializedView) {
             String msg = String.format("The data of '%s' cannot be deleted because it is a materialized view," +
@@ -237,7 +310,7 @@ public class DeleteAnalyzer {
             selectList.addItem(item);
         }
         try {
-            selectList.addItem(new SelectListItem(new IntLiteral(1, Type.TINYINT), Load.LOAD_OP_COLUMN));
+            selectList.addItem(new SelectListItem(new IntLiteral(1, IntegerType.TINYINT), Load.LOAD_OP_COLUMN));
         } catch (Exception e) {
             throw new SemanticException("analyze delete failed", e);
         }

@@ -31,6 +31,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "exprs/runtime_filter_bank.h"
@@ -259,6 +260,8 @@ public:
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 
+    Status prepare_local_state(RuntimeState* runtime_state);
+
     void increment_schedule_times();
 
     void set_driver_state(DriverState state) {
@@ -269,22 +272,22 @@ public:
         switch (_state) {
         case DriverState::INPUT_EMPTY: {
             auto elapsed_time = _input_empty_timer_sw->elapsed_time();
-            if (_first_input_empty_timer->value() == 0) {
-                _first_input_empty_timer->update(elapsed_time);
+            if (COUNTER_VALUE(_first_input_empty_timer) == 0) {
+                COUNTER_UPDATE(_first_input_empty_timer, elapsed_time);
             } else {
-                _followup_input_empty_timer->update(elapsed_time);
+                COUNTER_UPDATE(_followup_input_empty_timer, elapsed_time);
             }
-            _input_empty_timer->update(elapsed_time);
+            COUNTER_UPDATE(_input_empty_timer, elapsed_time);
             break;
         }
         case DriverState::OUTPUT_FULL:
-            _output_full_timer->update(_output_full_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_output_full_timer, _output_full_timer_sw->elapsed_time());
             break;
         case DriverState::PRECONDITION_BLOCK:
-            _precondition_block_timer->update(_precondition_block_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_precondition_block_timer, _precondition_block_timer_sw->elapsed_time());
             break;
         case DriverState::PENDING_FINISH:
-            _pending_finish_timer->update(_pending_finish_timer_sw->elapsed_time());
+            COUNTER_UPDATE(_pending_finish_timer, _pending_finish_timer_sw->elapsed_time());
             break;
         default:
             break;
@@ -330,7 +333,7 @@ public:
     bool precondition_prepared() const { return _precondition_prepared; }
     void start_timers();
     void stop_timers();
-    int64_t get_active_time() const { return _active_timer->value(); }
+    int64_t get_active_time() const { return COUNTER_VALUE(_active_timer); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
@@ -360,16 +363,26 @@ public:
         return !_all_local_rf_ready;
     }
 
-    bool global_rf_block() {
+    bool global_rf_block(std::string* rf_waiting_set = nullptr) {
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout =
-                _precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns || // Timeout,
-                std::all_of(_global_rf_descriptors.begin(), _global_rf_descriptors.end(), [](auto* rf_desc) {
-                    return rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr;
-                }); // or all the remote RFs are ready.
+        _all_global_rf_ready_or_timeout = true;
 
+        // timeout check
+        if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
+            return false;
+        }
+        // check if all the remote RFs are ready.
+        for (auto* rf_desc : _global_rf_descriptors) {
+            if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
+                continue;
+            }
+            if (rf_waiting_set != nullptr) {
+                rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
+            }
+            _all_global_rf_ready_or_timeout = false;
+        }
         return !_all_global_rf_ready_or_timeout;
     }
 
@@ -402,8 +415,9 @@ public:
 
     std::string get_preconditions_block_reasons() {
         if (_state == DriverState::PRECONDITION_BLOCK) {
+            std::string rf_waiting_set;
             return std::string(dependencies_block() ? "(dependencies," : "(") +
-                   std::string(global_rf_block() ? "global runtime filter," : "") +
+                   std::string(global_rf_block(&rf_waiting_set) ? "global runtime filter:" + rf_waiting_set : "") +
                    std::string(local_rf_block() ? "local runtime filter)" : ")");
         } else {
             return "";
@@ -425,8 +439,6 @@ public:
                 return false;
             }
 
-            // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
-            //  This writing method is a bit tricky, and when there is a better way, replace it
             mark_precondition_ready();
 
             RETURN_IF_ERROR(check_short_circuit());
@@ -452,6 +464,40 @@ public:
         return true;
     }
 
+    // used in event scheduler
+    // check driver is ready for schedule
+    // similar to is_not_blocked but without check short_circuit.
+    bool check_is_ready() {
+        // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+        if (sink_operator()->is_finished()) {
+            return true;
+        }
+        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
+            return true;
+        }
+
+        if (_state == DriverState::PRECONDITION_BLOCK) {
+            if (is_precondition_block()) {
+                return false;
+            }
+            mark_precondition_ready();
+        }
+
+        // OUTPUT_FULL
+        if (!sink_operator()->need_input()) {
+            set_driver_state(DriverState::OUTPUT_FULL);
+            return false;
+        }
+
+        // INPUT_EMPTY
+        if (!source_operator()->is_finished() && !source_operator()->has_output()) {
+            set_driver_state(DriverState::INPUT_EMPTY);
+            return false;
+        }
+
+        return true;
+    }
+
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
     Status check_short_circuit();
 
@@ -460,6 +506,7 @@ public:
     void runtime_report_action();
 
     std::string to_readable_string() const;
+    std::string get_raw_string_name() const;
 
     workgroup::WorkGroup* workgroup();
     const workgroup::WorkGroup* workgroup() const;
@@ -510,6 +557,8 @@ public:
     void assign_observer();
     bool is_operator_cancelled() const { return _is_operator_cancelled; }
 
+    bool local_prepare_is_done() const { return _local_prepare_is_done; }
+
 protected:
     PipelineDriver()
             : _observer(this),
@@ -547,6 +596,9 @@ protected:
 
     // used in event scheduler
     void _update_global_rf_timer();
+
+    // Helper function to build readable string with option to use raw operator names
+    std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;
@@ -599,6 +651,9 @@ protected:
 
     std::unique_ptr<PipelineTimerTask> _global_rf_timer;
 
+    std::atomic<bool> _local_prepare_is_done{false};
+
+protected:
     // metrics
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
@@ -631,6 +686,9 @@ protected:
     MonotonicStopWatch* _pending_finish_timer_sw = nullptr;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_driver_queue_size_counter = nullptr;
+
+private:
+    void prepare_profile();
 };
 
 } // namespace pipeline

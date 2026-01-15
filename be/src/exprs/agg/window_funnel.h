@@ -177,8 +177,10 @@ struct WindowFunnelState {
     }
 
     static void serialize(int64_t* buffer, size_t length, ArrayColumn* array_column) {
-        CHECK(array_column->elements_column()->append_numbers(buffer, sizeof(int64_t) * length) > 0);
-        array_column->offsets_column()->append(array_column->offsets_column()->get_data().back() + length);
+        auto* elements_col = array_column->elements_column_raw_ptr();
+        auto* offsets_col = array_column->offsets_column_raw_ptr();
+        CHECK(elements_col->append_numbers(buffer, sizeof(int64_t) * length) > 0);
+        offsets_col->append(offsets_col->immutable_data().back() + length);
     }
 
     void serialize_to_array_column(ArrayColumn* array_column) const {
@@ -446,7 +448,7 @@ public:
         if (!columns[1]->is_constant()) {
             const auto timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
             DCHECK(LT == TYPE_DATETIME || LT == TYPE_DATE || LT == TYPE_INT || LT == TYPE_BIGINT);
-            tv = timestamp_column->get_data()[row_num];
+            tv = timestamp_column->immutable_data()[row_num];
         } else {
             tv = ColumnHelper::get_const_value<LT>(columns[1]);
         }
@@ -462,14 +464,14 @@ public:
             event_column =
                     down_cast<const ArrayColumn*>(down_cast<const ConstColumn*>(columns[3])->data_column().get());
             const UInt32Column& offsets = event_column->offsets();
-            auto offsets_ptr = offsets.get_data().data();
+            const auto offsets_ptr = offsets.immutable_data().data();
             offset = offsets_ptr[0];
             array_size = offsets_ptr[1] - offsets_ptr[0];
         } else {
             DCHECK(columns[3]->is_array());
             event_column = down_cast<const ArrayColumn*>(columns[3]);
             const UInt32Column& offsets = event_column->offsets();
-            auto offsets_ptr = offsets.get_data().data();
+            const auto offsets_ptr = offsets.immutable_data().data();
             offset = offsets_ptr[row_num];
             array_size = offsets_ptr[row_num + 1] - offsets_ptr[row_num];
         }
@@ -478,10 +480,11 @@ public:
         if (elements.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(elements);
             auto data_column = down_cast<const BooleanColumn*>(null_column.data_column().get());
-            const auto& null_vector = null_column.null_column()->get_data();
+            const auto data_vector = data_column->immutable_data();
+            const auto null_vector = null_column.immutable_null_column_data();
             for (int i = 0; i < array_size; ++i) {
                 auto ele_offset = offset + i;
-                if (!null_vector[ele_offset] && data_column->get_data()[ele_offset]) {
+                if (!null_vector[ele_offset] && data_vector[ele_offset]) {
                     event_level = i + 1;
                     if constexpr (LT == TYPE_DATETIME) {
                         this->data(state).update(tv.to_unix_second(), event_level);
@@ -494,9 +497,11 @@ public:
             }
         } else {
             const auto& data_column = down_cast<const BooleanColumn&>(elements);
+            const auto data_vector = data_column.immutable_data();
+
             for (int i = 0; i < array_size; ++i) {
                 auto ele_offset = offset + i;
-                if (data_column.get_data()[ele_offset]) {
+                if (data_vector[ele_offset]) {
                     event_level = i + 1;
                     if constexpr (LT == TYPE_DATETIME) {
                         this->data(state).update(tv.to_unix_second(), event_level);
@@ -518,14 +523,14 @@ public:
         this->data(state).init_once(ctx);
 
         const auto* input_column = down_cast<const ArrayColumn*>(column);
-        const auto& offsets = input_column->offsets().get_data();
+        const auto offsets = input_column->offsets().immutable_data();
         const auto& elements = input_column->elements();
         const int64_t* raw_data;
         if (elements.is_nullable()) {
             auto data_elements = down_cast<const NullableColumn*>(&elements)->data_column().get();
-            raw_data = down_cast<const Int64Column*>(data_elements)->get_data().data();
+            raw_data = down_cast<const Int64Column*>(data_elements)->immutable_data().data();
         } else {
-            raw_data = down_cast<const Int64Column*>(&elements)->get_data().data();
+            raw_data = down_cast<const Int64Column*>(&elements)->immutable_data().data();
         }
 
         size_t offset = offsets[row_num];
@@ -544,8 +549,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* dst_column = down_cast<ArrayColumn*>(dst.get());
         dst_column->reserve(chunk_size);
 
         const auto timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
@@ -553,11 +558,11 @@ public:
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
             if constexpr (LT == TYPE_DATETIME) {
-                tv = timestamp_column->get_data()[i].to_unix_second();
+                tv = timestamp_column->immutable_data()[i].to_unix_second();
             } else if constexpr (LT == TYPE_DATE) {
-                tv = timestamp_column->get_data()[i].julian();
+                tv = timestamp_column->immutable_data()[i].julian();
             } else {
-                tv = timestamp_column->get_data()[i];
+                tv = timestamp_column->immutable_data()[i];
             }
 
             // get 4th value: event cond array

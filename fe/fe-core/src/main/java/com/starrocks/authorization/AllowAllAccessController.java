@@ -14,7 +14,7 @@
 
 package com.starrocks.authorization;
 
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 
 public class AllowAllAccessController extends ExternalAccessController {

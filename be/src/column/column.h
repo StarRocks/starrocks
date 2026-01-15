@@ -15,16 +15,18 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <string>
 #include <type_traits>
 
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
+#include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "runtime/memory/column_allocator.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
 #include "util/slice.h"
 
@@ -93,6 +95,7 @@ public:
     virtual bool is_object() const { return false; }
 
     virtual bool is_json() const { return false; }
+    virtual bool is_variant() const { return false; }
 
     virtual bool is_array() const { return false; }
 
@@ -100,6 +103,7 @@ public:
     virtual bool is_nullable_view() const { return false; }
     virtual bool is_array_view() const { return false; }
     virtual bool is_json_view() const { return false; }
+    virtual bool is_variant_view() const { return false; }
     virtual bool is_binary_view() const { return false; }
     virtual bool is_struct_view() const { return false; }
     virtual bool is_map_view() const { return false; }
@@ -139,14 +143,14 @@ public:
     // Return null, if the column is not overflow.
     // Return the new larger column, if upgrade success
     // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<Ptr> upgrade_if_overflow() = 0;
+    virtual StatusOr<MutablePtr> upgrade_if_overflow() = 0;
 
     // Downgrade the column from large column to normal column.
     // Return internal error if downgrade failed.
     // Return null, if the column is already normal column, no need to downgrade.
     // Return the new normal column, if downgrade success
     // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<Ptr> downgrade() = 0;
+    virtual StatusOr<MutablePtr> downgrade() = 0;
 
     // Check if the column contains large column.
     // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
@@ -174,7 +178,7 @@ public:
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
-    virtual StatusOr<Ptr> replicate(const Buffer<uint32_t>& offsets) {
+    virtual StatusOr<MutablePtr> replicate(const Buffer<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
@@ -273,6 +277,7 @@ public:
     //  - the count of copied integers on success.
     //  - -1 if this is not a numeric column.
     [[nodiscard]] virtual size_t append_numbers(const void* buff, size_t length) = 0;
+    virtual size_t append_numbers(const ContainerResource& res) { return append_numbers(res.data(), res.length()); }
 
     // Append |*value| |count| times, this is only used when load default value.
     virtual void append_value_multiple_times(const void* value, size_t count) = 0;
@@ -310,10 +315,14 @@ public:
     // (dst + byte_offset) with an interval between each element. It returns size of the data type
     // (which should be fixed size) of this column if this column supports this method, otherwise
     // it returns 0.
-    virtual size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                               size_t count) const {
+    virtual size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                               uint32_t max_row_size, size_t start, size_t count) const {
         return 0;
-    };
+    }
+
+    virtual size_t serialize_batch_at_interval_with_null_masks(uint8_t* dst, size_t byte_offset, size_t byte_interval,
+                                                               uint32_t max_row_size, size_t start, size_t count,
+                                                               const uint8_t* null_masks) const;
 
     // A dedicated serialization method used by NullableColumn to serialize data columns with null_masks.
     virtual void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
@@ -338,6 +347,8 @@ public:
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
+    // If input filter[i] == 0, the i-th element will be removed.
+    // If input filter[i] == 1, the i-th element will be kept.
     inline size_t filter(const Filter& filter) {
         DCHECK_EQ(size(), filter.size());
         return filter_range(filter, 0, filter.size());
@@ -346,7 +357,7 @@ public:
     inline size_t filter(const Filter& filter, size_t count) { return filter_range(filter, 0, count); }
 
     // get rid of the case where the map/array is null but the map/array'elements are not empty.
-    bool empty_null_in_complex_column(const Filter& null_data, const Buffer<uint32_t>& offsets);
+    bool empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets);
 
     // FIXME: Many derived implementation assume |to| equals to size().
     virtual size_t filter_range(const Filter& filter, size_t from, size_t to) = 0;
@@ -373,26 +384,26 @@ public:
 
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
-    virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
-    virtual void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
-        throw std::runtime_error("not support fnv_hash_with_selection");
-    }
-    virtual void fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
-        throw std::runtime_error("not support fnv_hash_selective: " + get_name());
-    }
+    // NOTE: they're still virtual method, because AdaptiveNullableColumn still override the implementation but not in the Visitor
+    virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const;
+    virtual void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const;
+    virtual void fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const;
+    virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
     // used by data loading compute tablet bucket
-    virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
-    virtual void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
-        throw std::runtime_error("not support crc32_hash_with_selection");
-    }
-    virtual void crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
-        throw std::runtime_error("not support crc32_hash_selective: " + get_name());
-    }
-
+    virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const;
+    virtual void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const;
+    virtual void crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const;
     virtual void crc32_hash_at(uint32_t* seed, uint32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
 
-    virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
+    // If there are multiple bucket columns <column, bucket_num> such as <c1, 50>, <c2, 60>, <c3, 10>.
+    // we use the following formula as iceberg unique bucket id.
+    // bucket_id = c1_bucket_id * 60 * 10 + c2_bucket_id * 10 + c3_bucket_id
+    virtual void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to) const;
+
+    virtual void xxh3_hash(uint32_t* hash, uint32_t from, uint32_t to) const;
+    virtual void xxh3_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const;
+    virtual void xxh3_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const;
 
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
@@ -459,9 +470,13 @@ public:
 
     // mutate the column to mutable column, but doesn't reset the column
     MutablePtr mutate() const&& {
-        MutablePtr res = try_mutate();
-        res->mutate_each_subcolumn();
-        return res;
+        if (config::enable_cow_optimization) {
+            MutablePtr res = try_mutate();
+            res->mutate_each_subcolumn();
+            return res;
+        } else {
+            return clone();
+        }
     }
 
     // mutate the column to mutable column, and reset the column to nullptr
@@ -473,8 +488,16 @@ public:
     }
 
 protected:
-    static StatusOr<Ptr> downgrade_helper_func(Ptr* col);
-    static StatusOr<Ptr> upgrade_helper_func(Ptr* col);
+    // Helper functions for downgrade and upgrade,
+    // if downgrade failed, return the error status.
+    // if upgrade success, always return nullptr.
+    // if downgrade's result is not nullptr, it will replace the input col with the new column.
+    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
+    // Helper functions for upgrade and downgrade,
+    // if upgrade failed, return the error status.
+    // if upgrade success, always return nullptr.
+    // if upgrade's result is not nullptr, it will replace the input col with the new column.
+    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

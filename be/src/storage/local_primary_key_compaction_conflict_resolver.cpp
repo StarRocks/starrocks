@@ -23,8 +23,15 @@
 
 namespace starrocks {
 
-StatusOr<std::string> LocalPrimaryKeyCompactionConflictResolver::filename() const {
-    return local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
+StatusOr<FileInfo> LocalPrimaryKeyCompactionConflictResolver::filename() const {
+    FileInfo info;
+    info.path = local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
+    // NOTE: For local tables, mapper files are always on local disk (.crm extension),
+    // so we don't need to populate the size field. The file size will be queried
+    // on-demand which is fast for local filesystem (~1-5ms).
+    // WHY FileInfo return type: Changed to match interface signature for consistency
+    // with lake tables, even though local tables don't use remote storage.
+    return info;
 }
 
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
@@ -60,6 +67,13 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
         *_total_deletes += num_dels;
         _delvecs->emplace_back(rssid, dv);
     });
+}
+
+Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
+        const std::function<Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
+                                   const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
+    return Status::NotSupported(
+            "LocalPrimaryKeyCompactionConflictResolver::segment_iterator without read data not supported");
 }
 
 Status LocalPrimaryKeyCompactionConflictResolver::breakpoint_check() {

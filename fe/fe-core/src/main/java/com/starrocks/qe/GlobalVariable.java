@@ -78,6 +78,12 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
     public static final String ENABLE_TDE = "enable_tde";
 
+    // cngroup
+    public static final String CNGROUP_RESOURCE_USAGE_FRESH_RATIO = "cngroup_resource_usage_fresh_ratio";
+    public static final String CNGROUP_LOW_WATERMARK_RUNNING_QUERY_COUNT  = "cngroup_low_watermark_running_query_count";
+    public static final String CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE = "cngroup_low_watermark_cpu_used_permille";
+    public static final String CNGROUP_SCHEDULE_MODE = "cngroup_schedule_mode";
+
     public static final String ENABLE_QUERY_HISTORY = "enable_query_history";
 
     public static final String QUERY_HISTORY_KEEP_SECONDS = "query_history_keep_seconds";
@@ -89,6 +95,9 @@ public final class GlobalVariable {
     public static final String SPM_CAPTURE_INTERVAL_SECONDS = "plan_capture_interval_seconds";
 
     public static final String SPM_CAPTURE_INCLUDE_TABLE_PATTERN = "plan_capture_include_pattern";
+
+    public static final String ENABLE_TABLE_NAME_CASE_INSENSITIVE = "enable_table_name_case_insensitive";
+
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH;
@@ -130,6 +139,29 @@ public final class GlobalVariable {
     // Compatible with jdbc that version > 8.0.15
     @VariableMgr.VarAttr(name = "performance_schema", flag = VariableMgr.READ_ONLY)
     private static boolean performanceSchema = false;
+
+    /**
+     * This configuration controls case sensitivity for SQL catalog/database/table names.
+     * When enabled, these database object names are treated as case-insensitive.
+     * IMPORTANT NOTES:
+     * - This setting can ONLY be configured during the initial cluster setup via
+     *   {@link Config#enable_table_name_case_insensitive} on the FE leader node
+     *
+     * - Once set during first initialization, this value is IMMUTABLE and will NOT
+     *   be modified by any subsequent operations including:
+     *   * Cluster upgrades/downgrades
+     *   * Fe node restarts
+     *   * Any other maintenance operations
+     *
+     * - During FE restart or leader failover, if the leader node's
+     *   {@link Config#enable_table_name_case_insensitive} differs from the cluster's initially
+     *   recorded enableTableNameCaseInsensitive value, the leader node will FAIL to start
+     *
+     * - Existing clusters CANNOT modify this value. it can only be configured
+     *   in NEW clusters during initial setup
+     */
+    @VariableMgr.VarAttr(name = ENABLE_TABLE_NAME_CASE_INSENSITIVE, flag = VariableMgr.READ_ONLY)
+    public static boolean enableTableNameCaseInsensitive = false;
 
     /**
      * Query will be pending when BE is overloaded, if `enableQueryQueueXxx` is true.
@@ -189,6 +221,18 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = ENABLE_TDE, flag = VariableMgr.GLOBAL | VariableMgr.READ_ONLY)
     public static boolean enableTde = KeyMgr.isEncrypted();
+
+    @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
+    private static double cngroupResourceUsageFreshRatio = 0.5;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_RUNNING_QUERY_COUNT)
+    private static long cngroupLowWatermarkRunningQueryCount = 8;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE)
+    private static long cngroupLowWatermarkCPUUsedPermille = 600;
+
+    @VariableMgr.VarAttr(name = CNGROUP_SCHEDULE_MODE)
+    private static String cngroupScheduleMode = "standard";
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_HISTORY, flag = VariableMgr.GLOBAL)
     public static boolean enableQueryHistory = false;
@@ -270,7 +314,7 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverHighWater() {
         if (queryQueueDriverHighWater == 0) {
-            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 16;
+            return BackendResourceStat.getInstance().getAvgNumCoresOfBe() * 16;
         }
         return queryQueueDriverHighWater;
     }
@@ -285,7 +329,7 @@ public final class GlobalVariable {
 
     public static int getQueryQueueDriverLowWater() {
         if (queryQueueDriverLowWater == 0) {
-            return BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe() * 8;
+            return BackendResourceStat.getInstance().getAvgNumCoresOfBe() * 8;
         }
         return queryQueueDriverLowWater;
     }
@@ -344,6 +388,38 @@ public final class GlobalVariable {
 
     public static void setActivateAllRolesOnLogin(boolean activateAllRolesOnLogin) {
         GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
+    }
+
+    public static void setCngroupResourceUsageFreshRatio(double value) {
+        cngroupResourceUsageFreshRatio = value;
+    }
+
+    public static double getCngroupResourceUsageFreshRatio() {
+        return cngroupResourceUsageFreshRatio;
+    }
+
+    public static void setCngroupLowWatermarkRunningQueryCount(long value) {
+        cngroupLowWatermarkRunningQueryCount = value;
+    }
+
+    public static long getCngroupLowWatermarkRunningQueryCount() {
+        return cngroupLowWatermarkRunningQueryCount;
+    }
+
+    public static void setCngroupLowWatermarkCPUUsedPermille(long value) {
+        cngroupLowWatermarkCPUUsedPermille = value;
+    }
+
+    public static long getCngroupLowWatermarkCPUUsedPermille() {
+        return cngroupLowWatermarkCPUUsedPermille;
+    }
+
+    public static void setCngroupScheduleMode(String mode) {
+        cngroupScheduleMode = mode;
+    }
+
+    public static String getCngroupScheduleMode() {
+        return cngroupScheduleMode;
     }
 
     // Don't allow create instance.

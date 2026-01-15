@@ -16,23 +16,25 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.formatter.AST2SQLVisitor;
+import com.starrocks.sql.formatter.FormatOptions;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,16 +46,18 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 public class CachingMvPlanContextBuilder {
     private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
 
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private static final Executor MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
+    private static final ExecutorService MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
             Config.mv_plan_cache_thread_pool_size,
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
@@ -89,6 +93,28 @@ public class CachingMvPlanContextBuilder {
     // store the ast of mv's define query to mvs
     private static final Map<AstKey, Set<MaterializedView>> AST_TO_MV_MAP = Maps.newConcurrentMap();
 
+    public static class MVCacheEntity {
+        private final Cache<Object, Object> cache = Caffeine.newBuilder()
+                .maximumSize(Config.mv_global_context_cache_max_size)
+                .recordStats()
+                .build();
+
+        public void invalidateAll() {
+            cache.invalidateAll();
+        }
+
+        public Object get(Object key, Supplier<Object> valueSupplier) {
+            return cache.get(key, k -> valueSupplier.get());
+        }
+
+        public Object getIfPresent(Object key) {
+            return cache.getIfPresent(key);
+        }
+    }
+    // Cache mv context entity for each materialized view, this cache's lifetime is same as materialized view.
+    // We can cache some mv level context info in MVCacheEntity to avoid recomputing them frequently.
+    private static final Map<MaterializedView, MVCacheEntity> MV_GLOBAL_CONTEXT_CACHE_MAP = Maps.newConcurrentMap();
+
     public static class AstKey {
         private final String sql;
 
@@ -96,7 +122,7 @@ public class CachingMvPlanContextBuilder {
          * Create a AstKey with parseNode(sub parse node)
          */
         public AstKey(ParseNode parseNode) {
-            this.sql = new AstToSQLBuilder.AST2SQLBuilderVisitor(true, false, true).visit(parseNode);
+            this.sql = AST2SQLVisitor.withOptions(FormatOptions.allEnable().setEnableDigest(false)).visit(parseNode);
         }
 
         @Override
@@ -126,7 +152,6 @@ public class CachingMvPlanContextBuilder {
         }
     }
 
-
     private CachingMvPlanContextBuilder() {
     }
 
@@ -136,6 +161,10 @@ public class CachingMvPlanContextBuilder {
 
     private CompletableFuture<List<MvPlanContext>> getPlanContextFuture(MaterializedView mv) {
         return MV_PLAN_CONTEXT_CACHE.get(mv);
+    }
+
+    public static MVCacheEntity getMVCache(MaterializedView mv) {
+        return MV_GLOBAL_CONTEXT_CACHE_MAP.computeIfAbsent(mv, k -> new MVCacheEntity());
     }
 
     /**
@@ -199,10 +228,10 @@ public class CachingMvPlanContextBuilder {
         try {
             result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
-            LOG.warn("get mv plan cache timeout: {}", mv.getName());
+            LOG.warn("get mv plan cache timeout: {}, timeout(ms):{}", mv.getName(), timeoutMs);
             return null;
         } catch (Throwable e) {
-            LOG.warn("get mv plan cache failed: {}", mv.getName(), e);
+            LOG.warn("get mv plan cache failed: {}, timeout(ms):{}", mv.getName(), timeoutMs, e);
             return null;
         }
         if (LOG.isDebugEnabled()) {
@@ -249,6 +278,9 @@ public class CachingMvPlanContextBuilder {
         try {
             // invalidate mv from plan cache
             MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+
+            // invalidate mv from mv level cache
+            MV_GLOBAL_CONTEXT_CACHE_MAP.remove(mv);
 
             // invalidate mv from timeline cache
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
@@ -354,13 +386,28 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
+     * NOTE: This method will refresh the metadata of mvs to avoid using stale mv.
      * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
      */
     public Set<MaterializedView> getMvsByAst(AstKey ast) {
         if (ast == null) {
             return null;
         }
-        return AST_TO_MV_MAP.get(ast);
+        Set<MaterializedView> candidateMVs = AST_TO_MV_MAP.get(ast);
+        // check & refresh mv's metadata to avoid using stale mv
+        if (candidateMVs == null) {
+            return Sets.newHashSet();
+        }
+        Set<MaterializedView> validMVs = Sets.newHashSet();
+        for (MaterializedView mv : candidateMVs) {
+            MaterializedView curMV = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mv.getMvId());
+            if (curMV == null) {
+                LOG.warn("mv {} is not found in metastore, skip it.", mv.getName());
+                continue;
+            }
+            validMVs.add(curMV);
+        }
+        return validMVs;
     }
 
     /**
@@ -377,5 +424,35 @@ public class CachingMvPlanContextBuilder {
             keys.add(cacheKey);
         }
         return keys;
+    }
+
+    /**
+     * Submit an async task to be executed in MV plan cache executor.
+     * @param taskName: the name of the task.
+     * @param task: the task to be executed.
+     */
+    public static void submitAsyncTask(String taskName, Supplier<Void> task) {
+        CompletableFuture<?> future = CompletableFuture.supplyAsync(task, MV_PLAN_CACHE_EXECUTOR);
+        long startTime = System.currentTimeMillis();
+        future.whenComplete((result, e) -> {
+            long duration = System.currentTimeMillis() - startTime;
+            if (e == null) {
+                LOG.info("async task {} finished successfully, cost: {}ms", taskName, duration);
+            } else {
+                LOG.warn("async task {} failed: {}, cost: {}ms", taskName, e.getMessage(), duration, e);
+            }
+        });
+    }
+
+    public static String getMVPlanCacheStats() {
+        return MV_PLAN_CONTEXT_CACHE.synchronous().stats().toString();
+    }
+
+    public static String getMVGlobalContextCacheStats(MaterializedView mv) {
+        MVCacheEntity mvCacheEntity = MV_GLOBAL_CONTEXT_CACHE_MAP.get(mv);
+        if (mvCacheEntity != null) {
+            return mvCacheEntity.cache.stats().toString();
+        }
+        return "";
     }
 }

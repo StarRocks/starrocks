@@ -22,7 +22,7 @@
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/spill_process_channel.h"
@@ -70,9 +70,11 @@ struct HashJoinerParam {
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
                     TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
                     bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
-                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
+                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots, size_t max_dop,
                     const TJoinDistributionMode::type distribution_mode, bool enable_late_materialization,
-                    bool enable_partition_hash_join, bool is_skew_join)
+                    bool enable_partition_hash_join, bool is_skew_join,
+                    const std::map<SlotId, ExprContext*>& common_expr_ctxs, TExprOpcode::type asof_join_condition_op,
+                    ExprContext* asof_join_condition_probe_expr_ctx, ExprContext* asof_join_condition_build_expr_ctx)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _is_null_safes(std::move(is_null_safes)),
@@ -88,10 +90,15 @@ struct HashJoinerParam {
               _build_runtime_filters(std::move(build_runtime_filters)),
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
+              _max_dop(max_dop),
               _distribution_mode(distribution_mode),
               _enable_late_materialization(enable_late_materialization),
               _enable_partition_hash_join(enable_partition_hash_join),
-              _is_skew_join(is_skew_join) {}
+              _is_skew_join(is_skew_join),
+              _common_expr_ctxs(common_expr_ctxs),
+              _asof_join_condition_op(asof_join_condition_op),
+              _asof_join_condition_probe_expr_ctx(asof_join_condition_probe_expr_ctx),
+              _asof_join_condition_build_expr_ctx(asof_join_condition_build_expr_ctx) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -113,10 +120,16 @@ struct HashJoinerParam {
     std::set<SlotId> _build_output_slots;
     std::set<SlotId> _probe_output_slots;
 
+    size_t _max_dop;
+
     const TJoinDistributionMode::type _distribution_mode;
     const bool _enable_late_materialization;
     const bool _enable_partition_hash_join;
     const bool _is_skew_join;
+    const std::map<SlotId, ExprContext*> _common_expr_ctxs;
+    TExprOpcode::type _asof_join_condition_op;
+    ExprContext* _asof_join_condition_probe_expr_ctx;
+    ExprContext* _asof_join_condition_build_expr_ctx;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -128,6 +141,14 @@ inline bool could_short_circuit(TJoinOp::type join_type) {
 inline bool has_post_probe(TJoinOp::type join_type) {
     return join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
            join_type == TJoinOp::FULL_OUTER_JOIN;
+}
+
+inline bool support_partitioned(TJoinOp::type join_type, bool has_other_conjuncts) {
+    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
+           join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::FULL_OUTER_JOIN ||
+           (join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && !has_other_conjuncts);
 }
 
 inline bool is_spillable(TJoinOp::type join_type) {
@@ -205,7 +226,7 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
-    Status append_chunk_to_ht(const ChunkPtr& chunk);
+    Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
 
     Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
@@ -343,6 +364,9 @@ public:
         return DeferOp([this]() { _probe_observable.notify_source_observers(); });
     }
 
+    size_t max_dop() const { return _max_dop; }
+    TJoinDistributionMode::type distribution_mode() const { return _hash_join_node.distribution_mode; }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -358,10 +382,10 @@ private:
                 key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(chunk->num_rows(), 0);
+                const_column->data_column()->as_mutable_raw_ptr()->assign(chunk->num_rows(), 0);
                 key_columns.emplace_back(const_column->data_column());
             } else {
-                key_columns.emplace_back(column_ptr);
+                key_columns.emplace_back(std::move(column_ptr));
             }
         }
         return Status::OK();
@@ -433,6 +457,7 @@ private:
     const std::vector<ExprContext*>& _other_join_conjunct_ctxs;
     // Conjuncts in Join followed by a filter predicate, usually in Where and Having.
     const std::vector<ExprContext*>& _conjunct_ctxs;
+    const std::map<SlotId, ExprContext*>& _common_expr_ctxs;
     const RowDescriptor& _build_row_descriptor;
     const RowDescriptor& _probe_row_descriptor;
     const TPlanNodeType::type _build_node_type;
@@ -483,7 +508,13 @@ private:
     pipeline::Observable _builder_observable;
     pipeline::Observable _probe_observable;
 
+    size_t _max_dop = 0;
+
     bool _is_skew_join = false;
+
+    TExprOpcode::type _asof_join_condition_op = TExprOpcode::INVALID_OPCODE;
+    ExprContext* _asof_join_condition_probe_expr_ctx = nullptr;
+    ExprContext* _asof_join_condition_build_expr_ctx = nullptr;
 };
 
 } // namespace starrocks

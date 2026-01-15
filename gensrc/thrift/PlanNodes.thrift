@@ -85,6 +85,9 @@ enum TPlanNodeType {
   STREAM_AGG_NODE,
   LAKE_META_SCAN_NODE,
   CAPTURE_VERSION_NODE,
+  RAW_VALUES_NODE,
+  FETCH_NODE,
+  LOOKUP_NODE,
 }
 
 // phases of an execution node
@@ -283,6 +286,7 @@ struct TBrokerScanRangeParams {
     31: optional i64 schema_sample_file_row_count
     32: optional bool flexible_column_mapping
     33: optional TFileScanType file_scan_type
+    34: optional bool schema_sample_types = true
 }
 
 // Broker scan range
@@ -308,16 +312,10 @@ struct TEsScanRange {
   4: required i32 shard_id
 }
 
-enum TIcebergFileContent {
-    DATA,
-    POSITION_DELETES,
-    EQUALITY_DELETES,
-}
-
 struct TIcebergDeleteFile {
     1: optional string full_path
     2: optional Descriptors.THdfsFileFormat file_format
-    3: optional TIcebergFileContent file_content
+    3: optional Types.TIcebergFileContent file_content
     4: optional i64 length
 }
 
@@ -436,6 +434,11 @@ struct THdfsScanRange {
 
     // min/max value of slots
     35: optional map<i32, Exprs.TExprMinMaxValue> min_max_values;
+
+    // mapping transformed bucket id, used to schedule scan range
+    36: optional i32 bucket_id;
+
+    37: optional i64 first_row_id;
 }
 
 struct TBinlogScanRange {
@@ -569,6 +572,7 @@ struct TColumnAccessPath {
     3: optional list<TColumnAccessPath> children
     4: optional bool from_predicate
     5: optional Types.TTypeDesc type_desc
+    6: optional bool extended
 }
 
 struct TVectorSearchOptions {
@@ -678,6 +682,12 @@ struct TLakeScanNode {
   40: optional i64 back_pressure_throttle_time
   41: optional i64 back_pressure_throttle_time_upper_bound
   42: optional i64 back_pressure_num_rows
+
+  43: optional Descriptors.TTableSchemaKey schema_key
+
+  // inverted index
+  44: optional bool enable_prune_column_after_index_filter
+  45: optional bool enable_gin_filter
 }
 
 struct TEqJoinCondition {
@@ -687,6 +697,15 @@ struct TEqJoinCondition {
   2: required Exprs.TExpr right;
   // operator of equal join
   3: optional Opcodes.TExprOpcode opcode;
+}
+
+struct TAsofJoinCondition {
+  // left-hand side of the asof condition (probe side)
+  1: required Exprs.TExpr left;
+  // right-hand side of the asof condition (build side)
+  2: required Exprs.TExpr right;
+  // operator for asof join: LT, LE, GT, GE
+  3: required Opcodes.TExprOpcode opcode;
 }
 
 enum TStreamingPreaggregationMode {
@@ -714,7 +733,9 @@ enum TJoinOp {
   // on the build side. Those NULLs are considered candidate matches, and therefore could
   // be rejected (ANTI-join), based on the other join conjuncts. This is in contrast
   // to LEFT_ANTI_JOIN where NULLs are not matches and therefore always returned.
-  NULL_AWARE_LEFT_ANTI_JOIN
+  NULL_AWARE_LEFT_ANTI_JOIN,
+  ASOF_INNER_JOIN,
+  ASOF_LEFT_OUTER_JOIN
 }
 
 enum TJoinDistributionMode {
@@ -762,6 +783,10 @@ struct THashJoinNode {
   56: optional bool late_materialization = false
   57: optional bool enable_partition_hash_join = false
   58: optional bool is_skew_join = false
+
+  59: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+
+  70: optional TAsofJoinCondition asof_join_condition
 }
 
 struct TMergeJoinNode {
@@ -801,6 +826,7 @@ struct TNestLoopJoinNode {
     3: optional list<Exprs.TExpr> join_conjuncts
     4: optional string sql_join_conjuncts
     5: optional bool interpolate_passthrough = false
+    6: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
 enum TAggregationOp {
@@ -873,6 +899,9 @@ struct TAggregationNode {
   29: optional bool enable_pipeline_share_limit = false
 
   30: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters
+
+  31: optional list<Exprs.TExpr> group_by_min_max
+
 }
 
 struct TRepeatNode {
@@ -951,6 +980,7 @@ struct TSortNode {
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
   40: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
+  41: optional bool per_pipeline;
 }
 
 enum TAnalyticWindowType {
@@ -1080,6 +1110,17 @@ struct TUnionNode {
     21: optional TLocalExchangerType local_exchanger_type
 
     22: optional list<list<Exprs.TExpr>> local_partition_by_exprs
+}
+
+// Raw values node for efficient serialization of large constant lists
+struct TRawValuesNode {
+    // Tuple ID for the output
+    1: required Types.TTupleId tuple_id
+    // The data type of the constants
+    2: required Types.TTypeDesc constant_type
+    // Typed constant lists for better compression
+    3: optional list<i64> long_values      // For BIGINT, INT types
+    4: optional list<string> string_values // For VARCHAR types
 }
 
 struct TIntersectNode {
@@ -1226,6 +1267,9 @@ struct THdfsScanNode {
     23: optional list<Types.TSlotId> extended_slot_ids;
 
     24: optional bool can_use_count_opt;
+
+    // describe distribution of local exchange
+    25: optional list<Partitions.TBucketProperty> bucket_properties;
 }
 
 struct TProjectNode {
@@ -1243,7 +1287,11 @@ struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
     2: optional list<Descriptors.TColumn> columns
-    3: optional i32 low_cardinality_threshold;
+    3: optional i32 low_cardinality_threshold
+    4: optional list<TColumnAccessPath> column_access_paths
+    // deprecated. use schema key instead
+    5: optional i64 schema_id
+    6: optional Descriptors.TTableSchemaKey schema_key
 }
 
 struct TDecodeNode {
@@ -1328,6 +1376,21 @@ struct TStreamAggregationNode {
   24: optional i32 agg_func_set_version = 1
 }
 
+struct TPlanNodeCommon {
+  // heavy_exprs are extracted from projection and shall be push down to ScanNode and
+  // it is evaluated by ScanNode's ChunkSource in io threads.
+  1: optional map<Types.TSlotId, Exprs.TExpr> heavy_exprs
+}
+
+struct TFetchNode {
+  1: optional i32 target_node_id
+  2: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
+  3: optional Descriptors.TNodesInfo nodes_info
+}
+
+struct TLookUpNode {
+  1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
+}
 
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
@@ -1345,6 +1408,7 @@ struct TPlanNode {
 
   // Produce data in compact format.
   8: required bool compact_data
+  9: optional TPlanNodeCommon common
 
   // one field per PlanNode subclass
   11: optional THashJoinNode hash_join_node
@@ -1369,6 +1433,7 @@ struct TPlanNode {
   33: optional TIntersectNode intersect_node
   34: optional TExceptNode except_node
   35: optional TMergeJoinNode merge_join_node
+  36: optional TRawValuesNode raw_values_node
 
   // For vector query engine
   // 50 is reserved, please don't use
@@ -1404,7 +1469,9 @@ struct TPlanNode {
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
 
-  81: optional TSelectNode select_node;
+  81: optional TSelectNode select_node; 
+  82: optional TFetchNode fetch_node;
+  83: optional TLookUpNode look_up_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

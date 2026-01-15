@@ -16,22 +16,22 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -214,10 +214,10 @@ public class BackupJobMaterializedViewTest {
             }
         };
 
-        List<TableRef> tableRefs = Lists.newArrayList();
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
         // disorder
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
         job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         new Expectations(job) {
@@ -246,18 +246,18 @@ public class BackupJobMaterializedViewTest {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.TABLE_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assertions.assertNotNull(backupTbl);
-                Assertions.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
+                Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                            RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)), BackupHandler.SIGNATURE_VERSION, partNames,
                                         true));
             }
             {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assertions.assertNotNull(backupTbl);
-                Assertions.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
-                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
+                Assertions.assertEquals(RestoreJob.getSignature(backupTbl, BackupHandler.SIGNATURE_VERSION, partNames, true),
+                            RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId + 1)), BackupHandler.SIGNATURE_VERSION, partNames,
                                         true));
             }
         }
@@ -366,18 +366,18 @@ public class BackupJobMaterializedViewTest {
                 Assertions.assertNotNull(olapTable);
                 Assertions.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
                 List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
-                Assertions.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                        .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
-                            olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assertions.assertEquals(RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)), BackupHandler.SIGNATURE_VERSION, names, true),
+                            RestoreJob.getSignature(olapTable, BackupHandler.SIGNATURE_VERSION, names, true));
             }
             {
                 MaterializedView mv = (MaterializedView) restoreMetaInfo.getTable(tblId + 1);
                 Assertions.assertNotNull(mv);
                 Assertions.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
                 List<String> names = Lists.newArrayList(mv.getPartitionNames());
-                Assertions.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
-                            true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+                Assertions.assertEquals(RestoreJob.getSignature(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tblId + 1)), BackupHandler.SIGNATURE_VERSION, names,
+                            true), RestoreJob.getSignature(mv, BackupHandler.SIGNATURE_VERSION, names, true));
             }
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());
@@ -425,9 +425,9 @@ public class BackupJobMaterializedViewTest {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
 
-        List<TableRef> tableRefs = Lists.newArrayList();
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
+        List<TableRefPersist> tableRefs = Lists.newArrayList();
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
+        tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
         job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000,
                     globalStateMgr, repo.getId());

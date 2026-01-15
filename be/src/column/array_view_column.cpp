@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-StatusOr<ColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
+StatusOr<MutableColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) {
     auto dest_size = offsets.size() - 1;
     auto new_offsets = UInt32Column::create();
     auto new_lengths = UInt32Column::create();
@@ -37,7 +37,7 @@ StatusOr<ColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) 
         new_offsets->append_value_multiple_times(*_offsets, i, repeat_times);
         new_lengths->append_value_multiple_times(*_lengths, i, repeat_times);
     }
-    return ArrayViewColumn::create(_elements, std::move(new_offsets), std::move(new_lengths));
+    return ArrayViewColumn::create(_elements->as_mutable_ptr(), std::move(new_offsets), std::move(new_lengths));
 }
 
 void ArrayViewColumn::assign(size_t n, size_t idx) {
@@ -136,10 +136,10 @@ size_t ArrayViewColumn::filter_range(const Filter& filter, size_t from, size_t t
 int ArrayViewColumn::compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const {
     // @TODO support compare with ArrayColumn
     const auto& rhs = down_cast<const ArrayViewColumn&>(right_column);
-    size_t lhs_offset = _offsets->get_data()[left];
-    size_t lhs_length = _lengths->get_data()[left];
-    size_t rhs_offset = rhs._offsets->get_data()[right];
-    size_t rhs_length = rhs._lengths->get_data()[right];
+    size_t lhs_offset = _offsets->immutable_data()[left];
+    size_t lhs_length = _lengths->immutable_data()[left];
+    size_t rhs_offset = rhs._offsets->immutable_data()[right];
+    size_t rhs_length = rhs._lengths->immutable_data()[right];
 
     size_t min_size = std::min(lhs_length, rhs_length);
     for (size_t i = 0; i < min_size; i++) {
@@ -165,10 +165,10 @@ void ArrayViewColumn::compare_column(const Column& rhs, std::vector<int8_t>* out
 
 int ArrayViewColumn::equals(size_t left, const Column& right_column, size_t right, bool safe_eq) const {
     const auto& rhs = down_cast<const ArrayViewColumn&>(right_column);
-    size_t lhs_offset = _offsets->get_data()[left];
-    size_t lhs_length = _lengths->get_data()[left];
-    size_t rhs_offset = rhs._offsets->get_data()[right];
-    size_t rhs_length = rhs._lengths->get_data()[right];
+    size_t lhs_offset = _offsets->immutable_data()[left];
+    size_t lhs_length = _lengths->immutable_data()[left];
+    size_t rhs_offset = rhs._offsets->immutable_data()[right];
+    size_t rhs_length = rhs._lengths->immutable_data()[right];
 
     if (lhs_length != rhs_length) {
         return EQUALS_FALSE;
@@ -188,34 +188,14 @@ int ArrayViewColumn::equals(size_t left, const Column& right_column, size_t righ
 
 Datum ArrayViewColumn::get(size_t idx) const {
     DCHECK_LT(idx, _offsets->size()) << "idx should be less than offsets size";
-    size_t offset = _offsets->get_data()[idx];
-    size_t length = _lengths->get_data()[idx];
+    size_t offset = _offsets->immutable_data()[idx];
+    size_t length = _lengths->immutable_data()[idx];
 
     DatumArray res(length);
     for (size_t i = 0; i < length; ++i) {
         res[i] = _elements->get(offset + i);
     }
     return {res};
-}
-
-void ArrayViewColumn::fnv_hash_at(uint32_t* seed, uint32_t idx) const {
-    DCHECK(false) << "ArrayViewColumn::fnv_hash_at() is not supported";
-    throw std::runtime_error("ArrayViewColumn::fnv_hash_at() is not supported");
-}
-
-void ArrayViewColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "ArrayViewColumn::fnv_hash() is not supported";
-    throw std::runtime_error("ArrayViewColumn::fnv_hash() is not supported");
-}
-
-void ArrayViewColumn::crc32_hash_at(uint32_t* seed, uint32_t idx) const {
-    DCHECK(false) << "ArrayViewColumn::crc32_hash_at() is not supported";
-    throw std::runtime_error("ArrayViewColumn::crc32_hash_at() is not supported");
-}
-
-void ArrayViewColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
-    DCHECK(false) << "ArrayViewColumn::crc32_hash() is not supported";
-    throw std::runtime_error("ArrayViewColumn::crc32_hash() is not supported");
 }
 
 int64_t ArrayViewColumn::xor_checksum(uint32_t from, uint32_t to) const {
@@ -229,15 +209,15 @@ void ArrayViewColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool
 }
 
 size_t ArrayViewColumn::get_element_null_count(size_t idx) const {
-    size_t offset = _offsets->get_data()[idx];
-    size_t length = _lengths->get_data()[idx];
+    size_t offset = _offsets->immutable_data()[idx];
+    size_t length = _lengths->immutable_data()[idx];
     auto nullable_column = down_cast<const NullableColumn*>(_elements.get());
     return nullable_column->null_count(offset, length);
 }
 
 size_t ArrayViewColumn::get_element_size(size_t idx) const {
     DCHECK_LT(idx, _lengths->size());
-    return _lengths->get_data()[idx];
+    return _lengths->immutable_data()[idx];
 }
 
 void ArrayViewColumn::check_or_die() const {
@@ -246,16 +226,16 @@ void ArrayViewColumn::check_or_die() const {
     DCHECK(_lengths);
     DCHECK_EQ(_offsets->size(), _lengths->size());
     for (size_t i = 0; i < _offsets->size(); i++) {
-        uint32_t offset = _offsets->get_data()[i];
-        uint32_t length = _lengths->get_data()[i];
+        uint32_t offset = _offsets->immutable_data()[i];
+        uint32_t length = _lengths->immutable_data()[i];
         DCHECK_LE(offset + length, _elements->size());
     }
 }
 
 std::string ArrayViewColumn::debug_item(size_t idx) const {
     DCHECK_LT(idx, size());
-    uint32_t offset = _offsets->get_data()[idx];
-    uint32_t length = _lengths->get_data()[idx];
+    uint32_t offset = _offsets->immutable_data()[idx];
+    uint32_t length = _lengths->immutable_data()[idx];
 
     std::stringstream ss;
     ss << "[";
@@ -300,8 +280,8 @@ ColumnPtr ArrayViewColumn::to_array_column() const {
     uint32_t last_offset = 0;
     size_t num_rows = _offsets->size();
     for (size_t i = 0; i < num_rows; i++) {
-        uint32_t offset = _offsets->get_data()[i];
-        uint32_t length = _lengths->get_data()[i];
+        uint32_t offset = _offsets->immutable_data()[i];
+        uint32_t length = _lengths->immutable_data()[i];
         // append lement
         array_elements->append(*_elements, offset, length);
         array_offsets->append(last_offset + length);
@@ -321,7 +301,7 @@ ColumnPtr ArrayViewColumn::to_array_column() const {
 //  elements column: [1,2,3,4]
 //  offsets column: [0,2,2,3]
 //  length column:  [2,0,0,1]
-ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
+MutableColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
     if (!column->is_array()) {
         throw std::runtime_error("input column must be an array column");
     }
@@ -334,9 +314,9 @@ ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
     if (column->is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(column.get());
         DCHECK(nullable_column != nullptr);
-        const auto& null_data = nullable_column->null_column()->get_data();
+        const auto null_data = nullable_column->immutable_null_column_data();
         auto array_column = down_cast<const ArrayColumn*>(nullable_column->data_column().get());
-        const auto& array_offsets = array_column->offsets().get_data();
+        const auto array_offsets = array_column->offsets().immutable_data();
 
         view_elements = array_column->elements_column();
 
@@ -355,7 +335,7 @@ ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
 
     auto array_column = down_cast<const ArrayColumn*>(column.get());
     view_elements = array_column->elements_column();
-    const auto& array_offsets = array_column->offsets().get_data();
+    const auto array_offsets = array_column->offsets().immutable_data();
 
     for (size_t i = 0; i < column->size(); i++) {
         uint32_t offset = array_offsets[i];
@@ -376,8 +356,7 @@ ColumnPtr ArrayViewColumn::to_array_column(const ColumnPtr& column) {
         DCHECK(nullable_column != nullptr);
         auto array_view_column = down_cast<const ArrayViewColumn*>(nullable_column->data_column().get());
         auto array_column = array_view_column->to_array_column();
-        return NullableColumn::create(std::move(array_column)->as_mutable_ptr(),
-                                      nullable_column->null_column()->as_mutable_ptr());
+        return NullableColumn::create(std::move(array_column), std::move(nullable_column->null_column()));
     }
     auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
     return array_view_column->to_array_column();

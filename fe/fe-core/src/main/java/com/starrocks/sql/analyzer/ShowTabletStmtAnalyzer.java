@@ -16,29 +16,30 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +50,7 @@ public class ShowTabletStmtAnalyzer {
         new ShowTabletStmtAnalyzerVisitor().visit(statement, context);
     }
 
-    static class ShowTabletStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+    static class ShowTabletStmtAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
 
         private long version = -1;
         private long backendId = -1;
@@ -64,15 +65,14 @@ public class ShowTabletStmtAnalyzer {
 
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-            String dbName = statement.getDbName();
             boolean isShowSingleTablet = statement.isShowSingleTablet();
-            if (!isShowSingleTablet && Strings.isNullOrEmpty(dbName)) {
-                dbName = context.getDatabase();
+            if (!isShowSingleTablet) {
+                TableRef normalizedRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+                statement.setTableRef(normalizedRef);
             }
-            statement.setDbName(dbName);
 
             // partitionNames.
-            PartitionNames partitionNames = statement.getPartitionNames();
+            PartitionRef partitionNames = statement.getPartitionNames();
             if (partitionNames != null) {
                 // check if partition name is not empty string
                 if (partitionNames.getPartitionNames().stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
@@ -84,7 +84,7 @@ public class ShowTabletStmtAnalyzer {
             if (whereClause != null) {
                 if (whereClause instanceof CompoundPredicate) {
                     CompoundPredicate cp = (CompoundPredicate) whereClause;
-                    if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                    if (cp.getOp() != CompoundPredicate.Operator.AND) {
                         throw new SemanticException("Only allow compound predicate with operator AND");
                     }
                     analyzeSubPredicate(cp.getChild(0));
@@ -96,11 +96,16 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
+                TableRef tableRef = statement.getTableRef();
+                if (tableRef == null) {
+                    throw new SemanticException("Table ref is null");
+                }
+                String dbName = tableRef.getDbName();
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbName);
                 }
-                String tableName = statement.getTableName();
+                String tableName = tableRef.getTableName();
                 Table table = null;
                 Locker locker = new Locker();
                 locker.lockDatabase(db.getId(), LockType.READ);
@@ -150,7 +155,7 @@ public class ShowTabletStmtAnalyzer {
             }
             if (subExpr instanceof CompoundPredicate) {
                 CompoundPredicate cp = (CompoundPredicate) subExpr;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
+                if (cp.getOp() != CompoundPredicate.Operator.AND) {
                     throw new SemanticException("Only allow compound predicate with operator AND");
                 }
 

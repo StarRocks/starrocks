@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <map>
+
 #include "storage/rowset/column_writer.h"
 
 namespace starrocks {
@@ -47,6 +49,11 @@ public:
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override;
 
+    bool is_global_dict_valid() override;
+
+    // Get global dict validity status for each sub-column
+    const std::map<std::string, bool>& get_subcolumn_dict_valid() const;
+
     uint64_t total_mem_footprint() const override;
 
 protected:
@@ -54,7 +61,7 @@ protected:
     Status _write_flat_column();
 
 private:
-    Status _flat_column(Columns& json_datas);
+    Status _flat_column(MutableColumns& json_datas);
 
 protected:
     ColumnMetaPB* _json_meta;
@@ -64,14 +71,22 @@ protected:
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
-    Columns _flat_columns;
+    MutableColumns _flat_columns;
 
-    Columns _json_datas;
+    MutableColumns _json_datas;
     size_t _estimate_size = 0;
 
     bool _has_remain;
     std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
     const FlatJsonConfig* _flat_json_config = nullptr;
+
+    // Store original options for sub-column global dict setup
+    // FIXME: avoid copy the map
+    const std::unordered_map<std::string, const GlobalDictMap> _global_dict;
+    std::string _column_name;
+
+    // Track global dict validity for each sub-column
+    std::map<std::string, bool> _subcolumn_dict_valid;
 };
 } // namespace starrocks

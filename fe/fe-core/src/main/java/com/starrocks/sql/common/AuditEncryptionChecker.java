@@ -14,13 +14,13 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -40,7 +41,9 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
 import java.util.List;
@@ -50,7 +53,7 @@ import java.util.Map;
  * Responsible for determining whether the corresponding statement
  * needs to encrypt sensitive information in the audit log
  */
-public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
+public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean, Void> {
     private static final AuditEncryptionChecker INSTANCE = new AuditEncryptionChecker();
 
     private AuditEncryptionChecker() {
@@ -81,6 +84,11 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     public Boolean visitQueryStatement(QueryStatement statement, Void context) {
         QueryRelation queryRelation = statement.getQueryRelation();
         return visit(queryRelation);
+    }
+
+    @Override
+    public Boolean visitSubmitTaskStatement(SubmitTaskStmt statement, Void context) {
+        return true;
     }
 
     @Override
@@ -143,6 +151,11 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
 
     @Override
     public Boolean visitCreateCatalogStatement(CreateCatalogStmt statement, Void context) {
+        return true;
+    }
+
+    @Override
+    public Boolean visitCreateRepositoryStatement(CreateRepositoryStmt statement, Void context) {
         return true;
     }
 
@@ -217,5 +230,10 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
             return hasSecretInProperties(tableProperties);
         }
         return false;
+    }
+
+    @Override
+    public Boolean visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement, Void context) {
+        return true;
     }
 }

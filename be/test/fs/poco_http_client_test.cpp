@@ -36,10 +36,10 @@ namespace starrocks::poco {
 static const char* kObjectName = "starrocks_ut_poco_test.txt";
 static const char* kObjectContent = "0123456789";
 
-class PocoHttpClientTest : public testing::Test {
+class S3PocoHttpClientTest : public testing::Test {
 public:
-    PocoHttpClientTest() = default;
-    ~PocoHttpClientTest() override = default;
+    S3PocoHttpClientTest() = default;
+    ~S3PocoHttpClientTest() override = default;
 
     static void SetUpTestCase();
     static void TearDownTestCase();
@@ -52,7 +52,7 @@ protected:
     inline static const char* sk = nullptr;
 };
 
-void PocoHttpClientTest::SetUpTestCase() {
+void S3PocoHttpClientTest::SetUpTestCase() {
     Aws::InitAPI(Aws::SDKOptions());
     Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
 
@@ -75,11 +75,11 @@ void PocoHttpClientTest::SetUpTestCase() {
     put_object(kObjectContent);
 }
 
-void PocoHttpClientTest::TearDownTestCase() {
+void S3PocoHttpClientTest::TearDownTestCase() {
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
 
-void PocoHttpClientTest::put_object(const std::string& object_content) {
+void S3PocoHttpClientTest::put_object(const std::string& object_content) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
@@ -99,10 +99,13 @@ void PocoHttpClientTest::put_object(const std::string& object_content) {
     CHECK(outcome.IsSuccess()) << outcome.GetError().GetMessage();
 }
 
-TEST_F(PocoHttpClientTest, TestNormalAccess) {
+TEST_F(S3PocoHttpClientTest, TestNormalAccess) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
+    // Set timeout for faster test execution
+    config.connectTimeoutMs = 500;
+    config.requestTimeoutMs = 2000;
     // Create a custom retry strategy
     int maxRetries = 2;
     long scaleFactor = 25;
@@ -123,12 +126,14 @@ TEST_F(PocoHttpClientTest, TestNormalAccess) {
     ASSERT_EQ("012345", std::string_view(buf, r));
 }
 
-TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
+TEST_F(S3PocoHttpClientTest, TestErrorEndpoint) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = "http://127.0.0.1";
-
-    // Create a custom retry strategy
-    int maxRetries = 2;
+    // Set very short timeout for faster failure detection
+    config.connectTimeoutMs = 100;
+    config.requestTimeoutMs = 200;
+    // Disable retry for error test to speed up
+    int maxRetries = 0;
     long scaleFactor = 25;
     std::shared_ptr<Aws::Client::RetryStrategy> retryStrategy =
             std::make_shared<Aws::Client::DefaultRetryStrategy>(maxRetries, scaleFactor);
@@ -146,13 +151,15 @@ TEST_F(PocoHttpClientTest, TestErrorEndpoint) {
     EXPECT_TRUE(r.status().message().find("Poco::Exception") != std::string::npos);
 }
 
-TEST_F(PocoHttpClientTest, TestErrorAkSk) {
+TEST_F(S3PocoHttpClientTest, TestErrorAkSk) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
-
-    // Create a custom retry strategy
-    int maxRetries = 2;
+    // Set timeout for faster test execution
+    config.connectTimeoutMs = 500;
+    config.requestTimeoutMs = 2000;
+    // Reduce retry for error test to speed up
+    int maxRetries = 1;
     long scaleFactor = 25;
     std::shared_ptr<Aws::Client::RetryStrategy> retryStrategy =
             std::make_shared<Aws::Client::DefaultRetryStrategy>(maxRetries, scaleFactor);
@@ -171,12 +178,15 @@ TEST_F(PocoHttpClientTest, TestErrorAkSk) {
     EXPECT_TRUE(r.status().message().find("SdkResponseCode=403") != std::string::npos);
 }
 
-TEST_F(PocoHttpClientTest, TestNotFoundKey) {
+TEST_F(S3PocoHttpClientTest, TestNotFoundKey) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     config.endpointOverride = config::object_storage_endpoint.empty() ? getenv("STARROCKS_UT_S3_ENDPOINT")
                                                                       : config::object_storage_endpoint;
-    // Create a custom retry strategy
-    int maxRetries = 2;
+    // Set timeout for faster test execution
+    config.connectTimeoutMs = 500;
+    config.requestTimeoutMs = 2000;
+    // Reduce retry for error test to speed up
+    int maxRetries = 1;
     long scaleFactor = 25;
     std::shared_ptr<Aws::Client::RetryStrategy> retryStrategy =
             std::make_shared<Aws::Client::DefaultRetryStrategy>(maxRetries, scaleFactor);

@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

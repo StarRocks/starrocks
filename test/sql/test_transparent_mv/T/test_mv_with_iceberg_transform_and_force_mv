@@ -18,7 +18,7 @@ PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
 REFRESH DEFERRED MANUAL
 PROPERTIES (
   "replication_num" = "1",
-  "partition_retention_condition" = "date_trunc('day', l_shipdate) >= '2024-11-13'",
+  "partition_retention_condition" = "date_trunc('day', l_shipdate) >= '2024-11-13' or date_trunc('day', l_shipdate) is null",
   "query_rewrite_consistency" = "force_mv"
 )
 AS

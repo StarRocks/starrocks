@@ -39,15 +39,15 @@ AS SELECT * FROM t1;
 REFRESH MATERIALIZED VIEW test_mv0 WITH SYNC MODE;
 
 -- complete rewrite
-function: check_hit_materialized_view("select count(*) from t1", "test_mv0")
-function: check_hit_materialized_view("select * from t1", "test_mv0")
+function: print_hit_materialized_view("select count(*) from t1", "test_mv0")
+function: print_hit_materialized_view("select * from t1", "test_mv0")
 select count(*) from t1;
 select * from t1 order by k1;
 
 -- union rewrite
 insert into t1 values ('2023-01-02', '2020-01-01 01:00:00', '1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);
-function: check_hit_materialized_view("select count(*) from t1", "test_mv0")
-function: check_hit_materialized_view("select * from t1", "test_mv0")
+function: print_hit_materialized_view("select count(*) from t1", "test_mv0")
+function: print_hit_materialized_view("select * from t1", "test_mv0")
 select count(*) from t1;
 select * from t1 order by k1;
 

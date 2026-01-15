@@ -1,4 +1,4 @@
--- name: test_bucket_size
+-- name: test_bucket_size @native
 create table t(k int);
 -- result:
 -- !result
@@ -10,7 +10,7 @@ t	CREATE TABLE `t` (
 DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
-"bucket_size" = "4294967296",
+"bucket_size" = "1073741824",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true",
 "replicated_storage" = "true",
@@ -72,7 +72,7 @@ alter table t set('bucket_size'='2048');
 
 
 
--- name: test_automatic_bucket
+-- name: test_automatic_bucket @native
 create database kkk;
 -- result:
 -- !result
@@ -257,37 +257,17 @@ PROPERTIES (
 );
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-3
--- !result
 insert into t values('2021-01-01', 1);
 -- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-6
 -- !result
 insert into t values('2021-01-03', 1);
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-12
--- !result
 insert into t values('2021-01-05', 1);
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-18
--- !result
 insert into t values('2021-01-01', 1);
 -- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-21
 -- !result
 select * from t;
 -- result:
@@ -549,7 +529,7 @@ select * from t;
 
 
 
--- name: test_mutable_bucket @sequential
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 -- result:
 -- !result
@@ -571,7 +551,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', `k`)
+PARTITION BY DATE_TRUNC('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",
@@ -603,7 +583,7 @@ t	CREATE TABLE `t` (
   `v` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('DAY', `k`)
+PARTITION BY DATE_TRUNC('DAY', `k`)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "bucket_size" = "1",

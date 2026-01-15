@@ -23,7 +23,7 @@
 namespace starrocks {
 
 std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map) {
-    NullableColumn::Ptr res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    NullableColumn::MutablePtr res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     res->reserve(dict_map.size() + 1);
 
     std::vector<Slice> slices;

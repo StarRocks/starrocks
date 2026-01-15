@@ -17,22 +17,16 @@ package com.starrocks.catalog;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.persist.gson.GsonUtils;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 
 public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     @SerializedName(value = "storageCacheInfo")
     private DataCacheInfo dataCacheInfo;
 
     public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
-                                  DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                  DataProperty dataProperty, short replicationNum,
                                   DataCacheInfo dataCacheInfo) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+        super(dbId, tableId, partition, dataProperty, replicationNum);
         this.dataCacheInfo = dataCacheInfo;
     }
 
@@ -47,19 +41,12 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     }
 
     @Override
-    void recover(OlapTable table) throws DdlException {
-        RecyclePartitionInfo.recoverRangePartition(table, this);
-    }
-
-    public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
+    public void checkRecoverable(OlapTable table) throws DdlException {
+        checkRecoverableForRangePartition(table);
     }
 
     @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(-1L);
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
+    public void recover(OlapTable table) {
+        recoverRangePartition(table);
     }
 }

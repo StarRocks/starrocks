@@ -46,6 +46,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -56,7 +57,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -125,7 +125,7 @@ public class MigrationAction extends RestBaseAction {
                         row.add(tableName);
                         row.add(partitionName);
                         row.add(tablet.getId());
-                        row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                        row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getMetaId()));
                         if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
                             Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                             row.add(replica.getBackendId());
@@ -151,7 +151,7 @@ public class MigrationAction extends RestBaseAction {
                             row.add(tableName);
                             row.add(partitionName);
                             row.add(tablet.getId());
-                            row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
+                            row.add(olapTable.getSchemaHashByIndexMetaId(baseIndex.getMetaId()));
                             if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
                                 Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                                 row.add(replica.getBackendId());

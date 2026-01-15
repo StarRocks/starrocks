@@ -18,16 +18,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
 
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.Set;
 
 public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
@@ -100,7 +96,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected void updateCatalog(Database db, LakeTable table) {
+    protected void updateCatalog(Database db, LakeTable table, boolean isReplay) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
@@ -130,9 +126,6 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = other.compactionStrategy;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
-        Text.writeString(out, json);
-    }
+
+
 }

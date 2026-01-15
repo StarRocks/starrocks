@@ -24,6 +24,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -49,6 +50,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -83,21 +85,30 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         if (!mv.isEnableTransparentRewrite()) {
             return Collections.emptyList();
         }
-
-        logMVRewrite(mv.getName(), "Start to generate transparent rewrite plan for mv");
-        ConnectContext connectContext = ConnectContext.get();
-        if (connectContext == null) {
-            logMVRewrite("Skip to generate transparent rewrite plan because connect context is null, mv: {}",
-                    mv.getName());
+        // if this mv comes from mv rewritten, skip it
+        if (olapScanOperator.isOpAppliedMV(mv.getId())) {
             return Collections.emptyList();
         }
+
+        logMVRewrite(mv.getName(), "Start to generate transparent rewrite plan for mv");
+        ConnectContext connectContext = context.getConnectContext() == null ?
+                new ConnectContext() : context.getConnectContext();
         try {
             OptExpression result = doTransform(connectContext, context, olapScanOperator, input, mv.getMvId());
             return Collections.singletonList(result);
         } catch (Exception e) {
             LOG.warn("Failed to generate transparent rewrite plan for mv: {}, error: {}",
                     mv.getName(), e.getMessage(), e);
-            return Collections.emptyList();
+            TableProperty.MVTransparentRewriteMode transparentRewriteMode = mv.getTransparentRewriteMode();
+            switch (transparentRewriteMode) {
+                case TRUE:
+                case TRANSPARENT_OR_DEFAULT:
+                    return Collections.emptyList();
+                case TRANSPARENT_OR_ERROR:
+                    throw new RuntimeException("Failed to generate transparent rewrite plan for mv: " + mv.getName(), e);
+                default:
+                    throw new IllegalArgumentException("Unknown transparent rewrite mode: " + transparentRewriteMode);
+            }
         }
     }
 
@@ -163,7 +174,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
         // mv's to refresh partition info
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
-        MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
+        MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
         if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
             logMVRewrite(context, this, "Get mv to refresh partition info failed, and redirect to mv's defined query");
             return getOptExpressionByDefault(context, mv, mvPlanContext, olapScanOperator, queryTables);
@@ -197,11 +210,10 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         TableProperty.MVTransparentRewriteMode transparentRewriteMode = mv.getTransparentRewriteMode();
         switch (transparentRewriteMode) {
             case TRUE:
+            case TRANSPARENT_OR_ERROR:
                 return redirectToMVDefinedQuery(context, mv, mvPlanContext, olapScanOperator, queryTables);
             case TRANSPARENT_OR_DEFAULT:
                 return OptExpression.create(olapScanOperator);
-            case TRANSPARENT_OR_ERROR:
-                throw new RuntimeException("Transparent rewrite is not supported for materialized view:" + mv.getName());
             default:
                 throw new IllegalArgumentException("Unknown transparent rewrite mode: " + transparentRewriteMode);
         }
@@ -216,13 +228,13 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.fullRefresh(mv);
-        mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
+        mvUpdateInfo.addMVToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-        List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
+        List<Column> mvColumns = mv.getOrderedOutputColumns();
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());

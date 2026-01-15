@@ -118,6 +118,9 @@ public:
 
     RuntimeFilterPort* runtime_filter_port() { return _runtime_state->runtime_filter_port(); }
 
+    void prepare_pass_through_chunk_buffer();
+    void destroy_pass_through_chunk_buffer();
+
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
     Status set_pipeline_timer(PipelineTimer* pipeline_timer);
     void clear_pipeline_timer();
@@ -142,6 +145,7 @@ public:
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
     const workgroup::WorkGroupPtr& workgroup() const { return _workgroup; }
     bool enable_resource_group() const { return _workgroup != nullptr; }
+    TQueryType::type query_type() const;
 
     // STREAM MV
     Status reset_epoch();

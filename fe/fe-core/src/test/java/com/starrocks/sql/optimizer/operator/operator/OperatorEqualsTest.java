@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.operator.operator;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -38,10 +38,10 @@ public class OperatorEqualsTest {
         Assertions.assertNotEquals(logicalA, logicalB);
 
         PhysicalTopNOperator physicalA = new PhysicalTopNOperator(null, 10, 10, null,
-                0, null, null, true, true, null, null, null);
+                0, null, null, true, true, false, null, null, null);
         PhysicalTopNOperator physicalB = new PhysicalTopNOperator(null, 10, 10, null,
                 0, null, null, true, true,
-                null, new Projection(Maps.newHashMap()), null);
+                false, null, new Projection(Maps.newHashMap()), null);
         Assertions.assertNotEquals(physicalA.hashCode(), physicalB.hashCode());
         Assertions.assertNotEquals(physicalA, physicalB);
     }

@@ -32,6 +32,7 @@
 #include "util/failpoint/fail_point.h"
 #include "util/race_detect.h"
 #include "util/runtime_profile.h"
+#include "util/time_guard.h"
 
 namespace starrocks::pipeline {
 
@@ -70,6 +71,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    auto num_heavy_exprs = down_cast<ScanOperatorFactory*>(_factory)->scan_node()->get_heavy_expr_ctxs().size();
+    _unique_metrics->add_info_string("NumHeavyExprs", std::to_string(num_heavy_exprs));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakChunkBufferSize", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_ALL),
@@ -251,10 +254,10 @@ void ScanOperator::_detach_chunk_sources() {
 void ScanOperator::update_exec_stats(RuntimeState* state) {
     auto ctx = state->query_ctx();
     if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
         if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
-            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
             ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
         }
     }
@@ -264,11 +267,11 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
     auto notify = scan_defer_notify(this);
     // check when expired, are there running io tasks or submitted tasks
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
-                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
+                 (_num_running_io_tasks > 0 || COUNTER_VALUE(_submit_task_counter) == 0))) {
         LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
                      << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
-                     << " _submit_task_counter= " << _submit_task_counter->value()
-                     << " _morsels_counter= " << _morsels_counter->value()
+                     << " _submit_task_counter= " << COUNTER_VALUE(_submit_task_counter)
+                     << " _morsels_counter= " << COUNTER_VALUE(_morsels_counter)
                      << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
                                                                           : "");
     }
@@ -295,6 +298,10 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
+    }
+
+    if (_scan_node->limit() != -1 && _op_pull_rows >= _scan_node->limit()) {
+        _morsel_queue->set_reach_limit(true);
     }
 
     return res;
@@ -433,7 +440,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     workgroup::ScanTask task;
     task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
-    task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
+    task.priority = OlapScanNode::compute_priority(COUNTER_VALUE(_submit_task_counter));
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
@@ -443,9 +450,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+            SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
-            auto& chunk_source = _chunk_sources[chunk_source_index];
+            auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
             [[maybe_unused]] std::string category;
@@ -455,8 +464,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             FAIL_POINT_SCOPE(mem_alloc_error);
 #endif
             DeferOp timer_defer([chunk_source]() {
-                COUNTER_SET(chunk_source->scan_timer(),
-                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+                COUNTER_SET(chunk_source->scan_timer(), COUNTER_VALUE(chunk_source->io_task_wait_timer()) +
+                                                                COUNTER_VALUE(chunk_source->io_task_exec_timer()));
             });
             auto notify = scan_defer_notify(this);
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
@@ -469,8 +478,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // kick start this chunk source
             auto start_status = chunk_source->start(state);
             if (!start_status.ok()) {
-                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
-                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                LOG(WARNING) << "start chunk_source failed, fragment_instance_id="
+                             << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
                 _set_scan_status(start_status);
             }
             Status status;
@@ -480,8 +489,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
-                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
+                LOG_IF(WARNING, !status.is_suppressed())
+                        << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                        << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -495,6 +505,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             (void)query_trace_ctx;
         }
     };
+
+    task.set_query_type(state->query_options().query_type);
 
     bool submit_success;
     {
@@ -656,6 +668,8 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     TEST_SUCC_POINT("ScanOperatorFactory::prepare");
 
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_scan_node->get_heavy_expr_ctxs(), state));
+    RETURN_IF_ERROR(Expr::open(_scan_node->get_heavy_expr_ctxs(), state));
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -667,7 +681,9 @@ OperatorPtr ScanOperatorFactory::create(int32_t degree_of_parallelism, int32_t d
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     do_close(state);
-
+    // Do not call Expr::close, since async io task would access heavy exprs after
+    // they are closed; exprs in scan operators are auto-closed by ExprContext.
+    // Expr::close(_scan_node->get_heavy_expr_ctxs(), state);
     OperatorFactory::close(state);
 }
 

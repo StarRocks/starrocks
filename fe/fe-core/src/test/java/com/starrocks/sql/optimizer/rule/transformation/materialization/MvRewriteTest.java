@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -78,6 +79,7 @@ public class MvRewriteTest extends MVTestBase {
         starRocksAssert.withTable(cluster, "test10");
         starRocksAssert.withTable(cluster, "test11");
 
+        starRocksAssert.getCtx().getSessionVariable().setEnableJSONV2Rewrite(false);
         prepareDatas();
     }
 
@@ -389,14 +391,14 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("create materialized view join_mv_3" +
                 " distributed by hash(empid)" +
                 " as" +
-                " select emps.empid, depts.deptno, depts.name from emps join depts using (deptno)");
-        String query11 = "select empid, depts.deptno from emps join depts using (deptno) where empid = 1";
+                " select emps.empid, deptno, depts.name from emps join depts using (deptno)");
+        String query11 = "select empid, deptno from emps join depts using (deptno) where empid = 1";
         String plan11 = getFragmentPlan(query11);
         PlanTestBase.assertContains(plan11, "join_mv_3");
         String costPlan2 = getFragmentPlan(query11);
         PlanTestBase.assertContains(costPlan2, "join_mv_3");
         PlanTestBase.assertNotContains(costPlan2, "name-->");
-        String newQuery11 = "select depts.deptno from emps join depts using (deptno) where empid = 1";
+        String newQuery11 = "select deptno from emps join depts using (deptno) where empid = 1";
         String newPlan11 = getFragmentPlan(newQuery11);
         PlanTestBase.assertContains(newPlan11, "join_mv_3");
         OptExpression optExpression11 = getOptimizedPlan(newQuery11, connectContext);
@@ -421,15 +423,15 @@ public class MvRewriteTest extends MVTestBase {
         Assertions.assertFalse(scanOperators13.get(0).getColRefToColumnMetaMap().keySet().toString().contains("deptno"));
 
         // output on equivalence classes
-        String query12 = "select empid, emps.deptno from emps join depts using (deptno) where empid = 1";
+        String query12 = "select empid, deptno from emps join depts using (deptno) where empid = 1";
         String plan12 = getFragmentPlan(query12);
         PlanTestBase.assertContains(plan12, "join_mv_3");
 
-        String query13 = "select empid, emps.deptno from emps join depts using (deptno) where empid > 1";
+        String query13 = "select empid, deptno from emps join depts using (deptno) where empid > 1";
         String plan13 = getFragmentPlan(query13);
         PlanTestBase.assertContains(plan13, "join_mv_3");
 
-        String query14 = "select empid, emps.deptno from emps join depts using (deptno) where empid < 1";
+        String query14 = "select empid, deptno from emps join depts using (deptno) where empid < 1";
         String plan14 = getFragmentPlan(query14);
         PlanTestBase.assertContains(plan14, "join_mv_3");
 
@@ -475,12 +477,12 @@ public class MvRewriteTest extends MVTestBase {
         createAndRefreshMv("create materialized view join_mv_4" +
                 " distributed by hash(empid)" +
                 " as" +
-                " select emps.empid, emps.name as name1, emps.deptno, depts.name as name2 from emps join depts using (deptno)" +
+                " select emps.empid, emps.name as name1, deptno, depts.name as name2 from emps join depts using (deptno)" +
                 " where (depts.name is not null and emps.name ='a')" +
                 " or (depts.name is not null and emps.name = 'b')" +
                 " or (depts.name is not null and emps.name = 'c')");
 
-        String query18 = "select depts.deptno, depts.name from emps join depts using (deptno)" +
+        String query18 = "select deptno, depts.name from emps join depts using (deptno)" +
                 " where (depts.name is not null and emps.name = 'a')" +
                 " or (depts.name is not null and emps.name = 'b')";
         String plan18 = getFragmentPlan(query18);
@@ -979,6 +981,36 @@ public class MvRewriteTest extends MVTestBase {
             dropMv("test", "emp_lowcard_sum");
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
+    }
+
+    @Test
+    public void testDictWithMVRewrite() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+        starRocksAssert.withTable("CREATE TABLE supplier_char(" +
+                " s_suppkey     INTEGER NOT NULL,\n" +
+                " s_name        CHAR(25) NOT NULL,\n" +
+                " s_address     CHAR(40), \n" +
+                " s_nationkey   INTEGER NOT NULL,\n" +
+                " s_phone       CHAR(15) NOT NULL,\n" +
+                " s_acctbal     double NOT NULL,\n" +
+                " s_comment     CHAR(101) NOT NULL,\n" +
+                " pad char(1) NOT NULL)\n" +
+                "DUPLICATE KEY(`s_suppkey`)\n" +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS select s_nationkey, s_name, bitmap_agg(s_suppkey), sum(s_nationkey) from supplier_char group by " +
+                "s_nationkey, s_name;");
+        String query = "select s_name, count(distinct s_suppkey), sum(s_nationkey) from supplier_char group by s_name;";
+        String plan = getFragmentPlan(query, TExplainLevel.COSTS);
+        PlanTestBase.assertContains(plan, "dict_col=s_name");
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
     @Test
@@ -1737,7 +1769,6 @@ public class MvRewriteTest extends MVTestBase {
                     "on a.v1=b.v1 " +
                     "where a.v1=1 and b.v2=1 ;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, " TABLE: test_partition_tbl_mv3\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 8: a_v1 = 1, 12: b_v2 = 1\n" +
@@ -1767,7 +1798,6 @@ public class MvRewriteTest extends MVTestBase {
                     "on a.v1=b.v1 " +
                     "where a.v1=1 and b.v2=1 ;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertNotContains(plan, "PREDICATES: 8: a_v1 = 1, 11: b_v1 = 1, 12: b_v2 = 1\n" +
                     "     partitions=6/6\n" +
                     "     rollup: test_partition_tbl_mv3");
@@ -1786,96 +1816,96 @@ public class MvRewriteTest extends MVTestBase {
     }
 
     @Test
-    public void testPlanCache() throws Exception {
+    public void testPlanCache1() throws Exception {
         CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
-        {
-            String mvSql = "create materialized view agg_join_mv_1" +
+        String mvSql = "create materialized view agg_join_mv_1" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1d";
+        starRocksAssert.withMaterializedView(mvSql);
+
+        MaterializedView mv = getMv("test", "agg_join_mv_1");
+        instance.evictMaterializedViewCache(mv);
+
+        List<MvPlanContext> planContexts = getPlanContext(mv, false);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertTrue(planContexts.size() == 1);
+        Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+        planContexts = getPlanContext(mv, true);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertNotNull(planContexts.size() == 1);
+        Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+        planContexts = getPlanContext(mv, false);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertNotNull(planContexts.size() == 1);
+        starRocksAssert.dropMaterializedView("agg_join_mv_1");
+    }
+
+    @Test
+    public void testPlanCache2() throws Exception {
+        String mvSql = "create materialized view mv_with_window" +
+                " distributed by hash(t1d) as" +
+                " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
+                " from test_all_type";
+        starRocksAssert.withMaterializedView(mvSql);
+
+        MaterializedView mv = getMv("test", "mv_with_window");
+        List<MvPlanContext> planContexts = getPlanContext(mv, true);
+        Assertions.assertNotNull(planContexts);
+        Assertions.assertNotNull(planContexts.size() == 1);
+        Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+        starRocksAssert.dropMaterializedView("mv_with_window");
+    }
+
+    @Test
+    public void testPlanCache3() throws Exception {
+        long testSize = Config.mv_plan_cache_max_size + 1;
+        for (int i = 0; i < testSize; i++) {
+            String mvName = "plan_cache_mv_" + i;
+            String mvSql = String.format("create materialized view %s" +
                     " distributed by hash(v1) as SELECT t0.v1 as v1," +
                     " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
                     " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
                     " where t0.v1 < 100" +
-                    " group by v1, test_all_type.t1d";
+                    " group by v1, test_all_type.t1d", mvName);
             starRocksAssert.withMaterializedView(mvSql);
 
-            MaterializedView mv = getMv("test", "agg_join_mv_1");
-            instance.evictMaterializedViewCache(mv);
-
-            List<MvPlanContext> planContexts = getPlanContext(mv, false);
-            Assertions.assertNotNull(planContexts);
-            Assertions.assertTrue(planContexts.size() == 1);
-            Assertions.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = getPlanContext(mv, true);
-            Assertions.assertNotNull(planContexts);
-            Assertions.assertNotNull(planContexts.size() == 1);
-            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            planContexts = getPlanContext(mv, false);
-            Assertions.assertNotNull(planContexts);
-            Assertions.assertNotNull(planContexts.size() == 1);
-            starRocksAssert.dropMaterializedView("agg_join_mv_1");
-        }
-
-        {
-            String mvSql = "create materialized view mv_with_window" +
-                    " distributed by hash(t1d) as" +
-                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
-                    " from test_all_type";
-            starRocksAssert.withMaterializedView(mvSql);
-
-            MaterializedView mv = getMv("test", "mv_with_window");
+            MaterializedView mv = getMv("test", mvName);
             List<MvPlanContext> planContexts = getPlanContext(mv, true);
             Assertions.assertNotNull(planContexts);
             Assertions.assertNotNull(planContexts.size() == 1);
-            Assertions.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
-            starRocksAssert.dropMaterializedView("mv_with_window");
         }
+        for (int i = 0; i < testSize; i++) {
+            String mvName = "plan_cache_mv_" + i;
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
 
-        {
-            long testSize = Config.mv_plan_cache_max_size + 1;
-            for (int i = 0; i < testSize; i++) {
-                String mvName = "plan_cache_mv_" + i;
-                String mvSql = String.format("create materialized view %s" +
-                        " distributed by hash(v1) as SELECT t0.v1 as v1," +
-                        " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
-                        " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
-                        " where t0.v1 < 100" +
-                        " group by v1, test_all_type.t1d", mvName);
-                starRocksAssert.withMaterializedView(mvSql);
+    @Test
+    public void testPlanCacheWithException() throws Exception {
+        CachingMvPlanContextBuilder instance = CachingMvPlanContextBuilder.getInstance();
+        // Planner exception
+        String mvSql = "create materialized view mv_with_window" +
+                " refresh deferred async " +
+                " as SELECT test_all_type.t1d, row_number() over (partition by t1c) from test_all_type";
+        starRocksAssert.withMaterializedView(mvSql);
 
-                MaterializedView mv = getMv("test", mvName);
-                List<MvPlanContext> planContexts = getPlanContext(mv, true);
-                Assertions.assertNotNull(planContexts);
-                Assertions.assertNotNull(planContexts.size() == 1);
+        MaterializedView mv = getMv("test", "mv_with_window");
+        instance.evictMaterializedViewCache(mv);
+        
+        new MockUp<QueryOptimizer>() {
+            @Mock
+            public OptExpression optimize(OptExpression logicOperatorTree,
+                                          PhysicalPropertySet requiredProperty,
+                                          ColumnRefSet requiredColumns) {
+                throw new RuntimeException("optimize failed");
             }
-            for (int i = 0; i < testSize; i++) {
-                String mvName = "plan_cache_mv_" + i;
-                starRocksAssert.dropMaterializedView(mvName);
-            }
-        }
-
-        {
-            // Planner exception
-            String mvSql = "create materialized view mv_with_window" + " distributed by hash(t1d) as" +
-                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" + " from test_all_type";
-            starRocksAssert.withMaterializedView(mvSql);
-
-            MaterializedView mv = getMv("test", "mv_with_window");
-            instance.evictMaterializedViewCache(mv);
-
-            new MockUp<QueryOptimizer>() {
-                @Mock
-                public OptExpression optimize(OptExpression logicOperatorTree,
-                                              PhysicalPropertySet requiredProperty,
-                                              ColumnRefSet requiredColumns) {
-                    throw new RuntimeException("optimize failed");
-                }
-            };
-            // build cache
-            List<MvPlanContext> planContexts = getPlanContext(mv, true);
-            Assertions.assertEquals(Lists.newArrayList(), planContexts);
-            // hit cache
-            planContexts = getPlanContext(mv, true);
-            Assertions.assertEquals(Lists.newArrayList(), planContexts);
-        }
+        };
+        // build cache
+        List<MvPlanContext> planContexts = getPlanContext(mv, true);
+        Assertions.assertEquals(Lists.newArrayList(), planContexts);
     }
 
     @Test
@@ -2161,7 +2191,7 @@ public class MvRewriteTest extends MVTestBase {
             starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
                     "refresh async " +
                     "properties('query_rewrite_consistency'='nocheck') " +
-                    "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
+                    "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension, true, true);
         }
 
         for (int i = 1; i < numDimensions; i++) {
@@ -2272,69 +2302,6 @@ public class MvRewriteTest extends MVTestBase {
                     ") > 0\n";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "mv11", "PREDICATES: 10: ct > 0");
-        }
-    }
-
-    @Test
-    public void testMvRewriteWithSortKey() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
-        {
-            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
-                    "DISTRIBUTED BY RANDOM buckets 1 " +
-                    "order by (v1) " +
-                    "REFRESH MANUAL " +
-                    "as\n" +
-                    "select v1, v2, sum(v3) from t0 group by v1, v2");
-            cluster.runSql("test", "refresh materialized view mv_order_by_v1 with sync mode");
-            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v2 " +
-                    "DISTRIBUTED BY RANDOM buckets 1 " +
-                    "order by (v2) " +
-                    "REFRESH MANUAL " +
-                    "as\n" +
-                    "select v1, v2, sum(v3) from t0 group by v1, v2");
-            cluster.runSql("test", "refresh materialized view mv_order_by_v2 with sync mode");
-            {
-                // in predicate
-                String query = "select v1, v2, sum(v3) from t0 where v1 in (1, 2, 3) group by v1, v2;";
-                String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "mv_order_by_v1");
-            }
-            {
-                // equal predicate
-                String query = "select v1, v2, sum(v3) from t0 where v1 = 1 group by v1, v2;";
-                String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "mv_order_by_v1");
-            }
-            starRocksAssert.dropMaterializedView("mv_order_by_v1");
-            starRocksAssert.dropMaterializedView("mv_order_by_v2");
-        }
-        {
-            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
-                    "DISTRIBUTED BY RANDOM buckets 1 " +
-                    "order by (v1) " +
-                    "REFRESH MANUAL " +
-                    "as\n" +
-                    "select v1, v2, v3 from t0");
-            cluster.runSql("test", "refresh materialized view mv_order_by_v1 with sync mode");
-            starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v2 " +
-                    "DISTRIBUTED BY RANDOM buckets 1 " +
-                    "order by (v2) " +
-                    "REFRESH MANUAL " +
-                    "as\n" +
-                    "select v1, v2, v3 from t0");
-            cluster.runSql("test", "refresh materialized view mv_order_by_v2 with sync mode");
-            {
-                String query = "select v1, v2, v3 from t0 where v1 in (1, 2, 3);";
-                String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "mv_order_by_v1");
-            }
-            {
-                String query = "select v1, v2, v3 from t0 where v1 = 1;";
-                String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "mv_order_by_v1");
-            }
-            starRocksAssert.dropMaterializedView("mv_order_by_v1");
-            starRocksAssert.dropMaterializedView("mv_order_by_v2");
         }
     }
 

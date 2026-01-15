@@ -34,7 +34,6 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -43,6 +42,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -318,5 +318,137 @@ public class LoadMgrTest {
         Assertions.assertEquals(2, result.size());
         Assertions.assertEquals(Long.valueOf(1), result.get(1L));
         Assertions.assertEquals(Long.valueOf(1), result.get(3L));
+    }
+
+    @Test
+    public void testReplayEndLoadJobRemovesExpiredJob(@Mocked GlobalStateMgr globalStateMgr)
+            throws Exception {
+        LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
+
+        // Prepare an Insert job that is already finished a long time ago
+        long now = System.currentTimeMillis();
+        InsertLoadJob insertJob = new InsertLoadJob("end_label", 100L, 1L, now, "", "", null);
+        insertJob.id = 1001L;
+        insertJob.state = JobState.FINISHED;
+        insertJob.finishTimestamp = now - 10_000L; // 10s ago
+        Deencapsulation.invoke(loadMgr, "addLoadJob", insertJob);
+
+        // Force expiry threshold to 1 second
+        int origKeep = Config.label_keep_max_second;
+        Config.label_keep_max_second = 1;
+
+        // Replay end operation which should trigger removal when expired
+        com.starrocks.load.EtlStatus status = new com.starrocks.load.EtlStatus();
+        LoadJobFinalOperation op = new LoadJobFinalOperation(
+                insertJob.id, status, 100, now - 20_000L, insertJob.finishTimestamp, JobState.FINISHED, null);
+        loadMgr.replayEndLoadJob(op);
+
+        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadMgr, "idToLoadJob");
+        Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Deencapsulation.getField(
+                loadMgr, "dbIdToLabelToLoadJobs");
+
+        // The job should be removed
+        Assertions.assertFalse(idToLoadJob.containsKey(insertJob.id));
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.getOrDefault(100L, new HashMap<>()).get("end_label") == null);
+
+        // recover config
+        Config.label_keep_max_second = origKeep;
+    }
+
+    @Test
+    public void testReplayUpdateLoadJobStateInfoRemovesExpiredJob(@Mocked GlobalStateMgr globalStateMgr) 
+                throws Exception {
+        LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
+
+        // Prepare an Insert job that is already finished and expired
+        long now = System.currentTimeMillis();
+        InsertLoadJob insertJob = new InsertLoadJob("insert_label", 200L, 1L, now, "", "", null);
+        insertJob.id = 2002L;
+        insertJob.state = JobState.FINISHED;
+        insertJob.finishTimestamp = now - 10_000L; // 10s ago
+        Deencapsulation.invoke(loadMgr, "addLoadJob", insertJob);
+
+        int origKeep = Config.label_keep_max_second;
+        Config.label_keep_max_second = 1; // make it expired
+
+        // Replay state update to FINISHED (state remains completed), which should
+        // trigger removal due to expiry
+        LoadJob.LoadJobStateUpdateInfo info = new LoadJob.LoadJobStateUpdateInfo(
+                insertJob.id, JobState.FINISHED, 12345L, now - 20_000L);
+        loadMgr.replayUpdateLoadJobStateInfo(info);
+
+        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadMgr, "idToLoadJob");
+        Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Deencapsulation.getField(
+                loadMgr, "dbIdToLabelToLoadJobs");
+
+        Assertions.assertFalse(idToLoadJob.containsKey(insertJob.id));
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.getOrDefault(200L, new HashMap<>()).get("insert_label") == null);
+
+        // recover config
+        Config.label_keep_max_second = origKeep;
+    }
+
+    @Test
+    public void testRemoveLoadJobsByDb(@Mocked GlobalStateMgr globalStateMgr,
+                                       @Injectable Database db1,
+                                       @Injectable Database db2) throws Exception {
+        LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
+
+        // Create load jobs for database 1
+        long dbId1 = 100L;
+        InsertLoadJob job1 = new InsertLoadJob("label1", dbId1, 1L, System.currentTimeMillis(), "", "", null);
+        job1.id = 1001L;
+        job1.state = JobState.FINISHED;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job1);
+
+        InsertLoadJob job2 = new InsertLoadJob("label2", dbId1, 1L, System.currentTimeMillis(), "", "", null);
+        job2.id = 1002L;
+        job2.state = JobState.LOADING;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job2);
+
+        // Create load jobs for database 2
+        long dbId2 = 200L;
+        InsertLoadJob job3 = new InsertLoadJob("label3", dbId2, 2L, System.currentTimeMillis(), "", "", null);
+        job3.id = 2001L;
+        job3.state = JobState.FINISHED;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job3);
+
+        InsertLoadJob job4 = new InsertLoadJob("label4", dbId2, 2L, System.currentTimeMillis(), "", "", null);
+        job4.id = 2002L;
+        job4.state = JobState.CANCELLED;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job4);
+
+        // Verify all jobs are added
+        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadMgr, "idToLoadJob");
+        Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Deencapsulation.getField(
+                loadMgr, "dbIdToLabelToLoadJobs");
+
+        Assertions.assertEquals(4, idToLoadJob.size());
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.containsKey(dbId1));
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.containsKey(dbId2));
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.get(dbId1).size());
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.get(dbId2).size());
+
+        // Remove all jobs for database 1
+        loadMgr.removeLoadJobsByDb(dbId1);
+
+        // Verify jobs for database 1 are removed
+        Assertions.assertEquals(2, idToLoadJob.size());
+        Assertions.assertFalse(idToLoadJob.containsKey(job1.id));
+        Assertions.assertFalse(idToLoadJob.containsKey(job2.id));
+        Assertions.assertTrue(idToLoadJob.containsKey(job3.id));
+        Assertions.assertTrue(idToLoadJob.containsKey(job4.id));
+
+        // Verify database 1 is removed from dbIdToLabelToLoadJobs
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.containsKey(dbId1));
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.containsKey(dbId2));
+
+        // Remove all jobs for database 2
+        loadMgr.removeLoadJobsByDb(dbId2);
+
+        // Verify all jobs are removed
+        Assertions.assertEquals(0, idToLoadJob.size());
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.containsKey(dbId2));
+        Assertions.assertEquals(0, dbIdToLabelToLoadJobs.size());
     }
 }

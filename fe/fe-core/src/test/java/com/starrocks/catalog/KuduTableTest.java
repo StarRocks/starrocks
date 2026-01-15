@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.Type;
 import org.apache.kudu.ColumnSchema;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;

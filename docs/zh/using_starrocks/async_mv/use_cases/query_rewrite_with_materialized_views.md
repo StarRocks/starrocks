@@ -553,6 +553,66 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+除了上述函数外，从 StarRocks v3.4.0 开始，异步物化视图还支持通用聚合函数，这些函数也可用于查询改写。有关通用聚合函数的更多信息，请参见[通用聚合函数状态](../../../table_design/table_types/aggregate_table.md#generic-aggregate-states-in-asynchronous-materialized-views)。
+
+```SQL
+-- Create an asynchronous materialized view test_mv2 to store aggregate states.
+CREATE MATERIALIZED VIEW test_mv2
+PARTITION BY (dt)
+DISTRIBUTED BY RANDOM
+AS
+SELECT 
+    dt,
+    -- Original aggregate functions.
+    min(id) AS min_id,
+    max(id) AS max_id,
+    sum(id) AS sum_id,
+    bitmap_union(to_bitmap(id)) AS bitmap_union_id,
+    hll_union(hll_hash(id)) AS hll_union_id,
+    percentile_union(percentile_hash(id)) AS percentile_union_id,
+    -- Generic aggregate state functions.
+    ds_hll_count_distinct_union(ds_hll_count_distinct_state(id)) AS hll_id,
+    avg_union(avg_state(id)) AS avg_id,
+    array_agg_union(array_agg_state(id)) AS array_agg_id,
+    min_by_union(min_by_state(province, id)) AS min_by_province_id
+FROM t1
+GROUP BY dt;
+
+-- Refresh the materialized view.
+REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+
+-- Direct queries against the aggregate function will be transparently accelerated by test_mv2.
+SELECT 
+    dt,
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01'
+GROUP BY dt;
+
+SELECT 
+    min(id),
+    max(id),
+    sum(id),
+    bitmap_union_count(to_bitmap(id)), -- count(distinct id)
+    hll_union_agg(hll_hash(id)), -- approx_count_distinct(id)
+    percentile_approx(id, 0.5),
+    ds_hll_count_distinct(id),
+    avg(id),
+    array_agg(id),
+    min_by(province, id)
+FROM t1
+WHERE dt >= '2024-01-01';
+```
+
 ### 聚合下推
 
 从 v3.3.0 版本开始，StarRocks 支持物化视图查询改写的聚合下推功能。启用此功能后，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。
@@ -1087,7 +1147,7 @@ StarRocks 默认启用基于文本的物化视图改写。您可以通过将变�
 
 FE 配置项 `enable_materialized_view_text_based_rewrite` 用于控制是否在创建异步物化视图时构建抽象语法树。此功能默认启用。将此项设置为 `false` 将在系统级别禁用基于文本的物化视图改写。
 
-变量 `materialized_view_subuqery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
+变量 `materialized_view_subquery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
 
 请注意，只有当物化视图满足时效性（数据一致性）要求时，才能用于基于文本的查询改写。您可以在创建物化视图时通过属性 `query_rewrite_consistency`手动设置一致性检查规则。更多信息，请参考 [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
 

@@ -38,11 +38,19 @@ public class QueryDebugOptions {
     @SerializedName(value = "enableQueryTraceLog")
     private boolean enableQueryTraceLog = false;
 
+    @Deprecated
     @SerializedName(value = "mvRefreshTraceMode")
     private String mvRefreshTraceMode;
 
+    @Deprecated
     @SerializedName(value = "mvRefreshTraceModule")
     private String mvRefreshTraceModule;
+
+    @SerializedName(value = "traceMode")
+    private String traceMode;
+
+    @SerializedName(value = "traceModule")
+    private String traceModule;
 
     public static class ExecDebugOption {
         @SerializedName(value = "plan_node_id")
@@ -93,12 +101,20 @@ public class QueryDebugOptions {
         this.enableQueryTraceLog = enableQueryTraceLog;
     }
 
-    public Tracers.Mode getMvRefreshTraceMode() {
-        return Strings.isEmpty(mvRefreshTraceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(mvRefreshTraceMode);
+    public Tracers.Mode getTraceMode() {
+        return Strings.isEmpty(traceMode) ? Tracers.Mode.TIMER : Tracers.Mode.valueOf(traceMode.toUpperCase());
     }
 
-    public Tracers.Module getMvRefreshTraceModule() {
-        return Strings.isEmpty(mvRefreshTraceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(mvRefreshTraceModule);
+    public Tracers.Module getTraceModule() {
+        return Strings.isEmpty(traceModule) ? Tracers.Module.BASE : Tracers.Module.valueOf(traceModule.toUpperCase());
+    }
+
+    public void setTraceMode(String traceMode) {
+        this.traceMode = traceMode;
+    }
+
+    public void setTraceModule(String traceModule) {
+        this.traceModule = traceModule;
     }
 
     public List<ExecDebugOption> getExecDebugOptions() {

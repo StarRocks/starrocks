@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "types/type_checker_manager.h"
 
 namespace starrocks {
@@ -355,6 +357,19 @@ TEST_F(TypeCheckerTest, NotSupportLocalDateTimeType) {
     ASSERT_FALSE(status_or_type.ok());
 }
 
+// Define unit test for java.time.LocalDate
+TEST_F(TypeCheckerTest, SupportLocalDateType) {
+    SlotDescriptor localdate_type_slot(0, "localdate_type_slot", TypeDescriptor(TYPE_DATE));
+    auto status_or_type = type_checker_manager_.checkType("java.time.LocalDate", &localdate_type_slot);
+    ASSERT_TRUE(status_or_type.ok());
+    ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
+}
+TEST_F(TypeCheckerTest, NotSupportLocalDateType) {
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    auto status_or_type = type_checker_manager_.checkType("java.time.LocalDate", &unknown_type_slot);
+    ASSERT_FALSE(status_or_type.ok());
+}
+
 // Define unit test for java.math.BigDecimal
 TEST_F(TypeCheckerTest, SupporBigDecimalType) {
     SlotDescriptor decimal32_type_slot(0, "decimal32_type_slot", TypeDescriptor(TYPE_DECIMAL32));
@@ -484,6 +499,77 @@ TEST_F(TypeCheckerTest, NotSupportDefaultType) {
     SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
     auto status_or_type = type_checker_manager_.checkType("unknown java class", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
+}
+
+} // namespace starrocks
+
+// Additional tests for XML configuration support
+namespace starrocks {
+
+class TypeCheckerManagerConfigTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // Create test directory
+        test_dir_ = "/tmp/type_checker_manager_test";
+        std::filesystem::create_directories(test_dir_);
+    }
+
+    void TearDown() override {
+        // Clean up
+        std::filesystem::remove_all(test_dir_);
+        unsetenv("STARROCKS_TYPE_CHECKER_CONFIG");
+        unsetenv("STARROCKS_HOME");
+    }
+
+    std::string test_dir_;
+};
+
+// Test that TypeCheckerManager uses hardcoded config by default
+TEST_F(TypeCheckerManagerConfigTest, DefaultsToHardcodedConfig) {
+    // Ensure no environment variables are set
+    unsetenv("STARROCKS_TYPE_CHECKER_CONFIG");
+    unsetenv("STARROCKS_HOME");
+
+    // The singleton is already initialized, so we just verify it works
+    TypeCheckerManager& manager = TypeCheckerManager::getInstance();
+
+    // Verify a few basic type checkers work
+    SlotDescriptor int_slot(0, "test", TypeDescriptor(TYPE_INT));
+    auto result = manager.checkType("java.lang.Integer", &int_slot);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), TYPE_INT);
+
+    SlotDescriptor varchar_slot(0, "test", TypeDescriptor(TYPE_VARCHAR));
+    result = manager.checkType("java.lang.String", &varchar_slot);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), TYPE_VARCHAR);
+}
+
+// Test backward compatibility - all existing type checkers still work
+TEST_F(TypeCheckerManagerConfigTest, BackwardCompatibility) {
+    TypeCheckerManager& manager = TypeCheckerManager::getInstance();
+
+    // Test a comprehensive set of type mappings to ensure backward compatibility
+    struct TypeTest {
+        std::string java_class;
+        LogicalType slot_type;
+        LogicalType expected_result;
+    };
+
+    std::vector<TypeTest> tests = {
+            {"java.lang.Byte", TYPE_TINYINT, TYPE_TINYINT},    {"java.lang.Short", TYPE_SMALLINT, TYPE_SMALLINT},
+            {"java.lang.Integer", TYPE_INT, TYPE_INT},         {"java.lang.Long", TYPE_BIGINT, TYPE_BIGINT},
+            {"java.lang.Boolean", TYPE_BOOLEAN, TYPE_BOOLEAN}, {"java.lang.Float", TYPE_FLOAT, TYPE_FLOAT},
+            {"java.lang.Double", TYPE_DOUBLE, TYPE_DOUBLE},    {"java.lang.String", TYPE_VARCHAR, TYPE_VARCHAR},
+            {"java.sql.Time", TYPE_TIME, TYPE_TIME},           {"byte[]", TYPE_VARBINARY, TYPE_VARBINARY},
+    };
+
+    for (const auto& test : tests) {
+        SlotDescriptor slot(0, "test", TypeDescriptor(test.slot_type));
+        auto result = manager.checkType(test.java_class, &slot);
+        ASSERT_TRUE(result.ok()) << "Failed for " << test.java_class;
+        ASSERT_EQ(result.value(), test.expected_result) << "Wrong result for " << test.java_class;
+    }
 }
 
 } // namespace starrocks

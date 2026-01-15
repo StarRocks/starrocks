@@ -47,8 +47,8 @@ public:
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
-                                      CompoundNodeType pred_relation) override {
-        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation);
+                                      CompoundNodeType pred_relation, const Range<>* src_range = nullptr) override {
+        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation, src_range);
     }
 
     bool has_original_bloom_filter_index() const override { return _parent->has_original_bloom_filter_index(); }
@@ -107,6 +107,8 @@ public:
     Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         return _parent->fetch_subfield_by_rowid(rowids, size, values);
     }
+
+    std::string name() const override { return "ColumnIteratorDecorator"; }
 
 protected:
     ColumnIterator* _parent;

@@ -17,8 +17,11 @@
 #include <thread>
 
 #include "bthread/timer_thread.h"
+#include "butil/resource_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/current_thread.h"
 #include "util/time.h"
 #include "util/unaligned_access.h"
 
@@ -63,14 +66,29 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms);
 // }
 class SignalTimerGuard {
 public:
+    struct TraceContext {
+        TUniqueId query_id;
+        TUniqueId fragment_instance_id;
+        int lwp_id = 0;
+    };
+
     using TaskId = bthread::TimerThread::TaskId;
     SignalTimerGuard(int64_t timeout_ms) {
         if (timeout_ms > 0) {
+            auto& current_thread = CurrentThread::current();
+            // init trace context
+            auto* trace = butil::get_resource(&_trace_context_id);
+            static_assert(sizeof(uint64_t) == sizeof(_trace_context_id.value));
+
+            trace->query_id = current_thread.query_id();
+            trace->fragment_instance_id = current_thread.fragment_instance_id();
+            trace->lwp_id = current_thread.get_lwp_id();
+
             auto timer_thread = bthread::get_global_timer_thread();
             timespec tm = butil::milliseconds_from_now(timeout_ms);
-            int lwp_id = syscall(SYS_gettid);
+            // assign the trace context id to arg
             void* arg = nullptr;
-            unaligned_store<int>(&arg, lwp_id);
+            unaligned_store<uint64_t>(&arg, _trace_context_id.value);
             _tid = timer_thread->schedule(dump_trace_info, arg, tm);
         }
     }
@@ -78,17 +96,32 @@ public:
     ~SignalTimerGuard() {
         if (_tid != bthread::TimerThread::INVALID_TASK_ID) {
             auto timer_thread = bthread::get_global_timer_thread();
-            timer_thread->unschedule(_tid);
+            int res = timer_thread->unschedule(_tid);
+            // return resource if timer not triggered
+            if (res != 0) {
+                butil::return_resource(_trace_context_id);
+            }
         }
     }
 
 private:
+    butil::ResourceId<TraceContext> _trace_context_id;
     TaskId _tid = bthread::TimerThread::INVALID_TASK_ID;
 
     static void dump_trace_info(void* arg) {
-        int tid = unaligned_load<int>(&arg);
-        std::string msg = get_stack_trace_for_thread(tid, 1000);
-        LOG(INFO) << "found slow function:" << msg;
+        uint64_t trace_id = unaligned_load<uint64_t>(&arg);
+        butil::ResourceId<TraceContext> trace_context_id{trace_id};
+        auto* trace = butil::address_resource(trace_context_id);
+        if (trace != nullptr) {
+            std::string msg = get_stack_trace_for_thread(trace->lwp_id, 1000);
+            LOG(INFO) << "query_id=" << print_id(trace->query_id)
+                      << ", fragment_instance_id=" << print_id(trace->fragment_instance_id)
+                      << ", found slow function:" << msg;
+            butil::return_resource(trace_context_id);
+        } else {
+            LOG(INFO) << "can not address resource for trace context id:" << trace_id;
+            DCHECK(false) << "can not found trace context";
+        }
     }
 };
 
@@ -100,3 +133,5 @@ private:
 #define WARN_IF_TIMEOUT(timeout_ms, lazy_msg) WARN_IF_TIMEOUT_MS(timeout_ms, [&]() { return lazy_msg; })
 
 #define WARN_IF_POLLER_TIMEOUT(lazy_msg) WARN_IF_TIMEOUT(config::pipeline_poller_timeout_guard_ms, lazy_msg)
+
+#define DUMP_TRACE_IF_TIMEOUT(timeout_ms) auto VARNAME_LINENUM(guard) = SignalTimerGuard(timeout_ms)

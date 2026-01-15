@@ -42,9 +42,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -53,10 +50,15 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.THdfsTable;
@@ -65,6 +67,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -259,8 +262,8 @@ public class HiveTable extends Table {
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
-        ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
-        ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
+        ImmutableList.Builder<Column> fullSchemaTempBuilder = ImmutableList.builder();
+        ImmutableList.Builder<String> dataColumnNamesTempBuilder = ImmutableList.builder();
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
             Column baseColumn = nameToColumn.get(colName);
@@ -269,31 +272,41 @@ public class HiveTable extends Table {
             }
         });
 
-        fullSchemaTemp.addAll(updatedTable.fullSchema);
-        dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
+        fullSchemaTempBuilder.addAll(updatedTable.fullSchema);
+        dataColumnNamesTempBuilder.addAll(updatedTable.dataColumnNames);
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
+        ImmutableList<Column> fullSchemaTemp = fullSchemaTempBuilder.build();
+        ImmutableList<String> dataColumnNamesTemp = dataColumnNamesTempBuilder.build();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            this.fullSchema.clear();
-            this.nameToColumn.clear();
-            this.dataColumnNames.clear();
-
-            this.fullSchema.addAll(fullSchemaTemp.build());
-            updateSchemaIndex();
-            this.dataColumnNames.addAll(dataColumnNamesTemp.build());
-
             if (GlobalStateMgr.getCurrentState().isLeader()) {
-                ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
+                ModifyTableColumnOperationLog log =
+                        new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp));
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log, wal -> {
+                    modifyTableSchemaInternal(fullSchemaTemp, dataColumnNamesTemp);
+                });
+            } else {
+                modifyTableSchemaInternal(fullSchemaTemp, dataColumnNamesTemp);
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+    }
+
+    protected void modifyTableSchemaInternal(ImmutableList<Column> newFullSchema,
+                                           ImmutableList<String> newDataColumnNames) {
+        this.fullSchema.clear();
+        this.nameToColumn.clear();
+        this.dataColumnNames.clear();
+
+        this.fullSchema.addAll(newFullSchema);
+        updateSchemaIndex();
+        this.dataColumnNames.addAll(newDataColumnNames);
     }
 
     @Override
@@ -306,9 +319,10 @@ public class HiveTable extends Table {
         // columns and partition columns
         Set<String> partitionColumnNames = Sets.newHashSet();
         List<TColumn> tPartitionColumns = Lists.newArrayList();
+        List<Column> partitionColumns = getPartitionColumns();
         List<TColumn> tColumns = Lists.newArrayList();
 
-        for (Column column : getPartitionColumns()) {
+        for (Column column : partitionColumns) {
             tPartitionColumns.add(column.toThrift());
             partitionColumnNames.add(column.getName());
         }
@@ -346,7 +360,14 @@ public class HiveTable extends Table {
             tPartition.setFile_format(hivePartitions.get(i).getFileFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+            Preconditions.checkState(keys.size() == partitionColumns.size(),
+                    "Partition key size does not match partition columns size");
+            List<TExpr> partitionKeyExprs = Lists.newArrayListWithCapacity(keys.size());
+            for (int j = 0; j < keys.size(); j++) {
+                LiteralExpr literal = HiveUtils.normalizeKey(keys.get(j), partitionColumns.get(j).getType());
+                partitionKeyExprs.add(ExprToThrift.treeToThrift(literal));
+            }
+            tPartition.setPartition_key_exprs(partitionKeyExprs);
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);
@@ -543,5 +564,11 @@ public class HiveTable extends Table {
                     tableLocation, comment, createTime, partitionColNames, dataColNames, properties, serdeProperties,
                     storageFormat, hiveTableType);
         }
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.CREATE, TableOperation.INSERT, TableOperation.DROP,
+                TableOperation.ALTER, TableOperation.CREATE_TABLE_LIKE);
     }
 }

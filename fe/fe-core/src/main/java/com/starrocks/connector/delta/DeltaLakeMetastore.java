@@ -79,7 +79,10 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) -> Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .weigher((key, value) -> {
+                    long size = SizeEstimator.estimate(key) + SizeEstimator.estimate(value);
+                    return (int) Math.min(size, Integer.MAX_VALUE);
+                })
                 .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -91,8 +94,10 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
-                .weigher((key, value) ->
-                        Math.toIntExact(SizeEstimator.estimate(key) + SizeEstimator.estimate(value)))
+                .weigher((key, value) -> {
+                    long size = SizeEstimator.estimate(key) + SizeEstimator.estimate(value);
+                    return (int) Math.min(size, Integer.MAX_VALUE);
+                })
                 .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
                     @NotNull
@@ -142,11 +147,15 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
             Table deltaTable = Table.forPath(deltaLakeEngine, path);
             snapshot = (SnapshotImpl) deltaTable.getLatestSnapshot(deltaLakeEngine);
         } catch (TableNotFoundException e) {
-            LOG.error("Failed to find Delta table for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
-            throw new SemanticException("Failed to find Delta table for " + catalogName + "." + dbName + "." + tableName);
+            LOG.error("Failed to find Delta table for {}.{}.{}, {}. caused by : {}", catalogName, dbName, tableName,
+                    e.getMessage(), e.getCause());
+            throw new SemanticException("Failed to find Delta table for %s.%s.%s, %s. caused by : %s", catalogName,
+                    dbName, tableName, e.getMessage(), e.getCause());
         } catch (Exception e) {
-            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}", catalogName, dbName, tableName, e.getMessage());
-            throw new SemanticException("Failed to get latest snapshot for " + catalogName + "." + dbName + "." + tableName);
+            LOG.error("Failed to get latest snapshot for {}.{}.{}, {}. caused by : {}", catalogName, dbName,
+                    tableName, e.getMessage(), e.getCause());
+            throw new SemanticException("Failed to get latest snapshot for %s.%s.%s, %s. caused by : %s",
+                    catalogName, dbName, tableName, e.getMessage(), e.getCause());
         }
         return new DeltaLakeSnapshot(dbName, tableName, deltaLakeEngine, snapshot, metastoreTable);
     }

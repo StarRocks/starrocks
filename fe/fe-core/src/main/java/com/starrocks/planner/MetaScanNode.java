@@ -15,8 +15,9 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TupleDescriptor;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.Pair;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -27,6 +28,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.system.ComputeNode;
@@ -40,33 +42,40 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TTableSchemaKey;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+import static com.starrocks.sql.common.ErrorType.USER_ERROR;
 
-public class MetaScanNode extends ScanNode {
+public class MetaScanNode extends AbstractOlapTableScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
-    private final Map<Integer, String> columnIdToNames;
-    private final OlapTable olapTable;
+    private final Map<Integer, Pair<String, Column>> columnIdToColumns;
     private final List<Column> tableSchema;
     private final List<String> selectPartitionNames;
+    private final List<Long> hintsTabletIds;
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
-                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, ComputeResource computeResource) {
-        super(id, desc, "MetaScan");
-        this.olapTable = olapTable;
+                        Map<Integer, Pair<String, Column>> aggColumnIdToColumns, List<String> selectPartitionNames,
+                        List<Long> hintsTabletIds, long selectedIndexId, ComputeResource computeResource) {
+        super(id, desc, "MetaScan", olapTable, selectedIndexId);
         this.tableSchema = olapTable.getBaseSchema();
-        this.columnIdToNames = columnIdToNames;
+        this.columnIdToColumns = aggColumnIdToColumns;
         this.selectPartitionNames = selectPartitionNames;
+        this.hintsTabletIds = hintsTabletIds != null ? hintsTabletIds : Collections.emptyList();
         this.computeResource = computeResource;
     }
 
@@ -75,12 +84,39 @@ public class MetaScanNode extends ScanNode {
         if (selectPartitionNames.isEmpty()) {
             partitions = olapTable.getPhysicalPartitions();
         } else {
-            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
-                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+            partitions = selectPartitionNames.stream().map(name -> {
+                Partition partition = olapTable.getPartition(name, false);
+                if (partition != null) {
+                    return partition;
+                }
+                return olapTable.getPartition(name, true);
+            }).map(Partition::getSubPartitions).flatMap(Collection::stream).collect(Collectors.toList());
         }
+        // Build tablet hint set for filtering
+        Set<Long> hintTabletSet = hintsTabletIds.isEmpty() ?
+                Collections.emptySet() : new HashSet<>(hintsTabletIds);
+
+        // Batch retrieve all tablets' location info in shared-data mode
+        Map<Long, List<Long>> tabletLocationInfo = new HashMap<>();
+        if (RunMode.isSharedDataMode()) {
+            List<Long> allTabletIds = Lists.newArrayList();
+            for (PhysicalPartition partition : partitions) {
+                List<Tablet> tablets = partition.getBaseIndex().getTablets();
+                for (Tablet tablet : tablets) {
+                    allTabletIds.add(tablet.getId());
+                }
+            }
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            // partial results are ok and can be handled by the fallback mechanism.
+            Map<Long, List<Long>> locations = warehouseManager.getAllComputeNodeIdsAssignToTablets(computeResource, allTabletIds);
+            if (locations != null) {
+                tabletLocationInfo = locations;
+            }
+        }
+
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
-            int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
+            int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
             List<Tablet> tablets = index.getTablets();
 
             long visibleVersion = partition.getVisibleVersion();
@@ -88,6 +124,12 @@ public class MetaScanNode extends ScanNode {
 
             for (Tablet tablet : tablets) {
                 long tabletId = tablet.getId();
+
+                // Skip tablets not in hint set if hints are provided
+                if (!hintTabletSet.isEmpty() && !hintTabletSet.contains(tabletId)) {
+                    continue;
+                }
+
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
                 TInternalScanRange internalRange = new TInternalScanRange();
@@ -101,7 +143,7 @@ public class MetaScanNode extends ScanNode {
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
                 if (RunMode.isSharedDataMode()) {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
-                            visibleVersion, -1, schemaHash, computeResource);
+                            visibleVersion, -1, schemaHash, computeResource, tabletLocationInfo.get(tabletId));
                 } else {
                     tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                             visibleVersion, -1, schemaHash);
@@ -168,30 +210,65 @@ public class MetaScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.META_SCAN_NODE;
         }
         msg.meta_scan_node = new TMetaScanNode();
+        Map<Integer, String> columnIdToNames = buildColumnIdToNames(columnIdToColumns);
         msg.meta_scan_node.setId_to_names(columnIdToNames);
         msg.meta_scan_node.setLow_cardinality_threshold(CacheDictManager.LOW_CARDINALITY_THRESHOLD);
         List<TColumn> columnsDesc = Lists.newArrayList();
         for (Column column : tableSchema) {
             TColumn tColumn = column.toThrift();
+            tColumn.setColumn_name(column.getColumnId().getId());
             columnsDesc.add(tColumn);
         }
         msg.meta_scan_node.setColumns(columnsDesc);
+        TTableSchemaKey schemaKey = getSchemaKey();
+        msg.meta_scan_node.setSchema_key(schemaKey);
+        // also set schema id for legacy compatibility
+        msg.meta_scan_node.setSchema_id(schemaKey.getSchema_id());
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.meta_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+        }
+    }
+
+    private Map<Integer, String> buildColumnIdToNames(Map<Integer, Pair<String, Column>> aggColumnIdToColumns) {
+        Map<Integer, String> result = Maps.newHashMap();
+        for (Map.Entry<Integer, Pair<String, Column>> entry : aggColumnIdToColumns.entrySet()) {
+            String aggFuncName = entry.getValue().first;
+            String columnName = entry.getValue().second.getColumnId().getId();
+            result.put(entry.getKey(), aggFuncName + "_" + columnName);
+        }
+        return result;
     }
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
         output.append(prefix).append("Table: ").append(olapTable.getName()).append("\n");
-        for (Map.Entry<Integer, String> kv : columnIdToNames.entrySet()) {
+        for (Map.Entry<Integer, Pair<String, Column>> entry : columnIdToColumns.entrySet()) {
             output.append(prefix);
+            String aggFuncName = entry.getValue().first;
+            String columnName = entry.getValue().second.getName();
             output.append("<id ").
-                    append(kv.getKey()).
+                    append(entry.getKey()).
                     append("> : ").
-                    append(kv.getValue()).
+                    append(aggFuncName).
+                    append("_").
+                    append(columnName).
                     append("\n");
         }
         if (!selectPartitionNames.isEmpty()) {
             output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+        // Only show TabletIds when tablet hint was provided
+        if (!hintsTabletIds.isEmpty()) {
+            List<Long> tabletIds = result.stream()
+                    .map(loc -> loc.getScan_range().getInternal_scan_range().getTablet_id())
+                    .collect(Collectors.toList());
+            output.append(prefix).append("TabletIds: ").append(tabletIds).append("\n");
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            output.append(explainColumnAccessPath(prefix));
         }
         return output.toString();
     }

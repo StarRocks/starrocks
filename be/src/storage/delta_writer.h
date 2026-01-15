@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -244,12 +243,12 @@ private:
     Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);
 
-    Status _fill_auto_increment_id(const Chunk& chunk);
+    Status _fill_auto_increment_id(Chunk& chunk);
     Status _check_partial_update_with_sort_key(const Chunk& chunk);
 
     void _garbage_collection();
 
-    void _reset_mem_table();
+    Status _reset_mem_table();
 
     void _set_state(State state, const Status& st);
 
@@ -288,6 +287,7 @@ private:
     int64_t _write_buffer_size = 0;
 
     DeltaWriterStat _stats;
+    bool _is_shadow = false;
 };
 
 } // namespace starrocks

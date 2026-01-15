@@ -68,6 +68,8 @@ public:
 
     std::vector<ShardInfo> shards() const override;
 
+    std::vector<ShardId> shard_ids() const;
+
     // `conf`: a k-v map, provides additional information about the filesystem configuration
     absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
 
@@ -136,6 +138,7 @@ private:
 private:
     mutable std::shared_mutex _mtx;
     std::shared_mutex _cache_mtx;
+    std::mutex _fs_cache_key_reset_mtx; // Protects fs_cache_key reset operations
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
@@ -146,6 +149,7 @@ extern std::unique_ptr<staros::starlet::Starlet> g_starlet;
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
 void shutdown_staros_worker();
 void update_staros_starcache();
+void set_starlet_in_shutdown();
 
 } // namespace starrocks
 #endif // USE_STAROS

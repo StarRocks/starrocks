@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
+import mockit.MockUp;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.junit.jupiter.api.Assertions;
@@ -40,7 +41,7 @@ public class CachingRemoteFileIOTest {
         hiveRemoteFileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
         ExecutorService executor = Executors.newFixedThreadPool(5);
-        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executor, 10, 10, 10);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executor, 10, 10, 0.1);
 
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
@@ -63,7 +64,7 @@ public class CachingRemoteFileIOTest {
         Assertions.assertEquals(20, blockDesc.getLength());
         Assertions.assertEquals(2, blockDesc.getReplicaHostIds().length);
 
-        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 5);
+        CachingRemoteFileIO queryLevelCache = CachingRemoteFileIO.createQueryLevelInstance(cachingFileIO, 0.1);
         Assertions.assertEquals(1, queryLevelCache.getRemoteFiles(pathKey).size());
 
         Map<RemotePathKey, List<RemoteFileDesc>> presentRemoteFileInfos =
@@ -72,5 +73,34 @@ public class CachingRemoteFileIOTest {
 
         queryLevelCache.updateRemoteFiles(pathKey);
         queryLevelCache.invalidatePartition(pathKey);
+    }
+
+    @Test
+    public void testWeigherHandlesLargeSize() {
+        // This test verifies that the weigher doesn't throw ArithmeticException
+        // when SizeEstimator.estimate() returns a value larger than Integer.MAX_VALUE
+        new MockUp<org.apache.spark.util.SizeEstimator>() {
+            @mockit.Mock
+            public long estimate(Object obj) {
+                // Return a value larger than Integer.MAX_VALUE to simulate overflow scenario
+                return 3L * Integer.MAX_VALUE;
+            }
+        };
+
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+        hiveRemoteFileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        ExecutorService executor = Executors.newFixedThreadPool(5);
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executor, 10, 10, 0.1);
+
+        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
+        RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
+
+        // Get remote files - this should not throw ArithmeticException
+        // even if the estimated size is very large
+        Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = cachingFileIO.getRemoteFiles(pathKey);
+        Assertions.assertNotNull(remoteFileInfos);
+        Assertions.assertTrue(remoteFileInfos.containsKey(pathKey));
     }
 }

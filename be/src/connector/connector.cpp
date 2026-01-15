@@ -18,7 +18,9 @@
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
+#ifndef __APPLE__
 #include "connector/iceberg_connector.h"
+#endif
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
@@ -61,7 +63,9 @@ public:
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
         cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
+#ifndef __APPLE__
         cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
+#endif
     }
 };
 
@@ -104,7 +108,7 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
 
 void DataSource::update_profile(const Profile& profile) {
     RuntimeProfile::Counter* mem_alloc_failed_counter = ADD_COUNTER(_runtime_profile, "MemAllocFailed", TUnit::UNIT);
-    mem_alloc_failed_counter->update(profile.mem_alloc_failed_count);
+    COUNTER_UPDATE(mem_alloc_failed_counter, profile.mem_alloc_failed_count);
 }
 
 StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(

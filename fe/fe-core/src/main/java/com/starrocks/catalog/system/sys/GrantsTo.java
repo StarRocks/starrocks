@@ -38,8 +38,8 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
@@ -50,12 +50,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
@@ -76,13 +76,13 @@ public class GrantsTo {
     public static SystemTable createGrantsToRoles() {
         return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, GRANTS_TO_ROLES, Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_DATABASE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_DATABASE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_GRANT_TO_ROLES);
     }
@@ -90,13 +90,13 @@ public class GrantsTo {
     public static SystemTable createGrantsToUsers() {
         return new SystemTable(SystemId.GRANTS_TO_USERS_ID, GRANTS_TO_USERS, Table.TableType.SCHEMA,
                 builder()
-                        .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_DATABASE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("OBJECT_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIVILEGE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_CATALOG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_DATABASE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("OBJECT_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PRIVILEGE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_GRANT_TO_USERS);
     }

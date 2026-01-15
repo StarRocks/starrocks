@@ -33,6 +33,7 @@ public:
     static bool init(bool is_cn);
     static std::string get_localhost();
     static std::string get_local_ip();
+    static std::string get_resolved_ip();
     static TBackend get_localBackend();
     static const char* get_service_bind_address();
     static const char* get_service_bind_address_without_bracket();
@@ -47,6 +48,7 @@ private:
 
     static std::string _s_localhost;
     static std::string _s_local_ip;
+    static std::string _s_resolved_ip;
     static std::vector<CIDR> _s_priority_cidrs;
     static TBackend _backend;
     static bool _bind_ipv6;

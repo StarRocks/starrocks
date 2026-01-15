@@ -92,7 +92,7 @@ public:
                 /*dest_dop*/ 1,
                 /*sender_id*/ 0, _dest_node_id, /*partition_exprs*/ std::vector<ExprContext*>(),
                 /*enable_exchange_pass_through*/ true, /*enable_exchange_perf*/ false, _fragment_context.get(),
-                /*output_columns*/ std::vector<int32_t>());
+                /*output_columns*/ std::vector<int32_t>(), std::vector<TBucketProperty>());
         _exchange_sink_factory->set_runtime_state(_runtime_state.get());
     }
 
@@ -133,14 +133,14 @@ TEST_F(ExchangePassThroughTest, test_exchange_pass_through) {
     while (sent_bytes + chunk_bytes < config::max_transmit_batched_bytes) {
         sent_bytes += chunk_bytes;
         exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
-        std::unique_ptr<Chunk> received_chunk = nullptr;
+        ChunkUniquePtr received_chunk = nullptr;
         std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
         EXPECT_TRUE(received_chunk == nullptr);
     }
 
     // once the sent bytes exceeds max_transmit_batched_bytes, the data is sent.
     exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next());
-    std::unique_ptr<Chunk> received_chunk = nullptr;
+    ChunkUniquePtr received_chunk = nullptr;
     std::ignore = _recvr->get_chunk_for_pipeline(&received_chunk, driver_sequence);
     EXPECT_TRUE(received_chunk != nullptr);
 
@@ -158,6 +158,38 @@ TEST_F(ExchangePassThroughTest, test_exchange_pass_through) {
     } while (received_chunk != nullptr);
     EXPECT_FALSE(_sink_buffer->is_full());
 
+    exchange_sink->close(_runtime_state.get());
+}
+
+TEST_F(ExchangePassThroughTest, recv_closed_1) {
+    int32_t driver_sequence = 0;
+    auto exchange_sink = _exchange_sink_factory->create(_degree_of_parallelism, driver_sequence);
+    ASSERT_OK(exchange_sink->prepare(_runtime_state.get()));
+
+    while (!_sink_buffer->is_full()) {
+        ASSERT_OK(exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next()));
+    }
+
+    ASSERT_OK(exchange_sink->set_finishing(_runtime_state.get()));
+
+    std::thread thr([recvr = _recvr]() { recvr->close(); });
+    thr.join();
+    exchange_sink->close(_runtime_state.get());
+}
+
+TEST_F(ExchangePassThroughTest, recv_closed_2) {
+    int32_t driver_sequence = 0;
+    auto exchange_sink = _exchange_sink_factory->create(_degree_of_parallelism, driver_sequence);
+    ASSERT_OK(exchange_sink->prepare(_runtime_state.get()));
+
+    while (!_sink_buffer->is_full()) {
+        ASSERT_OK(exchange_sink->push_chunk(_runtime_state.get(), _chunk_builder.get_next()));
+    }
+
+    std::thread thr([recvr = _recvr]() { recvr->close(); });
+    thr.join();
+
+    ASSERT_OK(exchange_sink->set_finishing(_runtime_state.get()));
     exchange_sink->close(_runtime_state.get());
 }
 

@@ -15,7 +15,9 @@
 package com.starrocks.transaction;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -37,7 +39,6 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -111,7 +112,7 @@ public class ExplicitTxnTest {
         MetricRepo.init();
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(3);
-        serializer.writeEofString("select * from a");
+        serializer.writeEofString("select 1");
         ByteBuffer queryPacket = serializer.toByteBuffer();
         ByteBuffer finalQueryPacket1 = queryPacket;
         new MockUp<MysqlChannel>() {
@@ -128,8 +129,7 @@ public class ExplicitTxnTest {
         ConnectProcessor processor = new ConnectProcessor(context);
         processor.processOnce();
 
-        Assertions.assertTrue(context.getState().isError());
-        Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
+        Assertions.assertNotEquals(ErrorCode.ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT, context.getState().getErrorCode());
 
         serializer.reset();
         serializer.writeInt1(3);

@@ -180,6 +180,8 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("with a as (select distinct k1, k2, k3 from colocate1) select /*+SET_VAR(cbo_cte_reuse_rate=0) */ " +
                     "l.k1,z.k2 from a l join [shuffle] a z on l.k1=z.k1 and l.k2=z.k2 where l.k3 > 100 and z.k3 < 100");
 
+            querys.add("with w as (select *, row_number() over (partition by k1,k2 order by k1,k2) from colocate1)\n" +
+                    "select * from w t1 join [colocate] w t2 on t1.k1=t2.k1 and t1.k2=t2.k2");
             for (String sql : querys) {
                 String plan = getFragmentPlan(sql);
                 assertNotContains(plan, "colocate exec groups:");
@@ -225,6 +227,14 @@ public class GroupExecutionPlanTest extends PlanTestBase {
             querys.add("select distinct tb.k1,tb.k2,tb.k3,tb.k4 from (select l.k1 k1, l.k2 k2,r.k1 k3,r.k2 k4 " +
                     "from (select k1, k2 from colocate1 l) l join [bucket] colocate2 r on l.k1 = r.k1 and l.k2 = r.k2) tb " +
                     "join colocate1 z;");
+            //                                      Colocate Join
+            //                                      /          \
+            //                        Bucket Shuffle Join      Scan
+            //                          /          \
+            //                       Scan           Exchange
+            //                                      Scan
+            querys.add("select * from colocate1 l left join [bucket] colocate2 r on l.k1=r.k1 and l.k2=r.k2 " +
+                    "join [colocate] colocate2 z on l.k1=z.k1 and l.k2=z.k2;");
             // CTE as probe runtime filter probe side
             querys.add("with a as (select distinct k1, k2 from colocate1) " +
                     "select distinct l.k1,r.k2 from colocate1 l join [broadcast] a r on l.k1=r.k1 and l.k2=r.k2 " +

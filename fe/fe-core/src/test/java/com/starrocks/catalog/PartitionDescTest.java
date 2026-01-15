@@ -16,11 +16,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.PartitionDesc;
-import org.apache.commons.lang.NotImplementedException;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,7 +45,7 @@ public class PartitionDescTest {
 
     @BeforeEach
     public void setUp() throws AnalysisException {
-        ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
+        ColumnDef id = new ColumnDef("id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)));
         this.columnDefs = Lists.newArrayList(id);
 
         Map<String, String> otherProperties = new HashMap<>();
@@ -53,24 +56,21 @@ public class PartitionDescTest {
     }
 
     @Test
-    public void testAnalyzeByColumnDefs() {
-        assertThrows(NotImplementedException.class, () -> this.partitionDesc.analyze(columnDefs, otherProperties));
-    }
-
-    @Test
     public void testToSql() {
-        assertThrows(NotImplementedException.class, () -> this.partitionDesc.toSql());
+        assertThrows(UnsupportedOperationException.class, () -> this.partitionDesc.toSql());
     }
 
     @Test
-    public void testToPartitionInfo() {
-        assertThrows(NotImplementedException.class, () -> {
-            Column id = new Column("id", Type.BIGINT);
+    public void testPartitionInfoBuilder() {
+        // Since toPartitionInfo method was removed, we now use PartitionInfoBuilder directly
+        // We expect DdlException for unsupported partition types
+        assertThrows(DdlException.class, () -> {
+            Column id = new Column("id", IntegerType.BIGINT);
             List<Column> columns = Lists.newArrayList(id);
             Map<String, Long> partitionNameToId = new HashMap<>();
             partitionNameToId.put("p1", 1003L);
-            this.partitionDesc.toPartitionInfo(columns, partitionNameToId, false);
-            throw new NotImplementedException();
+            // Use PartitionInfoBuilder directly instead of toPartitionInfo
+            PartitionInfoBuilder.build(this.partitionDesc, columns, partitionNameToId, false);
         });
     }
 

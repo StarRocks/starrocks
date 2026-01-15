@@ -37,22 +37,9 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -62,7 +49,17 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -77,6 +74,8 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.HLLType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,7 +88,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;;
+import static com.starrocks.catalog.DefaultExpr.isValidDefaultFunction;
+
+
 
 /**
  * used to scan from stream
@@ -103,9 +104,6 @@ public class StreamLoadScanNode extends LoadScanNode {
     private Table dstTable;
     private StreamLoadInfo streamLoadInfo;
     private int numInstances;
-
-    // helper
-    private Analyzer analyzer;
 
     private List<TScanRangeLocations> locationsList = Lists.newArrayList();
 
@@ -141,7 +139,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private ParamCreateContext paramCreateContext;
     private boolean nullExprInAutoIncrement;
-
+    private DescriptorTable descriptorTable;
 
     // used to construct for streaming loading
     public StreamLoadScanNode(TUniqueId loadId, PlanNodeId id, TupleDescriptor tupleDesc, Table dstTable, StreamLoadInfo streamLoadInfo) {
@@ -196,14 +194,13 @@ public class StreamLoadScanNode extends LoadScanNode {
         return nullExprInAutoIncrement;
     }
 
-    @Override
-    public void init(Analyzer analyzer) throws StarRocksException {
+    public void init(DescriptorTable descriptorTable) throws StarRocksException {
         // can't call super.init(), because after super.init, conjuncts would be null
         if (needAssignBE) {
             assignBackends();
         }
-        assignConjuncts(analyzer);
-        this.analyzer = analyzer;
+
+        this.descriptorTable = descriptorTable;
         paramCreateContext = new ParamCreateContext();
         initParams();
     }
@@ -251,19 +248,19 @@ public class StreamLoadScanNode extends LoadScanNode {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }
         initColumns();
-        initWhereExpr(streamLoadInfo.getWhereExpr(), analyzer);
+        initWhereExpr(streamLoadInfo.getWhereExpr());
     }
 
     private void initColumns() throws StarRocksException {
-        paramCreateContext.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor("StreamLoadScanNode");
+        paramCreateContext.tupleDescriptor = descriptorTable.createTupleDescriptor("StreamLoadScanNode");
         Load.initColumns(dstTable, streamLoadInfo.getColumnExprDescs(), null /* no hadoop function */,
-                exprsByName, analyzer, paramCreateContext.tupleDescriptor, slotDescByName,
+                exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
                 streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate());
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException, StarRocksException {
+    public void finalizeStats() throws StarRocksException, StarRocksException {
         finalizeParams();
     }
 
@@ -345,24 +342,24 @@ public class StreamLoadScanNode extends LoadScanNode {
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH + "(xxx)");
                 }
                 FunctionCallExpr fn = (FunctionCallExpr) expr;
-                if (!fn.getFnName().getFunction().equalsIgnoreCase(FunctionSet.HLL_HASH)
-                        && !fn.getFnName().getFunction().equalsIgnoreCase("hll_empty")) {
+                if (!fn.getFunctionName().equalsIgnoreCase(FunctionSet.HLL_HASH)
+                        && !fn.getFunctionName().equalsIgnoreCase("hll_empty")) {
                     throw new AnalysisException("HLL column must use " + FunctionSet.HLL_HASH + " function, like "
                             + dstSlotDesc.getColumn().getName() + "=" + FunctionSet.HLL_HASH
                             + "(xxx) or " + dstSlotDesc.getColumn().getName() + "=hll_empty()");
                 }
-                expr.setType(Type.HLL);
+                expr.setType(HLLType.HLL);
             }
 
-            checkBitmapCompatibility(analyzer, dstSlotDesc, expr);
+            checkBitmapCompatibility(dstSlotDesc, expr);
 
             if (negative && dstSlotDesc.getColumn().getAggregationType() == AggregateType.SUM) {
                 expr = new ArithmeticExpr(ArithmeticExpr.Operator.MULTIPLY, expr, new IntLiteral(-1));
-                expr = Expr.analyzeAndCastFold(expr);
+                expr = ExprUtils.analyzeAndCastFold(expr);
             }
             expr = castToSlot(dstSlotDesc, expr);
 
-            paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), expr.treeToThrift());
+            paramCreateContext.params.putToExpr_of_dest_slot(dstSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(expr));
         }
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());

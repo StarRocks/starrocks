@@ -29,7 +29,6 @@ import com.staros.proto.GSFileStoreInfo;
 import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -37,11 +36,12 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -50,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(StorageVolume.class);
+
     public enum StorageVolumeType {
         UNKNOWN,
         S3,
@@ -83,6 +85,24 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     @SerializedName("e")
     private boolean enabled;
+
+    /**
+     * Each storage volume can have a virtual tablet bind to it.
+     * It is used to create a virtual shard in starmgr, and the value's persistence is guaranteed in filestore of starmgr.
+     * The value of `vTabletId` is not -1L if a virtual tablet needed.
+     */
+    @SerializedName("vt")
+    private long vTabletId = -1L;
+
+    /**
+     * Same as `vTabletId`, but it is used to create a virtual shard group in starmgr, and the value's persistence
+     * is also guaranteed in filestore of starmgr.
+     */
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
+
+    public static final String V_SHARD_ID = "v_shard_id";
+    public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
 
     public static String CREDENTIAL_MASK = "******";
 
@@ -118,6 +138,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(sv.locations);
         this.comment = sv.comment;
         this.enabled = sv.enabled;
+        this.vTabletId = sv.vTabletId;
+        this.vTabletGroupId = sv.vTabletGroupId;
         this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
         this.params = new HashMap<>(sv.params);
         validateStorageVolumeConstraints();
@@ -169,6 +191,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public Boolean getEnabled() {
         return enabled;
+    }
+
+    public long getVTabletId() {
+        return vTabletId;
+    }
+
+    public void setVTabletId(long vTabletId) {
+        this.vTabletId = vTabletId;
+    }
+
+    public long getVTabletGroupId() {
+        return vTabletGroupId;
+    }
+
+    public void setVTabletGroupId(long vTabletGroupId) {
+        this.vTabletGroupId = vTabletGroupId;
     }
 
     public void setComment(String comment) {
@@ -265,20 +303,56 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public FileStoreInfo toFileStoreInfo() {
+        Map<String, String> properties = new HashMap<>();
+        if (vTabletId != -1L) {
+            properties.put(V_SHARD_ID, String.valueOf(vTabletId));
+        }
+        if (vTabletGroupId != -1L) {
+            properties.put(V_SHARD_GROUP_ID, String.valueOf(vTabletGroupId));
+        }
         FileStoreInfo.Builder builder = cloudConfiguration.toFileStoreInfo().toBuilder();
         builder.setFsKey(id)
                 .setFsName(this.name)
                 .setComment(this.comment)
                 .setEnabled(this.enabled)
-                .addAllLocations(locations);
+                .addAllLocations(locations)
+                .putAllProperties(properties);
         return builder.build();
     }
 
     public static StorageVolume fromFileStoreInfo(FileStoreInfo fsInfo) throws DdlException {
         String svt = fsInfo.getFsType().toString();
         Map<String, String> params = getParamsFromFileStoreInfo(fsInfo);
-        return new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
+        StorageVolume storageVolume = new StorageVolume(fsInfo.getFsKey(), fsInfo.getFsName(), svt,
                 fsInfo.getLocationsList(), params, fsInfo.getEnabled(), fsInfo.getComment());
+
+        Map<String, String> propertiesMap = fsInfo.getPropertiesMap();
+        if (propertiesMap.containsKey(V_SHARD_ID)) {
+            String vTabletId = propertiesMap.get(V_SHARD_ID);
+            try {
+                storageVolume.setVTabletId(StringUtils.isEmpty(vTabletId) ? -1L : Long.parseLong(vTabletId));
+            } catch (NumberFormatException e) {
+                LOG.error("Failed to parse vTabletId from properties, vTabletId: {}", vTabletId, e);
+            }
+        }
+        if (propertiesMap.containsKey(V_SHARD_GROUP_ID)) {
+            if (storageVolume.getVTabletId() == -1L) {
+                LOG.warn("vTabletId is not set for storage volume: {}, skip parsing and setting vTabletGroupId",
+                        storageVolume.getName());
+                return storageVolume;
+            }
+            String vTabletGroupId = propertiesMap.get(V_SHARD_GROUP_ID);
+            try {
+                storageVolume.setVTabletGroupId(
+                        StringUtils.isEmpty(vTabletGroupId) ? -1L : Long.parseLong(vTabletGroupId));
+            } catch (NumberFormatException e) {
+                // ignore processing further if the vTabletGroupId is not set, 
+                // the previous vTabletId will be cleared by StarMgrMetaSyncer
+                LOG.error("Failed to parse vTabletGroupId from properties, vTabletGroupId: {}", vTabletGroupId, e);
+            }
+        }
+
+        return storageVolume;
     }
 
     public static Map<String, String> getParamsFromFileStoreInfo(FileStoreInfo fsInfo) {
@@ -294,6 +368,13 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                             Boolean.toString(true));
                     params.put(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                             Integer.toString(s3FileStoreInfo.getNumPartitionedPrefix()));
+                }
+                if (s3FileStoreInfo.getPathStyleAccess() == 1) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(true));
+                } else if (s3FileStoreInfo.getPathStyleAccess() == 2) {
+                    params.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
+                            Boolean.toString(false));
                 }
                 AwsCredentialInfo credentialInfo = s3FileStoreInfo.getCredential();
                 if (credentialInfo.hasSimpleCredential()) {
@@ -405,13 +486,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             String container = locations.get(0).split("/")[0];
             params.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container);
         }
-    }
-
-
-
-    public static StorageVolume read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, StorageVolume.class);
     }
 
     @Override

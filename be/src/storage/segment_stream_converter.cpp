@@ -112,6 +112,12 @@ Status SegmentStreamConverter::close() {
 
     RETURN_IF_ERROR(Segment::write_segment_footer(_output_file.get(), segment_footer_pb));
 
+    // Record the final output file size (may differ from input size due to footer changes)
+    _final_output_file_size = _output_file->size();
+
+    LOG(INFO) << "Segment conversion completed, input_file: " << _input_file_name
+              << ", input_size: " << _input_file_size << ", output_size: " << _final_output_file_size;
+
     return _output_file->close();
 }
 

@@ -39,11 +39,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleId;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExceptNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -158,20 +157,7 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-    }
-
-    /**
-     * Must be called after addChild()/addConstExprList(). Computes the materialized
-     * result/const expr lists based on the materialized slots of this UnionNode's
-     * produced tuple. The UnionNode doesn't need an smap: like a ScanNode, it
-     * materializes an original tuple.
-     * There is no need to call assignConjuncts() because all non-constant conjuncts
-     * have already been assigned to the set operation operands, and all constant conjuncts have
-     * been evaluated during registration to set analyzer.hasEmptyResultSet_.
-     */
-    @Override
-    public void init(Analyzer analyzer) {
+    public void computeStats() {
     }
 
     protected void toThrift(TPlanNode msg, TPlanNodeType nodeType) {
@@ -179,17 +165,17 @@ public abstract class SetOperationNode extends PlanNode {
         List<List<TExpr>> texprLists = Lists.newArrayList();
 
         for (List<Expr> exprList : materializedResultExprLists_) {
-            texprLists.add(Expr.treesToThrift(exprList));
+            texprLists.add(ExprToThrift.treesToThrift(exprList));
         }
 
         List<List<TExpr>> constTexprLists = Lists.newArrayList();
         for (List<Expr> constTexprList : materializedConstExprLists_) {
-            constTexprLists.add(Expr.treesToThrift(constTexprList));
+            constTexprLists.add(ExprToThrift.treesToThrift(constTexprList));
         }
 
         List<List<TExpr>> tlocalPartitionByExprsList = Lists.newArrayList();
         for (List<Expr> localPartitionByExprs : localPartitionByExprsList) {
-            tlocalPartitionByExprsList.add(Expr.treesToThrift(localPartitionByExprs));
+            tlocalPartitionByExprsList.add(ExprToThrift.treesToThrift(localPartitionByExprs));
         }
 
         Preconditions.checkState(firstMaterializedChildIdx_ <= children.size());
@@ -231,12 +217,12 @@ public abstract class SetOperationNode extends PlanNode {
         // A SetOperationNode may have predicates if a union is set operation inside an inline view,
         // and the enclosing select stmt has predicates referring to the inline view.
         if (CollectionUtils.isNotEmpty(conjuncts)) {
-            output.append(prefix).append("predicates: ").append(getExplainString(conjuncts)).append("\n");
+            output.append(prefix).append("predicates: ").append(explainExpr(conjuncts)).append("\n");
         }
         if (CollectionUtils.isNotEmpty(constExprLists_)) {
             output.append(prefix).append("constant exprs: ").append("\n");
             for (List<Expr> exprs : constExprLists_) {
-                output.append(prefix).append("    ").append(exprs.stream().map(Expr::toSql)
+                output.append(prefix).append("    ").append(exprs.stream().map(this::explainExpr)
                         .collect(Collectors.joining(" | "))).append("\n");
             }
         }
@@ -244,15 +230,20 @@ public abstract class SetOperationNode extends PlanNode {
             if (CollectionUtils.isNotEmpty(setOperationOutputList)) {
                 output.append(prefix).append("output exprs:").append("\n");
                 output.append(prefix).append("    ")
-                        .append(setOperationOutputList.stream().map(Expr::explain).collect(
-                                Collectors.joining(" | "))).append("\n");
+                        .append(setOperationOutputList.stream()
+                                .map(c -> explainExpr(detailLevel, List.of(c)))
+                                .collect(Collectors.joining(" | ")))
+                        .append("\n");
             }
 
             if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
                 output.append(prefix).append("child exprs:").append("\n");
                 for (List<Expr> exprs : materializedResultExprLists_) {
-                    output.append(prefix).append("    ").append(exprs.stream().map(Expr::explain)
-                            .collect(Collectors.joining(" | "))).append("\n");
+                    output.append(prefix).append("    ")
+                            .append(exprs.stream()
+                                    .map(c -> explainExpr(detailLevel, List.of(c)))
+                                    .collect(Collectors.joining(" | ")))
+                            .append("\n");
                 }
             }
             List<String> passThroughNodeIds = Lists.newArrayList();
@@ -281,7 +272,7 @@ public abstract class SetOperationNode extends PlanNode {
         if (!(expr instanceof SlotRef)) {
             return Optional.empty();
         }
-        if (!expr.isBoundByTupleIds(getTupleIds())) {
+        if (!ExprUtils.isBoundByTupleIds(expr, getTupleIds())) {
             return Optional.empty();
         }
         int slotExprSlotId = ((SlotRef) expr).getSlotId().asInt();
@@ -322,8 +313,8 @@ public abstract class SetOperationNode extends PlanNode {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
-        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds()) &&
-                partitionByExprs.stream().allMatch(expr -> expr.isBoundByTupleIds(getTupleIds()));
+        boolean isBound = ExprUtils.isBoundByTupleIds(probeExpr, getTupleIds()) &&
+                partitionByExprs.stream().allMatch(expr -> ExprUtils.isBoundByTupleIds(expr, getTupleIds()));
         if (!isBound) {
             return false;
         }

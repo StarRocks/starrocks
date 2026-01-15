@@ -37,14 +37,11 @@ package com.starrocks.backup;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
-import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -64,16 +61,18 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ReplicaStatus;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -89,15 +88,12 @@ import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -125,7 +121,7 @@ public class BackupJob extends AbstractJob {
 
     // all objects which need backup
     @SerializedName(value = "tableRefs")
-    protected List<TableRef> tableRefs = Lists.newArrayList();
+    protected List<TableRefPersist> tableRefs = Lists.newArrayList();
 
     @SerializedName(value = "state")
     protected BackupJobState state;
@@ -168,7 +164,7 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP);
     }
 
-    public BackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
+    public BackupJob(String label, long dbId, String dbName, List<TableRefPersist> tableRefs, long timeoutMs,
                      GlobalStateMgr globalStateMgr, long repoId) {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
@@ -207,7 +203,7 @@ public class BackupJob extends AbstractJob {
         return localMetaInfoFilePath;
     }
 
-    public List<TableRef> getTableRef() {
+    public List<TableRefPersist> getTableRef() {
         return tableRefs;
     }
 
@@ -414,7 +410,7 @@ public class BackupJob extends AbstractJob {
     }
 
     protected void checkBackupTables(Database db) {
-        for (TableRef tableRef : tableRefs) {
+        for (TableRefPersist tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
             Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
@@ -423,7 +419,7 @@ public class BackupJob extends AbstractJob {
             }
             if (!tbl.isSupportBackupRestore()) {
                 status = new Status(ErrCode.UNSUPPORTED,
-                                    "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
+                        "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
                 return;
             }
 
@@ -447,7 +443,7 @@ public class BackupJob extends AbstractJob {
 
     protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
-        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
+        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion, schemaHash);
         if (replica == null) {
             status = new Status(ErrCode.COMMON_ERROR,
                     "failed to choose replica to make snapshot for tablet " + tablet.getId()
@@ -506,7 +502,7 @@ public class BackupJob extends AbstractJob {
             taskProgress.clear();
             taskErrMsg.clear();
             // create snapshot tasks
-            for (TableRef tblRef : tableRefs) {
+            for (TableRefPersist tblRef : tableRefs) {
                 String tblName = tblRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {
@@ -529,7 +525,7 @@ public class BackupJob extends AbstractJob {
                         long visibleVersion = physicalPartition.getVisibleVersion();
                         List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
                         for (MaterializedIndex index : indexes) {
-                            int schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
+                            int schemaHash = olapTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                             for (Tablet tablet : index.getTablets()) {
                                 prepareSnapshotTask(physicalPartition, olapTbl, tablet, index, visibleVersion, schemaHash);
                                 if (status != Status.OK) {
@@ -545,7 +541,7 @@ public class BackupJob extends AbstractJob {
 
             // copy all related schema at this moment
             List<Table> copiedTables = Lists.newArrayList();
-            for (TableRef tableRef : tableRefs) {
+            for (TableRefPersist tableRef : tableRefs) {
                 String tblName = tableRef.getName().getTbl();
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getFullName(), tblName);
                 if (tbl.isOlapView()) {
@@ -663,9 +659,8 @@ public class BackupJob extends AbstractJob {
                 }
                 Preconditions.checkState(brokers.size() == 1);
             } else {
-                BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                 try {
-                    HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                    HdfsUtil.getTProperties(repo.getLocation(), repo.getStorage().getProperties(), hdfsProperties);
                 } catch (StarRocksException e) {
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
                     return;
@@ -700,7 +695,7 @@ public class BackupJob extends AbstractJob {
 
     private void saveMetaInfo() {
         String createTimeStr = TimeUtils.longToTimeString(createTime,
-                new SimpleDateFormat(TIMESTAMP_FORMAT));
+                DateTimeFormatter.ofPattern(TIMESTAMP_FORMAT).withZone(TimeUtils.getSystemTimeZone().toZoneId()));
         if (testPrimaryKey) {
             localJobDirPath = Paths.get(BackupHandler.TEST_BACKUP_ROOT_DIR.toString(),
                     label + "__" + UUIDUtil.genUUID().toString()).normalize();
@@ -830,11 +825,12 @@ public class BackupJob extends AbstractJob {
     }
 
     /*
-     * Choose a replica whose version >= visibleVersion and dose not have failed version.
+     * Choose a replica whose status is OK.
      * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
-    private Replica chooseReplica(LocalTablet tablet, long visibleVersion) {
+    private Replica chooseReplica(LocalTablet tablet, long visibleVersion, int schemaHash) {
         List<Long> replicaIds = Lists.newArrayList();
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
         for (Replica replica : tablet.getImmutableReplicas()) {
             replicaIds.add(replica.getId());
         }
@@ -842,7 +838,7 @@ public class BackupJob extends AbstractJob {
         Collections.sort(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
-            if (replica.getLastFailedVersion() < 0 && (replica.getVersion() >= visibleVersion)) {
+            if (replica.computeReplicaStatus(infoService, visibleVersion, schemaHash) == ReplicaStatus.OK) {
                 return replica;
             }
         }
@@ -925,104 +921,6 @@ public class BackupJob extends AbstractJob {
     private String getBackupObjs() {
         List<String> list = tableRefs.stream().map(n -> "[" + n.toString() + "]").collect(Collectors.toList());
         return Joiner.on(", ").join(list);
-    }
-
-    public static BackupJob read(DataInput in) throws IOException {
-        BackupJob job = new BackupJob();
-        job.readFields(in);
-        return job;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        // table refs
-        out.writeInt(tableRefs.size());
-        for (TableRef tblRef : tableRefs) {
-            tblRef.write(out);
-        }
-
-        // state
-        Text.writeString(out, state.name());
-
-        // times
-        out.writeLong(snapshotFinishedTime);
-        out.writeLong(snapshotUploadFinishedTime);
-
-        // snapshot info
-        out.writeInt(snapshotInfos.size());
-        for (SnapshotInfo info : snapshotInfos.values()) {
-            info.write(out);
-        }
-
-        // backup meta
-        if (backupMeta == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            backupMeta.write(out);
-        }
-
-        // No need to persist job info. It is generated then write to file
-
-        // metaInfoFilePath and jobInfoFilePath
-        if (Strings.isNullOrEmpty(localMetaInfoFilePath)) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Text.writeString(out, localMetaInfoFilePath);
-        }
-
-        if (Strings.isNullOrEmpty(localJobInfoFilePath)) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            Text.writeString(out, localJobInfoFilePath);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        // table refs
-        int size = in.readInt();
-        tableRefs = Lists.newArrayList();
-        for (int i = 0; i < size; i++) {
-            TableRef tblRef = new TableRef();
-            tblRef.readFields(in);
-            tableRefs.add(tblRef);
-        }
-
-        state = BackupJobState.valueOf(Text.readString(in));
-
-        // times
-        snapshotFinishedTime = in.readLong();
-        snapshotUploadFinishedTime = in.readLong();
-
-        // snapshot info
-        size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            SnapshotInfo snapshotInfo = new SnapshotInfo();
-            snapshotInfo.readFields(in);
-            snapshotInfos.put(snapshotInfo.getTabletId(), snapshotInfo);
-        }
-
-        // backup meta
-        if (in.readBoolean()) {
-            backupMeta = BackupMeta.read(in);
-        }
-
-        // No need to persist job info. It is generated then write to file
-
-        // metaInfoFilePath and jobInfoFilePath
-        if (in.readBoolean()) {
-            localMetaInfoFilePath = Text.readString(in);
-        }
-
-        if (in.readBoolean()) {
-            localJobInfoFilePath = Text.readString(in);
-        }
     }
 
     @Override

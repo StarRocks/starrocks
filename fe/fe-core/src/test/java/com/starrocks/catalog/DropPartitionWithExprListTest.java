@@ -16,7 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -576,7 +576,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     MaterializedView mv = starRocksAssert.getMv("test", mvName);
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -586,12 +586,12 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     {
                                         // add new partitions
                                         LocalDateTime now = LocalDateTime.now();
-                                        addListPartition(tableName, "p5", "guangdong",
+                                        addListPartition(tableName, "p5", "guangdong_p5",
                                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                                        addListPartition(tableName, "p6", "guangdong",
+                                        addListPartition(tableName, "p6", "guangdong_p6",
                                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
 
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
@@ -624,7 +624,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     MaterializedView mv = starRocksAssert.getMv("test", mvName);
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -637,10 +637,15 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                             "interval 1 month')", mvName);
                                     starRocksAssert.alterMvProperties(alterMVSql);
 
+                                    // trigger dynamic scheduler to ensure test more stable
+                                    DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
+                                            .getDynamicPartitionScheduler();
+                                    scheduler.runOnceForTest();
+
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
-                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                                        Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                                         Assertions.assertTrue(execPlan == null);
@@ -649,28 +654,20 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     {
                                         // add new partitions
                                         LocalDateTime now = LocalDateTime.now();
-                                        addListPartition(tableName, "p5", "guangdong",
+                                        addListPartition(tableName, "p5", "guangdong_p5",
                                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                                        addListPartition(tableName, "p6", "guangdong",
+                                        addListPartition(tableName, "p6", "guangdong_p6",
                                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
 
-                                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
-                                        Assertions.assertEquals(4, mv.getVisiblePartitions().size());
+                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                                         Assertions.assertTrue(execPlan != null);
                                         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
                                         PlanTestBase.assertContains(plan, "     PREAGGREGATION: ON\n" +
                                                 "     partitions=2/6");
-                                    }
-
-                                    // run partition ttl scheduler
-                                    {
-                                        DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState()
-                                                .getDynamicPartitionScheduler();
-                                        scheduler.runOnceForTest();
-                                        Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                     }
                                 });
                     });

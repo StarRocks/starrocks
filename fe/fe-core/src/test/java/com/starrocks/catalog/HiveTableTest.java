@@ -35,13 +35,13 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.planner.DescriptorTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.HiveTableFactory;
@@ -50,6 +50,7 @@ import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -139,7 +140,7 @@ public class HiveTableTest {
         Assertions.assertEquals("hive_table", hiveTable.getCatalogTableName());
         Assertions.assertEquals(hdfsPath, hiveTable.getTableLocation());
         Assertions.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
-        Assertions.assertEquals(new Column("col1", Type.INT, true), hiveTable.getPartitionColumns().get(0));
+        Assertions.assertEquals(new Column("col1", IntegerType.INT, true), hiveTable.getPartitionColumns().get(0));
         Assertions.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assertions.assertFalse(hiveTable.isUnPartitioned());
 

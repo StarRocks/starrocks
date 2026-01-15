@@ -23,6 +23,7 @@ add_library(Column STATIC
         column.cpp
         column_access_path.cpp
         column_helper.cpp
+        append_with_mask.cpp
         column_viewer.cpp
         const_column.cpp
         datum.cpp
@@ -42,6 +43,10 @@ add_library(Column STATIC
         map_column.cpp
         struct_column.cpp
         stream_chunk.cpp
+        type_traits.cpp
         column_view/column_view_base.cpp
         column_view/column_view_helper.cpp
+        variant_column.cpp
+        german_string.cpp
+        column_hash/column_hash.cpp
 )

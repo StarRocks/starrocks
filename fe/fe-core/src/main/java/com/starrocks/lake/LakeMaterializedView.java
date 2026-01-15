@@ -16,6 +16,7 @@ package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
@@ -24,7 +25,6 @@ import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
@@ -34,20 +34,17 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
-import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -92,9 +89,6 @@ public class LakeMaterializedView extends MaterializedView {
 
     @Override
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
     }
 
@@ -107,12 +101,6 @@ public class LakeMaterializedView extends MaterializedView {
             return null;
         }
         return (MaterializedView) selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
-    }
-
-    public static LakeMaterializedView read(DataInput in) throws IOException {
-        // type is already read in Table
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, LakeMaterializedView.class);
     }
 
     @Override
@@ -138,17 +126,15 @@ public class LakeMaterializedView extends MaterializedView {
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = super.getProperties();
-        if (tableProperty != null) {
-            StorageInfo storageInfo = tableProperty.getStorageInfo();
-            if (storageInfo != null) {
-                // datacache.enable
-                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
-                        String.valueOf(storageInfo.isEnableDataCache()));
+        StorageInfo storageInfo = tableProperty.getStorageInfo();
+        if (storageInfo != null) {
+            // datacache.enable
+            properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    String.valueOf(storageInfo.isEnableDataCache()));
 
-                // enable_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
-            }
+            // enable_async_write_back
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                    String.valueOf(storageInfo.isEnableAsyncWriteBack()));
         }
         return properties;
     }
@@ -198,19 +184,16 @@ public class LakeMaterializedView extends MaterializedView {
             return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleLakeListPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isUnPartitioned()) {
             return new RecycleLakeUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
@@ -223,5 +206,11 @@ public class LakeMaterializedView extends MaterializedView {
         // And the max unique id will be reset while rebuilding full schema.
         LakeTableHelper.restoreColumnUniqueIdIfNeeded(this);
         super.gsonPostProcess();
+    }
+
+    // used in colocate table index, return an empty list for LakeMaterializedView
+    @Override
+    public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
+        return Lists.newArrayList();
     }
 }

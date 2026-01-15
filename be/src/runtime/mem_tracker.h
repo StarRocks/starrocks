@@ -90,9 +90,11 @@ enum class MemTrackerType {
     SCHEMA_CHANGE_TASK,
     SCHEMA_CHANGE,
     RESOURCE_GROUP,
+    RESOURCE_GROUP_SHARED_MEMORY_POOL,
     RESOURCE_GROUP_BIG_QUERY,
     JEMALLOC,
     PASSTHROUGH,
+    BRPC_IOBUF,
     CONNECTOR_SCAN,
     METADATA,
     TABLET_METADATA,
@@ -111,7 +113,6 @@ enum class MemTrackerType {
     UPDATE,
     CLONE,
     DATACACHE,
-    POCO_CONNECTION_POOL,
     REPLICATION,
     ROWSET_UPDATE_STATE,
     INDEX_CACHE,
@@ -195,14 +196,14 @@ public:
     void update_allocation(int64_t bytes) {
         if (bytes <= 0) return;
         for (auto* tracker : _all_trackers) {
-            tracker->_allocation->update(bytes);
+            COUNTER_UPDATE(tracker->_allocation, bytes);
         }
     }
 
     void update_deallocation(int64_t bytes) {
         if (bytes <= 0) return;
         for (auto* tracker : _all_trackers) {
-            tracker->_deallocation->update(bytes);
+            COUNTER_UPDATE(tracker->_deallocation, bytes);
         }
     }
 
@@ -262,25 +263,34 @@ public:
         return nullptr;
     }
 
+    // Attempts to consume `bytes` memory from all trackers in the hierarchy.
     WARN_UNUSED_RESULT
-    MemTracker* try_consume_with_limited(int64_t bytes) {
+    MemTracker* try_consume_with_limited(int64_t bytes, size_t shared_reserve_bytes) {
         if (UNLIKELY(bytes <= 0)) return nullptr;
         int64_t i;
-        // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
             MemTracker* tracker = _all_trackers[i];
             int64_t limit = tracker->reserve_limit();
             if (limit < 0) {
                 limit = tracker->limit();
             }
+
             if (limit < 0) {
                 DCHECK_EQ(limit, -1);
-                tracker->_consumption->add(bytes); // No limit at this tracker.
+                tracker->_consumption->add(bytes);
             } else {
-                if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
+                // If this tracker is not shared, ignore shared_reserve_bytes
+                size_t reserve = !tracker->is_shared() ? 0 : shared_reserve_bytes;
+                // Adjust limit to account for reserved memory
+                int64_t adjusted_limit = limit - reserve;
+                if (adjusted_limit < 0) {
+                    adjusted_limit = 0;
+                }
+                // Try to consume memory under the adjusted limit
+                if (LIKELY(tracker->_consumption->try_add(bytes, adjusted_limit))) {
                     continue;
                 } else {
-                    // Failed for this mem tracker. Roll back the ones that succeeded.
+                    // fail to consume, roll back
                     for (int64_t j = _all_trackers.size() - 1; j > i; --j) {
                         _all_trackers[j]->_consumption->add(-bytes);
                     }
@@ -288,9 +298,37 @@ public:
                 }
             }
         }
-        // Everyone succeeded, return.
         DCHECK_EQ(i, -1);
         return nullptr;
+    }
+
+    // Checks if there is still available memory above the reserved amount for all trackers.
+    bool has_enough_reserved_memory(size_t shared_reserve_bytes) const {
+        for (int64_t i = _all_trackers.size() - 1; i >= 0; --i) {
+            const MemTracker* tracker = _all_trackers[i];
+            int64_t limit = tracker->reserve_limit();
+            if (limit < 0) {
+                limit = tracker->limit();
+            }
+
+            // Unlimited tracker, always has enough memory
+            if (limit < 0) {
+                DCHECK_EQ(limit, -1);
+                continue;
+            }
+
+            // If tracker is not shared, ignore reserve
+            size_t reserve = !tracker->is_shared() ? 0 : shared_reserve_bytes;
+            int64_t adjusted_limit = limit - reserve;
+            if (adjusted_limit < 0) adjusted_limit = 0;
+
+            // Check if current consumption has already exceeded adjusted limit
+            if (tracker->_consumption->current_value() > adjusted_limit) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// Decreases consumption of this tracker and its ancestors by 'bytes'.
@@ -374,9 +412,9 @@ public:
 
     int64_t consumption() const { return _consumption->current_value(); }
 
-    int64_t peak_consumption() const { return _consumption->value(); }
-    int64_t allocation() const { return _allocation->value(); }
-    int64_t deallocation() const { return _deallocation->value(); }
+    int64_t peak_consumption() const { return COUNTER_VALUE(_consumption); }
+    int64_t allocation() const { return COUNTER_VALUE(_allocation); }
+    int64_t deallocation() const { return COUNTER_VALUE(_deallocation); }
 
     MemTracker* parent() const { return _parent; }
 
@@ -393,8 +431,8 @@ public:
         msg << "limit: " << _limit << "; "
             << "reserve_limit: " << _reserve_limit << "; "
             << "consumption: " << _consumption->current_value() << "; "
-            << "allocation: " << _allocation->value() << "; "
-            << "deallocation: " << _deallocation->value() << "; "
+            << "allocation: " << COUNTER_VALUE(_allocation) << "; "
+            << "deallocation: " << COUNTER_VALUE(_deallocation) << "; "
             << "label: " << _label << "; "
             << "all tracker size: " << _all_trackers.size() << "; "
             << "limit trackers size: " << _limit_trackers.size() << "; "
@@ -413,6 +451,11 @@ public:
     std::list<MemTracker*> _child_trackers;
 
     std::list<MemTracker*> getChild() { return _child_trackers; }
+
+    bool is_shared() const {
+        return _type == MemTrackerType::PROCESS || _type == MemTrackerType::QUERY_POOL ||
+               _type == MemTrackerType::RESOURCE_GROUP || _type == MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL;
+    }
 
 private:
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers

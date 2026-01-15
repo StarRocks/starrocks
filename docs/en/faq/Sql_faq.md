@@ -40,7 +40,7 @@ show tablet from lineitem where State="ALTER";
 
 The time spent on the alteration operation relates to the data volume. In general, the alteration can be completed in minutes. We recommend that you stop loading data into StarRocks while you are altering tables because data loading lowers the speed at which alteration completes.
 
-## This error "get partition detail failed: org.apache.doris.common.DdlException: get hive partition meta data failed: java.net.UnknownHostException:hadooptest" occurs when I query the external tables of Apache Hive
+## This error "get hive partition meta data failed: java.net.UnknownHostException:hadooptest" occurs when I query the external tables of Apache Hive
 
 This error occurs when the metadata of Apache Hive partitions cannot be obtained. To solve this problem, copy **core-sit.xml** and **hdfs-site.xml** to the **fe.conf** file and the **be.conf** file.
 
@@ -130,3 +130,243 @@ You can use the [SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.m
 `SHOW DATA;` displays the data size and replicas of all tables in the current database.
 
 `SHOW DATA FROM <db_name>.<table_name>;` displays the data size, number of replicas, and number of rows in a specified table of a specified database.
+
+## In StarRocks on ES, when creating an Elasticsearch external table, if the relevant string length is too long, exceeding 256, and Elasticsearch uses dynamic mapping, using a select statement will result in the inability to query that column
+
+In dynamic mapping, Elasticsearch's data type is
+
+```json
+          "k4": {
+                "type": "text",
+                "fields": {
+                   "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 256
+                   }
+                }
+             }
+```
+
+StarRocks uses the keyword data type to convert the query statement. Since the keyword length of the column exceeds 256, the column cannot be queried.
+
+Solution: Remove the field mapping
+
+```json
+            "fields": {
+                   "keyword": {
+                      "type": "keyword",
+                      "ignore_above": 256
+                   }
+                }
+```
+
+to use the text type instead.
+
+## How to quickly count the size of StarRocks databases and tables and the disk resources they occupy?
+
+You can use the [SHOW DATA](../sql-reference/sql-statements/Database/SHOW_DATA.md) command to view the storage size of databases and tables.
+
+`SHOW DATA;` displays the data volume and replica count of all tables in the current database.
+
+`SHOW DATA FROM <db_name>.<table_name>;` displays the data volume, replica count, and row count of a specific table in a specified database.
+
+## Why does using a function on a partition key slow down queries?
+
+Using a function on a partition key can lead to inaccurate partition pruning, thereby reducing query performance.
+
+## Why doesn't the DELETE statement support nested functions?
+
+```SQL
+mysql > DELETE FROM starrocks.ods_sale_branch WHERE create_time >= concat(substr(202201,1,4),'01') and create_time <= concat(substr(202301,1,4),'12');
+
+SQL Error [1064][42000]: Right expr of binary predicate should be value
+```
+
+BINARY predicates must be of the `column op literal` type and cannot be expressions. There are currently no plans to support expressions as comparison values.
+
+## How to name columns with reserved keywords?
+
+Reserved keywords (e.g., `rank`) need to be escaped, such as using `` `rank` ``.
+
+## How to stop an executing SQL?
+
+You can use `show processlist;` to view executing SQL and use `kill <id>;` to terminate the corresponding SQL. You can also view and manage through `SHOW PROC '/current_queries';`.
+
+## How to clean up idle connections?
+
+You can control the timeout for idle connections through the session variable `wait_timeout` (unit: seconds). MySQL automatically cleans up idle connections after about 8 hours by default.
+
+## Are multiple SQL segments in UNION ALL executed in parallel?
+
+Yes, they are executed in parallel.
+
+## What should be done if a SQL causes BE to crash?
+
+1. Based on the `be.out` error stack, find the `query_id` that caused the crash.
+2. Find the corresponding SQL in `fe.audit.log` using the `query_id`.
+
+Please collect and send the following information to the support team:
+
+- `be.out` log
+- Run `pstack $be_pid > pstack.log` to execute SQL.
+- Core Dump file
+
+Steps to collect Core files:
+
+1. Get the corresponding BE process:
+
+   ```Bash
+   ps aux| grep be
+   ```
+
+2. Set the Core file size limit to unlimited.
+
+   ```Bash
+   prlimit -p $bePID --core=unlimited:unlimited
+   ```
+
+   Verify if the size limit is unlimited.
+
+   ```Bash
+   cat /proc/$bePID/limits
+   ```
+
+If it is not `0`, the system will generate a Core file in the root directory of the BE deployment when the process crashes.
+
+## How to use Hints to control table join optimizer behavior?
+
+Supports `broadcast` and `shuffle` Hints. For example:
+
+- `select * from a join [broadcast] b on a.id = b.id;`
+- `select * from a join [shuffle] b on a.id = b.id;`
+
+## How to increase SQL query concurrency?
+
+By adjusting the session variable `pipeline_dop`.
+
+## How to check the execution progress of DDL?
+
+- View all column modification tasks in the default database:
+
+   ```SQL
+   SHOW ALTER TABLE COLUMN;
+   ```
+
+- View the most recent column modification task for a specific table:
+
+   ```SQL
+   SHOW ALTER TABLE COLUMN WHERE TableName="table1" ORDER BY CreateTime DESC LIMIT 1;
+   ```
+
+## Why does comparing floating-point numbers sometimes result in inconsistent query results?
+
+Directly using floating-point numbers `=` for comparison can lead to instability due to errors. It is recommended to use range checks.
+
+## Why does floating-point calculation result in errors?
+
+FLOAT/DOUBLE types have precision errors in `avg`, `sum`, and other calculations, leading to potentially inconsistent query results. For high precision, use the DECIMAL type, but note that performance will decrease by 2-3 times.
+
+## Why does ORDER BY in a subquery not take effect?
+
+In distributed execution, if ORDER BY is not specified in the outer layer of the subquery, global ordering cannot be guaranteed. This is expected behavior.
+
+## Why is the result of row_number() inconsistent across multiple executions?
+
+If the ORDER BY field has duplicates (e.g., multiple rows with the same `createTime`), SQL standards do not guarantee stable sorting. It is recommended to include a unique field (e.g., `employee_id`) in the ORDER BY to ensure stability.
+
+## What information is needed for SQL optimization or troubleshooting?
+
+- `EXPLAIN COSTS <SQL>` (includes statistics)
+- `EXPLAIN VERBOSE <SQL>` (includes data types, nullable, optimization strategies)
+- Query Profile (viewable through the FE Web interface at `http://<fe_ip>:<fe_http_port>` and navigating to the Queries Tab)
+- Query Dump (obtained via HTTP API)
+
+  ```Bash
+  wget --user=${username} --password=${password} --post-file ${query_file} http://${fe_host}:${fe_http_port}/api/query_dump?db=${database} -O ${dump_file}
+  ```
+
+Query Dump includes the following information:
+
+- Query statement
+- Table schema referenced in the query
+- Session variables
+- Number of BEs
+- Statistics (Min, Max values)
+- Exception information (exception stack)
+
+## How to check data skew?
+
+Use `ADMIN SHOW REPLICA DISTRIBUTION FROM <table>` to view the distribution of tablets.
+
+## How to troubleshoot memory-related errors?
+
+There are three common scenarios:
+
+- **Single query memory limit exceeded:**
+  - Error: `Mem usage has exceed the limit of single query, You can change the limit by set session variable exec_mem_limit.`
+  - Solution: Adjust `exec_mem_limit`
+- **Query pool memory limit exceeded:**
+  - Error: `Mem usage has exceed the limit of query pool`
+  - Solution: Optimize the SQL.
+- **BE total memory limit exceeded:**
+  - Error: `Mem usage has exceed the limit of BE`
+  - Solution: Analyze memory usage.
+
+Memory analysis methods:
+
+```Bash
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/metrics | grep "^starrocks_be_.*_mem_bytes\|^starrocks_be_tcmalloc_bytes_in_use"
+curl -XGET -s http://BE_IP:BE_HTTP_PORT/mem_tracker
+```
+
+---
+
+## What to do when encountering the error `StarRocks planner use long time xxx ms in logical phase`?
+
+1. Analyze `fe.gc.log` to check for Full GC occurrences.
+2. If the SQL execution plan is complex, increase `new_planner_optimize_timeout` (unit: ms):
+
+   ```SQL
+   set global new_planner_optimize_timeout = 6000;
+   ```
+
+## How to troubleshoot Unknown Error?
+
+Try adjusting the following parameters one by one and then re-execute the SQL:
+
+```SQL
+set disable_join_reorder = true;
+set enable_global_runtime_filter = false;
+set enable_query_cache = false;
+set cbo_enable_low_cardinality_optimize = false;
+```
+
+Then collect EXPLAIN COSTS, EXPLAIN VERBOSE, PROFILE, and Query Dump, and provide them to the support team.
+
+## What time zone does `select now()` return?
+
+It returns the time zone specified by the `time_zone` system variable. FE/BE logs use the machine's local time zone.
+
+## Why does SQL slow down under high concurrency even when resources are normal?
+
+The reason is high network or RPC latency. You can adjust the BE parameter `brpc_connection_type` to `pooled` and then restart BE.
+
+## How to disable statistics collection?
+
+- Disable automatic collection:
+
+  ```SQL
+  enable_statistic_collect = false;
+  ```
+
+- Disable import-triggered collection:
+
+  ```SQL
+  enable_statistic_collect_on_first_load = false;
+  ```
+
+- For versions upgraded to v3.3 and above, manually set:
+
+  ```SQL
+  set global analyze_mv = "";
+  ```

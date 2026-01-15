@@ -182,6 +182,7 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARIANT:
     case TYPE_NULL:
     case TYPE_FUNCTION:
     case TYPE_TIME:
@@ -308,11 +309,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -354,11 +359,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -401,11 +410,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -448,11 +461,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -497,11 +514,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     bool support_original_bloom_filter() const override { return true; }
@@ -530,7 +551,15 @@ public:
     ColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
             : Base(PredicateType::kNE, type_info, id, value) {}
 
-    bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
+        const auto type_info = this->type_info();
+        if (min == max) {
+            return type_info->cmp(Datum(this->_value), min) != 0;
+        }
+        return true;
+    }
 
     bool support_bitmap_filter() const override { return false; }
 
@@ -540,11 +569,15 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &this->_value, query_type, &roaring));
         *row_bitmap -= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -717,12 +750,16 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
@@ -761,12 +798,16 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
@@ -804,12 +845,16 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::GREATER_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
@@ -848,12 +893,16 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_THAN_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
@@ -891,12 +940,16 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap &= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
 };
 
@@ -907,7 +960,7 @@ public:
     using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
 
     BinaryColumnNePredicate(const TypeInfoPtr& type_info, ColumnId id, ValueType value)
-            : Base(PredicateType::kNE, type_info, id, value) {}
+            : Base(PredicateType::kNE, type_info, id, value), _is_empty_string(value.empty()) {}
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
@@ -919,13 +972,62 @@ public:
 
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
+#ifndef __APPLE__
         Slice padded_value(Base::_zero_padded_str);
         InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap -= roaring;
         return Status::OK();
+#else
+        return Status::OK();
+#endif
     }
+
+    // Optimized evaluate_branchless for empty string comparison
+    StatusOr<uint16_t> evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
+        if (!_is_empty_string) {
+            // For non-empty string, use base class implementation
+            return Base::evaluate_branchless(column, sel, sel_size);
+        }
+
+        // Fast path for col != ''
+        // Only need to check if length > 0, no need to compare actual data
+        const BinaryColumn* binary_column;
+        if (column->is_nullable()) {
+            binary_column =
+                    down_cast<const BinaryColumn*>(down_cast<const NullableColumn*>(column)->data_column().get());
+        } else {
+            binary_column = down_cast<const BinaryColumn*>(column);
+        }
+
+        const auto& offsets = binary_column->get_offset();
+        const uint32_t* offset_data = offsets.data();
+        uint16_t new_size = 0;
+
+        if (!column->has_null()) {
+            // Non-nullable column: just check length != 0
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                uint32_t len = offset_data[data_idx + 1] - offset_data[data_idx];
+                sel[new_size] = data_idx;
+                new_size += (len != 0); // Branchless: increment only if len > 0
+            }
+        } else {
+            // Nullable column: check not null AND length != 0
+            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
+            for (uint16_t i = 0; i < sel_size; ++i) {
+                uint16_t data_idx = sel[i];
+                uint32_t len = offset_data[data_idx + 1] - offset_data[data_idx];
+                sel[new_size] = data_idx;
+                new_size += (!is_null[data_idx]) & (len != 0); // Branchless
+            }
+        }
+        return new_size;
+    }
+
+private:
+    const bool _is_empty_string;
 };
 
 ColumnPredicate* new_column_ne_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {

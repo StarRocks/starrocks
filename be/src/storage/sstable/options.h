@@ -8,10 +8,12 @@
 #include <memory>
 #include <string>
 
+#include "storage/del_vector.h"
 #include "storage/sstable/sstable_predicate_fwd.h"
 
 namespace starrocks {
 class Cache;
+class RandomAccessFile;
 
 namespace sstable {
 
@@ -131,6 +133,17 @@ struct ReadOptions {
     ReadIOStat* stat = nullptr;
 
     SstablePredicateSPtr predicate = nullptr;
+
+    // When sst was generated during data write & compaction process,
+    // these two fields are used to indicate the shared rssid & version
+    uint32_t shared_rssid = 0;
+    int64_t shared_version = 0;
+
+    // Mark rows that have been deleted in this sst
+    DelVectorPtr delvec = nullptr;
+
+    // Use for multi-thread read scenario, to avoid multiple threads read same file concurrently
+    RandomAccessFile* file = nullptr;
 };
 
 // Options that control write operations

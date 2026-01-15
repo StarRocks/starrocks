@@ -24,3 +24,5 @@ insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k
 insert into t2 select a.k from t1 a join t1 b on a.k = b.k where a.k = 0 and b.k = 0;
 
 select count(*) from t2;
+
+admin disable failpoint 'report_exec_state_failed_status';

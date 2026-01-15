@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.qe.StmtExecutor;
@@ -250,8 +251,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = alterMvStmt.getMvName().getDb();
-        String mvName = alterMvStmt.getMvName().getTbl();
+        String dbName = alterMvStmt.getDbName();
+        String mvName = alterMvStmt.getMvName();
         Assertions.assertEquals("test", dbName);
         Assertions.assertEquals("mv_to_refresh", mvName);
 
@@ -306,7 +307,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         Partition p2 = table.getPartition("p2");
         if (p2.getDefaultPhysicalPartition().getVisibleVersion() == 3) {
             MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
-            Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+            Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
             Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
             partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
             Assertions.assertTrue(partitionsToRefresh1.isEmpty());
@@ -316,10 +317,10 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         } else {
             // publish version is async, so version update may be late
             // for debug
-            System.out.println("p1 visible version:" + p1.getDefaultPhysicalPartition().getVisibleVersion());
-            System.out.println("p2 visible version:" + p2.getDefaultPhysicalPartition().getVisibleVersion());
-            System.out.println("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
-            System.out.println("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
+            logSysInfo("p1 visible version:" + p1.getDefaultPhysicalPartition().getVisibleVersion());
+            logSysInfo("p2 visible version:" + p2.getDefaultPhysicalPartition().getVisibleVersion());
+            logSysInfo("mv1 refresh context" + mv1.getRefreshScheme().getAsyncRefreshContext());
+            logSysInfo("mv2 refresh context" + mv2.getRefreshScheme().getAsyncRefreshContext());
         }
     }
 
@@ -626,8 +627,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb());
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
@@ -730,8 +731,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb());
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
@@ -1181,7 +1182,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-                System.out.println(mv.getPartitionNames());
+                logSysInfo(mv.getPartitionNames());
             });
         }
         starRocksAssert.dropTable("t1");
@@ -1233,7 +1234,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
                 Assertions.assertEquals(2, mv.getPartitionExprMaps().size());
-                System.out.println(mv.getPartitionNames());
+                logSysInfo(mv.getPartitionNames());
             });
         }
         starRocksAssert.dropTable("t1");
@@ -1282,9 +1283,9 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                 MaterializedView mv =
                         (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
-                System.out.println(mv.getPartitionExprMaps());
+                logSysInfo(mv.getPartitionExprMaps());
                 Assertions.assertEquals(2, mv.getPartitionExprMaps().size());
-                System.out.println(mv.getPartitionNames());
+                logSysInfo(mv.getPartitionNames());
             });
         }
         starRocksAssert.dropTable("t1");

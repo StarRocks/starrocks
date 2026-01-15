@@ -44,7 +44,6 @@
 #include <vector>
 
 #include "arrow_memory_pool.h"
-#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -81,10 +80,7 @@ class ParquetOutputStream;
 
 namespace starrocks::formats {
 
-struct FileColumnId {
-    int32_t field_id = -1;
-    std::vector<FileColumnId> children;
-};
+using FileColumnId = ::starrocks::parquet::FileColumnId;
 
 struct ParquetWriterOptions : FileWriterOptions {
     int64_t dictionary_pagesize = 1024 * 1024; // 1MB
@@ -118,21 +114,16 @@ public:
 
     int64_t get_allocated_bytes() override;
 
+    int64_t get_flush_batch_size() override;
+
     Status write(Chunk* chunk) override;
 
     CommitResult commit() override;
 
 private:
-    static StatusOr<::parquet::Compression::type> _convert_compression_type(TCompressionType::type type);
-
     arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
             const std::vector<FileColumnId>& file_column_ids);
-
-    arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
-                                                                const TypeDescriptor& type_desc,
-                                                                ::parquet::Repetition::type rep_type,
-                                                                FileColumnId file_column_id);
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
@@ -160,7 +151,7 @@ class ParquetFileWriterFactory : public FileWriterFactory {
 public:
     ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, TCompressionType::type compression_type,
                              std::map<std::string, std::string> options, std::vector<std::string> column_names,
-                             std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
                              RuntimeState* runtime_state);
 
@@ -176,7 +167,7 @@ private:
     std::shared_ptr<ParquetWriterOptions> _parsed_options;
 
     std::vector<std::string> _column_names;
-    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+    std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
 };

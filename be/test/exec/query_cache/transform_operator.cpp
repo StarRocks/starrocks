@@ -58,8 +58,8 @@ Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& c
     DCHECK(_cur_chunk == nullptr);
     DCHECK(chunk != nullptr && !chunk->is_empty());
     DCHECK(chunk->num_columns() == 1);
-    auto column = chunk->get_column_by_slot_id(SlotId(1));
-    auto* col = dynamic_cast<DoubleColumn*>(column.get());
+    auto* column = chunk->get_column_raw_ptr_by_slot_id(SlotId(1));
+    auto* col = dynamic_cast<DoubleColumn*>(column);
     DCHECK(col != nullptr);
     auto num_rows = col->size();
     auto& data = col->get_data();
@@ -116,7 +116,7 @@ Status ReduceSinkOperator::push_chunk(starrocks::RuntimeState* state, const Chun
     auto column = chunk->get_column_by_slot_id(SlotId(1));
     const auto* col = dynamic_cast<const DoubleColumn*>(column.get());
     DCHECK(col != nullptr);
-    const auto& data = col->get_data();
+    const auto& data = col->immutable_data();
     const auto num_rows = data.size();
     auto reduce_func = _reducer->reduce_func();
     for (auto i = 0; i < num_rows; ++i) {

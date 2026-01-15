@@ -38,7 +38,9 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - Parquet and ORC files support the following compression formats: NO_COMPRESSION, SNAPPY, LZ4, ZSTD, and GZIP.
   - Textfile files support the NO_COMPRESSION compression format.
 
-  You can use the session variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+  You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+
+  When writing to a Hive table, if the table's properties include a compression codec, StarRocks will preferentially use that algorithm to compress the written data. Otherwise, it will use the compression algorithm set in the system variable `connector_sink_compression_codec`.
 
 ## Integration preparations
 
@@ -480,6 +482,7 @@ In most cases, if your Hive data is updated at a granularity of 1 hour or less, 
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 | enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+| remote_file_cache_memory_ratio         | No       | The maximum memory usage ratio for the remote file cache. Default value: `0.1`, which is 10%. Supported from v3.5.6 onwards. |
 
 ### Examples
 
@@ -950,7 +953,7 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md), or [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) statement to create a managed table in that Hive database.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md), or [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) statement to create a managed table in that Hive database.
 
 This feature is supported since v3.2 in which version StarRocks only supports creating Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports creating ORC- and Textfile-formatted Hive tables.
 
@@ -1020,7 +1023,7 @@ The following table describes a few key properties.
 | ----------------- | ------------------------------------------------------------ |
 | location          | The file path in which you want to create the managed table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
 | file_format       | The file format of the managed table. Supported file formats are Parquet, ORC, and Textfile. ORC and Textfile formats are supported from v3.3 onwards. Valid values: `parquet`, `orc`, and `textfile`. Default value: `parquet`. |
-| compression_codec | The compression algorithm used for the managed table. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Hive tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec). |
+| compression_codec | The compression algorithm used for the managed table.        |
 
 ### Examples
 
@@ -1067,7 +1070,7 @@ Note that sinking data to external tables is disabled by default. To sink data t
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the session variable [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+- You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
 
 :::
 
@@ -1152,6 +1155,56 @@ The following DMLs use the default file format Parquet as an example.
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## Truncate a Hive table
+
+You can use the [TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) statement to quickly delete all data from Hive managed tables. This operation supports:
+
+- Truncating all data in non-partitioned tables
+- Truncating all partitions in a partitioned table
+- Truncating specific partitions in a partitioned table
+
+### Syntax
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### Parameters
+
+- `table_name`: The name of the Hive table that you want to truncate data from. You need to [Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it) before you truncate the table in that database.
+- `partition_name = partition_value`: The name and value of the partition column(s) to identify which partition(s) to truncate.
+
+### Examples
+
+Switch to a Hive catalog and a database in it, and then use the following statements to truncate a Hive table in that database.
+
+1. Truncate a non-partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. Truncate all partitions of a partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. Truncate a single-partition partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. Truncate specific partitions of a multi-partition partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
    ```
 
 ## Drop a Hive table

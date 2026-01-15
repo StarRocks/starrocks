@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
@@ -69,10 +70,6 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
         }
 
         domainMap.put(left, new DomainMessage(binaryPredicate));
-        List<ColumnRefOperator> usedCols = left.getColumnRefs();
-        if (Sets.newHashSet(usedCols).size() == 1 && !domainMap.containsKey(usedCols.get(0))) {
-            domainMap.put(usedCols.get(0), new DomainMessage(binaryPredicate, false));
-        }
         return domainMap;
     }
 
@@ -89,6 +86,11 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
             return predicate.isAnd() ? mergeAndMap(leftDomainMap, rightDomainMap) : mergeOrMap(leftDomainMap, rightDomainMap);
         }
 
+    }
+
+    @Override
+    public Map<ScalarOperator, DomainMessage> visitLargeInPredicate(LargeInPredicateOperator predicate, Void context) {
+        throw new UnsupportedOperationException("not support large in predicate in the DomainPropertyDeriver");
     }
 
     @Override

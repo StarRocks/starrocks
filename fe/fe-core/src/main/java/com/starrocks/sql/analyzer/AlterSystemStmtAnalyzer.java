@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
@@ -26,7 +25,7 @@ import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CleanTabletSchedQClause;
@@ -34,6 +33,7 @@ import com.starrocks.sql.ast.ComputeNodeClause;
 import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
+import com.starrocks.sql.ast.HostPort;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -49,7 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
-public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext> {
+public class AlterSystemStmtAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
     public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
     private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
 
@@ -64,7 +64,7 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
             for (String hostPort : stmt.getHostPorts()) {
                 Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
-                stmt.getHostPortPairs().add(pair);
+                stmt.getHostPortPairs().add(new HostPort(pair.first, pair.second));
             }
         }
     }
@@ -74,7 +74,7 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
         for (String hostPort : computeNodeClause.getHostPorts()) {
             Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
                     computeNodeClause instanceof AddComputeNodeClause && !FrontendOptions.isUseFqdn());
-            computeNodeClause.getHostPortPairs().add(pair);
+            computeNodeClause.getHostPortPairs().add(new HostPort(pair.first, pair.second));
         }
         Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
         return null;
@@ -82,11 +82,11 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
 
     @Override
     public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
-        List<Pair<String, Integer>> hostPortPairs = new ArrayList<>();
+        List<HostPort> hostPortPairs = new ArrayList<>();
         for (String hostPort : backendClause.getHostPortsUnResolved()) {
             Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
                     backendClause instanceof AddBackendClause && !FrontendOptions.isUseFqdn());
-            hostPortPairs.add(pair);
+            hostPortPairs.add(new HostPort(pair.first, pair.second));
         }
         backendClause.setHostPortPairs(hostPortPairs);
         Preconditions.checkState(!hostPortPairs.isEmpty());
@@ -100,8 +100,7 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
                         (frontendClause instanceof AddFollowerClause
                                 || frontendClause instanceof AddObserverClause)
                                 && !FrontendOptions.isUseFqdn());
-        frontendClause.setHost(pair.first);
-        frontendClause.setPort(pair.second);
+        frontendClause.setHostPortObj(new HostPort(pair.first, pair.second));
         Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
         return null;
     }
@@ -179,7 +178,7 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
         if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
             for (String hostPort : clause.getHostPorts()) {
                 Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
-                clause.getHostPortPairs().add(pair);
+                clause.getHostPortPairs().add(new HostPort(pair.first, pair.second));
             }
             Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
         }
@@ -187,10 +186,9 @@ public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext>
     }
 
     private void validateBrokerName(ModifyBrokerClause clause) {
-        try {
-            clause.validateBrokerName();
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        String brokerName = clause.getBrokerName();
+        if (Strings.isNullOrEmpty(brokerName)) {
+            throw new SemanticException("Broker's name can't be empty.");
         }
     }
 }

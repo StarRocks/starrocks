@@ -18,18 +18,15 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -53,7 +50,35 @@ public class JDBCScanNode extends ScanNode {
         super(id, desc, "SCAN JDBC");
         table = tbl;
         String objectIdentifier = getIdentifierSymbol();
-        tableName = objectIdentifier + tbl.getCatalogTableName() + objectIdentifier;
+        tableName = wrapWithIdentifier(tbl.getCatalogTableName(), objectIdentifier);
+    }
+
+    private String wrapWithIdentifier(String name, String identifier) {
+        if (name == null) {
+            return "";
+        }
+        if (identifier.isEmpty()) {
+            return name;
+        }
+        // If name already have identifier wrapped, just return
+        if (name.length() > 2 && name.startsWith(identifier) && name.endsWith(identifier)) {
+            return name;
+        }
+
+        String[] parts = name.split("\\.", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                sb.append(".");
+            }
+            String part = parts[i];
+            if (part.length() > 2 && part.startsWith(identifier) && part.endsWith(identifier)) {
+                sb.append(part);
+            } else {
+                sb.append(identifier).append(part).append(identifier);
+            }
+        }
+        return sb.toString();
     }
 
     @Override
@@ -63,10 +88,10 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+    public void finalizeStats() throws StarRocksException {
         createJDBCTableColumns();
         createJDBCTableFilters();
-        computeStats(analyzer);
+        computeStats();
     }
 
     public void computeColumnsAndFilters() {
@@ -101,26 +126,44 @@ public class JDBCScanNode extends ScanNode {
             if (!slot.isMaterialized()) {
                 continue;
             }
-            Column col = slot.getColumn();
-            columns.add(objectIdentifier + col.getName() + objectIdentifier);
+            String colName = slot.getColumn().getName();
+            if (objectIdentifier.isEmpty() || (
+                    colName.startsWith(objectIdentifier) && colName.endsWith(objectIdentifier))) {
+                columns.add(colName);
+            } else {
+                columns.add(objectIdentifier + colName + objectIdentifier);
+            }
         }
-        // this happends when count(*)
-        if (0 == columns.size()) {
+        // this happens when count(*)
+        if (columns.isEmpty()) {
             columns.add("*");
         }
     }
 
-    private boolean isMysql() {
+    private String getJdbcUri() {
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
         // Compatible with jdbc catalog
-        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
-        return jdbcURI.startsWith("jdbc:mysql");
+        return resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
     }
 
     private String getIdentifierSymbol() {
-        //TODO: for other jdbc table we need different objectIdentifier to support reserved key words
-        return isMysql() ? "`" : "";
+        String jdbcUri = getJdbcUri();
+        if (jdbcUri == null) {
+            return "";
+        }
+        if (jdbcUri.startsWith("jdbc:mysql") ||
+                jdbcUri.startsWith("jdbc:mariadb") ||
+                jdbcUri.startsWith("jdbc:clickhouse")) {
+            return "`";
+        }
+        if (jdbcUri.startsWith("jdbc:postgresql") ||
+                jdbcUri.startsWith("jdbc:postgres") ||
+                jdbcUri.startsWith("jdbc:oracle") ||
+                jdbcUri.startsWith("jdbc:sqlserver")) {
+            return "\"";
+        }
+        return "";
     }
 
     private void createJDBCTableFilters() {
@@ -128,7 +171,7 @@ public class JDBCScanNode extends ScanNode {
             return;
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
-        Expr.collectList(conjuncts, SlotRef.class, slotRefs);
+        ExprUtils.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
         String identifier = getIdentifierSymbol();
         for (SlotRef slotRef : slotRefs) {
@@ -138,9 +181,9 @@ public class JDBCScanNode extends ScanNode {
             sMap.put(slotRef, tmpRef);
         }
 
-        ArrayList<Expr> jdbcConjuncts = Expr.cloneList(conjuncts, sMap);
+        ArrayList<Expr> jdbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
-            p = p.replaceLargeStringLiteral();
+            p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(AstToStringBuilder.toString(p));
         }
     }
@@ -167,8 +210,8 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
-    public void computeStats(Analyzer analyzer) {
-        super.computeStats(analyzer);
+    public void computeStats() {
+        super.computeStats();
     }
 
 }

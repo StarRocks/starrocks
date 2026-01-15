@@ -174,7 +174,7 @@ public class CheckConsistencyJob {
             }
 
             checkedVersion = physicalPartition.getVisibleVersion();
-            checkedSchemaHash = olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId());
+            checkedSchemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
 
             int sentTaskReplicaNum = 0;
             long maxDataSize = 0;
@@ -292,9 +292,9 @@ public class CheckConsistencyJob {
             }
 
             // check if schema has changed
-            if (checkedSchemaHash != olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId())) {
+            if (checkedSchemaHash != olapTable.getSchemaHashByIndexMetaId(index.getMetaId())) {
                 LOG.info("index[{}]'s schema hash has been changed. [{} -> {}]. retry", tabletMeta.getIndexId(),
-                            checkedSchemaHash, olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId()));
+                            checkedSchemaHash, olapTable.getSchemaHashByIndexMetaId(index.getMetaId()));
                 return -1;
             }
 
@@ -342,7 +342,7 @@ public class CheckConsistencyJob {
                 }
 
                 if (isConsistent) {
-                    LOG.info("tablet[{}] is consistent: {}", tabletId, checksumMap.keySet());
+                    LOG.debug("tablet[{}] is consistent: {}", tabletId, checksumMap.keySet());
                 } else {
                     StringBuilder sb = new StringBuilder();
                     sb.append("tablet[").append(tabletId).append("] is not consistent: ");
@@ -375,7 +375,7 @@ public class CheckConsistencyJob {
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), physicalPartition.getId(),
                         index.getId(), tabletId, lastCheckTime,
                         checkedVersion, isConsistent);
-            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
+            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
         }
 
         // Wait for edit log write finish out of db lock.

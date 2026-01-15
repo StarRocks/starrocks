@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -136,6 +137,16 @@ public class RuntimeProfile {
         return addCounter(name, type, strategy, ROOT_COUNTER);
     }
 
+    @VisibleForTesting
+    public void addCounter(String name, String parentName, Counter counter) {
+        this.counterMap.put(name, Pair.create(counter, parentName));
+        if (!childCounterMap.containsKey(parentName)) {
+            childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+        }
+        Set<String> childNames = childCounterMap.get(parentName);
+        childNames.add(name);
+    }
+
     public Counter addCounter(String name, TUnit type, TCounterStrategy strategy, String parentName) {
         if (strategy == null) {
             strategy = Counter.createStrategy(type);
@@ -165,6 +176,9 @@ public class RuntimeProfile {
 
         // Remove from its parent sub sets
         Pair<Counter, String> pair = counterMap.get(name);
+        if (pair == null) {
+            return;
+        }
         String parentName = pair.second;
         if (childCounterMap.containsKey(parentName)) {
             Set<String> childNames = childCounterMap.get(parentName);
@@ -316,9 +330,13 @@ public class RuntimeProfile {
                         // Running profile will report multiple times, we only need the last time value
                         if (tcounter.isSetMin_value()) {
                             counter.setMinValue(tcounter.getMin_value());
+                        } else {
+                            counter.clearMinValue();
                         }
                         if (tcounter.isSetMax_value()) {
                             counter.setMaxValue(tcounter.getMax_value());
+                        } else {
+                            counter.clearMaxValue();
                         }
                         tCounterMap.remove(topName);
                     }
@@ -354,9 +372,13 @@ public class RuntimeProfile {
                 // Running profile will report multiple times, we only need the last time value
                 if (tcounter.isSetMin_value()) {
                     counter.setMinValue(tcounter.getMin_value());
+                } else {
+                    counter.clearMinValue();
                 }
                 if (tcounter.isSetMax_value()) {
                     counter.setMaxValue(tcounter.getMax_value());
+                } else {
+                    counter.clearMaxValue();
                 }
             }
         }

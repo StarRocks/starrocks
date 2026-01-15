@@ -15,16 +15,14 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.TypeFactory;
 
 import java.util.List;
 import java.util.function.Function;
@@ -36,43 +34,35 @@ import java.util.stream.Collectors;
  */
 public class ShowRunningQueriesStmt extends ShowStmt {
     private static final List<Pair<Column, Function<LogicalSlot, String>>> META_DATA = ImmutableList.of(
-            Pair.create(new Column("QueryId", ScalarType.createVarchar(64)),
+            Pair.create(new Column("QueryId", TypeFactory.createVarcharType(64)),
                     slot -> DebugUtil.printId(slot.getSlotId())),
-            Pair.create(new Column("WarehouseId", ScalarType.createVarchar(64)),
+            Pair.create(new Column("WarehouseId", TypeFactory.createVarcharType(64)),
                     slot -> slot.getWarehouseId() == WarehouseManager.DEFAULT_WAREHOUSE_ID  ? "-" :
                             Long.toString(slot.getWarehouseId())),
-            Pair.create(new Column("ResourceGroupId", ScalarType.createVarchar(64)),
+            Pair.create(new Column("ResourceGroupId", TypeFactory.createVarcharType(64)),
                     slot -> slot.getGroupId() == LogicalSlot.ABSENT_GROUP_ID ? "-" : Long.toString(slot.getGroupId())),
-            Pair.create(new Column("StartTime", ScalarType.createVarchar(64)),
+            Pair.create(new Column("StartTime", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getStartTimeMs())),
-            Pair.create(new Column("PendingTimeout", ScalarType.createVarchar(64)),
+            Pair.create(new Column("PendingTimeout", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getExpiredPendingTimeMs())),
-            Pair.create(new Column("QueryTimeout", ScalarType.createVarchar(64)),
+            Pair.create(new Column("QueryTimeout", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getExpiredAllocatedTimeMs())),
-            Pair.create(new Column("State", ScalarType.createVarchar(64)),
+            Pair.create(new Column("State", TypeFactory.createVarcharType(64)),
                     slot -> slot.getState().toQueryStateString()),
-            Pair.create(new Column("Slots", ScalarType.createVarchar(64)),
+            Pair.create(new Column("Slots", TypeFactory.createVarcharType(64)),
                     slot -> Integer.toString(slot.getNumPhysicalSlots())),
-            Pair.create(new Column("Fragments", ScalarType.createVarchar(64)),
+            Pair.create(new Column("Fragments", TypeFactory.createVarcharType(64)),
                     slot -> Integer.toString(slot.getNumFragments())),
-            Pair.create(new Column("DOP", ScalarType.createVarchar(64)),
+            Pair.create(new Column("DOP", TypeFactory.createVarcharType(64)),
                     slot -> Integer.toString(slot.getPipelineDop())),
-            Pair.create(new Column("Frontend", ScalarType.createVarchar(64)),
+            Pair.create(new Column("Frontend", TypeFactory.createVarcharType(64)),
                     LogicalSlot::getRequestFeName),
-            Pair.create(new Column("FeStartTime", ScalarType.createVarchar(64)),
+            Pair.create(new Column("FeStartTime", TypeFactory.createVarcharType(64)),
                     slot -> TimeUtils.longToTimeString(slot.getFeStartTimeMs()))
     );
 
-    private static final ShowResultSetMetaData COLUMN_META_DATA;
-
     private static final List<Function<LogicalSlot, String>> COLUMN_SUPPLIERS = META_DATA.stream()
             .map(item -> item.second).collect(Collectors.toList());
-
-    static {
-        ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
-        META_DATA.forEach(item -> builder.addColumn(item.first));
-        COLUMN_META_DATA = builder.build();
-    }
 
     private final int limit;
 
@@ -87,17 +77,7 @@ public class ShowRunningQueriesStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowRunningQueriesStatement(this, context);
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return COLUMN_META_DATA;
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_NO_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitShowRunningQueriesStatement(this, context);
     }
 
     public int getLimit() {

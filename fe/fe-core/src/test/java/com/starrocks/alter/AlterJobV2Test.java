@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -60,7 +61,7 @@ import java.util.Map;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
-public class AlterJobV2Test {
+public class AlterJobV2Test extends StarRocksTestBase {
     private static ConnectContext connectContext;
 
     private static StarRocksAssert starRocksAssert;
@@ -127,8 +128,8 @@ public class AlterJobV2Test {
         ShowAlterStmt showAlterStmt =
                     (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showAlterStmt, connectContext);
-        System.out.println(showResultSet.getMetaData());
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getMetaData());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     @Test
@@ -141,11 +142,11 @@ public class AlterJobV2Test {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
+                logSysInfo(
                             "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
                 Thread.sleep(1000);
             }
-            System.out.println("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
+            logSysInfo("alter job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
             Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
         // 3. check show alter table column
@@ -153,8 +154,8 @@ public class AlterJobV2Test {
         ShowAlterStmt showAlterStmt =
                     (ShowAlterStmt) UtFrameUtils.parseStmtWithNewParser(showAlterStmtStr, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showAlterStmt, connectContext);
-        System.out.println(showResultSet.getMetaData());
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getMetaData());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     @Test
@@ -171,8 +172,8 @@ public class AlterJobV2Test {
         ShowCreateTableStmt showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
         ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getMetaData());
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getMetaData());
+        logSysInfo(showResultSet.getResultRows());
 
         // 4. process a modify table properties job(in_memory)
         String alterStmtStr2 = "alter table test.properties_change_test set ('in_memory' = 'true');";
@@ -186,8 +187,8 @@ public class AlterJobV2Test {
         showCreateTableStmt =
                     (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateTableStr, connectContext);
         showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
-        System.out.println(showResultSet.getMetaData());
-        System.out.println(showResultSet.getResultRows());
+        logSysInfo(showResultSet.getMetaData());
+        logSysInfo(showResultSet.getResultRows());
     }
 
     @Test
@@ -347,7 +348,7 @@ public class AlterJobV2Test {
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
                             .getCurrentState().getLocalMetastore().getDb("test").getTable("mv4");
                 Assertions.assertFalse(mv.isActive());
-                System.out.println(mv.getInactiveReason());
+                logSysInfo(mv.getInactiveReason());
                 Assertions.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
             }
         } catch (Exception e) {

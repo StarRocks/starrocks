@@ -15,14 +15,11 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -33,10 +30,15 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
@@ -44,7 +46,9 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -74,7 +78,7 @@ public class CoordinatorTest extends PlanTestBase {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new DefaultCoordinator.Factory().createQueryScheduler(ctx, Lists.newArrayList(), Lists.newArrayList(),
-                new TDescriptorTable());
+                new TDescriptorTable(), null);
         coordinatorPreprocessor = coordinator.getPrepareInfo();
     }
 
@@ -87,7 +91,8 @@ public class CoordinatorTest extends PlanTestBase {
         return fragment;
     }
 
-    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
+    private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode)
+            throws IOException, StarRocksException {
         PlanFragment fragment = genFragment();
         ExecutionFragment execFragment = new ExecutionFragment(null, fragment, 0);
         FragmentInstance instance0 = new FragmentInstance(null, execFragment);
@@ -105,10 +110,14 @@ public class CoordinatorTest extends PlanTestBase {
         execFragment.addInstance(instance2);
 
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node");
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node", table.getBaseIndexMetaId());
         scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
         execFragment.getOrCreateColocatedAssignment(scanNode);
 
@@ -121,12 +130,12 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
-    public void testColocateRuntimeFilter() throws IOException {
+    public void testColocateRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.COLOCATE);
     }
 
     @Test
-    public void testBucketShuffleRuntimeFilter() throws IOException {
+    public void testBucketShuffleRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
@@ -139,7 +148,7 @@ public class CoordinatorTest extends PlanTestBase {
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
                 olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
-                                .getTabletIds().stream())
+                                .getTabletIdsInOrder().stream())
                         .collect(Collectors.toList());
         Assertions.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);
@@ -158,7 +167,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
 
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
         CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(Lists.newArrayList(), scanNodes,
@@ -198,8 +207,8 @@ public class CoordinatorTest extends PlanTestBase {
         TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
         scanTuple.setTable(getOlapTable("t0"));
         TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
-        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", Type.INT, false);
-        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", Type.INT, false);
+        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", IntegerType.INT, false);
+        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", IntegerType.INT, false);
         aggTuple.addSlot(groupBySlot);
         aggTuple.addSlot(aggFuncSlot);
 
@@ -207,7 +216,7 @@ public class CoordinatorTest extends PlanTestBase {
         List<PlanFragment> fragments = new ArrayList<>();
         BinlogScanNode binlogScan = new BinlogScanNode(new PlanNodeId(1), scanTuple);
         binlogScan.setFragmentId(fragmentId);
-        binlogScan.finalizeStats(null);
+        binlogScan.finalizeStats();
         List<ScanNode> scanNodes = Arrays.asList(binlogScan);
 
         // Build agg node

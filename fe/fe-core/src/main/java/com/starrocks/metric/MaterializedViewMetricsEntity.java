@@ -90,6 +90,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
     public Optional<String> dbNameOpt = Optional.empty();
     public Optional<String> mvNameOpt = Optional.empty();
+    public Optional<String> warehouseNameOpt = Optional.empty();
 
     public MaterializedViewMetricsEntity(MetricRegistry metricRegistry, MvId mvId) {
         this.metricRegistry = metricRegistry;
@@ -105,13 +106,16 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getLocalMetastore().getDb(mvId.getDbId());
-        if (db != null) {
-            dbNameOpt = Optional.of(db.getFullName());
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
-            if (table != null) {
-                mvNameOpt = Optional.of(table.getName());
-                return true;
-            }
+        if (db == null) {
+            return false;
+        }
+        this.dbNameOpt = Optional.of(db.getFullName());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+        if (table != null && table.isMaterializedView()) {
+            MaterializedView curMV = (MaterializedView) table;
+            this.mvNameOpt = Optional.of(table.getName());
+            this.warehouseNameOpt = Optional.ofNullable(curMV.getWarehouseName());
+            return true;
         }
         return false;
     }
@@ -311,6 +315,18 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterPartitionCount);
     }
 
+    protected MaterializedView getMaterializedView() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+        if (db == null) {
+            return null;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+        if (table == null || !table.isMaterializedView()) {
+            return null;
+        }
+        return (MaterializedView) table;
+    }
+
     @Override
     public void increaseQueryConsideredCount(long count) {
         this.counterQueryConsideredTotal.increase(count);
@@ -338,8 +354,12 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
     @Override
     public void increaseRefreshJobStatus(Constants.TaskRunState status) {
+        if (status == null || !status.isFinishState()) {
+            return;
+        }
         this.counterRefreshJobTotal.increase(1L);
         switch (status) {
+            case MERGED:
             case SKIPPED:
                 this.counterRefreshJobEmptyTotal.increase(1L);
                 break;

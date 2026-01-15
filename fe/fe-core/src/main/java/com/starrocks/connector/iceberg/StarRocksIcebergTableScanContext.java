@@ -14,12 +14,14 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.cache.Cache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.starrocks.connector.PlanMode;
+import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 
+import java.util.Map;
 import java.util.Set;
 
 public class StarRocksIcebergTableScanContext {
@@ -30,10 +32,12 @@ public class StarRocksIcebergTableScanContext {
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private boolean onlyReadCache;
     private int localParallelism;
     private long localPlanningMaxSlotSize;
     private boolean enableCacheDataFileIdentifierColumnMetrics;
+    private long fileSplitSize;
     private ConnectContext connectContext;
 
     public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
@@ -47,6 +51,9 @@ public class StarRocksIcebergTableScanContext {
         this.tableName = tableName;
         this.planMode = planMode;
         this.connectContext = connectContext;
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
+            this.fileSplitSize = connectContext.getSessionVariable().getConnectorHugeFileSize();
+        }
     }
 
     public String getCatalogName() {
@@ -73,6 +80,10 @@ public class StarRocksIcebergTableScanContext {
         return deleteFileCache;
     }
 
+    public Map<IcebergTableName, Set<String>> getMetaFileCacheMap() {
+        return metaFileCacheMap;
+    }
+
     public void setDataFileCacheWithMetrics(boolean dataFileCacheWithMetrics) {
         this.dataFileCacheWithMetrics = dataFileCacheWithMetrics;
     }
@@ -83,6 +94,10 @@ public class StarRocksIcebergTableScanContext {
 
     public void setDeleteFileCache(Cache<String, Set<DeleteFile>> deleteFileCache) {
         this.deleteFileCache = deleteFileCache;
+    }
+
+    public void setMetaFileCacheMap(Map<IcebergTableName, Set<String>> metaFileCacheMap) {
+        this.metaFileCacheMap = metaFileCacheMap;
     }
 
     public boolean isOnlyReadCache() {
@@ -123,5 +138,9 @@ public class StarRocksIcebergTableScanContext {
 
     public ConnectContext getConnectContext() {
         return connectContext;
+    }
+
+    public long getFileSplitSize() {
+        return fileSplitSize;
     }
 }

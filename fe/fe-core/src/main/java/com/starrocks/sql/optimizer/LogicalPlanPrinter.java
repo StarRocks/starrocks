@@ -18,6 +18,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
@@ -37,12 +39,14 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
@@ -52,6 +56,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
@@ -60,6 +65,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -246,6 +253,19 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalRawValues(OptExpression optExpression, Integer step) {
+            LogicalRawValuesOperator rawValuesOperator = optExpression.getOp().cast();
+            String desc = String.format("logical raw values(constantType=%s, count=%d)",
+                    rawValuesOperator.getConstantType(),
+                    rawValuesOperator.getConstantCount());
+            if (isPrintColumnRef) {
+                desc += " [" + rawValuesOperator.getColumnRefSet()
+                        .stream().map(col -> "" + col).collect(Collectors.joining(", ")) + "]";
+            }
+            return new OperatorStr(desc, step, Collections.emptyList());
+        }
+
+        @Override
         public OperatorStr visitLogicalProject(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
@@ -323,7 +343,9 @@ public class LogicalPlanPrinter {
                     .map(e -> String.format("%d: %s", e.getKey().getId(),
                             scalarOperatorStringFunction.apply(e.getValue())))
                     .collect(Collectors.joining(", "));
-            String windowDefStr = window.getAnalyticWindow() != null ? window.getAnalyticWindow().toSql() : "NONE";
+            String windowDefStr = window.getAnalyticWindow() != null
+                    ? ExprToSql.toSql(window.getAnalyticWindow())
+                    : "NONE";
             String partitionByStr = window.getPartitionExpressions().stream()
                     .map(scalarOperatorStringFunction).collect(Collectors.joining(", "));
             String orderByStr = window.getOrderByElements().stream().map(Ordering::toString)
@@ -538,7 +560,8 @@ public class LogicalPlanPrinter {
                     analytic.getAnalyticCall().toString() + " " +
                     analytic.getPartitionExpressions() + " " +
                     analytic.getOrderByElements() + " " +
-                    (analytic.getAnalyticWindow() == null ? "" : analytic.getAnalyticWindow().toSql()) +
+                    (analytic.getAnalyticWindow() == null ? "" :
+                            ExprToSql.toSql(analytic.getAnalyticWindow())) +
                     ")", step, Collections.singletonList(child));
         }
 
@@ -588,6 +611,20 @@ public class LogicalPlanPrinter {
             valuesStr.delete(valuesStr.length() - 1, valuesStr.length());
 
             return new OperatorStr(valuesStr.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalRawValues(OptExpression optExpression, Integer step) {
+            PhysicalRawValuesOperator rawValuesOperator = optExpression.getOp().cast();
+            String sample = rawValuesOperator.getRawText();
+            if (sample.length() > 50) {
+                sample = sample.substring(0, 47) + "...";
+            }
+            String desc = String.format("RAW_VALUES(constantType=%s, count=%d, sample=%s)",
+                    rawValuesOperator.getConstantType(),
+                    rawValuesOperator.getConstantCount(),
+                    sample);
+            return new OperatorStr(desc, step, Collections.emptyList());
         }
 
         @Override
@@ -728,6 +765,32 @@ public class LogicalPlanPrinter {
             PhysicalSplitConsumeOperator op = (PhysicalSplitConsumeOperator) optExpression.getOp();
             String sb = "SplitConsumer(cteid=" + op.getSplitId() + ")";
             return new OperatorStr(sb, step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalFetch(OptExpression optExpression, Integer step) {
+            List<OperatorStr> children = new ArrayList<>();
+            for (int childIdx = 0; childIdx < optExpression.getInputs().size(); ++childIdx) {
+                OperatorStr operatorStr = visit(optExpression.inputAt(childIdx), step + 1);
+                children.add(operatorStr);
+            }
+
+            PhysicalFetchOperator op = (PhysicalFetchOperator) optExpression.getOp();
+            Map<ColumnRefOperator, Set<ColumnRefOperator>> rowidToColumns = op.getRowIdToLazyColumns();
+            StringBuilder sb = new StringBuilder("FETCH (columns");
+            sb.append(rowidToColumns.entrySet().stream().map(entry -> {
+                Set<ColumnRefOperator> columns = entry.getValue();
+                String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "[", "]"));
+                return str;
+            }).collect(Collectors.joining(",", "[", "]")));
+            sb.append(")");
+
+            return new OperatorStr(sb.toString(), step, children);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalLookUp(OptExpression optExpression, Integer step) {
+            return new OperatorStr("LookUp", step, Collections.emptyList());
         }
     }
 }

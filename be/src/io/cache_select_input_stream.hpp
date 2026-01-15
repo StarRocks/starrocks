@@ -58,10 +58,10 @@ protected:
             existed = _cache->exist(_cache_key, block_offset, load_size);
         }
 
-        _stats.read_cache_ns += read_cache_ns;
+        _stats.read_block_cache_ns += read_cache_ns;
         if (existed) {
-            _stats.read_cache_bytes += load_size;
-            _stats.read_cache_count += 1;
+            _stats.read_block_cache_bytes += load_size;
+            _stats.read_block_cache_count += 1;
             return Status::OK();
         } else {
             return Status::NotFound("Not Found");

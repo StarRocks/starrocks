@@ -12,17 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.InsertOverwriteJobState;
-import com.starrocks.persist.gson.GsonUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.List;
 
 public class InsertOverwriteStateChangeInfo implements Writable {
@@ -44,6 +39,10 @@ public class InsertOverwriteStateChangeInfo implements Writable {
     @SerializedName(value = "sourcePartitionNames")
     private List<String> sourcePartitionNames = null;
 
+    // Transaction ID for dynamic overwrite, used to identify temp partitions after FE restart.
+    @SerializedName(value = "txnId")
+    private long txnId = -1;
+
     public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
                                           InsertOverwriteJobState toState,
                                           List<Long> sourcePartitionIds, 
@@ -55,6 +54,21 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         this.sourcePartitionIds = sourcePartitionIds;
         this.sourcePartitionNames = sourcePartitionNames;
         this.tmpPartitionIds = tmpPartitionIds;
+    }
+
+    public InsertOverwriteStateChangeInfo(long jobId, InsertOverwriteJobState fromState,
+                                          InsertOverwriteJobState toState,
+                                          List<Long> sourcePartitionIds, 
+                                          List<String> sourcePartitionNames,
+                                          List<Long> tmpPartitionIds,
+                                          long txnId) {
+        this.jobId = jobId;
+        this.fromState = fromState;
+        this.toState = toState;
+        this.sourcePartitionIds = sourcePartitionIds;
+        this.sourcePartitionNames = sourcePartitionNames;
+        this.tmpPartitionIds = tmpPartitionIds;
+        this.txnId = txnId;
     }
 
     public long getJobId() {
@@ -81,6 +95,10 @@ public class InsertOverwriteStateChangeInfo implements Writable {
         return sourcePartitionNames;
     }
 
+    public long getTxnId() {
+        return txnId;
+    }
+
     @Override
     public String toString() {
         return "InsertOverwriteStateChangeInfo{" +
@@ -92,10 +110,4 @@ public class InsertOverwriteStateChangeInfo implements Writable {
                 '}';
     }
 
-
-
-    public static InsertOverwriteStateChangeInfo read(DataInput in) throws IOException {
-        String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, InsertOverwriteStateChangeInfo.class);
-    }
 }

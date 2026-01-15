@@ -21,22 +21,21 @@
 // This file is the mock file that helps us get BE started even if we don't have a JAVA_HOME configuration
 
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_GetDefaultJavaVMInitArgs(void* args) {
-    return 1;
+    return JNI_ERR;
 }
 
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM** pvm, void** penv, void* args) {
-    return 1;
+    return JNI_ERR;
 }
 
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_GetCreatedJavaVMs(JavaVM** vm, jsize sz, jsize* output) {
     fprintf(stderr, "unsupported call jni function, JAVA_HOME is required\n ");
-    exit(1);
-    return 1;
+    return JNI_ERR;
 }
 
 /* Defined by native libraries. */
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
-    return 1;
+    return JNI_ERR;
 }
 
 JNIEXPORT void JNICALL JNI_OnUnload(JavaVM* vm, void* reserved) {}

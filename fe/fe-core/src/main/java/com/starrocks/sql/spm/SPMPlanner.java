@@ -18,21 +18,22 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InPredicate;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
@@ -201,9 +202,9 @@ public class SPMPlanner {
         @Override
         public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, ParseNode node2) {
             TimestampArithmeticExpr other = cast(node2);
-            Preconditions.checkNotNull(node.getFn());
-            Preconditions.checkNotNull(other.getFn());
-            if (!StringUtils.equals(node.getFn().functionName(), other.getFn().functionName())) {
+            String funcName = ExprUtils.getTimestampArithmeticFunctionName(node);
+            String otherFuncName = ExprUtils.getTimestampArithmeticFunctionName(other);
+            if (!StringUtils.equalsIgnoreCase(funcName, otherFuncName)) {
                 return false;
             }
             return check(node.getChildren(), ((Expr) node2).getChildren());

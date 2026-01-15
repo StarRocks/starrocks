@@ -89,6 +89,7 @@ public class ApplyRuleTask extends OptimizerTask {
             }
             List<OptExpression> targetExpressions;
             OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, extractExpr);
+            
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
             } catch (StarRocksPlannerException e) {
@@ -100,7 +101,7 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             newExpressions.addAll(targetExpressions);
-            OptimizerTraceUtil.logApplyRuleAfter(targetExpressions);
+            OptimizerTraceUtil.logApplyRuleAfter(rule, targetExpressions);
 
             extractExpr = binder.next();
         }

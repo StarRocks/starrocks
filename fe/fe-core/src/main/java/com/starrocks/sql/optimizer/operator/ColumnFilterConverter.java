@@ -18,20 +18,6 @@ package com.starrocks.sql.optimizer.operator;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.BoolLiteral;
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FloatLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LargeIntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -40,13 +26,26 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DecimalLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FloatLiteral;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LargeIntLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -55,11 +54,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.Type;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +73,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import static com.starrocks.sql.common.SyncPartitionUtils.getLowerDateTime;
+import static com.starrocks.sql.common.SyncPartitionUtils.nextUpperDateTime;
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 
 /**
@@ -82,7 +86,7 @@ public class ColumnFilterConverter {
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
     // replaces a field in an expression with a constant
-    private static class ExprRewriter implements AstVisitor<Boolean, Void> {
+    private static class ExprRewriter implements AstVisitorExtendInterface<Boolean, Void> {
 
         private final ColumnRefOperator columnRef;
         private final ConstantOperator constant;
@@ -106,12 +110,11 @@ public class ColumnFilterConverter {
 
         @Override
         public Boolean visitFunctionCall(FunctionCallExpr node, Void context) {
-            String functionName = node.getFnName().getFunction();
+            String functionName = node.getFunctionName();
             if (FunctionSet.SUBSTRING.equalsIgnoreCase(functionName) ||
                     FunctionSet.SUBSTR.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
-                if (firstExpr instanceof SlotRef) {
-                    SlotRef slotRef = (SlotRef) firstExpr;
+                if (firstExpr instanceof SlotRef slotRef) {
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
                         node.setChild(0, new StringLiteral(constant.getVarchar()));
                         return true;
@@ -120,10 +123,18 @@ public class ColumnFilterConverter {
             } else if (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(functionName) ||
                     FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(functionName)) {
                 Expr firstExpr = node.getChild(0);
-                if (firstExpr instanceof SlotRef) {
-                    SlotRef slotRef = (SlotRef) firstExpr;
+                if (firstExpr instanceof SlotRef slotRef) {
                     if (columnRef.getName().equals(slotRef.getColumnName())) {
-                        node.setChild(0, new IntLiteral(constant.getBigint()));
+                        // FROM_UNIXTIME supports INT and BIGINT, FROM_UNIXTIME_MS supports only BIGINT
+                        long value;
+                        if (constant.getType().isInt()) {
+                            value = constant.getInt();
+                        } else if (constant.getType().isBigint()) {
+                            value = constant.getBigint();
+                        } else {
+                            value = constant.getBigint();
+                        }
+                        node.setChild(0, new IntLiteral(value, constant.getType()));
                         return true;
                     }
                 }
@@ -218,7 +229,94 @@ public class ColumnFilterConverter {
             return;
         }
 
+        // Fast path: build range for date_trunc(...) on expression-partitioned tables; if handled, return.
+        if (predicate instanceof BinaryPredicateOperator
+                && predicate.getChild(0) instanceof CallOperator
+                && buildDateTruncRange((BinaryPredicateOperator) predicate, result, table)) {
+            return;
+        }
+
         predicate.accept(COLUMN_FILTER_VISITOR, result);
+    }
+
+    // Build a PartitionColumnFilter range for date_trunc predicates. Returns true if handled.
+    private static boolean buildDateTruncRange(BinaryPredicateOperator predicate,
+                                               Map<String, PartitionColumnFilter> result,
+                                               Table table) {
+        if (!(table instanceof OlapTable)) {
+            return false;
+        }
+        if (!(predicate.getChild(0) instanceof CallOperator call) ||
+                !(predicate.getChild(1) instanceof ConstantOperator rhsConst)) {
+            return false;
+        }
+        if (!FunctionSet.DATE_TRUNC.equals(call.getFnName())) {
+            return false;
+        }
+        PartitionInfo pinfo = ((OlapTable) table).getPartitionInfo();
+        if (!(pinfo instanceof ExpressionRangePartitionInfo)) {
+            return false;
+        }
+        ExpressionRangePartitionInfo exprInfo = (ExpressionRangePartitionInfo) pinfo;
+        if (!checkPartitionExprsContainsOperator(exprInfo.getPartitionExprs(table.getIdToColumn()), call)) {
+            return false;
+        }
+
+        try {
+            // Partition column and RHS constant as literal
+            ColumnRefOperator columnRef = Utils.extractColumnRef(predicate.getChild(0)).get(0);
+            LiteralExpr rhsLiteral = convertLiteral(columnRef.getType(), rhsConst);
+            if (!(rhsLiteral instanceof DateLiteral) || !(call.getChild(0) instanceof ConstantOperator)) {
+                return false;
+            }
+            // Time unit and normalized endpoints
+            String granularity = ((ConstantOperator) call.getChild(0)).getVarchar().toLowerCase();
+            LocalDateTime rhsDateTime = ((DateLiteral) rhsLiteral).toLocalDateTime();
+            LocalDateTime periodStart = getLowerDateTime(rhsDateTime, granularity);
+            LocalDateTime nextPeriodStart = nextUpperDateTime(periodStart, granularity);
+
+            DateLiteral startLit = new DateLiteral(periodStart, rhsLiteral.getType());
+            DateLiteral nextStartLit = new DateLiteral(nextPeriodStart, rhsLiteral.getType());
+
+            PartitionColumnFilter filter = result.getOrDefault(columnRef.getName(), new PartitionColumnFilter());
+            boolean isAligned = rhsDateTime.equals(periodStart);
+            switch (predicate.getBinaryType()) {
+                case EQ: {
+                    // If RHS constant is not aligned to the granularity, equality can never be true.
+                    // Build an empty interval: [L, L)
+                    if (!isAligned) {
+                        filter.setLowerBound(startLit, true);
+                        filter.setUpperBound(startLit, false);
+                    } else {
+                        filter.setLowerBound(startLit, true);
+                        filter.setUpperBound(nextStartLit, false);
+                    }
+                    break;
+                }
+                case GE:
+                    // If not aligned, minimal satisfying dt starts from next period start [U, +inf)
+                    filter.setLowerBound(isAligned ? startLit : nextStartLit, true);
+                    break;
+                case GT:
+                    filter.setLowerBound(nextStartLit, true);
+                    break;
+                case LE:
+                    filter.setUpperBound(nextStartLit, false);
+                    break;
+                case LT:
+                    // If not aligned, T(dt) < C allows dt < U; if aligned, dt < L
+                    filter.setUpperBound(isAligned ? startLit : nextStartLit, false);
+                    break;
+                default:
+                    return false;
+            }
+            filter.setFromFunctionCall();
+            result.put(columnRef.getName(), filter);
+            return true;
+        } catch (Exception e) {
+            LOG.warn("build date_trunc column filter failed", e);
+            return false;
+        }
     }
 
     // Replace the predicate of the query with the predicate of the partition expression and evaluate.
@@ -250,14 +348,13 @@ public class ColumnFilterConverter {
                 return predicate;
             }
             ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);
-            if (!(evaluation instanceof ConstantOperator)) {
+            if (!(evaluation instanceof ConstantOperator result)) {
                 return predicate;
             }
             predicate = predicate.clone();
-            ConstantOperator result = (ConstantOperator) evaluation;
             Optional<ConstantOperator> castResult = result.castTo(predicateExpr.getType());
 
-            if (!castResult.isPresent()) {
+            if (castResult.isEmpty()) {
                 return predicate;
             }
             result = castResult.get();
@@ -277,7 +374,7 @@ public class ColumnFilterConverter {
 
             if (type.isFixedPointType() && columnType.isFixedPointType()) {
                 // LargeIntLiteral getHashValue method is different with IntLiteral
-                return type == columnType || (type != Type.LARGEINT && columnType != Type.LARGEINT);
+                return type == columnType || (type != IntegerType.LARGEINT && columnType != IntegerType.LARGEINT);
             }
 
             return type.equals(columnType);
@@ -315,7 +412,7 @@ public class ColumnFilterConverter {
 
     private static boolean checkPartitionExprEqualsOperator(FunctionCallExpr functionCallExpr,
                                                             CallOperator callOperator) {
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
         if (!Objects.equals(fnName, callOperator.getFnName())) {
             return false;
         }
@@ -403,6 +500,12 @@ public class ColumnFilterConverter {
                 LOG.warn("build column filter failed.", e);
             }
             return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitLargeInPredicate(LargeInPredicateOperator predicate,
+                                                    Map<String, PartitionColumnFilter> context) {
+            throw new UnsupportedOperationException("not support large in predicate in the ColumnFilterConverter");
         }
 
         @Override

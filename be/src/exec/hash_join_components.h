@@ -19,7 +19,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -92,11 +92,11 @@ public:
     virtual void create(const HashTableParam& param) = 0;
 
     // append chunk to hash table
-    Status append_chunk(const ChunkPtr& chunk) {
+    Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
         _inc_row_count(chunk->num_rows());
-        return do_append_chunk(chunk);
+        return do_append_chunk(state, chunk);
     }
-    virtual Status do_append_chunk(const ChunkPtr& chunk) = 0;
+    virtual Status do_append_chunk(RuntimeState* state, const ChunkPtr& chunk) = 0;
 
     virtual Status build(RuntimeState* state) = 0;
 
@@ -125,6 +125,7 @@ public:
     // clone readable to to builder
     virtual void clone_readable(HashJoinBuilder* builder) = 0;
 
+    virtual Status prepare_for_spill_start(RuntimeState* state) { return Status::OK(); }
     virtual ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const = 0;
 
 protected:
@@ -149,7 +150,7 @@ public:
 
     void reset(const HashTableParam& param) override;
 
-    Status do_append_chunk(const ChunkPtr& chunk) override;
+    Status do_append_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status build(RuntimeState* state) override;
 
@@ -174,7 +175,10 @@ public:
 
     ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const override;
 
+    void set_is_sub_partition(bool is_sub_partition) { _is_sub_partition = is_sub_partition; }
+
 private:
+    bool _is_sub_partition = false;
     JoinHashTable _ht;
     Columns _key_columns;
 };

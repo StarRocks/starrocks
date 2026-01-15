@@ -20,15 +20,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.Delimiter;
-import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
@@ -39,6 +35,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.net.URI;
@@ -58,6 +55,7 @@ import java.util.Set;
 public class ExportStmt extends StatementBase {
 
     private static final String INCLUDE_QUERY_ID_PROP = "include_query_id";
+    private static final String WITH_HEADER_PROP = "with_header";
 
     private static final String DEFAULT_COLUMN_SEPARATOR = "\t";
     private static final String DEFAULT_LINE_DELIMITER = "\n";
@@ -66,7 +64,7 @@ public class ExportStmt extends StatementBase {
     private static final Set<String> VALID_SCHEMES = Sets.newHashSet(
             "afs", "bos", "hdfs", "oss", "s3a", "cosn", "viewfs", "ks3");
 
-    private TableName tblName;
+    private TableRef tableRef;
     private List<String> partitions;
     private List<String> columnNames;
     // path should include "/"
@@ -77,9 +75,8 @@ public class ExportStmt extends StatementBase {
     private String columnSeparator;
     private String rowDelimiter;
     private boolean includeQueryId = true;
+    private boolean withHeader = false;
 
-    // may catalog.db.table
-    private TableRef tableRef;
     private long exportStartTime;
     private boolean sync;
 
@@ -121,8 +118,24 @@ public class ExportStmt extends StatementBase {
         return exportStartTime;
     }
 
-    public void setTblName(TableName tblName) {
-        this.tblName = tblName;
+    public TableRef getTableRef() {
+        return tableRef;
+    }
+
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
+    }
+
+    public String getCatalogName() {
+        return tableRef == null ? null : tableRef.getCatalogName();
+    }
+
+    public String getDbName() {
+        return tableRef == null ? null : tableRef.getDbName();
+    }
+
+    public String getTableName() {
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public void setPartitions(List<String> partitions) {
@@ -131,14 +144,6 @@ public class ExportStmt extends StatementBase {
 
     public void setExportStartTime(long exportStartTime) {
         this.exportStartTime = exportStartTime;
-    }
-
-    public TableName getTblName() {
-        return tblName;
-    }
-
-    public TableRef getTableRef() {
-        return tableRef;
     }
 
     public List<String> getPartitions() {
@@ -177,18 +182,22 @@ public class ExportStmt extends StatementBase {
         return includeQueryId;
     }
 
+    public boolean isWithHeader() {
+        return withHeader;
+    }
+
     public void checkTable(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
+        Database db = globalStateMgr.getLocalMetastore().getDb(getDbName());
         if (db == null) {
-            throw new SemanticException("Db does not exist. name: " + tblName.getDb());
+            throw new SemanticException("Db does not exist. name: " + getDbName());
         }
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), getTableName());
         if (table == null) {
-            throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
+            throw new SemanticException("Table[" + getTableName() + "] does not exist");
         }
 
         try (AutoCloseableLock ignore =
-                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:
@@ -200,8 +209,8 @@ public class ExportStmt extends StatementBase {
                 case INLINE_VIEW:
                 case VIEW:
                 default:
-                    throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
-                                " type, do not support EXPORT.");
+                    throw new SemanticException("Table[" + getTableName() + "] is " + tblType +
+                            " type, do not support EXPORT.");
             }
 
             if (partitions != null) {
@@ -300,16 +309,27 @@ public class ExportStmt extends StatementBase {
             }
             includeQueryId = Boolean.parseBoolean(properties.get(INCLUDE_QUERY_ID_PROP));
         }
+
+        // with header
+        if (properties.containsKey(WITH_HEADER_PROP)) {
+            String withHeaderStr = properties.get(WITH_HEADER_PROP);
+            if (!withHeaderStr.equalsIgnoreCase("true")
+                    && !withHeaderStr.equalsIgnoreCase("false")) {
+                throw new AnalysisException("Invalid with_header value: " + withHeaderStr);
+            }
+            withHeader = Boolean.parseBoolean(properties.get(WITH_HEADER_PROP));
+        }
     }
 
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("EXPORT TABLE ");
-        if (tblName == null) {
+        if (tableRef == null) {
             sb.append("non-exist");
         } else {
-            sb.append(tblName.toSql());
+            TableName tableName = TableName.fromTableRef(tableRef);
+            sb.append(tableName.toSql());
         }
         if (partitions != null && !partitions.isEmpty()) {
             sb.append(" PARTITION (");
@@ -339,12 +359,7 @@ public class ExportStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitExportStatement(this, context);
-    }
-
-    @Override
-    public RedirectStatus getRedirectStatus() {
-        return RedirectStatus.FORWARD_WITH_SYNC;
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitExportStatement(this, context);
     }
 
     @Override

@@ -17,11 +17,8 @@ package com.starrocks.catalog.system;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
@@ -40,6 +37,7 @@ import com.starrocks.catalog.system.information.ViewsSystemTable;
 import com.starrocks.catalog.system.information.WarehouseMetricsSystemTable;
 import com.starrocks.catalog.system.information.WarehouseQueriesSystemTable;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -48,13 +46,16 @@ import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.thrift.protocol.TType;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
@@ -92,11 +93,11 @@ public class SystemTable extends Table {
 
     private static final ImmutableMap<Byte, Type> THRIFT_TO_SCALAR_TYPE_MAPPING =
             ImmutableMap.<Byte, Type>builder()
-                    .put(TType.I16, Type.SMALLINT)
-                    .put(TType.I32, Type.INT)
-                    .put(TType.I64, Type.BIGINT)
-                    .put(TType.STRING, Type.STRING)
-                    .put(TType.BOOL, Type.BOOLEAN)
+                    .put(TType.I16, IntegerType.SMALLINT)
+                    .put(TType.I32, IntegerType.INT)
+                    .put(TType.I64, IntegerType.BIGINT)
+                    .put(TType.STRING, StringType.STRING)
+                    .put(TType.BOOL, BooleanType.BOOLEAN)
                     .build();
 
     private final TSchemaTableType schemaTableType;
@@ -134,14 +135,10 @@ public class SystemTable extends Table {
         return name.equals(BeConfigsSystemTable.NAME);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        throw new UnsupportedOperationException("Do not allow to write SchemaTable to image.");
-    }
 
-    public void readFields(DataInput in) throws IOException {
-        throw new UnsupportedOperationException("Do not allow read SchemaTable from image.");
-    }
+
+
+
 
     public static Builder builder() {
         return new Builder();
@@ -285,6 +282,6 @@ public class SystemTable extends Table {
     }
 
     public static ScalarType createNameType() {
-        return ScalarType.createVarchar(NAME_CHAR_LEN);
+        return TypeFactory.createVarcharType(NAME_CHAR_LEN);
     }
 }

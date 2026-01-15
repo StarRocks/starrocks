@@ -16,10 +16,13 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SortInfo;
+import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterBuildType;
@@ -105,6 +108,7 @@ public class RuntimeFilterDescription {
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
     private List<Integer> bucketSeqToDriverSeq = Lists.newArrayList();
     private List<Integer> bucketSeqToPartition = Lists.newArrayList();
+    private List<BucketProperty> bucketProperties = Lists.newArrayList();
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
@@ -170,6 +174,14 @@ public class RuntimeFilterDescription {
 
     public long getTopN() {
         return this.topn;
+    }
+
+    public boolean isTopNSortAsc() {
+        return sortInfo != null && sortInfo.getIsAscOrder().get(exprOrder);
+    }
+
+    public boolean isTopNullsFirst() {
+        return sortInfo != null && sortInfo.getNullsFirst().get(exprOrder);
     }
 
     public PlanNode getBuildPlanNode() {
@@ -256,6 +268,7 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        // TODO: Support TopN runtime filter for other nodes
         if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
@@ -266,7 +279,7 @@ public class RuntimeFilterDescription {
         }
         // colocate runtime filter couldn't apply to other exec groups
         if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
-            int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
+            int probeExecGroupId = rfPushCtx.getExecGroupId(node.getId().asInt()).asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;
             }
@@ -393,6 +406,10 @@ public class RuntimeFilterDescription {
         this.bucketSeqToPartition = bucketSeqToPartition;
     }
 
+    public void setBucketProperties(List<BucketProperty> bucketProperties) {
+        this.bucketProperties = bucketProperties;
+    }
+
     public List<Integer> getBucketSeqToInstance() {
         return this.bucketSeqToInstance;
     }
@@ -479,7 +496,7 @@ public class RuntimeFilterDescription {
         StringBuilder sb = new StringBuilder();
         sb.append("filter_id = ").append(filterId);
         if (probeNodeId >= 0) {
-            sb.append(", probe_expr = (").append(nodeIdToProbeExpr.get(probeNodeId).toSql()).append(")");
+            sb.append(", probe_expr = (").append(ExprToSql.toSql(nodeIdToProbeExpr.get(probeNodeId))).append(")");
             if (isCanUsePartitionByExprs() && nodeIdToParitionByExprs.containsKey(probeNodeId) &&
                     !nodeIdToParitionByExprs.get(probeNodeId).isEmpty()) {
                 sb.append(", partition_exprs = (");
@@ -487,15 +504,15 @@ public class RuntimeFilterDescription {
                 for (int i = 0; i < partitionByExprs.size(); i++) {
                     Expr partitionByExpr = partitionByExprs.get(i);
                     if (i != partitionByExprs.size() - 1) {
-                        sb.append(partitionByExpr.toSql() + ",");
+                        sb.append(ExprToSql.toSql(partitionByExpr) + ",");
                     } else {
-                        sb.append(partitionByExpr.toSql());
+                        sb.append(ExprToSql.toSql(partitionByExpr));
                     }
                 }
                 sb.append(")");
             }
         } else {
-            sb.append(", build_expr = (").append(buildExpr.toSql()).append(")");
+            sb.append(", build_expr = (").append(ExprToSql.toSql(buildExpr)).append(")");
             sb.append(", remote = ").append(hasRemoteTargets);
         }
         return sb.toString();
@@ -566,6 +583,13 @@ public class RuntimeFilterDescription {
         if (bucketSeqToPartition != null && !bucketSeqToPartition.isEmpty()) {
             layout.setBucketseq_to_partition(bucketSeqToPartition);
         }
+        if (bucketProperties != null && !bucketProperties.isEmpty()) {
+            List<TBucketProperty> tBucketProperties = new ArrayList<>();
+            for (BucketProperty bucketProperty : bucketProperties) {
+                tBucketProperties.add(bucketProperty.toThrift());
+            }
+            layout.setBucket_properties(tBucketProperties);
+        }
         return layout;
     }
 
@@ -573,11 +597,11 @@ public class RuntimeFilterDescription {
         TRuntimeFilterDescription t = new TRuntimeFilterDescription();
         t.setFilter_id(filterId);
         if (buildExpr != null) {
-            t.setBuild_expr(buildExpr.treeToThrift());
+            t.setBuild_expr(ExprToThrift.treeToThrift(buildExpr));
         }
         t.setExpr_order(exprOrder);
         for (Map.Entry<Integer, Expr> entry : nodeIdToProbeExpr.entrySet()) {
-            t.putToPlan_node_id_to_target_expr(entry.getKey(), entry.getValue().treeToThrift());
+            t.putToPlan_node_id_to_target_expr(entry.getKey(), ExprToThrift.treeToThrift(entry.getValue()));
         }
         t.setHas_remote_targets(hasRemoteTargets);
         t.setBuild_plan_node_id(buildPlanNodeId);
@@ -616,7 +640,7 @@ public class RuntimeFilterDescription {
             for (Map.Entry<Integer, List<Expr>> entry : nodeIdToParitionByExprs.entrySet()) {
                 if (entry.getValue() != null && !entry.getValue().isEmpty()) {
                     t.putToPlan_node_id_to_partition_by_exprs(entry.getKey(),
-                            Expr.treesToThrift(entry.getValue()));
+                            ExprToThrift.treesToThrift(entry.getValue()));
                 }
             }
         }
@@ -625,6 +649,9 @@ public class RuntimeFilterDescription {
 
         if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+            t.setIs_asc(isTopNSortAsc());
+            t.setIs_nulls_first(isTopNullsFirst());
+            t.setLimit(topn);
         } else if (runtimeFilterType().isAggInFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {

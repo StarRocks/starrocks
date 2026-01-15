@@ -15,17 +15,18 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.ComplexTypeAccessGroup;
-import com.starrocks.catalog.ComplexTypeAccessPath;
-import com.starrocks.catalog.ComplexTypeAccessPathType;
 import com.starrocks.catalog.ComplexTypeAccessPaths;
-import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.StructField;
-import com.starrocks.catalog.StructType;
-import com.starrocks.catalog.Type;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.ComplexTypeAccessPath;
+import com.starrocks.type.ComplexTypeAccessPathType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,11 +40,11 @@ public class PruneSubfieldsForComplexTypeTest {
 
     @BeforeEach
     public void setup() {
-        Type keyType = ScalarType.createType(PrimitiveType.INT);
-        Type valueType = ScalarType.createCharType(10);
+        Type keyType = IntegerType.INT;
+        Type valueType = TypeFactory.createCharType(10);
         mapType = new MapType(keyType, valueType);
         Type arrayType = new ArrayType(mapType);
-        Type keyTypeOuter = ScalarType.createType(PrimitiveType.INT);
+        Type keyTypeOuter = IntegerType.INT;
         typeMapArrayMap = new MapType(keyTypeOuter, arrayType);
     }
 
@@ -165,10 +166,10 @@ public class PruneSubfieldsForComplexTypeTest {
 
     @Test
     public void testStructSubfield() {
-        Type field1 = ScalarType.createType(PrimitiveType.INT);
-        Type field2Map =
-                new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.VARCHAR));
-        Type field2Str = ScalarType.createType(PrimitiveType.VARCHAR);
+        Type field1 = IntegerType.INT;
+        Type field2Map = new MapType(IntegerType.INT,
+                VarcharType.VARCHAR);
+        Type field2Str = VarcharType.VARCHAR;
         StructField structField1 = new StructField("subfield1", field2Map);
         StructField structField2 = new StructField("subfield2", field2Str);
         ArrayList<StructField> list1 = new ArrayList<>();

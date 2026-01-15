@@ -34,7 +34,6 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -50,15 +49,16 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -103,7 +103,7 @@ public class LoadLoadingTask extends LoadTask {
     private final ConnectContext context;
 
     private LoadPlanner loadPlanner;
-    private final OriginStatement originStmt;
+    private final OriginStatementInfo originStmt;
     private final LoadStmt loadStmt;
     private final List<List<TBrokerFileStatus>> fileStatusList;
     private final int fileNum;
@@ -143,11 +143,10 @@ public class LoadLoadingTask extends LoadTask {
     public void prepare() throws StarRocksException {
         loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusList, fileNum);
+                brokerDesc, fileGroups, fileStatusList, fileNum, computeResource);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
-        loadPlanner.setComputeResource(computeResource);
         loadPlanner.plan();
     }
 
@@ -341,7 +340,7 @@ public class LoadLoadingTask extends LoadTask {
         private String mergeConditionStr;
         private TPartialUpdateMode partialUpdateMode;
         private ConnectContext context;
-        private OriginStatement originStmt;
+        private OriginStatementInfo originStmt;
         private LoadStmt loadStmt;
         private List<List<TBrokerFileStatus>> fileStatusList;
         private int fileNum = 0;
@@ -451,7 +450,7 @@ public class LoadLoadingTask extends LoadTask {
             return this;
         }
 
-        public Builder setOriginStmt(OriginStatement originStmt) {
+        public Builder setOriginStmt(OriginStatementInfo originStmt) {
             this.originStmt = originStmt;
             return this;
         }

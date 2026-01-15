@@ -41,7 +41,6 @@ Status BufferControlResultWriter::add_to_write_buffer(Chunk* chunk) {
         LOG(WARNING) << "Append result batch to sink failed: status=" << status.to_string();
     }
     return status;
-    return Status::OK();
 }
 
 void BufferControlResultWriter::cancel() {

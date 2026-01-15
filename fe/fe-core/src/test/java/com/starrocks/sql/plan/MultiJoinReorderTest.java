@@ -18,12 +18,18 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.rule.join.JoinReorderDP;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+
+import java.util.BitSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class MultiJoinReorderTest extends PlanTestBase {
@@ -46,6 +52,85 @@ public class MultiJoinReorderTest extends PlanTestBase {
         setTableStatistics(t3, 1000000000);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
         FeConstants.runningUnitTest = true;
+    }
+
+    @Test
+    @Order(0)
+    void testJoinReorderDPGeneratePartitions() {
+        Assertions.assertTrue(JoinReorderDP.generatePartitions(new BitSet()).isEmpty());
+        BitSet single = new BitSet();
+        single.set(10);
+        Assertions.assertTrue(JoinReorderDP.generatePartitions(single).isEmpty());
+
+        BitSet two = new BitSet();
+        two.set(7);
+        two.set(42);
+        List<BitSet> p2 = JoinReorderDP.generatePartitions(two);
+        Assertions.assertEquals(1, p2.size());
+        Assertions.assertTrue(p2.get(0).get(7));
+        Assertions.assertNotEquals(p2.get(0), two);
+
+        BitSet total = new BitSet();
+        total.set(2);
+        total.set(5);
+        total.set(9);
+        total.set(17);
+        List<BitSet> parts = JoinReorderDP.generatePartitions(total);
+        Assertions.assertEquals(7, parts.size());
+
+        int first = total.nextSetBit(0);
+        int[] rest = new int[total.cardinality() - 1];
+        int n = 0;
+        for (int b = total.nextSetBit(first + 1); b >= 0; b = total.nextSetBit(b + 1)) {
+            rest[n++] = b;
+        }
+        Assertions.assertEquals(3, n);
+
+        Set<BitSet> expected = new HashSet<>();
+        long full = (1L << n) - 1;
+        for (long mask = 0; mask < full; mask++) {
+            BitSet p = new BitSet();
+            p.set(first);
+            for (int i = 0; i < n; i++) {
+                if ((mask & (1L << i)) != 0) {
+                    p.set(rest[i]);
+                }
+            }
+            expected.add(p);
+        }
+        Assertions.assertEquals(7, expected.size());
+
+        Set<BitSet> actual = new HashSet<>();
+        BitSet union = new BitSet();
+        for (BitSet p : parts) {
+            Assertions.assertTrue(p.get(first), "partition must contain the first set bit");
+            Assertions.assertTrue(p.cardinality() > 0);
+            Assertions.assertNotEquals(p, total, "partition must not equal the full set");
+
+            BitSet other = (BitSet) total.clone();
+            other.andNot(p);
+            Assertions.assertFalse(other.get(first), "complement must not contain the first set bit (avoid symmetric dup)");
+
+            // Partition and complement should form a bipartition of total: disjoint and union equals total.
+            BitSet inter = (BitSet) p.clone();
+            inter.and(other);
+            Assertions.assertTrue(inter.isEmpty(), "partition and complement must be disjoint");
+            BitSet combined = (BitSet) p.clone();
+            combined.or(other);
+            Assertions.assertEquals(total, combined, "partition union complement must equal total");
+
+            // Each partition should be a subset of total.
+            BitSet tmp = (BitSet) p.clone();
+            tmp.andNot(total);
+            Assertions.assertTrue(tmp.isEmpty(), "partition must be subset of total");
+
+            union.or(p);
+            actual.add((BitSet) p.clone());
+        }
+
+        Assertions.assertEquals(parts.size(), actual.size(), "partitions should be unique");
+        Assertions.assertEquals(expected, actual, "partitions content mismatch");
+        Assertions.assertEquals(total, union, "union of all partitions should cover total");
     }
 
     @Test
@@ -389,7 +474,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join t2 on t1.v5 = t2.v8 ";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assertions.assertTrue(planFragment.contains("2:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assertions.assertTrue(planFragment.contains("|----3:EXCHANGE\n" +

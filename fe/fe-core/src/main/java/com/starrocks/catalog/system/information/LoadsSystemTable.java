@@ -13,12 +13,14 @@
 // limitations under the License.
 package com.starrocks.catalog.system.information;
 
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
+import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
@@ -31,32 +33,32 @@ public class LoadsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PROFILE_ID", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("DB_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("USER", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("WAREHOUSE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("SCAN_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SCAN_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("FILTERED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("UNSELECTED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SINK_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("RUNTIME_DETAILS", ScalarType.createJsonType())
-                        .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LOAD_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LOAD_COMMIT_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("LOAD_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
-                        .column("PROPERTIES", ScalarType.createJsonType())
-                        .column("ERROR_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("REJECTED_RECORD_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
-                        .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("ID", IntegerType.BIGINT)
+                        .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PROFILE_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DB_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("USER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("WAREHOUSE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("STATE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PROGRESS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PRIORITY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("SCAN_ROWS", IntegerType.BIGINT)
+                        .column("SCAN_BYTES", IntegerType.BIGINT)
+                        .column("FILTERED_ROWS", IntegerType.BIGINT)
+                        .column("UNSELECTED_ROWS", IntegerType.BIGINT)
+                        .column("SINK_ROWS", IntegerType.BIGINT)
+                        .column("RUNTIME_DETAILS", JsonType.JSON)
+                        .column("CREATE_TIME", DateType.DATETIME)
+                        .column("LOAD_START_TIME", DateType.DATETIME)
+                        .column("LOAD_COMMIT_TIME", DateType.DATETIME)
+                        .column("LOAD_FINISH_TIME", DateType.DATETIME)
+                        .column("PROPERTIES", JsonType.JSON)
+                        .column("ERROR_MSG", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_SQL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("REJECTED_RECORD_PATH", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("JOB_ID", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_LOADS);
     }
 }

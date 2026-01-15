@@ -35,26 +35,22 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.VariableExpr;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.utframe.UtFrameUtils.PseudoImage;
-import mockit.Expectations;
-import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,33 +63,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class VariableMgrTest {
     private static final Logger LOG = LoggerFactory.getLogger(VariableMgrTest.class);
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private EditLog editLog;
 
-    private VariableMgr variableMgr = new VariableMgr();
+
     @BeforeEach
     public void setUp() {
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
+        // Initialize test environment
+        UtFrameUtils.setUpForPersistTest();
+    }
 
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getVariableMgr();
-                minTimes = 0;
-                result = variableMgr;
-            }
-        };
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
@@ -331,7 +311,7 @@ public class VariableMgrTest {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
 
         Assertions.assertEquals("autocommit", desc.getName());
-        Assertions.assertEquals(ScalarType.createType(PrimitiveType.BIGINT), desc.getType());
+        Assertions.assertEquals(IntegerType.BIGINT, desc.getType());
         Assertions.assertEquals((long) desc.getValue(), 1);
     }
 }

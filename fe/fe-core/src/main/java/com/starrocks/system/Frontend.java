@@ -149,9 +149,8 @@ public class Frontend extends JsonWriter {
         return heapUsedPercent;
     }
 
-    public void updateHostAndEditLogPort(String host, int editLogPort) {
+    public void updateHost(String host) {
         this.host = host;
-        this.editLogPort = editLogPort;
     }
 
     @VisibleForTesting
@@ -240,7 +239,7 @@ public class Frontend extends JsonWriter {
     private void changeToAlive(boolean isReplay) {
         if (!isReplay && GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
             BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-            ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
+            ha.removeUnstableNode(nodeName, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
         }
     }
 

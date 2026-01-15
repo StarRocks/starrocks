@@ -24,7 +24,7 @@ CREATE TABLE telemetry (
 )
 ENGINE=OLAP
 PRIMARY KEY(device_id, ts)
-PARTITION BY RANGE (date_trunc('day', ts))
+PARTITION BY date_trunc('day', ts)
 DISTRIBUTED BY HASH(device_id) BUCKETS 16
 ORDER BY (device_id, ts);
 ```
@@ -98,23 +98,6 @@ ORDER BY (device_id, ts);
     例：
 
     (device_id, ts) でソートされたテレメトリテーブルは、同じデータを未ソートで取り込んだ場合と比べて、1.8 倍の圧縮（LZ4）と 25% の CPU/スキャン削減を達成しました。
-
----
-5. プライマリキーテーブルのより速いマージオンライト
-
-    仕組み：
-
-    アップサート中、エンジンはバッチとキー範囲が重なるスライスのみを書き換え、タブレット全体を再書き込みすることはありません。
-
-    例：
-
-    ```sql
-    UPDATE balances
-    SET    amount = amount + 100
-    WHERE  account_id = 123;
-    ```
-
-    `ORDER BY (account_id)` を使用すると、セグメントデータの 1% 未満が触れられ、未ソートの場合の 100% と比較して、更新が多いワークロードで 2–4 倍の書き込みスループットを実現します。
 
 ---
 

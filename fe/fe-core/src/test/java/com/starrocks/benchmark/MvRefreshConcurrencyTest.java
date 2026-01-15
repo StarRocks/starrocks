@@ -115,9 +115,9 @@ public class MvRefreshConcurrencyTest extends MVTestBase {
             List<MaterializedView> mvs = Lists.newArrayList();
             try {
                 for (int i = 0; i < mvNum; i++) {
-                    System.out.println("create mv " + i);
+                    logSysInfo("create mv " + i);
                     String sql = buildMV(rnd, tables, i);
-                    System.out.println(sql);
+                    logSysInfo(sql);
                     starRocksAssert.withMaterializedView(sql);
 
                     Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");

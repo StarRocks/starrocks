@@ -30,20 +30,25 @@ namespace starrocks::pipeline {
 
 Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_aggregator->open(state));
 
     _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by keys
                                 _aggregator->limit() != -1 &&                 // has limit
                                 _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
-    _aggregator->attach_sink_observer(state, this->_observer);
     return Status::OK();
 }
 
 void AggregateBlockingSinkOperator::close(RuntimeState* state) {
     auto* counter = ADD_COUNTER(_unique_metrics, "HashTableMemoryUsage", TUnit::BYTES);
-    counter->set(_aggregator->hash_map_memory_usage());
+    COUNTER_SET(counter, _aggregator->hash_map_memory_usage());
     _aggregator->unref(state);
     Operator::close(state);
 }
@@ -69,8 +74,7 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-        _aggregator->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+        _aggregator->it_hash() = _aggregator->state_allocator().begin();
 
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,

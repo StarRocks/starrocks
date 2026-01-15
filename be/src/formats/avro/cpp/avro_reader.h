@@ -18,7 +18,7 @@
 #include <avrocpp/Generic.hh>
 #include <avrocpp/Stream.hh>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "formats/avro/cpp/column_reader.h"
 
 namespace starrocks {

@@ -21,12 +21,13 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sorting.h"
+#include "types/date_value.h"
 
 namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_basic) {
-    FixedLengthColumn<int32_t>::Ptr column = FixedLengthColumn<int32_t>::create();
+    auto column = FixedLengthColumn<int32_t>::create();
     for (int i = 0; i < 100; i++) {
         column->append(i);
     }
@@ -46,13 +47,13 @@ TEST(FixedLengthColumnTest, test_basic) {
     }
 
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(column->get_data()[i], i);
+        ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column.get())->get_data()[i], i);
     }
 
     column = FixedLengthColumn<int32_t>::create(100);
     ASSERT_EQ(100, column->size());
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(column->get_data()[i], 0);
+        ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column.get())->get_data()[i], 0);
     }
     {
         column = FixedLengthColumn<int32_t>::create();
@@ -62,15 +63,15 @@ TEST(FixedLengthColumnTest, test_basic) {
 
         Filter filter;
         for (int i = 0; i < 100; ++i) {
-            filter.push_back(i % 2);
+            filter.emplace_back(i % 2);
         }
 
         column->filter(filter);
-        auto re = column;
+        auto re = std::move(column);
         ASSERT_EQ(50, re->size());
 
         for (int k = 0; k < 50; ++k) {
-            ASSERT_EQ(k * 2 + 1, re->get_data()[k]);
+            ASSERT_EQ(k * 2 + 1, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(re.get())->get_data()[k]);
         }
     }
 }
@@ -85,7 +86,7 @@ TEST(FixedLengthColumnTest, test_nullable) {
         null_column->append(i % 2 ? 1 : 0);
     }
 
-    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
 
     ASSERT_EQ(false, column->is_numeric());
     ASSERT_EQ(100, column->size());
@@ -139,21 +140,22 @@ TEST(FixedLengthColumnTest, test_nullable) {
 
         Filter filter;
         for (int k = 0; k < 50; ++k) {
-            filter.push_back(0);
+            filter.emplace_back(0);
         }
 
         for (int k = 0; k < 50; ++k) {
-            filter.push_back(1);
+            filter.emplace_back(1);
         }
 
         column->filter(filter);
-        auto result = column;
-        auto data_result = Int32Column::static_pointer_cast(result->data_column());
+        auto result = std::move(column);
+        auto* nullable_col = down_cast<NullableColumn*>(result.get());
+        auto* data_result = down_cast<Int32Column*>(nullable_col->data_column_raw_ptr());
 
         ASSERT_EQ(50, result->size());
         for (int j = 0; j < 50; ++j) {
             if ((j + 50) % 3) {
-                ASSERT_TRUE(column->is_null(j + 50));
+                ASSERT_TRUE(result->is_null(j + 50));
                 ASSERT_TRUE(result->is_null(j));
             } else {
                 ASSERT_EQ(j + 50, data_result->get_data()[j]);
@@ -165,9 +167,10 @@ TEST(FixedLengthColumnTest, test_nullable) {
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_strings) {
     std::vector<Slice> values{{"hello"}, {"starrocks"}};
-    Int32Column::Ptr c1 = Int32Column::create();
-    NullableColumn::Ptr nullable_c1 = NullableColumn::create(c1, NullColumn::create());
+    auto c1 = Int32Column::create();
     ASSERT_FALSE(c1->append_strings(values));
+
+    auto nullable_c1 = NullableColumn::create(std::move(c1), NullColumn::create());
     ASSERT_FALSE(nullable_c1->append_strings(values.data(), values.size()));
 }
 
@@ -178,7 +181,7 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     size_t length = values.size() * sizeof(values[0]);
 
     // FixedLengthColumn
-    Int32Column::Ptr c1 = Int32Column::create();
+    auto c1 = Int32Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
@@ -187,11 +190,12 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     }
 
     // Nullable FixedLengthColumn
-    NullableColumn::Ptr c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     ASSERT_EQ(values.size(), c2->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c2->size());
+    auto* nullable_c2 = down_cast<NullableColumn*>(c2.get());
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(c2->data_column()->raw_data());
+        auto* p = reinterpret_cast<const int32_t*>(nullable_c2->data_column()->raw_data());
         ASSERT_EQ(values[i], p[i]);
     }
 }
@@ -199,11 +203,11 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_nulls) {
     // FixedLengthColumn
-    Int32Column::Ptr c1 = Int32Column::create();
+    auto c1 = Int32Column::create();
     ASSERT_FALSE(c1->append_nulls(10));
 
     // NullableColumn
-    NullableColumn::Ptr c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_nulls(10));
     ASSERT_EQ(10U, c2->size());
     for (int i = 0; i < 10; i++) {
@@ -214,15 +218,15 @@ TEST(FixedLengthColumnTest, test_append_nulls) {
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_defaults) {
     // FixedLengthColumn
-    Int32Column::Ptr c1 = Int32Column::create();
+    auto c1 = Int32Column::create();
     c1->append_default(10);
     ASSERT_EQ(10U, c1->size());
     for (int i = 0; i < 10; i++) {
-        ASSERT_EQ(0, c1->get_data()[i]);
+        ASSERT_EQ(0, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c1.get())->get_data()[i]);
     }
 
     // NullableColumn
-    NullableColumn::Ptr c2 = NullableColumn::create(Int16Column::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(Int16Column::create(), NullColumn::create());
     c2->append_default(10);
     ASSERT_EQ(10U, c2->size());
     for (int i = 0; i < 10; i++) {
@@ -235,8 +239,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // int32 basic
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        Int32Column::Ptr c1 = Int32Column::create();
-        Int32Column::Ptr c2 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         for (size_t i = 0; i < numbers.size(); i++) {
@@ -253,8 +257,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // int32 boundary test
     {
         std::vector<int32_t> numbers{-2147483648, 1514736000, 1577808000, 2147483647};
-        Int32Column::Ptr c1 = Int32Column::create();
-        Int32Column::Ptr c2 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         for (size_t i = 0; i < numbers.size(); i++) {
@@ -271,8 +275,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // double
     {
         std::vector<double> numbers{1, 2, 3, 4, 5, 6, 7};
-        DoubleColumn::Ptr c1 = DoubleColumn::create();
-        DoubleColumn::Ptr c2 = DoubleColumn::create();
+        auto c1 = DoubleColumn::create();
+        auto c2 = DoubleColumn::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(double));
         c1->append(34315.800000033356);
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(double));
@@ -294,8 +298,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // nullable int32
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        NullableColumn::Ptr c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        NullableColumn::Ptr c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         for (size_t i = 0; i < numbers.size(); i++) {
@@ -323,8 +327,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     }
     // big int
     {
-        NullableColumn::Ptr c1 = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        NullableColumn::Ptr c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        auto c1 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        auto c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
         c1->append_datum(Datum(int64_t(53988727729812)));
         c2->append_datum(Datum(int64_t(10872854479952)));
         ASSERT_EQ(1, c1->compare_at(0, 0, *c2, -1));
@@ -333,8 +337,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     }
     // large int
     {
-        NullableColumn::Ptr c1 = NullableColumn::create(Int128Column::create(), NullColumn::create());
-        NullableColumn::Ptr c2 = NullableColumn::create(Int128Column::create(), NullColumn::create());
+        auto c1 = NullableColumn::create(Int128Column::create(), NullColumn::create());
+        auto c2 = NullableColumn::create(Int128Column::create(), NullColumn::create());
         c1->append_datum(Datum(int128_t(5398872772981245727)));
         c2->append_datum(Datum(int128_t(1087285447995287452)));
         ASSERT_EQ(1, c1->compare_at(0, 0, *c2, -1));
@@ -345,7 +349,7 @@ TEST(FixedLengthColumnTest, test_compare_at) {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_decimal) {
-    DecimalColumn::Ptr dc = DecimalColumn::create();
+    auto dc = DecimalColumn::create();
 
     dc->append(DecimalV2Value(1));
     dc->append(DecimalV2Value(2));
@@ -393,8 +397,8 @@ TEST(FixedLengthColumnTest, test_append_numeric) {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_nullable_numeric) {
-    NullableColumn::Ptr c1 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
-    NullableColumn::Ptr c2 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
+    auto c1 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
+    auto c2 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
     c1->append_datum(Datum((int64_t)0));
 
     c2->append_nulls(1);
@@ -429,26 +433,26 @@ TEST(FixedLengthColumnTest, test_assign) {
     // int32
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        Int32Column::Ptr c1 = Int32Column::create();
-        Int32Column::Ptr c2 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
 
         c1->assign(c1->size(), 0);
         for (size_t i = 0; i < numbers.size(); i++) {
-            ASSERT_EQ(c1->get_data()[i], 1);
+            ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c1.get())->get_data()[i], 1);
         }
 
         c2->assign(c2->size(), 3);
         for (size_t i = 0; i < numbers.size(); i++) {
-            ASSERT_EQ(c2->get_data()[i], 4);
+            ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c2.get())->get_data()[i], 4);
         }
     }
     // nullable int32
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        NullableColumn::Ptr c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        NullableColumn::Ptr c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c1->append_nulls(1);
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
@@ -476,7 +480,7 @@ TEST(FixedLengthColumnTest, test_reset_column) {
 
     c1->reset_column();
     ASSERT_EQ(0, c1->size());
-    ASSERT_EQ(0, c1->get_data().size());
+    ASSERT_EQ(0, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c1.get())->get_data().size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c1->delete_state());
 }
 
@@ -492,15 +496,15 @@ TEST(FixedLengthColumnTest, test_swap_column) {
     c1->swap_column(*c2);
 
     ASSERT_EQ(0, c1->size());
-    ASSERT_EQ(0, c1->get_data().size());
+    ASSERT_EQ(0, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c1.get())->get_data().size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c1->delete_state());
 
     ASSERT_EQ(3, c2->size());
-    ASSERT_EQ(3, c2->get_data().size());
+    ASSERT_EQ(3, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c2.get())->get_data().size());
     ASSERT_EQ(DEL_PARTIAL_SATISFIED, c2->delete_state());
-    ASSERT_EQ(1, c2->get_data()[0]);
-    ASSERT_EQ(2, c2->get_data()[1]);
-    ASSERT_EQ(3, c2->get_data()[2]);
+    ASSERT_EQ(1, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c2.get())->get_data()[0]);
+    ASSERT_EQ(2, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c2.get())->get_data()[1]);
+    ASSERT_EQ(3, ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(c2.get())->get_data()[2]);
 }
 
 TEST(FixedLengthColumnTest, test_update_rows) {
@@ -514,7 +518,7 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     ASSERT_EQ(100 * 4, column->byte_size());
 
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(column->get_data()[i], i);
+        ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column.get())->get_data()[i], i);
     }
 
     auto replace_column = FixedLengthColumn<int32_t>::create();
@@ -526,12 +530,46 @@ TEST(FixedLengthColumnTest, test_update_rows) {
     column->update_rows(*replace_column.get(), replace_idxes.data());
 
     for (int i = 0; i < 10; i++) {
-        ASSERT_EQ(column->get_data()[i], i + 100);
+        ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column.get())->get_data()[i], i + 100);
     }
 
     for (int i = 10; i < 100; i++) {
-        ASSERT_EQ(column->get_data()[i], i);
+        ASSERT_EQ(ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(column.get())->get_data()[i], i);
     }
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_murmur_hash) {
+    auto column = Int32Column::create();
+    column->append(34);
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(2017239379, hash_values[0]);
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_murmur_hash_int64) {
+    auto column = Int64Column::create();
+    column->append(34);
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(2017239379, hash_values[0]);
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_murmur_hash_date) {
+    auto column = DateColumn::create();
+    DateValue date = DateValue::create(2017, 11, 16);
+    column->append(date);
+
+    std::vector<uint32_t> hash_values(1);
+    column->murmur_hash3_x86_32(hash_values.data(), 0, 1);
+
+    ASSERT_EQ(-653330422, *reinterpret_cast<int32_t*>(&hash_values[0]));
 }
 
 TEST(FixedLengthColumnTest, test_xor_checksum) {
@@ -610,9 +648,9 @@ TEST(FixedLengthColumnTest, test_replicate) {
     column->append(3);
 
     Offsets offsets;
-    offsets.push_back(0);
-    offsets.push_back(3);
-    offsets.push_back(5);
+    offsets.emplace_back(0);
+    offsets.emplace_back(3);
+    offsets.emplace_back(5);
 
     auto c2 = column->replicate(offsets).value();
     ASSERT_EQ(5, c2->size());
@@ -629,7 +667,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     void* buff = values.data();
     size_t length = values.size() * sizeof(values[0]);
 
-    Int64Column::Ptr c1 = Int64Column::create();
+    auto c1 = Int64Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
 

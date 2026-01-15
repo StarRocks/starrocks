@@ -359,7 +359,7 @@ public:
     DISALLOW_COPY(Promise);
 
     ~Promise() {
-        if (static_cast<bool>(_state) && !_state.unique()) _state->break_promise();
+        if (static_cast<bool>(_state) && _state.use_count() > 1) _state->break_promise();
     }
 
     // Assignment
@@ -407,7 +407,7 @@ public:
     DISALLOW_COPY(Promise);
 
     ~Promise() {
-        if (static_cast<bool>(_state) && !_state.unique()) _state->break_promise();
+        if (static_cast<bool>(_state) && _state.use_count() > 1) _state->break_promise();
     }
 
     // Assignment
@@ -451,7 +451,7 @@ public:
     DISALLOW_COPY(Promise);
 
     ~Promise() {
-        if (static_cast<bool>(_state) && !_state.unique()) _state->break_promise();
+        if (static_cast<bool>(_state) && _state.use_count() > 1) _state->break_promise();
     }
 
     // Assignment

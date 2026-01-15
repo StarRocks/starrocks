@@ -7,7 +7,7 @@ sidebar_position: 10
 
 StarRocks 内で SQL コマンドを使用して、ネイティブ認証を通じてユーザーを作成および管理します。
 
-StarRocks のネイティブ認証は、パスワードベースの認証方法です。加えて、StarRocks は LDAP、OpenID Connect、OAuth 2.0 などの外部認証システムとの統合もサポートしています。詳細な手順については、[セキュリティインテグレーションで認証](./security_integration.md) を参照してください。
+StarRocks のネイティブ認証は、パスワードベースの認証方法です。加えて、StarRocks は LDAP などの外部認証システムとの統合もサポートしています。詳細な手順については、[セキュリティインテグレーションで認証](./security_integration.md) を参照してください。
 
 :::note
 
@@ -59,7 +59,7 @@ ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 > **NOTE**
 >
 > - どのユーザーも自分のパスワードを特権なしでリセットできます。
-> - `root` ユーザー自身のみがそのパスワードを設定できます。パスワードを忘れて StarRocks に接続できない場合は、[Reset lost root password](#reset-lost-root-password) を参照してください。
+> - `root` ユーザー自身のみがそのパスワードを設定できます。パスワードを忘れて StarRocks に接続できない場合は、[Reset lost root password](#失われた-root-パスワードのリセット) を参照してください。
 
 以下の例はどちらも `jack` のパスワードを `54321` にリセットします。
 
@@ -148,5 +148,11 @@ SHOW USERS;
 以下の例では、ユーザー `jack` のプロパティを表示します。
 
 ```SQL
-SHOW PROPERTY FOR jack@'172.10.1.10';
+SHOW PROPERTY FOR 'jack';
+```
+
+または、特定のプロパティを表示するには:
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
 ```

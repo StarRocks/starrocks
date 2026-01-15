@@ -42,6 +42,9 @@ public class EliminateGroupByConstantRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        if (!context.getSessionVariable().isEnableConstantExecuteInFE()) {
+            return false;
+        }
         LogicalAggregationOperator aggOp = input.getOp().cast();
         LogicalProjectOperator projectOp = input.inputAt(0).getOp().cast();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOp.getColumnRefMap();

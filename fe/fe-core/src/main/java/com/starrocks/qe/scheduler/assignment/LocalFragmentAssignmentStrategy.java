@@ -18,7 +18,9 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListUtil;
+import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -79,6 +81,16 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         // The fragment which only contains scan nodes without scan ranges,
         // such as SchemaScanNode, is assigned to an arbitrary worker.
         if (execFragment.getInstances().isEmpty()) {
+            PlanNode leftMostNode = execFragment.getLeftMostNode();
+            if (leftMostNode instanceof LookUpNode) {
+                // @TODO(silverbullet233): only assign to scan-related workers
+                for (ComputeNode worker : workerProvider.getAllWorkers()) {
+                    FragmentInstance instance = new FragmentInstance(worker, execFragment);
+                    execFragment.addInstance(instance);
+                }
+                return;
+            }
+
             long workerId = workerProvider.selectNextWorker();
             ComputeNode worker = workerProvider.getWorkerById(workerId);
             FragmentInstance instance = new FragmentInstance(worker, execFragment);
@@ -163,19 +175,29 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                         Map.Entry::getValue,
                         Collectors.mapping(Map.Entry::getKey, Collectors.toList())
                 ));
+        boolean isNative = execFragment.getColocatedAssignment().isNative();
 
+        // bucket-aware execution on lake doesn't support assign to pipeline driver
+        // TODO, checking shall we support it
         boolean assignPerDriverSeq = usePipeline && workerIdToBucketSeqs.values().stream()
-                .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop));
+                .allMatch(bucketSeqs -> enableAssignScanRangesPerDriverSeq(bucketSeqs, pipelineDop)) && isNative;
 
         if (!assignPerDriverSeq) {
             // these optimize depend on assignPerDriverSeq.
             fragment.disablePhysicalPropertyOptimize();
         }
 
-        long bucketScanRows = bucketScanRows(bucketSeqToScanRange);
+        long bucketScanRows = isNative ? bucketScanRows(bucketSeqToScanRange) : 0;
         int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
         long instanceAvgScanRows = bucketScanRows / Math.max(1, workerIdToBucketSeqs.size() * expectedInstanceNum);
 
+        final Map<Long, FragmentInstance> fragmentInstanceMap = new HashMap<>();
+        if (!execFragment.getInstances().isEmpty()) {
+            for (FragmentInstance fragmentInstance : execFragment.getInstances()) {
+                fragmentInstanceMap.put(fragmentInstance.getWorkerId(), fragmentInstance);
+            }
+        }
+        
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
             ComputeNode worker = workerProvider.getWorkerById(workerId);
 
@@ -184,8 +206,13 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
             // 3.construct instanceExecParam add the scanRange should be scanned by instance
             bucketSeqsPerInstance.forEach(bucketSeqsOfInstance -> {
-                FragmentInstance instance = new FragmentInstance(worker, execFragment);
-                execFragment.addInstance(instance);
+                final boolean reuse = useIncrementalScanRanges && !fragmentInstanceMap.isEmpty();
+                final FragmentInstance instance = reuse
+                        ? fragmentInstanceMap.get(workerId)
+                        : new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                if (!reuse) {
+                    execFragment.addInstance(instance);
+                }
 
                 // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly
                 // when they are in different buckets

@@ -15,12 +15,10 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotId;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TDecodeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalDecodeNode;
@@ -71,7 +69,7 @@ public class DecodeNode extends PlanNode {
         msg.decode_node = new TDecodeNode();
         msg.decode_node.setDict_id_to_string_ids(dictIdToStringIds);
         stringFunctions.forEach(
-                (key, value) -> msg.decode_node.putToString_functions(key.asInt(), value.treeToThrift()));
+                (key, value) -> msg.decode_node.putToString_functions(key.asInt(), ExprToThrift.treeToThrift(value)));
     }
 
     @Override
@@ -93,7 +91,7 @@ public class DecodeNode extends PlanNode {
                 output.append("<function id ").
                         append(kv.getKey()).
                         append("> : ").
-                        append(kv.getValue().toSql()).
+                        append(explainExpr(kv.getValue())).
                         append("\n");
             }
         }

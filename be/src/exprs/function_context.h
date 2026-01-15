@@ -35,6 +35,12 @@ class RuntimeState;
 class Column;
 class Slice;
 struct JavaUDAFContext;
+#if defined(__APPLE__)
+// On macOS build, Java is disabled. Provide an empty definition so that
+// std::unique_ptr<JavaUDAFContext> has a complete type and can be destroyed
+// without pulling in JNI headers.
+struct JavaUDAFContext {};
+#endif
 struct NgramBloomFilterState;
 
 class FunctionContext {
@@ -133,7 +139,7 @@ public:
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
 
-    ColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
+    MutableColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
 
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.

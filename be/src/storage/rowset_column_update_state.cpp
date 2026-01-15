@@ -17,6 +17,7 @@
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_column_group.h"
@@ -106,7 +107,7 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
         return Status::InternalError(err_msg);
     }
 
-    std::shared_ptr<Chunk> chunk_shared_ptr;
+    ChunkPtr chunk_shared_ptr;
     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE));
 
     // alloc first BatchPKsPtr
@@ -282,8 +283,7 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
                                                                EditVersion latest_applied_version,
                                                                const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_update_files() == 0 ||
-        rowset_meta_pb.txn_meta().has_merge_condition()) {
+    if (!rowset_meta_pb.has_txn_meta() || rowset->num_update_files() == 0) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_init_rowset_seg_id(tablet));
@@ -419,40 +419,29 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
     return Status::OK();
 }
 
-// cut rowid pairs by source rowid's order. E.g.
-// rowid_pairs -> <101, 2>, <202, 3>, <303, 4>, <102, 5>, <203, 6>
-// After cut, it will be:
-//  inorder_source_rowids -> <101, 202, 303>, <102, 203>
-//  inorder_upt_rowids -> <2, 3, 4>, <5, 6>
-static void cut_rowids_in_order(const std::vector<RowidPairs>& rowid_pairs,
-                                std::vector<std::vector<uint32_t>>* inorder_source_rowids,
-                                std::vector<std::vector<uint32_t>>* inorder_upt_rowids,
-                                StreamChunkContainer container) {
-    uint32_t last_source_rowid = 0;
-    std::vector<uint32_t> current_source_rowids;
-    std::vector<uint32_t> current_upt_rowids;
-    auto cut_rowids_fn = [&]() {
-        inorder_source_rowids->push_back({});
-        inorder_upt_rowids->push_back({});
-        inorder_source_rowids->back().swap(current_source_rowids);
-        inorder_upt_rowids->back().swap(current_upt_rowids);
-    };
+// This function will split rowid_pairs into two parts:
+// 1. sorted_source_rowids: sorted source rowids
+// 2. unsorted_upt_rowids: unsorted upt rowids
+// If container is not provided, we will just push back the rowids without alignment.
+void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<uint32_t>* sorted_source_rowids,
+                       std::vector<uint32_t>* unsorted_upt_rowids, StreamChunkContainer* container) {
+    // rowid_pairs MUST be sorted already
+    DCHECK(std::is_sorted(rowid_pairs.begin(), rowid_pairs.end(), RowidPairsCompFn));
     for (const auto& each : rowid_pairs) {
-        if (!container.contains(each.first)) {
-            // skip in this round
-            continue;
+        if (container == nullptr) {
+            // If container is not provided, we just push back the rowids.
+            sorted_source_rowids->push_back(each.first);
+            unsorted_upt_rowids->push_back(each.second);
+        } else {
+            if (!container->contains(each.first)) {
+                // skip in this round
+                continue;
+            }
+            // append to sorted_source_rowids and unsorted_upt_rowids
+            // Align rowid
+            sorted_source_rowids->push_back(each.first - container->start_rowid);
+            unsorted_upt_rowids->push_back(each.second);
         }
-        if (each.first < last_source_rowid) {
-            // cut
-            cut_rowids_fn();
-        }
-        // Align rowid
-        current_source_rowids.push_back(each.first - container.start_rowid);
-        current_upt_rowids.push_back(each.second);
-        last_source_rowid = each.first;
-    }
-    if (!current_source_rowids.empty()) {
-        cut_rowids_fn();
     }
 }
 
@@ -479,16 +468,17 @@ Status RowsetColumnUpdateState::_update_source_chunk_by_upt(const UptidToRowidPa
         tracker->consume(upt_chunk_size);
         DeferOp tracker_defer([&]() { tracker->release(upt_chunk_size); });
         // 2. update source chunk
-        std::vector<std::vector<uint32_t>> inorder_source_rowids;
-        std::vector<std::vector<uint32_t>> inorder_upt_rowids;
-        cut_rowids_in_order(each.second, &inorder_source_rowids, &inorder_upt_rowids, container);
-        DCHECK(inorder_source_rowids.size() == inorder_upt_rowids.size());
-        for (int i = 0; i < inorder_source_rowids.size(); i++) {
-            auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, inorder_upt_rowids[i].size());
-            TRY_CATCH_BAD_ALLOC(tmp_chunk->append_selective(*upt_chunk, inorder_upt_rowids[i].data(), 0,
-                                                            inorder_upt_rowids[i].size()));
-            RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, inorder_source_rowids[i].data()));
-        }
+        std::vector<uint32_t> sorted_source_rowids;
+        std::vector<uint32_t> unsorted_upt_rowids;
+        // split rowid_pairs into sorted_source_rowids and unsorted_upt_rowids
+        split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, &container);
+        DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
+        // fetch upt rows from upt_chunk
+        auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        TRY_CATCH_BAD_ALLOC(
+                tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
+        // update source chunk use upt rows
+        RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
     }
     return Status::OK();
 }
@@ -543,10 +533,10 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
                                                                  type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-            RETURN_IF_ERROR(
-                    default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]].get()));
+            RETURN_IF_ERROR(default_value_iter->fetch_values_by_rowid(nullptr, row_cnt,
+                                                                      (*columns)[column_ids[i]]->as_mutable_raw_ptr()));
         } else {
-            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->append_default(row_cnt));
+            TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->as_mutable_raw_ptr()->append_default(row_cnt));
         }
     }
     return Status::OK();
@@ -634,7 +624,7 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             ASSIGN_OR_RETURN(auto writer, _prepare_segment_writer(rowset, tablet_schema, segid));
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, partial_chunk_ptr));
             for (uint32_t column_id : read_update_column_ids.second) {
-                chunk_ptr->get_column_by_id(column_id)->append_selective(
+                chunk_ptr->get_column_raw_ptr_by_id(column_id)->append_selective(
                         *partial_chunk_ptr->get_column_by_id(column_id), _partial_update_states[upt_id].insert_rowids);
             }
             // fill default columns
@@ -698,7 +688,22 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     std::vector<ColumnUID> update_column_uids;
     std::vector<ColumnUID> unique_update_column_ids;
     const auto& tschema = rowset->schema();
+    /* 
+      * skip overwrite the auto increment column using data in .upt files if user partially update it for the existed keys
+
+      * In current implementation, if user partially update the auto increment column, it will also be included in partial schema
+      * in writing phrase. Because we need to allocate the id in this phrase. It means that .upt files will contains auto increment
+      * column data even it is partially updated (does not specfied by user).
+      * 
+      * For the keys which have already existed in the tablet, we will write "0" in .upt file. In the apply phrase, such "0" data is not
+      * used and we need to discard the column for the keys which have already existed in the tablet.
+    */
     for (ColumnId cid : txn_meta.partial_update_column_ids()) {
+        DCHECK(cid < tschema->columns().size());
+        if (txn_meta.has_auto_increment_partial_update_column_id() && tschema->column(cid).is_auto_increment()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
         if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((ColumnUID)cid);
@@ -712,7 +717,12 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         }
-        if (!tschema->column(cid).is_key()) {
+        const auto& column = tschema->column(cid);
+        if (txn_meta.has_auto_increment_partial_update_column_id() && column.is_auto_increment()) {
+            // skip auto increment column if it is being used for partial update
+            continue;
+        }
+        if (!column.is_key()) {
             unique_update_column_ids.push_back(uid);
         }
     }
@@ -751,6 +761,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
     std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
     std::map<uint32_t, std::vector<std::string>> dcg_column_files;
+    std::map<uint32_t, int64_t> rssid_to_segment_file_size;
     // 3. read from raw segment file and update file, and generate `.col` files one by one
     int idx = 0; // It is used for generate different .cols filename
     for (uint32_t col_index = 0; col_index < update_column_ids.size(); col_index += BATCH_HANDLE_COLUMN_CNT) {
@@ -804,6 +815,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             dcg_column_ids[each.first].push_back(selective_unique_update_column_ids);
             dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
             handle_cnt++;
+            rssid_to_segment_file_size[each.first] += segment_file_size;
         }
         idx++;
     }
@@ -811,7 +823,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
         _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1,
-                                                       dcg_column_ids[each.first], dcg_column_files[each.first]);
+                                                       dcg_column_ids[each.first], dcg_column_files[each.first], {},
+                                                       rssid_to_segment_file_size[each.first]);
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();

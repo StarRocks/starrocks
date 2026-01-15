@@ -14,8 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -28,8 +26,10 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;

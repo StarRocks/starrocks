@@ -14,6 +14,7 @@
 
 package com.starrocks.replication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -28,6 +29,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -54,7 +56,7 @@ public class ReplicationMgr extends FrontendDaemon {
     private final Map<Long, ReplicationJob> abortedJobs = Maps.newConcurrentMap(); // Aborted jobs, will retry later
 
     public ReplicationMgr() {
-        super("ReplicationMgr", Config.replication_interval_ms);
+        super("replication-mgr", Config.replication_interval_ms);
     }
 
     @Override
@@ -64,8 +66,16 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
-        ReplicationJob job = new ReplicationJob(request);
+        LOG.debug("Add replication job, database id: {}, table id: {}, job id: {}",
+                request.getDatabase_id(), request.getTable_id(), request.getJob_id());
+        ReplicationJob job = isLakeReplicationJob(request) ?
+                new LakeReplicationJob(request) : new ReplicationJob(request);
         addReplicationJob(job);
+    }
+
+    private boolean isLakeReplicationJob(TTableReplicationRequest request) {
+        return request != null && request.src_cluster_run_mode != null
+                && request.src_cluster_run_mode == RunMode.toTRunMode(RunMode.SHARED_DATA);
     }
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {
@@ -132,6 +142,11 @@ public class ReplicationMgr extends FrontendDaemon {
         for (ReplicationJob job : toRemovedJobs) {
             runningJobs.remove(job.getTableId(), job);
         }
+    }
+
+    @VisibleForTesting
+    public void removeRunningJob(ReplicationJob job) {
+        runningJobs.remove(job.getTableId(), job);
     }
 
     public void finishRemoteSnapshotTask(RemoteSnapshotTask task, TFinishTaskRequest request) {

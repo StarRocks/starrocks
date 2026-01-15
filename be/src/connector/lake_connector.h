@@ -55,6 +55,13 @@ public:
         _reader->get_split_tasks(split_tasks);
     }
 
+    // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
+    // generates predicates by ScanConjunctsManager, so skip parse_runtime_filters to make the parse logic is consistent
+    // to the share-nothing mode.
+    Status parse_runtime_filters(RuntimeState* state) override { return Status::OK(); }
+
+    TabletSchemaCSPtr TEST_tablet_schema() const { return _tablet_schema; }
+
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
     Status init_global_dicts(TabletReaderParams* params);
@@ -66,8 +73,11 @@ private:
     Status build_scan_range(RuntimeState* state);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
-    void update_counter();
+    void update_counter(RuntimeState* state);
 
+    Status _extend_schema_by_access_paths();
+    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                          const ColumnAccessPath* path);
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -126,6 +136,9 @@ private:
     RuntimeProfile::Counter* _pred_filter_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_input_rows = nullptr;
+    RuntimeProfile::Counter* _rf_pred_output_rows = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _get_delta_column_group_timer = nullptr;
@@ -149,6 +162,8 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
@@ -181,8 +196,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
-    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 
     RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
     RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
