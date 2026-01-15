@@ -284,7 +284,7 @@ public class TabletReshardJob implements Writable {
     protected void runRunningJob() {
         boolean allPartitionPublished = true;
         ThreadPoolExecutor publishThreadPool = GlobalStateMgr.getCurrentState().getPublishVersionDaemon()
-                .getLakeTaskExecutor();
+                .getTaskExecutor();
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
             List<String> distributionColumns = olapTable.getDefaultDistributionInfo().getDistributionColumns().stream()
