@@ -26,6 +26,7 @@ class LoadSpillBlockManager;
 class ChunkIterator;
 class LoadChunkSpiller;
 class LoadSpillPipelineMergeTask;
+class LoadSpillPipelineMergeContext;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 using LoadSpillPipelineMergeTaskPtr = std::unique_ptr<LoadSpillPipelineMergeTask>;
@@ -85,7 +86,8 @@ struct SpillBlockInputTasks {
 class LoadChunkSpiller {
 public:
     friend class LoadSpillPipelineMergeIterator;
-    LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
+    LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
+                     LoadSpillPipelineMergeContext* pipeline_merge_context = nullptr);
     ~LoadChunkSpiller() = default;
 
     StatusOr<size_t> spill(const Chunk& chunk, int64_t slot_idx = -1);
@@ -121,6 +123,8 @@ private:
     LoadSpillBlockManager* _block_manager = nullptr;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    // pipeline merge context for managing merge tasks
+    LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
     RuntimeProfile* _profile = nullptr;

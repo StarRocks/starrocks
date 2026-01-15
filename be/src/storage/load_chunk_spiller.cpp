@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
@@ -99,8 +100,9 @@ Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
     return Status::OK();
 }
 
-LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile)
-        : _block_manager(block_manager), _profile(profile) {
+LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
+                                   LoadSpillPipelineMergeContext* pipeline_merge_context)
+        : _block_manager(block_manager), _profile(profile), _pipeline_merge_context(pipeline_merge_context) {
     if (_profile == nullptr) {
         // use dummy profile
         _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
@@ -117,7 +119,12 @@ LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, Runtime
 //                  when multiple memtables flush concurrently, slot_idx preserves their
 //                  original submission order for correct merge sequence.
 StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
-    if (chunk.num_rows() == 0) return 0;
+    if (chunk.num_rows() == 0) {
+        if (_pipeline_merge_context) {
+            _pipeline_merge_context->mark_slot_ready(slot_idx);
+        }
+        return 0;
+    }
     // 1. create new block group tagged with slot_idx
     auto block_group = _block_manager->block_container()->create_block_group(slot_idx);
     auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager, block_group);
@@ -125,6 +132,9 @@ StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
     RETURN_IF_ERROR(output->flush());
+    if (_pipeline_merge_context) {
+        _pipeline_merge_context->mark_slot_ready(slot_idx);
+    }
     return output->append_bytes();
 }
 
@@ -367,15 +377,13 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
 
     // Empty result signals iteration complete (iterator checks merge_itr == nullptr)
     RETURN_IF(groups.empty(), result_task);
+    // Return error if _pipeline_merge_context is null
+    RETURN_IF(_pipeline_merge_context == nullptr,
+              Status::InternalError("LoadChunkSpiller pipeline merge context is null"));
 
     std::vector<ChunkIteratorPtr> merge_inputs;
     size_t current_input_bytes = 0;
 
-    // CONTINUITY ENFORCEMENT: Track last slot_idx to ensure we only merge continuous ranges.
-    // WHY: Gaps in slot_idx indicate pending flushes from parallel memtables. Merging across
-    // gaps would violate data ordering. In non-final rounds we stop at gaps; in final round
-    // gaps are errors (all flushes should be complete).
-    int64_t last_slot_idx = -1;
     // Sort groups by slot_idx to restore original memtable flush order
     // CORRECTNESS: When parallel flush is enabled, block groups are created out of order.
     // Sorting by slot_idx ensures we merge blocks in the same order as they were originally
@@ -386,29 +394,20 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     // Tracks the last group index included in this task (used for cleanup at end)
     int64_t stop_idx = -1;
 
+    // Check previous slot id for continuity
+    if (!final_round && groups[0].slot_idx > 0 && !_pipeline_merge_context->is_slot_ready(groups[0].slot_idx - 1)) {
+        // No continuous blocks available yet
+        return result_task;
+    }
+
     // BATCHING LOGIC: Accumulate continuous block groups until hitting size/memory limits
     for (size_t i = 0; i < groups.size(); i++) {
         auto& group = groups[i];
 
         // CONTINUITY CHECK: Ensure we only merge consecutive slot_idx ranges
-        if (last_slot_idx != -1 && group.slot_idx != last_slot_idx + 1) {
-            if (final_round) {
-                // CRITICAL ERROR: In final round, gaps indicate a bug (missing flush or race condition).
-                // This should never happen if all memtable flushes completed properly.
-                LOG(ERROR) << fmt::format(
-                        "LoadChunkSpiller final round merge found non-continuous slot idx, load_id:{} "
-                        "fragment_instance_id:{} last_slot_idx:{} current_slot_idx:{}",
-                        (std::ostringstream() << _block_manager->load_id()).str(),
-                        (std::ostringstream() << _block_manager->fragment_instance_id()).str(), last_slot_idx,
-                        group.slot_idx);
-                return Status::InternalError("Non-continuous slot idx found in final round merge");
-            }
-            // Non-final round: Stop at gap and wait for pending flushes to fill the gap.
-            // The iterator will be called again later to process remaining groups.
+        if (!final_round && !_pipeline_merge_context->is_slot_ready(group.slot_idx)) {
             break;
         }
-
-        last_slot_idx = group.slot_idx;
 
         // Create iterator for this block group's data
         merge_inputs.push_back(

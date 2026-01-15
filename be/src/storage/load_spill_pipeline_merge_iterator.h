@@ -97,7 +97,7 @@ public:
     void next() { _next(); }
 
     // Check if more tasks are available. Pipeline operators use this for work scheduling.
-    bool has_more() const { return _current_task != nullptr; }
+    bool has_more() const { return _current_task != nullptr && _status.ok(); }
 
     // Returns error status if task generation failed (e.g., OOM, I/O error)
     const Status& status() const { return _status; }

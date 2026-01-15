@@ -34,13 +34,13 @@ namespace starrocks::lake {
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
                                      RuntimeProfile* profile) {
-    _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(block_manager, profile);
     _writer = writer;
+    _pipeline_merge_context = std::make_unique<LoadSpillPipelineMergeContext>(_writer);
+    _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(block_manager, profile, _pipeline_merge_context.get());
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" + std::to_string(writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
                                                       GlobalEnv::GetInstance()->compaction_mem_tracker());
-    _pipeline_merge_context = std::make_unique<LoadSpillPipelineMergeContext>(_writer);
 }
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
@@ -79,6 +79,11 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
 
         // Lazy initialization: create thread pool token only when first needed
         _pipeline_merge_context->create_thread_pool_token();
+        if (!_pipeline_merge_context->token()) {
+            // Thread pool exhausted - cannot submit merge tasks now
+            // Skip eager merge for this flush
+            return Status::OK();
+        }
 
         // Generate ONE merge task eagerly (not all tasks). This allows pipeline execution
         // where merge tasks are generated and submitted incrementally as resources allow,
@@ -96,6 +101,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
                 current_task->update_status(submit_st);
             }
         }
+        RETURN_IF_ERROR(task_iterator.status());
     }
     return Status::OK();
 }

@@ -91,6 +91,16 @@ public:
 
     ThreadPoolToken* token() { return _token.get(); }
 
+    void mark_slot_ready(int64_t slot_idx) {
+        std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+        _ready_slots.insert(slot_idx);
+    }
+
+    bool is_slot_ready(int64_t slot_idx) {
+        std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+        return _ready_slots.find(slot_idx) != _ready_slots.end();
+    }
+
 private:
     // Parent writer that owns the final tablet data. All task results merge into this.
     lake::TabletWriter* _writer;
@@ -112,6 +122,9 @@ private:
     // Shared quit flag checked by all merge tasks for cancellation support.
     // Set to true when load operation is cancelled/aborted.
     std::atomic<bool> _quit_flag{false};
+
+    // Tracks the block groups which are ready to be merged in order.
+    std::unordered_set<int64_t> _ready_slots;
 };
 
 }; // namespace starrocks

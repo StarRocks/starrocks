@@ -63,13 +63,13 @@ private:
     // to prevent OOM. Parent is compaction tracker since merge is similar to compaction.
     std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
 
-    // Manages spilling chunks to disk and provides merge capabilities
-    std::unique_ptr<LoadChunkSpiller> _load_chunk_spiller = nullptr;
-
     // Coordinates parallel merge tasks and consolidates their results.
     // Collects tasks from both eager merge (in flush_chunk) and final merge phases,
     // ensuring all task results are properly merged into the tablet writer.
     std::unique_ptr<LoadSpillPipelineMergeContext> _pipeline_merge_context = nullptr;
+
+    // Manages spilling chunks to disk and provides merge capabilities
+    std::unique_ptr<LoadChunkSpiller> _load_chunk_spiller = nullptr;
 };
 
 } // namespace lake
