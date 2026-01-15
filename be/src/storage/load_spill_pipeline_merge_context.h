@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <unordered_set>
 #include <vector>
 
 #include "common/status.h"

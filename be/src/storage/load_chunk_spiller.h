@@ -121,13 +121,13 @@ private:
 
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
+    RuntimeProfile* _profile = nullptr;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
     // pipeline merge context for managing merge tasks
     LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
-    RuntimeProfile* _profile = nullptr;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
     SchemaPtr _schema;
