@@ -229,8 +229,8 @@ public class ScalarOperatorRewriterTest {
 
     @Test
     public void testUuidBothSidesNoInfiniteLoop() {
-        CallOperator uuid1 = new CallOperator(FunctionSet.UUID, VarcharType.VARCHAR, Lists.newArrayList());
-        CallOperator uuid2 = new CallOperator(FunctionSet.UUID, VarcharType.VARCHAR, Lists.newArrayList());
+        CallOperator uuid1 = new CallOperator(FunctionSet.UUID, Type.VARCHAR, Lists.newArrayList());
+        CallOperator uuid2 = new CallOperator(FunctionSet.UUID, Type.VARCHAR, Lists.newArrayList());
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.NE, uuid1, uuid2);
 
         ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
