@@ -117,6 +117,99 @@ Iceberg テーブルにロードされるクエリストートメントの結果
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## DELETE
+
+指定された条件に基づいて Iceberg テーブルからデータを削除するには、DELETE ステートメントを使用できます。この機能は StarRocks v4.1 以降でサポートされています。
+
+### 構文
+
+```SQL
+DELETE FROM <table_name> WHERE <condition>
+```
+
+### パラメーター
+
+- `table_name`: データを削除する Iceberg テーブルの名前。使用可能な形式：
+  - 完全修飾名：`catalog_name.database_name.table_name`
+  - データベース修飾名（catalog 設定後）：`database_name.table_name`
+  - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
+
+- `condition`: 削除する行を識別する条件。以下を含めることができます：
+  - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
+  - 論理演算子：`AND`、`OR`、`NOT`
+  - `IN` および `NOT IN` 句
+  - `BETWEEN` および `LIKE` 演算子
+  - `IS NULL` および `IS NOT NULL`
+  - `IN` または `EXISTS` を含むサブクエリ
+
+### 例
+
+#### 基本的な DELETE 操作
+
+単純な条件で行を削除する：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE id = 3;
+```
+
+#### IN および NOT IN を使用した DELETE
+
+IN 句を使用して複数の行を削除する：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE id IN (18, 20, 22);
+DELETE FROM iceberg_catalog.db.table1 WHERE id NOT IN (100, 101, 102);
+```
+
+#### 論理演算子を使用した DELETE
+
+複数の条件を組み合わせる：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE age > 30 AND salary < 70000;
+DELETE FROM iceberg_catalog.db.table1 WHERE status = 'inactive' OR last_login < '2023-01-01';
+```
+
+#### パターン一致を使用した DELETE
+
+LIKE を使用したパターンベースの削除：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE name LIKE 'A%';
+DELETE FROM iceberg_catalog.db.table1 WHERE email LIKE '%@example.com';
+```
+
+#### 範囲条件を使用した DELETE
+
+BETWEEN を使用した範囲ベースの削除：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE age BETWEEN 30 AND 40;
+DELETE FROM iceberg_catalog.db.table1 WHERE created_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+#### NULL チェックを使用した DELETE
+
+NULL 値を含む行または NULL 値を含まない行を削除する：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE name IS NULL;
+DELETE FROM iceberg_catalog.db.table1 WHERE email IS NULL AND phone IS NULL;
+DELETE FROM iceberg_catalog.db.table1 WHERE age IS NOT NULL;
+```
+
+#### サブクエリを使用した DELETE
+
+削除する行を識別するためにサブクエリを使用する：
+
+```SQL
+-- IN サブクエリを使用した DELETE
+DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHERE expired = true);
+
+-- EXISTS サブクエリを使用した DELETE
+DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
+```
+
 ## TRUNCATE
 
 Iceberg テーブルからすべてのデータを迅速に削除するには、TRUNCATE TABLE ステートメントを使用できます。
