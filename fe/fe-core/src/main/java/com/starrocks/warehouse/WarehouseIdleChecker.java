@@ -113,6 +113,9 @@ public class WarehouseIdleChecker extends FrontendDaemon {
     }
 
     public static void updateJobLastFinishTime(long wId, String info) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
         LAST_FINISHED_JOB_TIME.put(wId, System.currentTimeMillis());
         LAST_FINISHED_JOB_INFO.put(wId, info);
     }
