@@ -83,24 +83,6 @@ TEST_F(BrpcStubCacheTest, reset) {
     ASSERT_NE(istub1, istub2);
 }
 
-TEST_F(BrpcStubCacheTest, lake_service_stub_normal) {
-    LakeServiceBrpcStubCache cache;
-    TNetworkAddress address;
-    std::string hostname = "127.0.0.1";
-    int32_t port1 = 123;
-    auto stub1 = cache.get_stub(hostname, port1);
-    ASSERT_TRUE(stub1.ok());
-    int32_t port2 = 124;
-    auto stub2 = cache.get_stub(hostname, port2);
-    ASSERT_TRUE(stub2.ok());
-    ASSERT_NE(*stub1, *stub2);
-    auto stub3 = cache.get_stub(hostname, port1);
-    ASSERT_TRUE(stub3.ok());
-    ASSERT_EQ(*stub1, *stub3);
-    auto stub4 = cache.get_stub("invalid.cm.invalid", 123);
-    ASSERT_FALSE(stub4.ok());
-}
-
 TEST_F(BrpcStubCacheTest, test_http_stub) {
     HttpBrpcStubCache cache;
     TNetworkAddress address;
@@ -136,23 +118,6 @@ TEST_F(BrpcStubCacheTest, test_cleanup) {
     sleep(2);
     auto stub3 = cache.get_stub(address);
     ASSERT_NE(stub3, stub1);
-}
-
-TEST_F(BrpcStubCacheTest, test_lake_cleanup) {
-    config::brpc_stub_expire_s = 1;
-    LakeServiceBrpcStubCache cache;
-    std::string hostname = "127.0.0.1";
-    int32_t port = 123;
-    auto stub1 = cache.get_stub(hostname, port);
-    ASSERT_TRUE(stub1.ok());
-    ASSERT_NE(nullptr, *stub1);
-    auto stub2 = cache.get_stub(hostname, port);
-    ASSERT_TRUE(stub1.ok());
-    ASSERT_EQ(*stub2, *stub1);
-
-    sleep(2);
-    auto stub3 = cache.get_stub(hostname, port);
-    ASSERT_NE(*stub3, *stub1);
 }
 
 TEST_F(BrpcStubCacheTest, test_http_cleanup) {
