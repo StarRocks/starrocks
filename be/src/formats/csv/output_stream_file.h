@@ -105,14 +105,13 @@ protected:
 private:
     // Private constructor - use create() factory method instead
     CompressedOutputStream(std::shared_ptr<OutputStream> underlying_stream, const BlockCompressionCodec* codec,
-                           CompressionTypePB compression_type, size_t buff_size);
+                           size_t buff_size);
 
     // Compress and write the current buffer to underlying stream
     Status _flush_compressed_chunk();
 
     std::shared_ptr<OutputStream> _underlying_stream;
     const BlockCompressionCodec* _codec;
-    CompressionTypePB _compression_type;
     // Buffer to accumulate uncompressed data before compression
     raw::RawVector<uint8_t> _uncompressed_buffer;
     raw::RawVector<uint8_t> _compress_buffer;

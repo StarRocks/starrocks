@@ -52,16 +52,12 @@ StatusOr<std::shared_ptr<CompressedOutputStream>> CompressedOutputStream::create
                 fmt::format("Failed to get compression codec for type: {}", CompressionTypePB_Name(compression_type)));
     }
     return std::shared_ptr<CompressedOutputStream>(
-            new CompressedOutputStream(std::move(underlying_stream), codec, compression_type, buff_size));
+            new CompressedOutputStream(std::move(underlying_stream), codec, buff_size));
 }
 
 CompressedOutputStream::CompressedOutputStream(std::shared_ptr<OutputStream> underlying_stream,
-                                               const BlockCompressionCodec* codec, CompressionTypePB compression_type,
-                                               size_t buff_size)
-        : OutputStream(buff_size),
-          _underlying_stream(std::move(underlying_stream)),
-          _codec(codec),
-          _compression_type(compression_type) {}
+                                               const BlockCompressionCodec* codec, size_t buff_size)
+        : OutputStream(buff_size), _underlying_stream(std::move(underlying_stream)), _codec(codec) {}
 
 Status CompressedOutputStream::_flush_compressed_chunk() {
     if (_uncompressed_buffer.empty()) {
@@ -123,15 +119,20 @@ Status CompressedOutputStream::finalize() {
 
 std::size_t CompressedOutputStream::size() {
     // Return the total compressed bytes written so far, plus an estimate for pending
-    // uncompressed data in the buffer. This provides a reasonable approximation of
-    // the final file size for file rotation decisions.
+    // uncompressed data. This provides a reasonable approximation of the final file
+    // size for file rotation decisions.
+    //
+    // Pending data includes:
+    // 1. Data in the base class OutputStream buffer (not yet synced)
+    // 2. Data in _uncompressed_buffer (synced but not yet compressed)
     //
     // For pending data, we use the max_compressed_len as a conservative estimate.
     // This may slightly overestimate, but ensures file rotation triggers before
     // files get too large.
+    size_t total_pending = _pending_buffer_size() + _uncompressed_buffer.size();
     size_t pending_estimate = 0;
-    if (!_uncompressed_buffer.empty()) {
-        pending_estimate = _codec->max_compressed_len(_uncompressed_buffer.size());
+    if (total_pending > 0) {
+        pending_estimate = _codec->max_compressed_len(total_pending);
     }
     return _compressed_bytes_written + pending_estimate;
 }
