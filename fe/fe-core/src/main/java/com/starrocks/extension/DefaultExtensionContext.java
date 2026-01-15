@@ -172,7 +172,11 @@ public class DefaultExtensionContext implements ExtensionContext {
         register(ResourceUsageMonitor.class, resourceUsageMonitor);
         
         register(WarehouseManager.class, new WarehouseManager());
+        
+        // Register constructor for BaseSlotManager to enable dependency injection
+        registerConstructor(SlotManager.class);
         register(BaseSlotManager.class, new SlotManager(resourceUsageMonitor));
+        
         register(IGsonBuilderFactory.class, new DefaultGsonBuilderFactory());
     }
 }
