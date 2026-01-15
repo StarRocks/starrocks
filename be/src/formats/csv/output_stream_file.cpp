@@ -63,10 +63,6 @@ CompressedOutputStream::CompressedOutputStream(std::shared_ptr<OutputStream> und
           _codec(codec),
           _compression_type(compression_type) {}
 
-bool CompressedOutputStream::_supports_incremental_compression() const {
-    return supports_incremental_compression(_compression_type);
-}
-
 Status CompressedOutputStream::_flush_compressed_chunk() {
     if (_uncompressed_buffer.empty()) {
         return Status::OK();

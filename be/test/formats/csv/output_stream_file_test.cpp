@@ -201,7 +201,7 @@ TEST_F(OutputStreamFileTest, TestDataLargerThanBuffer) {
     EXPECT_EQ(decompressed, test_data);
 }
 
-// Test size() method
+// Test size() method - tests both pending estimate and final size
 TEST_F(OutputStreamFileTest, TestSizeMethod) {
     std::string file_path = "/test_size.csv.gz";
     auto maybe_file = _fs.new_writable_file(file_path);
@@ -216,11 +216,17 @@ TEST_F(OutputStreamFileTest, TestSizeMethod) {
 
     std::string test_data = "Test data\n";
     ASSERT_OK(compressed_stream->write(Slice(test_data)));
+
+    // Test size() before finalize() - should include pending estimate for buffered data
+    // This covers the pending_estimate calculation in size() method
+    size_t size_before_finalize = compressed_stream->size();
+    EXPECT_GT(size_before_finalize, 0);
+
     ASSERT_OK(compressed_stream->finalize());
 
-    // size() should return the position in the underlying stream
-    size_t size = compressed_stream->size();
-    EXPECT_GT(size, 0);
+    // Test size() after finalize() - buffer is now empty, returns actual compressed size
+    size_t size_after_finalize = compressed_stream->size();
+    EXPECT_GT(size_after_finalize, 0);
 
     // Note: finalize() already closes the async stream internally
 }

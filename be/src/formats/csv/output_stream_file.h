@@ -110,10 +110,6 @@ private:
     // Compress and write the current buffer to underlying stream
     Status _flush_compressed_chunk();
 
-    // Check if the compression type supports incremental compression via frame concatenation.
-    // GZIP, LZ4_FRAME, and ZSTD support this because multiple frames can be concatenated.
-    bool _supports_incremental_compression() const;
-
     std::shared_ptr<OutputStream> _underlying_stream;
     const BlockCompressionCodec* _codec;
     CompressionTypePB _compression_type;
