@@ -110,6 +110,7 @@ set(UTIL_FILES
   hash_util.cpp
   debug_action.cpp
   internal_service_recoverable_stub.cpp
+  brpc_stub_cache.cpp
   byte_buffer.cpp
 )
 
