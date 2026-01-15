@@ -24,7 +24,6 @@ import com.starrocks.server.WarehouseManager;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
-import java.util.Arrays;
 import java.util.Map;
 
 public class DefaultExtensionContext implements ExtensionContext {
@@ -110,7 +109,7 @@ public class DefaultExtensionContext implements ExtensionContext {
             }
 
             // Create and return new instance
-            return (T) metadata.getConstructor().newInstance(parameters);
+            return clazz.cast(metadata.getConstructor().newInstance(parameters));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create instance of " + clazz.getName(), e);
         }
