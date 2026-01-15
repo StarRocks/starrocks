@@ -1648,7 +1648,7 @@ public class ShowExecutor {
                         long indexReplicaCount = 0;
                         long indexRowCount = 0;
                         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                            MaterializedIndex mIndex = partition.getIndex(indexMetaId);
+                            MaterializedIndex mIndex = partition.getLatestIndex(indexMetaId);
                             indexSize += mIndex.getDataSize();
                             indexReplicaCount += mIndex.getReplicaCount();
                             indexRowCount += mIndex.getRowCount();
@@ -1937,7 +1937,7 @@ public class ShowExecutor {
                             break;
                         }
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                            for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                                 if (indexMetaId > -1 && index.getMetaId() != indexMetaId) {
                                     continue;
                                 }

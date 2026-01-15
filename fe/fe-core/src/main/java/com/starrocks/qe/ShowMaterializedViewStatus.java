@@ -379,7 +379,7 @@ public class ShowMaterializedViewStatus {
         // rows
         if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
             final Partition partition = olapTable.getPartitions().iterator().next();
-            final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(indexMeta.getIndexMetaId());
+            final MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestIndex(indexMeta.getIndexMetaId());
             status.setRows(index.getRowCount());
         } else {
             status.setRows(0L);

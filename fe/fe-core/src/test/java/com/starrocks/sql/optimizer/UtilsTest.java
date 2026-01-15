@@ -86,7 +86,7 @@ public class UtilsTest {
 
     protected static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(rowCount);
         }
     }
 

@@ -523,7 +523,7 @@ public class BackupJob extends AbstractJob {
                 for (Partition partition : partitions) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         long visibleVersion = physicalPartition.getVisibleVersion();
-                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                         for (MaterializedIndex index : indexes) {
                             int schemaHash = olapTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                             for (Tablet tablet : index.getTablets()) {

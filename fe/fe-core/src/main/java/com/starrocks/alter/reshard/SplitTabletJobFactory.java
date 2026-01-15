@@ -167,7 +167,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
                 for (PhysicalPartition physicalPartition : physicalPartitions) {
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
-                    for (MaterializedIndex oldIndex : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex oldIndex : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
 
                         Map<Long, SplittingTablet> splittingTablets = new HashMap<>();
                         for (Tablet tablet : oldIndex.getTablets()) {
@@ -279,9 +279,8 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
 
     private MaterializedIndex createMaterializedIndex(MaterializedIndex oldIndex,
             List<ReshardingTablet> reshardingTablets) {
-        // TODO: Use new id after multiple versions of MaterializedIndex is supported
-        MaterializedIndex newIndex = new MaterializedIndex(oldIndex.getId(), IndexState.NORMAL,
-                oldIndex.getShardGroupId());
+        MaterializedIndex newIndex = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(), oldIndex.getMetaId(),
+                IndexState.NORMAL, oldIndex.getShardGroupId());
 
         for (ReshardingTablet reshardingTablet : reshardingTablets) {
             Tablet oldTablet = oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());

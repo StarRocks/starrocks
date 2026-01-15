@@ -457,7 +457,7 @@ public class TabletChecker extends FrontendDaemon {
 
         // Tablet in SHADOW index can not be repaired or balanced
         if (physicalPartition != null) {
-            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
+            for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(
                     IndexExtState.VISIBLE)) {
                 BalanceStat balanceStat = BalanceStat.BALANCED_STAT;
                 boolean allTabletsChecked = true;

@@ -248,7 +248,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds =
                     partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -419,7 +419,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
@@ -515,7 +515,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p2")).
                     mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
