@@ -18,6 +18,13 @@
 #include "formats/csv/output_stream.h"
 #include "formats/file_writer.h"
 
+namespace starrocks {
+class ColumnEvaluator;
+class FileSystem;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
+
 namespace starrocks::formats {
 
 struct CSVWriterOptions : FileWriterOptions {

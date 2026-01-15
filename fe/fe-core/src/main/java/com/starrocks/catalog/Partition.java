@@ -80,7 +80,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
 
     @SerializedName(value = "idToSubPartition")
     private Map<Long, PhysicalPartition> idToSubPartition = Maps.newHashMap();
-    private Map<String, PhysicalPartition> nameToSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
@@ -117,13 +116,11 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         this.distributionInfo = distributionInfo;
 
         this.defaultPhysicalPartitionId = physicalPartitionId;
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId,
-                generatePhysicalPartitionName(physicalPartitionId), id, baseIndex);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, id, baseIndex);
         if (distributionInfo != null) {
             physicalPartition.setBucketNum(distributionInfo.getBucketNum());
         }
         this.idToSubPartition.put(physicalPartitionId, physicalPartition);
-        this.nameToSubPartition.put(physicalPartition.getName(), physicalPartition);
     }
 
     public Partition shallowCopy() {
@@ -145,7 +142,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         partition.shardGroupId = this.shardGroupId;
         partition.defaultPhysicalPartitionId = this.defaultPhysicalPartitionId;
         partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
-        partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
         return partition;
     }
 
@@ -185,20 +181,11 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         if (idToSubPartition.size() == 0) {
             defaultPhysicalPartitionId = subPartition.getId();
         }
-        if (subPartition.getName() == null) {
-            subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
-        }
-
         idToSubPartition.put(subPartition.getId(), subPartition);
-        nameToSubPartition.put(subPartition.getName(), subPartition);
     }
 
     public PhysicalPartition removeSubPartition(long id) {
         PhysicalPartition subPartition = idToSubPartition.remove(id);
-        if (subPartition != null) {
-            nameToSubPartition.remove(subPartition.getName());
-            return subPartition;
-        }
         return subPartition;
     }
 
@@ -208,10 +195,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
 
     public PhysicalPartition getSubPartition(long id) {
         return idToSubPartition.get(id);
-    }
-
-    public PhysicalPartition getSubPartition(String name) {
-        return nameToSubPartition.get(name);
     }
 
     public PhysicalPartition getLatestPhysicalPartition() {
@@ -288,10 +271,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         return buffer.toString();
     }
 
-    public String generatePhysicalPartitionName(long physicalPartitionId) {
-        return this.name + '_' + physicalPartitionId;
-    }
-
     @Override
     public void gsonPostProcess() throws IOException {
         if (dataVersion == 0) {
@@ -315,18 +294,12 @@ public class Partition extends MetaObject implements GsonPostProcessable {
             long physicalPartitionId = id;
             defaultPhysicalPartitionId = physicalPartitionId;
             idToSubPartition.put(physicalPartitionId, physicalPartition);
-            nameToSubPartition.put(generatePhysicalPartitionName(physicalPartitionId), physicalPartition);
         }
 
         for (PhysicalPartition subPartition : idToSubPartition.values()) {
-            if (subPartition.getName() == null) {
-                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
-            }
             if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
                 subPartition.getBaseIndex().setShardGroupId(getDefaultPhysicalPartition().getShardGroupId());
             }
-
-            nameToSubPartition.put(subPartition.getName(), subPartition);
         }
     }
 

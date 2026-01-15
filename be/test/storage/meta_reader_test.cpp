@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"

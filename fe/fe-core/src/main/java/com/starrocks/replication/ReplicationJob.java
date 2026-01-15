@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -799,20 +800,34 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
-            Preconditions.checkState(physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
-                    "Partition " + physicalPartition.getName() + " in table " + table.getName()
-                            + " publish version not finished");
-            Preconditions.checkState(physicalPartition.getDataVersion() <= srcPartition.getDataVersion(),
-                    "Target data version: " + physicalPartition.getDataVersion()
-                            + " is larger than source data version: " + srcPartition.getDataVersion());
-            if (physicalPartition.getDataVersion() == srcPartition.getDataVersion()) {
-                continue;
+        for (Partition partition : table.getPartitions()) {
+            Partition srcPartition = srcTable.getPartition(partition.getName(), false);
+            Preconditions.checkState(srcPartition != null,
+                    "Partition " + partition.getName() + " in table " + srcTable.getName() + " not found");
+
+            List<PhysicalPartition> physicalPartitions = getOrderedPhysicalPartitions(partition);
+            List<PhysicalPartition> srcPhysicalPartitions = getOrderedPhysicalPartitions(srcPartition);
+            Preconditions.checkState(physicalPartitions.size() == srcPhysicalPartitions.size(),
+                    "Target physical partition size: " + physicalPartitions.size()
+                            + " is not equal to source physical partition size: " + srcPhysicalPartitions.size());
+
+            for (int i = 0; i < physicalPartitions.size(); ++i) {
+                PhysicalPartition physicalPartition = physicalPartitions.get(i);
+                PhysicalPartition srcPhysicalPartition = srcPhysicalPartitions.get(i);
+                Preconditions.checkState(
+                        physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
+                        "Partition " + partition.getName() + "(" + physicalPartition.getId() + ") in table "
+                                + table.getName() + " publish version not finished");
+                Preconditions.checkState(physicalPartition.getDataVersion() <= srcPhysicalPartition.getDataVersion(),
+                        "Target data version: " + physicalPartition.getDataVersion()
+                                + " is larger than source data version: " + srcPhysicalPartition.getDataVersion());
+                if (physicalPartition.getDataVersion() == srcPhysicalPartition.getDataVersion()) {
+                    continue;
+                }
+                PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition,
+                        srcPhysicalPartition, srcSystemInfoService);
+                partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
-            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
-                    srcSystemInfoService);
-            partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }
         return partitionInfos;
     }
@@ -849,6 +864,15 @@ public class ReplicationJob implements GsonPostProcessable {
             tabletInfos.put(tabletInfo.getTabletId(), tabletInfo);
         }
         return new IndexInfo(index.getId(), schemaHash, srcSchemaHash, tabletInfos);
+    }
+
+    private static List<PhysicalPartition> getOrderedPhysicalPartitions(Partition partition) {
+        List<PhysicalPartition> physicalPartitions = partition.getSubPartitions().stream()
+                .sorted((left, right) -> Long.compare(left.getId(), right.getId()))
+                .collect(Collectors.toList());
+        Preconditions.checkState(!physicalPartitions.isEmpty()
+                && physicalPartitions.get(0).getId() == partition.getDefaultPhysicalPartition().getId());
+        return physicalPartitions;
     }
 
     private static TabletInfo initTabletInfo(Tablet tablet, Tablet srcTablet,

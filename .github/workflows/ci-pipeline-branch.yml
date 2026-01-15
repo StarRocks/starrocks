@@ -73,7 +73,7 @@ jobs:
       - name: Checkout code
         id: checkout_code
         if: github.base_ref != 'main'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: refs/pull/${{ github.event.pull_request.number }}/head
@@ -160,7 +160,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -222,7 +222,7 @@ jobs:
           ./bin/run-pr-update-image.sh
 
       - name: Upload Thirdparty Result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
@@ -256,7 +256,7 @@ jobs:
           fi
 
       - name: Download Thirdparty Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
@@ -304,7 +304,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: BE UT LOG
@@ -375,7 +375,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -446,7 +446,7 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -479,7 +479,7 @@ jobs:
           echo ${GITHUB_SHA} > head_sha.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pr_num
           path: ./pr_num.txt
@@ -487,7 +487,7 @@ jobs:
           overwrite: true
 
       - name: Upload the PR HEAD REF
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: head_sha
           path: ./head_sha.txt

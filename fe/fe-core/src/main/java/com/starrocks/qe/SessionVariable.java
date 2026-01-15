@@ -3125,7 +3125,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePhasedScheduler = false;
 
     @VarAttr(name = ENABLE_SINGLE_NODE_SCHEDULE)
-    private boolean enableSingleNodeSchedule = true;
+    private boolean enableSingleNodeSchedule = false;
 
     @VarAttr(name = ENABLE_PIPELINE_EVENT_SCHEDULER)
     private boolean enablePipelineEventScheduler = true;
@@ -6078,9 +6078,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @Override
-    public Object clone() {
+    public SessionVariable clone() {
         try {
-            return super.clone();
+            return (SessionVariable) super.clone();
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }

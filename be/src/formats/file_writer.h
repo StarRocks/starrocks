@@ -14,16 +14,20 @@
 
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <future>
+#include <map>
+#include <string>
+#include <vector>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "formats/column_evaluator.h"
-#include "fs/fs.h"
-#include "io/async_flush_output_stream.h"
-#include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
+#include "common/statusor.h"
 
+namespace starrocks::io {
+class AsyncFlushOutputStream;
+}
 namespace starrocks::formats {
 
 struct FileWriterOptions {
@@ -51,14 +55,8 @@ public:
         std::function<void()> rollback_action;
         std::string extra_data;
         std::string referenced_data_file;
-        CommitResult& set_extra_data(std::string extra_data) {
-            this->extra_data = std::move(extra_data);
-            return *this;
-        }
-        CommitResult& set_referenced_data_file(std::string referenced_data_file) {
-            this->referenced_data_file = std::move(referenced_data_file);
-            return *this;
-        }
+        CommitResult& set_extra_data(std::string extra_data);
+        CommitResult& set_referenced_data_file(std::string referenced_data_file);
     };
 
     virtual ~FileWriter() = default;
@@ -86,13 +84,11 @@ public:
 
 class UnknownFileWriterFactory : public FileWriterFactory {
 public:
-    UnknownFileWriterFactory(std::string format) : _format(std::move(format)) {}
+    UnknownFileWriterFactory(std::string format);
 
-    Status init() override { return Status::NotSupported(fmt::format("got unsupported file format: {}", _format)); }
+    Status init() override;
 
-    StatusOr<WriterAndStream> create(const std::string& path) const override {
-        return Status::NotSupported(fmt::format("got unsupported file format: {}", _format));
-    }
+    StatusOr<WriterAndStream> create(const std::string& path) const override;
 
 private:
     std::string _format;

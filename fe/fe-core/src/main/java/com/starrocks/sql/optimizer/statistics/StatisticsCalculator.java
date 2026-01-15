@@ -166,12 +166,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -188,6 +186,37 @@ import static java.lang.Math.pow;
  */
 public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContext> {
     private static final Logger LOG = LogManager.getLogger(StatisticsCalculator.class);
+
+    private static final ThreadLocal<Integer> SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
+    public static final class SkipPredicateColumnsCollectionScope implements AutoCloseable {
+        private SkipPredicateColumnsCollectionScope() {
+        }
+
+        @Override
+        public void close() {
+            int v = SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() - 1;
+            if (v <= 0) {
+                SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.remove();
+            } else {
+                SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.set(v);
+            }
+        }
+    }
+
+    public static SkipPredicateColumnsCollectionScope skipPredicateColumnsCollectionScope() {
+        SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.set(SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() + 1);
+        return new SkipPredicateColumnsCollectionScope();
+    }
+
+    private static boolean shouldSkipPredicateColumnsCollection() {
+        return SKIP_PREDICATE_COLUMNS_COLLECTION_DEPTH.get() > 0;
+    }
+
+    public static boolean isInSkipPredicateColumnsCollectionScope() {
+        return shouldSkipPredicateColumnsCollection();
+    }
 
     private final ExpressionContext expressionContext;
     private final ColumnRefFactory columnRefFactory;
@@ -227,8 +256,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
-        PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
-                context.getOptExpression());
+        if (!shouldSkipPredicateColumnsCollection()) {
+            PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
+                    context.getOptExpression());
+        }
 
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
@@ -1152,11 +1183,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics rightStatistics = context.getChildStatistics(1);
         // construct cross join statistics
         Statistics.Builder crossBuilder = Statistics.builder();
-        crossBuilder.addColumnStatisticsFromOtherStatistic(leftStatistics, context.getChildOutputColumns(0),
+        addColumnStatisticsFromOtherStatisticByRefs(crossBuilder, leftStatistics, context.getChildOutputColumns(0),
                 preserveJoinHistogram);
-        crossBuilder.addColumnStatisticsFromOtherStatistic(rightStatistics, context.getChildOutputColumns(1),
+        addColumnStatisticsFromOtherStatisticByRefs(crossBuilder, rightStatistics, context.getChildOutputColumns(1),
                 preserveJoinHistogram);
-
         // Add multi-column statistics from both sides (they are independent after cross join)
         crossBuilder.addMultiColumnStatistics(leftStatistics.getMultiColumnCombinedStats());
         crossBuilder.addMultiColumnStatistics(rightStatistics.getMultiColumnCombinedStats());
@@ -1217,7 +1247,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             innerRowCount = innerJoinStats.getOutputRowCount();
         } else {
-            innerJoinStats = Statistics.buildFrom(crossJoinStats).setOutputRowCount(innerRowCount).build();
+            innerJoinStats = crossJoinStats.withOutputRowCount(innerRowCount);
         }
 
         Statistics.Builder joinStatsBuilder;
@@ -1286,29 +1316,44 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         allJoinPredicate.removeAll(eqOnPredicates);
         Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
         if (joinType.isLeftOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), leftRowCount))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(estimateStatistics.getOutputRowCount(), leftRowCount));
         } else if (joinType.isRightOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), rightRowCount))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(estimateStatistics.getOutputRowCount(), rightRowCount));
         } else if (joinType.isFullOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()));
         } else if (joinType.isAsofInnerJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(
+                    Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1));
         } else if (joinType.isAsofLeftOuterJoin()) {
-            estimateStatistics = Statistics.buildFrom(estimateStatistics)
-                    .setOutputRowCount(Math.max(1, leftRowCount))
-                    .build();
+            estimateStatistics = estimateStatistics.withOutputRowCount(Math.max(1, leftRowCount));
         }
 
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
+    }
+
+    private void addColumnStatisticsFromOtherStatisticByRefs(Statistics.Builder builder, Statistics statistics,
+                                                             ColumnRefSet hintRefs, boolean withHist) {
+        if (statistics == null || hintRefs == null) {
+            return;
+        }
+        Map<ColumnRefOperator, ColumnStatistic> src = statistics.getColumnStatistics();
+        for (int id : hintRefs.getColumnIds()) {
+            ColumnRefOperator col = columnRefFactory.getColumnRef(id);
+            ColumnStatistic v = src.get(col);
+            if (v == null) {
+                continue;
+            }
+            if (withHist) {
+                builder.addColumnStatistic(col, v);
+            } else {
+                builder.addColumnStatistic(col, v.getHistogram() == null ? v :
+                        ColumnStatistic.buildFrom(v).setHistogram(null).build());
+            }
+        }
     }
 
     private Statistics buildStatisticsForUKFKJoin(JoinOperator joinType, UKFKConstraints constraints,
@@ -1618,8 +1663,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (ConnectContext.get().getSessionVariable().isUseCorrelatedJoinEstimate()) {
             return estimatedInnerJoinStatisticsAssumeCorrelated(statistics, eqOnPredicates);
         } else {
-            return Statistics.buildFrom(statistics)
-                    .setOutputRowCount(estimateInnerRowCountMiddleGround(statistics, eqOnPredicates)).build();
+            return statistics.withOutputRowCount(estimateInnerRowCountMiddleGround(statistics, eqOnPredicates));
         }
     }
 
@@ -1630,19 +1674,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // for other (auxiliary) predicates.
     private Statistics estimatedInnerJoinStatisticsAssumeCorrelated(Statistics statistics,
                                                                     List<BinaryPredicateOperator> eqOnPredicates) {
-        Queue<BinaryPredicateOperator> remainingEqOnPredicates = new LinkedList<>(eqOnPredicates);
-        BinaryPredicateOperator drivingPredicate = remainingEqOnPredicates.poll();
-        Statistics result = statistics;
-        for (int i = 0; i < eqOnPredicates.size(); ++i) {
-            Statistics estimateStatistics =
-                    estimateByEqOnPredicates(statistics, drivingPredicate, remainingEqOnPredicates);
-            if (estimateStatistics.getOutputRowCount() < result.getOutputRowCount()) {
-                result = estimateStatistics;
-            }
-            remainingEqOnPredicates.add(drivingPredicate);
-            drivingPredicate = remainingEqOnPredicates.poll();
+        int predicateNum = eqOnPredicates.size();
+        if (predicateNum == 1) {
+            Statistics estimateStatistics = estimateStatistics(ImmutableList.of(eqOnPredicates.get(0)), statistics);
+            return estimateStatistics.getOutputRowCount() < statistics.getOutputRowCount() ? estimateStatistics : statistics;
         }
-        return result;
+
+        double auxiliaryCoeffPow = pow(StatisticsEstimateCoefficient.UNKNOWN_AUXILIARY_FILTER_COEFFICIENT, predicateNum - 1);
+
+        double bestRowCount = statistics.getOutputRowCount();
+        Statistics bestDrivingStats = null;
+        for (BinaryPredicateOperator drivingPredicate : eqOnPredicates) {
+            Statistics drivingStats = estimateStatistics(ImmutableList.of(drivingPredicate), statistics);
+            double candidateRowCount = drivingStats.getOutputRowCount() * auxiliaryCoeffPow;
+            if (candidateRowCount < bestRowCount) {
+                bestRowCount = candidateRowCount;
+                bestDrivingStats = drivingStats;
+            }
+        }
+
+        if (bestDrivingStats == null) {
+            return statistics;
+        }
+        return Statistics.buildFrom(bestDrivingStats).setOutputRowCount(bestRowCount).build();
     }
 
     private double getPredicateSelectivity(PredicateOperator predicateOperator, Statistics statistics) {
@@ -1721,21 +1775,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 complexEqOnPredicatesSelectivity.add(getPredicateSelectivity(predicateOperator, statistics));
             }
         }
-    }
-
-    public Statistics estimateByEqOnPredicates(Statistics statistics, BinaryPredicateOperator divingPredicate,
-                                               Collection<BinaryPredicateOperator> remainingEqOnPredicate) {
-        Statistics estimateStatistics = estimateStatistics(ImmutableList.of(divingPredicate), statistics);
-        for (BinaryPredicateOperator ignored : remainingEqOnPredicate) {
-            estimateStatistics = estimateByAuxiliaryPredicates(estimateStatistics);
-        }
-        return estimateStatistics;
-    }
-
-    public Statistics estimateByAuxiliaryPredicates(Statistics estimateStatistics) {
-        double rowCount = estimateStatistics.getOutputRowCount() *
-                StatisticsEstimateCoefficient.UNKNOWN_AUXILIARY_FILTER_COEFFICIENT;
-        return Statistics.buildFrom(estimateStatistics).setOutputRowCount(rowCount).build();
     }
 
     @Override
@@ -1884,7 +1923,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         // avoid sample statistics filter all data, save one rows least
         if (statistics.getOutputRowCount() > 0 && result.getOutputRowCount() == 0) {
-            return Statistics.buildFrom(result).setOutputRowCount(1).build();
+            return result.withOutputRowCount(1);
         }
         return result;
     }

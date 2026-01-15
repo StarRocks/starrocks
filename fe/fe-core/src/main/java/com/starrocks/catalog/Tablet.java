@@ -31,10 +31,7 @@ public abstract class Tablet extends MetaObject implements Writable {
     @SerializedName(value = JSON_KEY_ID)
     protected long id;
 
-    /*
-     * Add the serialization when the feature is almost finished
-     * @SerializedName(value = "range")
-    */
+    @SerializedName(value = "range")
     protected TabletRange range = new TabletRange();
 
     public Tablet() {

@@ -19,6 +19,7 @@
 #include <array>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/type_traits.h"

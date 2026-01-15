@@ -77,6 +77,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
@@ -2017,6 +2018,8 @@ public class QueryAnalyzer {
         private final LinkedList<String> resolvingAlias = new LinkedList<>();
         private final Scope sourceScope;
         private final ConnectContext session;
+        // Track whether we're currently inside a FunctionCallExpr or AnalyticExpr to detect nested aggregation/analytic
+        private boolean insideAggregateOrAnalyticFunction = false;
 
         public RewriteAliasVisitor(Scope sourceScope, ConnectContext session) {
             this.sourceScope = sourceScope;
@@ -2029,6 +2032,28 @@ public class QueryAnalyzer {
                 expr.setChild(i, visit(expr.getChild(i)));
             }
             return expr;
+        }
+
+        @Override
+        public Expr visitFunctionCall(FunctionCallExpr funcCall, Void context) {
+            // Track that we're inside a function call
+            insideAggregateOrAnalyticFunction |= ExprUtils.isAggregateFunction(funcCall.getFunctionName());
+            // Visit children
+            for (int i = 0; i < funcCall.getChildren().size(); ++i) {
+                funcCall.setChild(i, visit(funcCall.getChild(i)));
+            }
+            return funcCall;
+        }
+
+        @Override
+        public Expr visitAnalyticExpr(AnalyticExpr analyticExpr, Void context) {
+            // Track that we're inside an analytic expression
+            insideAggregateOrAnalyticFunction = true;
+            // Visit children
+            for (int i = 0; i < analyticExpr.getChildren().size(); ++i) {
+                analyticExpr.setChild(i, visit(analyticExpr.getChild(i)));
+            }
+            return analyticExpr;
         }
 
         @Override
@@ -2056,6 +2081,26 @@ public class QueryAnalyzer {
             if (sourceScope.tryResolveField(slotRef).isPresent() &&
                     !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
                 return slotRef;
+            }
+            // If the alias matches the source column name and the alias expression is an aggregation/analytic function,
+            // and we're inside another function call or analytic expression, use the source column
+            // directly instead of the aggregation/analytic expression to avoid nested aggregation/analytic.
+            // For example: sum(input_count) as input_count, then sum(case when ... then input_count else 0 end)
+            // should use the source column input_count, not sum(input_count)
+            // Similarly: sum(input_count) over() as input_count, then sum(case when ... then input_count else 0 end) over()
+            // should use the source column input_count, not sum(input_count) over()
+            if (sourceScope.tryResolveField(slotRef).isPresent() && (insideAggregateOrAnalyticFunction)) {
+                // Check if alias expression is an AnalyticExpr
+                if (e instanceof AnalyticExpr) {
+                    return slotRef;
+                }
+                // Check if alias expression is a FunctionCallExpr that is aggregate or analytic
+                if (e instanceof FunctionCallExpr) {
+                    FunctionCallExpr funcCall = (FunctionCallExpr) e;
+                    if (ExprUtils.isAggregateFunction(funcCall.getFunctionName())) {
+                        return slotRef;
+                    }
+                }
             }
             // Referring to a duplicated alias is ambiguous
             if (aliasesMaybeAmbiguous.contains(ref)) {
@@ -2099,6 +2144,7 @@ public class QueryAnalyzer {
                 return null;
             }
             for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                insideAggregateOrAnalyticFunction = false;
                 if (item.getExpr() == null) {
                     continue;
                 }

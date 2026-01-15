@@ -41,14 +41,16 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
 }
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
-                                      int64_t* flush_data_size) {
-    if (eos && _load_chunk_spiller->empty()) {
-        // If there is only one flush, flush it to segment directly
+                                      int64_t* flush_data_size, int64_t slot_idx) {
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
+        // Optimization: If there is only one flush, write directly to segment without spilling
+        // This avoids the overhead of spill/merge for single-chunk loads
         RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
         return _writer->flush(segment);
     }
 
-    auto res = _load_chunk_spiller->spill(chunk);
+    // Spill chunk to temporary storage with slot_idx for ordering
+    auto res = _load_chunk_spiller->spill(chunk, slot_idx);
     RETURN_IF_ERROR(res.status());
     // record append bytes to `flush_data_size`
     if (flush_data_size != nullptr) {
@@ -58,15 +60,16 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
 }
 
 Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size) {
-    if (eos && _load_chunk_spiller->empty()) {
+                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size,
+                                                   int64_t slot_idx) {
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
     // 1. flush upsert
-    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size));
+    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size, slot_idx));
     // 2. flush deletes
     RETURN_IF_ERROR(_writer->flush_del_file(deletes));
     return Status::OK();
@@ -91,8 +94,8 @@ Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const S
     std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
         tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
-                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), _merge_mem_tracker.get(), schema.get(),
-                i, &quit_flag, get_spiller()->metrics().write_io_timer));
+                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), schema.get(), i, &quit_flag,
+                get_spiller()->metrics().write_io_timer));
     }
     // 4. Submit all tasks to thread pool
     for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {

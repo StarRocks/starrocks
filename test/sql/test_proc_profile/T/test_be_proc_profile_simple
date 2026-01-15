@@ -1,4 +1,4 @@
--- name: test_be_proc_profile_simple
+-- name: test_be_proc_profile_simple @sequential
 -- Test BE /proc_profile and /proc_profile/file HTTP endpoints
 
 -- Get BE IP and HTTP port from show backends command

@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "common/logging.h"
 #include "connector/iceberg_chunk_sink.h"
 #include "connector/iceberg_delete_sink.h"
 #include "exec/data_sink.h"

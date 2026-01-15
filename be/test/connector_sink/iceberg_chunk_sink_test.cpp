@@ -112,6 +112,7 @@ TEST_F(IcebergChunkSinkTest, test_callback) {
                 std::move(partition_chunk_writer_factory), _runtime_state);
         auto poller = MockPoller();
         sink->set_io_poller(&poller);
+        sink->init_profile();
 
         Columns partition_key_columns;
         ChunkPtr chunk = std::make_shared<Chunk>();

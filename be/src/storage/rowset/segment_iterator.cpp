@@ -318,6 +318,9 @@ private:
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
 
+    Status _apply_tablet_range();
+    StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
+
     uint32_t segment_id() const { return _segment->id(); }
     uint32_t num_rows() const { return _segment->num_rows(); }
 
@@ -852,6 +855,7 @@ Status SegmentIterator::_init() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_tablet_range());
     bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
     if (!apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
@@ -1509,6 +1513,23 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
     return Status::OK();
 }
 
+Status SegmentIterator::_apply_tablet_range() {
+    if (!_opts.tablet_range.has_value() || _opts.tablet_range.value().all_range()) {
+        return Status::OK();
+    }
+
+    // _lookup_ordinal() relies on short key index.
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+    if (rowid_range_opt.has_value()) {
+        _scan_range &= SparseRange<>(rowid_range_opt.value());
+    } else {
+        // no valid rowid range, clear the scan range
+        _scan_range.clear();
+    }
+    return Status::OK();
+}
+
 StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
     DCHECK(_opts.short_key_ranges.empty());
 
@@ -1521,23 +1542,31 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
 
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const SeekRange& range : _opts.ranges) {
-        rowid_t lower_rowid = 0;
-        rowid_t upper_rowid = num_rows();
-
-        if (!range.upper().empty()) {
-            RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
-            RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
-        }
-        if (!range.lower().empty() && upper_rowid > 0) {
-            RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
-            RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
-        }
-        if (lower_rowid <= upper_rowid) {
-            res.add(Range{lower_rowid, upper_rowid});
+        ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range));
+        if (rowid_range_opt.has_value()) {
+            res.add(rowid_range_opt.value());
         }
     }
-
     return res;
+}
+
+StatusOr<std::optional<Range<>>> SegmentIterator::_seek_range_to_rowid_range(const SeekRange& range) {
+    rowid_t lower_rowid = 0;
+    rowid_t upper_rowid = num_rows();
+
+    if (!range.upper().empty()) {
+        RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
+        RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
+    }
+    if (!range.lower().empty() && upper_rowid > 0) {
+        RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
+        RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
+    }
+
+    if (lower_rowid <= upper_rowid) {
+        return std::optional<Range<>>{Range{lower_rowid, upper_rowid}};
+    }
+    return std::nullopt;
 }
 
 StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {

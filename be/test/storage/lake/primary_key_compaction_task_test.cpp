@@ -1347,10 +1347,12 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     }
     {
         // check rows mapper files
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         uint32_t counter = 0;
         RowsMapperIterator iterator;
-        ASSIGN_OR_ABORT(auto filename, lake_rows_mapper_filename(tablet_id, txn_id));
-        ASSERT_OK(iterator.open(filename));
+        ASSIGN_OR_ABORT(auto filename, lake_rows_mapper_filename(_tablet_mgr.get(), tablet_id,
+                                                                 txn_log->op_compaction().lcrm_file().name()));
+        ASSERT_OK(iterator.open(FileInfo{.path = filename, .size = txn_log->op_compaction().lcrm_file().size()}));
         for (uint32_t i = 0; i < kChunkSize * 3; i += 3) {
             std::vector<uint64_t> rows_mapper;
             ASSERT_OK(iterator.next_values(3, &rows_mapper));
@@ -1515,7 +1517,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     version++;
     ASSERT_EQ(kChunkSize * N, read(version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(8, new_tablet_metadata->orphan_files_size());
+    EXPECT_EQ(9, new_tablet_metadata->orphan_files_size());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }

@@ -177,6 +177,8 @@ public:
 
     void check_global_dict(SegmentWriter* segment_writer);
 
+    const FileInfo& lcrm_file() const { return _lcrm_file; }
+
 protected:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -185,8 +187,11 @@ protected:
     ThreadPool* _flush_pool;
     std::vector<SegmentFileInfo> _segments;
     std::vector<FileInfo> _dels;
+    std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;
+    // lake compaction row mapper file
+    FileInfo _lcrm_file;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
