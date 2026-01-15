@@ -66,6 +66,7 @@ jobs:
             core.setOutput('is_fork', pr.head.repo.fork);
             core.setOutput('head_ref', pr.head.ref);
       - name: Commit and Push
+        # Only runs if this is a branch of our repo
         if: steps.pr_info.outputs.is_fork == 'false'
         run: |
           git config --global user.name "github-actions[bot]"
@@ -75,4 +76,11 @@ jobs:
             git commit -m "docs: automated translation via Gemini [skip ci]"
             git push origin HEAD:refs/heads/${{ steps.pr_info.outputs.head_ref }}
           fi
+
+      - name: Add maintainer instruction comment
+        # Only runs if this is a fork of our repo
+        if: github.event.pull_request.head.repo.fork == true
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          message: "Doc Maintainers: Please generate the translations locally and add them to this PR"
 
