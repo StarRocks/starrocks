@@ -56,7 +56,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadInfo;
@@ -915,7 +914,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
             info.setLoad_commit_time(TimeUtils.longToTimeString(loadTimeTrace.commitTimeMs.get()));
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs()));
 
-            info.setWarehouse(RunMode.isSharedDataMode() ? warehouseName : "");
+            info.setWarehouse(warehouseName);
             info.setRuntime_details(getRuntimeDetails());
             long execStartTime = loadTimeTrace.execWaitStartTimeMs.get();
             long mergeWindowElapsedMs;

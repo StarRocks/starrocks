@@ -86,7 +86,7 @@ PROPERTIES (
 0
 {
     "Status": "Fail",
-    "Message": "Load is aborted, reason: There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: http://127.0.0.1:11912/api/_load_error_log?file=error_log_19badb6f0787d08_9e6a85c0e21ff10c. Tracking SQL: SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=11530"
+    "Message": "Load is aborted, reason: There is a data quality issue. Please check the tracking URL or SQL for details. Tracking URL: http://172.26.200.160:8040/api/_load_error_log?file=error_log_19bc4b6da1278e8_ae96ce10f5c40b0b. Tracking SQL: SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID=10806"
 }
 -- !result
 sync;
@@ -126,7 +126,7 @@ select (TRACKING_SQL = concat('SELECT tracking_log FROM information_schema.load_
 -- !result
 [UC]JOB_ID=select JOB_ID from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
 -- result:
-11530
+10806
 -- !result
 SELECT tracking_log FROM information_schema.load_tracking_logs WHERE JOB_ID = ${JOB_ID};
 -- result:
