@@ -205,7 +205,7 @@ public class SplitTabletJob extends TabletReshardJob {
                     allPartitionFinished = false;
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
@@ -540,11 +540,7 @@ public class SplitTabletJob extends TabletReshardJob {
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    if (newIndex.getMetaId() == olapTable.getBaseIndexMetaId()) {
-                        physicalPartition.setBaseIndex(newIndex);
-                    } else {
-                        physicalPartition.createRollupIndex(newIndex);
-                    }
+                    physicalPartition.addMaterializedIndex(newIndex, newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
         }

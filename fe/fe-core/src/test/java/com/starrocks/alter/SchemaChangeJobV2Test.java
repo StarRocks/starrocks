@@ -158,7 +158,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -175,11 +175,11 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assertions.assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(IndexExtState.ALL).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         schemaChangeJob.runWaitingTxnJob();
@@ -216,7 +216,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
@@ -239,11 +239,11 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assertions.assertEquals(2, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.ALL).size());
+                .getLatestMaterializedIndices(IndexExtState.ALL).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.VISIBLE).size());
+                .getLatestMaterializedIndices(IndexExtState.VISIBLE).size());
         Assertions.assertEquals(1, testPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(IndexExtState.SHADOW).size());
 
         // runWaitingTxnJob
         schemaChangeJob.runWaitingTxnJob();
@@ -471,7 +471,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
         alterJobsV2.clear();
 
-        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
         assertEquals(PartitionState.NORMAL, testPartition.getState());
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
