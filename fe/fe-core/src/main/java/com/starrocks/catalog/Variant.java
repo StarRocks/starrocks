@@ -23,6 +23,7 @@ import com.starrocks.thrift.TVariant;
 import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.List;
 
@@ -53,9 +54,37 @@ public abstract class Variant implements Comparable<Variant> {
 
     public abstract long getLongValue();
 
-    public abstract TVariant toThrift();
+    public TVariant toThrift() {
+        TVariant variant = new TVariant();
+        variant.setType(TypeSerializer.toThrift(type));
+        if (this instanceof NullVariant) {
+            variant.setVariant_type(TVariantType.NULL_VALUE);
+        } else if (this instanceof MinVariant) {
+            variant.setVariant_type(TVariantType.MINIMUM);
+        } else if (this instanceof MaxVariant) {
+            variant.setVariant_type(TVariantType.MAXIMUM);
+        } else {
+            variant.setVariant_type(TVariantType.NORMAL_VALUE);
+            variant.setValue(getStringValue());
+        }
+        return variant;
+    }
 
-    // public abstract VariantPB toProto();
+    public VariantPB toProto() {
+        VariantPB variant = new VariantPB();
+        variant.type = TypeSerializer.toProtobuf(type);
+        if (this instanceof NullVariant) {
+            variant.variantType = VariantTypePB.NULL_VALUE;
+        } else if (this instanceof MinVariant) {
+            variant.variantType = VariantTypePB.MINIMUM;
+        } else if (this instanceof MaxVariant) {
+            variant.variantType = VariantTypePB.MAXIMUM;
+        } else {
+            variant.variantType = VariantTypePB.NORMAL_VALUE;
+            variant.value = getStringValue();
+        }
+        return variant;
+    }
 
     protected abstract int compareToImpl(Variant other);
 

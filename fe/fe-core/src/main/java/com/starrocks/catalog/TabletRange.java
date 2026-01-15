@@ -41,6 +41,34 @@ public class TabletRange {
         return range.toString();
     }
 
+    public TTabletRange toThrift() {
+        TTabletRange tRange = new TTabletRange();
+        tRange.setLower_bound_included(range.isLowerBoundIncluded());
+        tRange.setUpper_bound_included(range.isUpperBoundIncluded());
+
+        if (!range.isMinimum()) {
+            tRange.setLower_bound(range.getLowerBound().toThrift());
+        }
+        if (!range.isMaximum()) {
+            tRange.setUpper_bound(range.getUpperBound().toThrift());
+        }
+        return tRange;
+    }
+
+    public TabletRangePB toProto() {
+        TabletRangePB rangePB = new TabletRangePB();
+        rangePB.lowerBoundIncluded = range.isLowerBoundIncluded();
+        rangePB.upperBoundIncluded = range.isUpperBoundIncluded();
+
+        if (!range.isMinimum()) {
+            rangePB.lowerBound = range.getLowerBound().toProto();
+        }
+        if (!range.isMaximum()) {
+            rangePB.upperBound = range.getUpperBound().toProto();
+        }
+        return rangePB;
+    }
+
     public static TabletRange fromThrift(TTabletRange tTabletRange) {
         return new TabletRange(
                 Range.of(Tuple.fromThrift(tTabletRange.lower_bound), Tuple.fromThrift(tTabletRange.upper_bound),
@@ -55,17 +83,4 @@ public class TabletRange {
         return new TabletRange(Range.of(lowerBound, upperBound, lowerIncluded, upperIncluded));
     }
 
-    public TTabletRange toThrift() {
-        TTabletRange tRange = new TTabletRange();
-        tRange.setLower_bound_included(range.isLowerBoundIncluded());
-        tRange.setUpper_bound_included(range.isUpperBoundIncluded());
-
-        if (!range.isMinimum()) {
-            tRange.setLower_bound(range.getLowerBound().toThrift());
-        }
-        if (!range.isMaximum()) {
-            tRange.setUpper_bound(range.getUpperBound().toThrift());
-        }
-        return tRange;
-    }
 }

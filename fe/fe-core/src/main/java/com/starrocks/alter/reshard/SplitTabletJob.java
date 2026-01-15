@@ -246,6 +246,8 @@ public class SplitTabletJob extends TabletReshardJob {
                                 }
                             }
                         }
+                        // Share adjacent tablet range bounds to reduce memory usage
+                        newIndex.shareAdjacentTabletRangeBounds();
                     }
                 } else {
                     LOG.error("Unknown publish state {} in {}", publishResult.publishState(), this);

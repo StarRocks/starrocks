@@ -28,7 +28,9 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeSerializer;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -1048,6 +1050,46 @@ public class VariantTest {
         Variant nullVariant = Variant.fromProto(pbNull);
         Assertions.assertTrue(nullVariant instanceof NullVariant);
         Assertions.assertEquals(IntegerType.INT, nullVariant.getType());
+    }
+
+    @Test
+    public void testToProtoNormalVariant() {
+        Variant variant = Variant.of(IntegerType.INT, "123");
+        VariantPB pb = variant.toProto();
+        Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, pb.variantType);
+        Assertions.assertEquals("123", pb.value);
+        Assertions.assertEquals(IntegerType.INT, TypeDeserializer.fromProtobuf(pb.type));
+    }
+
+    @Test
+    public void testToProtoSpecialVariants() {
+        Variant min = Variant.minVariant(DateType.DATE);
+        VariantPB pbMin = min.toProto();
+        Assertions.assertEquals(VariantTypePB.MINIMUM, pbMin.variantType);
+        Assertions.assertNull(pbMin.value);
+        Assertions.assertEquals(DateType.DATE, TypeDeserializer.fromProtobuf(pbMin.type));
+
+        Variant max = Variant.maxVariant(DateType.DATE);
+        VariantPB pbMax = max.toProto();
+        Assertions.assertEquals(VariantTypePB.MAXIMUM, pbMax.variantType);
+        Assertions.assertNull(pbMax.value);
+        Assertions.assertEquals(DateType.DATE, TypeDeserializer.fromProtobuf(pbMax.type));
+
+        Variant nullVar = Variant.nullVariant(IntegerType.INT);
+        VariantPB pbNull = nullVar.toProto();
+        Assertions.assertEquals(VariantTypePB.NULL_VALUE, pbNull.variantType);
+        Assertions.assertNull(pbNull.value);
+        Assertions.assertEquals(IntegerType.INT, TypeDeserializer.fromProtobuf(pbNull.type));
+    }
+
+    @Test
+    public void testToProtoStringLength() {
+        VarcharType varcharType = new VarcharType(10);
+        Variant variant = Variant.of(varcharType, "abc");
+        VariantPB pb = variant.toProto();
+        Type type = TypeDeserializer.fromProtobuf(pb.type);
+        Assertions.assertTrue(type instanceof ScalarType);
+        Assertions.assertEquals(10, ((ScalarType) type).getLength());
     }
 
     @Test
