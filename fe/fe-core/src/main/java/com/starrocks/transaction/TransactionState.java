@@ -881,11 +881,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
     public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, PhysicalPartition partition) {
         List<MaterializedIndex> loadedIndex;
         if (loadedTblIndexes.isEmpty()) {
-            loadedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            loadedIndex = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         } else {
             loadedIndex = Lists.newArrayList();
             for (long indexId : loadedTblIndexes.get(tableId)) {
-                MaterializedIndex index = partition.getIndex(indexId);
+                MaterializedIndex index = partition.getLatestIndex(indexId);
                 if (index != null) {
                     loadedIndex.add(index);
                 }

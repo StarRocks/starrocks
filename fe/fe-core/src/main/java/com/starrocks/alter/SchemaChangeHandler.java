@@ -2612,7 +2612,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
                 for (Tablet tablet : baseIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
@@ -2699,7 +2699,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             Set<Long> tabletSet = beIdToTabletSet.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());

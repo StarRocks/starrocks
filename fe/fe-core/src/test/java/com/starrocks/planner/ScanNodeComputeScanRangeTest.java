@@ -78,7 +78,7 @@ public class ScanNodeComputeScanRangeTest {
         long partitionId = olapTable.getAllPartitionIds().get(0);
         Partition partition = olapTable.getPartition(partitionId);
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-        MaterializedIndex selectedIndex = physicalPartition.getIndex(olapTable.getBaseIndexMetaId());
+        MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(olapTable.getBaseIndexMetaId());
         AtomicInteger invokeCounter = new AtomicInteger(0);
 
         new MockUp<StarClient>() {

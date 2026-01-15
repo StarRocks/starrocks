@@ -337,8 +337,8 @@ public class ReplicationJobTest {
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
-        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
-        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getLatestBaseIndex();
         indexInfo.index_id = index.getId();
         indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexMetaId(srcIndex.getMetaId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);

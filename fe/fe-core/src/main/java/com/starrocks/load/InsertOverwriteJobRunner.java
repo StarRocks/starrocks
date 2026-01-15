@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -517,7 +518,7 @@ public class InsertOverwriteJobRunner {
      * 3. Cancelled before prepare: no temp partitions to clean up
      */
     private void gcDropDynamicOverwriteTempPartitions(OlapTable targetTable, Set<Tablet> sourceTablets,
-                                                       boolean isReplay) throws InterruptedException {
+                                                      boolean isReplay) throws InterruptedException {
         List<String> tmpPartitionNames = Lists.newArrayList();
         if (!isReplay) {
             if (insertStmt != null && job.getTxnId() > 0) {
@@ -584,8 +585,7 @@ public class InsertOverwriteJobRunner {
 
     private void collectTabletsFromPartition(Partition partition, Set<Tablet> tablets) {
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            for (MaterializedIndex index : subPartition.getMaterializedIndices(
-                    MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
         }
@@ -604,10 +604,10 @@ public class InsertOverwriteJobRunner {
         InsertOverwriteJobStats stats = new InsertOverwriteJobStats();
         stats.setSourcePartitionIds(job.getSourcePartitionIds());
         stats.setTargetPartitionIds(job.getTmpPartitionIds());
-        
+
         // Collect partition tablet row counts for statistics sampling
         com.google.common.collect.Table<Long, Long, Long> partitionTabletRowCounts = HashBasedTable.create();
-        
+
         try {
             // try exception to release write lock finally
             final OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -641,7 +641,7 @@ public class InsertOverwriteJobRunner {
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (MaterializedIndex index : subPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
                     }
                 }
@@ -663,7 +663,7 @@ public class InsertOverwriteJobRunner {
                             throw new DmlException("transaction state is null dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
                         }
                         tmpPartitionNames = txnState.getCreatedPartitionNames(tableId);
-                        
+
                         List<Long> dynamicSourcePartitionIds = new ArrayList<>();
                         for (String tempPartitionName : tmpPartitionNames) {
                             String oldPartitionName = tempPartitionName.substring(
@@ -673,7 +673,7 @@ public class InsertOverwriteJobRunner {
                                 dynamicSourcePartitionIds.add(oldPartition.getId());
                             }
                         }
-                        
+
                         // Collect target partition IDs for stats (the new temp partitions)
                         List<Long> dynamicTargetPartitionIds = tmpPartitionNames.stream()
                                 .map(name -> {
@@ -684,7 +684,7 @@ public class InsertOverwriteJobRunner {
                                     return partition.getId();
                                 })
                                 .collect(Collectors.toList());
-                        
+
                         job.setTmpPartitionIds(dynamicTargetPartitionIds);
                         tmpPartitionIds = dynamicTargetPartitionIds;
 
@@ -732,7 +732,7 @@ public class InsertOverwriteJobRunner {
                             sumTargetRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                         }
                     }
-                    
+
                     // Collect tablet row counts from TableCommitInfo for statistics sampling
                     TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(tableId);
                     if (tableCommitInfo != null) {
@@ -740,7 +740,7 @@ public class InsertOverwriteJobRunner {
                             long physicalPartitionId = entry.getKey();
                             PartitionCommitInfo partitionCommitInfo = entry.getValue();
                             Map<Long, Long> tabletRows = partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad();
-                            
+
                             PhysicalPartition physicalPartition = targetTable.getPhysicalPartition(physicalPartitionId);
                             if (physicalPartition != null) {
                                 Partition partition = targetTable.getPartition(physicalPartition.getParentId());
@@ -755,10 +755,10 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
-            
+
             if (sumTargetRows == 0) {
                 LOG.warn("TxnCommitAttachment is null or invalid, fallback to partition.getRowCount() for " +
-                        "table_id={}, partition_ids={}, txn_id={}", 
+                                "table_id={}, partition_ids={}, txn_id={}",
                         tableId, job.getTmpPartitionIds(), insertStmt != null ? insertStmt.getTxnId() : "null");
                 sumTargetRows = job.getTmpPartitionIds().stream()
                         .mapToLong(p -> targetTable.mayGetPartition(p).stream().mapToLong(Partition::getRowCount).sum())

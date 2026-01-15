@@ -218,7 +218,7 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
     private boolean checkPhysicalPartition(OlapTable localTable, Partition localPartition,
             PhysicalPartition remotePhysicalPartition, PhysicalPartition localPhysicalPartition) {
         // Do not support rollup index now, so only check base index
-        return remotePhysicalPartition.getBaseIndex().getTablets().size() == localPhysicalPartition.getBaseIndex()
+        return remotePhysicalPartition.getLatestBaseIndex().getTablets().size() == localPhysicalPartition.getLatestBaseIndex()
                 .getTablets().size();
     }
 

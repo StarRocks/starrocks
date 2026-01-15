@@ -138,7 +138,7 @@ public class CheckReplicatedTableJobTest {
         Partition remotePartition = remoteTable.getPartition("p1");
         long newPhysicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedIndex baseIndexCopy = DeepCopy.copyWithGson(
-                remotePartition.getDefaultPhysicalPartition().getBaseIndex(), MaterializedIndex.class);
+                remotePartition.getDefaultPhysicalPartition().getLatestBaseIndex(), MaterializedIndex.class);
         PhysicalPartition extraPartition = new PhysicalPartition(newPhysicalPartitionId,
                 remotePartition.getId(), baseIndexCopy);
         extraPartition.setBucketNum(remotePartition.getDistributionInfo().getBucketNum());

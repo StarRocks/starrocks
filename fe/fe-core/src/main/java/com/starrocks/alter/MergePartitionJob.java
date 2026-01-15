@@ -27,6 +27,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -705,7 +706,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 Partition partition = targetTable.getPartition(sourcePartitionName);
                 if (partition != null) {
                     for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         sourceTablets.addAll(index.getTablets());
                     }
                 }
@@ -820,7 +821,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             sourceTablets.addAll(index.getTablets());
                         }
@@ -913,8 +914,8 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         for (long id : replayedJob.getTmpPartitionIds()) {
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
-                for (MaterializedIndex index
-                        : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index :
+                        partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
                 targetTable.dropTempPartition(partition.getName(), true);

@@ -297,8 +297,10 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         }
 
         for (PhysicalPartition subPartition : idToSubPartition.values()) {
-            if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
-                subPartition.getBaseIndex().setShardGroupId(getDefaultPhysicalPartition().getShardGroupId());
+            for (MaterializedIndex baseIndex : subPartition.getBaseIndices()) {
+                if (baseIndex.getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                    baseIndex.setShardGroupId(getDefaultPhysicalPartition().getShardGroupId());
+                }
             }
         }
     }

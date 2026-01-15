@@ -1611,7 +1611,7 @@ public class LowCardinalityTest extends PlanTestBase {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getDb("test").getTable("test_all_type");
         Partition partition = table.getPartitions().iterator().next();
-        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
         long actualTabletId = index.getTablets().get(0).getId();
 
         String sql = "select max(t1c), min(t1d) from test_all_type tablet(" + actualTabletId + ") [_META_]";
@@ -1628,7 +1628,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 .getLocalMetastore().getDb("test").getTable("test_all_type");
         List<Long> tabletIds = new ArrayList<>();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Tablet tablet : index.getTablets()) {
                 tabletIds.add(tablet.getId());
                 if (tabletIds.size() >= 2) {
