@@ -226,4 +226,16 @@ public class ScalarOperatorRewriterTest {
         Assertions.assertEquals(predicate, result);
 
     }
+
+    @Test
+    public void testUuidBothSidesNoInfiniteLoop() {
+        CallOperator uuid1 = new CallOperator(FunctionSet.UUID, VarcharType.VARCHAR, Lists.newArrayList());
+        CallOperator uuid2 = new CallOperator(FunctionSet.UUID, VarcharType.VARCHAR, Lists.newArrayList());
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.NE, uuid1, uuid2);
+
+        ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+        ScalarOperator result = operatorRewriter.rewrite(predicate,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        Assertions.assertEquals(predicate, result);
+    }
 }
