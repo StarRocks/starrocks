@@ -31,11 +31,13 @@ public class UDFToBitmap extends GenericUDF {
 
     @Override
     public ObjectInspector initialize(ObjectInspector[] args) throws UDFArgumentException {
-        if (args.length != 1)
+        if (args.length != 1) {
             throw new UDFArgumentException("Argument number of to_bitmap should be 1");
+        }
         ObjectInspector arg0 = args[0];
-        if (!(arg0 instanceof LongObjectInspector))
+        if (!(arg0 instanceof LongObjectInspector)) {
             throw new UDFArgumentException("First argument should be bigint type");
+        }
         this.inspector = (LongObjectInspector) args[0];
         return PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector;
     }
@@ -47,7 +49,8 @@ public class UDFToBitmap extends GenericUDF {
         try {
             long val = this.inspector.get(args[0].get());
             if (val < 0) {
-                throw new IllegalArgumentException("to_bitmap only support bigint value from 0 to 18446744073709551615, but got negative value: " + val);
+                throw new IllegalArgumentException("to_bitmap only support bigint value from 0 to 18446744073709551615, " + 
+                                                   "but got negative value: " + val);
             }
             return BitmapValue.bitmapToBytes(new BitmapValue(val));
         } catch (IOException e) {
