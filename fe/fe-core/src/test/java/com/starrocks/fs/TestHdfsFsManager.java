@@ -19,6 +19,7 @@ package com.starrocks.fs;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.thrift.THdfsProperties;
@@ -137,5 +138,64 @@ public class TestHdfsFsManager {
                 hdfsFsManager.listPath("s3a://dir/", true, Maps.newHashMap()).size());
         Assertions.assertEquals(1,
                 hdfsFsManager.listPath("s3a://dir/", false, Maps.newHashMap()).size());
+    }
+
+    @Test
+    public void testAzblobPathMappingToWasbs() throws StarRocksException {
+        HdfsFsManager hdfsFsManager = Mockito.spy(fileSystemManager);
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, "https://account.blob.core.windows.net");
+
+        Mockito.doAnswer(invocation -> {
+            String path = invocation.getArgument(0);
+            Map<String, String> loadProps = invocation.getArgument(1);
+            Assertions.assertEquals(
+                    "wasbs://container@account.blob.core.windows.net/path/file",
+                    path);
+            Assertions.assertEquals("https://account.blob.core.windows.net",
+                    loadProps.get(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT));
+            return Mockito.mock(HdfsFs.class);
+        }).when(hdfsFsManager).getAzureFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        hdfsFsManager.getFileSystem("azblob://container/path/file", properties, null);
+        Assertions.assertEquals("https://account.blob.core.windows.net",
+                properties.get(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT));
+    }
+
+    @Test
+    public void testAdls2PathMappingToAbfs() throws StarRocksException {
+        HdfsFsManager hdfsFsManager = Mockito.spy(fileSystemManager);
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, "http://account.dfs.core.windows.net");
+
+        Mockito.doAnswer(invocation -> {
+            String path = invocation.getArgument(0);
+            Map<String, String> loadProps = invocation.getArgument(1);
+            Assertions.assertEquals(
+                    "abfs://container@account.dfs.core.windows.net/dir",
+                    path);
+            Assertions.assertEquals("http://account.dfs.core.windows.net",
+                    loadProps.get(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT));
+            return Mockito.mock(HdfsFs.class);
+        }).when(hdfsFsManager).getAzureFileSystem(Mockito.anyString(), Mockito.anyMap(), Mockito.isNull());
+
+        hdfsFsManager.getFileSystem("adls2://container/dir", properties, null);
+        Assertions.assertEquals("http://account.dfs.core.windows.net",
+                properties.get(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT));
+    }
+
+    @Test
+    public void testAzblobMissingEndpointThrows() {
+        Map<String, String> properties = new HashMap<>();
+        assertThrows(StarRocksException.class,
+                () -> fileSystemManager.getFileSystem("azblob://container/dir", properties, null));
+    }
+
+    @Test
+    public void testAdls2InvalidEndpointThrows() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net");
+        assertThrows(StarRocksException.class,
+                () -> fileSystemManager.getFileSystem("adls2://container/dir", properties, null));
     }
 }
