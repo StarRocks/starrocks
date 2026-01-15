@@ -586,23 +586,75 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         root.getUsedColumns().getStream().forEach(disableRewriteStringColumns::union);
     }
 
+    /**
+     * Check if the first PhysicalDistributionOperator in the child tree will change data distribution
+     * due to low-cardinality optimization.
+     *
+     * @param child the child OptExpression to check
+     * @param onColumns the join ON condition columns
+     * @return true if data distribution will be changed, false otherwise
+     */
+    private boolean checkDistributionWillBeChanged(OptExpression child, ColumnRefSet onColumns) {
+        // Find the first PhysicalDistributionOperator by traversing from parent to child
+        // For shuffle join, there must be a PhysicalDistributionOperator in the child tree
+        OptExpression current = child;
+        while (current.arity() == 1) {
+            Operator op = current.getOp();
+
+            // Found the first PhysicalDistributionOperator
+            if (op.getOpType() == OperatorType.PHYSICAL_DISTRIBUTION) {
+                DecodeInfo distDecodeInfo = allOperatorDecodeInfo.get(op);
+                if (distDecodeInfo == null) {
+                    return false;
+                }
+
+                // Check if outputStringColumns contains any join ON columns
+                // If yes, it means the distribution will use dictionary columns, which changes data distribution
+                return distDecodeInfo.outputStringColumns.containsAny(onColumns);
+            }
+
+            // Continue to traverse to the first child
+            current = current.inputAt(0);
+        }
+
+        // Didn't find PhysicalDistributionOperator in the single-child path
+        // This should not happen for shuffle join
+        throw new IllegalStateException("PhysicalDistributionOperator not found in shuffle join child tree");
+    }
+
     @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
-        if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
-        }
         PhysicalJoinOperator join = optExpression.getOp().cast();
         DecodeInfo result = context.createOutputInfo();
+
         if (join.getOnPredicate() == null) {
-            return result;
+            return context.outputStringColumns.isEmpty() ? DecodeInfo.EMPTY : result;
         }
+
         ColumnRefSet onColumns = join.getOnPredicate().getUsedColumns();
+
+        DistributionProperty leftDistribution = optExpression.getRequiredProperties().get(0).getDistributionProperty();
+        DistributionProperty rightDistribution = optExpression.getRequiredProperties().get(1).getDistributionProperty();
+
+        if (context.outputStringColumns.isEmpty()) {
+            // For shuffle join, check if the first PhysicalDistributionOperator in left or right child tree
+            // has outputStringColumns containing join ON columns.
+            // If yes, it means the distribution will use dictionary columns, which changes data distribution.
+            if (leftDistribution.isShuffle() && rightDistribution.isShuffle()) {
+                boolean leftWillChangeDistribution = checkDistributionWillBeChanged(optExpression.inputAt(0), onColumns);
+                boolean rightWillChangeDistribution = checkDistributionWillBeChanged(optExpression.inputAt(1), onColumns);
+                if (leftWillChangeDistribution || rightWillChangeDistribution) {
+                    onColumns.getStream().forEach(disableRewriteStringColumns::union);
+                }
+            }
+
+            return DecodeInfo.EMPTY;
+        }
+
         if (!result.inputStringColumns.containsAny(onColumns)) {
             return result;
         }
 
-        DistributionProperty leftDistribution = optExpression.getRequiredProperties().get(0).getDistributionProperty();
-        DistributionProperty rightDistribution = optExpression.getRequiredProperties().get(1).getDistributionProperty();
         // Currently only supports broadcast join.
         if (!sessionVariable.isEnableLowCardinalityOptimizeForJoin() ||
                 (leftDistribution.isShuffle() && rightDistribution.isShuffle())) {
