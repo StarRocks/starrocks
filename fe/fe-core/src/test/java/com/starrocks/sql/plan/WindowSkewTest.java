@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-public class WindowSkewTest extends PlanTestBase {
+class WindowSkewTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -47,6 +47,7 @@ public class WindowSkewTest extends PlanTestBase {
     }
 
     @BeforeEach
+    @Override
     public void setUp() {
         connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
     }
@@ -161,13 +162,21 @@ public class WindowSkewTest extends PlanTestBase {
 
         String sql = "select p, s, sum(x) over (partition by p order by s) from window_skew_table";
         String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
-
+        System.out.println(plan);
         assertContains(plan, "UNION");
+        assertContains(plan, "Predicates: [1: p, INT, true] = 1");
+        // Ensure that unskewed partition preserves NULLs
+        assertContains(plan, "Predicates: (cast([1: p, INT, true] as VARCHAR(1048576)) != '1') " +
+                "OR ([1: p, INT, true] IS NULL)");
+
         assertContains(plan,
-                "ANALYTIC\n" + "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: " +
-                        "true; result nullable: true], ]\n" + "  |  partition by: [1: p, INT, true]\n" +
+                "ANALYTIC\n" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        " result nullable: true], ]\n" +
+                        "  |  partition by: [1: p, INT, true]\n" +
                         "  |  order by: [2: s, INT, true] ASC\n" +
-                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" + "  |  cardinality: 700\n" +
+                        "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                        "  |  cardinality: 730\n" +
                         "  |  column statistics: \n" +
                         "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
@@ -175,14 +184,13 @@ public class WindowSkewTest extends PlanTestBase {
                         "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; result " +
-                        "nullable: true], ]\n" +
-                        "  |  partition by: [1: p, INT, true]\n" +
+                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        " result nullable: true], ]\n" +
                         "  |  order by: [2: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                        "  |  cardinality: 700\n" +
+                        "  |  cardinality: 300\n" +
                         "  |  column statistics: \n" +
-                        "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
+                        "  |  * p-->[1.0, 1.0, 0.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
