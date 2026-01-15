@@ -155,8 +155,8 @@ public class MySqlAndJDBCScanNodeTest {
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, oracleTable);
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains("TABLE: \"select\""), nodeString);
-        Assertions.assertTrue(nodeString.contains("FROM \"select\""), nodeString);
+        Assertions.assertTrue(nodeString.contains("TABLE: select"), nodeString);
+        Assertions.assertTrue(nodeString.contains("FROM select"), nodeString);
     }
 
     @Test
@@ -175,8 +175,8 @@ public class MySqlAndJDBCScanNodeTest {
         JDBCScanNode scanNode = new JDBCScanNode(new PlanNodeId(1), tupleDesc, sqlServerTable);
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains("TABLE: \"table\""), nodeString);
-        Assertions.assertTrue(nodeString.contains("FROM \"table\""), nodeString);
+        Assertions.assertTrue(nodeString.contains("TABLE: table"), nodeString);
+        Assertions.assertTrue(nodeString.contains("FROM table"), nodeString);
     }
 
     @Test
