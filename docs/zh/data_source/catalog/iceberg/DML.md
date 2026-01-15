@@ -135,7 +135,7 @@ DELETE FROM <table_name> WHERE <condition>
   - 仅表名（设置 catalog 和数据库后）：`table_name`
 
 - `condition`: 用于标识要删除哪些行的条件。可以包括：
-  - 比较运算符：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>``
+  - 比较运算符：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
   - 逻辑运算符：`AND`、`OR`、`NOT`
   - `IN` 和 `NOT IN` 子句
   - `BETWEEN` 和 `LIKE` 运算符

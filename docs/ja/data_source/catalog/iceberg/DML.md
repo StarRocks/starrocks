@@ -135,7 +135,7 @@ DELETE FROM <table_name> WHERE <condition>
   - テーブル名のみ（catalog とデータベースの設定後）：`table_name`
 
 - `condition`: 削除する行を識別する条件。以下を含めることができます：
-  - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`&lt;&gt;`
+  - 比較演算子：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
   - 論理演算子：`AND`、`OR`、`NOT`
   - `IN` および `NOT IN` 句
   - `BETWEEN` および `LIKE` 演算子
