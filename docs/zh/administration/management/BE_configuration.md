@@ -36,8 +36,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 60
 - 类型: Int
 - 单位: Seconds
-- 是否可变: Yes
-- 描述: 控制系统多频繁为超过其配置 RPC 超时的 load RPC 打印慢日志条目。慢日志还包括 load channel 的运行时 profile。将此值设为 0 会导致实际上按每次超时记录日志。
+- 是否动态：是
+- 描述: 控制系统多频繁为超过其配置 RPC 超时的 Load RPC 打印慢日志条目。慢日志还包括 Load Channel 的运行时 Profile。将此值设为 0 会导致实际上按每次超时记录日志。
 - 引入版本: v3.4.3, v3.5.0
 
 ##### log_buffer_level
@@ -128,8 +128,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: false
 - 类型: Boolean
 - 单位: -
-- 是否可变: 是
-- 描述: 当单次分配请求超过配置的大内存分配阈值（g_large_memory_alloc_failure_threshold `>` 0 且请求大小 `>` 阈值）时，此标志控制进程的响应方式。若为 true，检测到此类大分配时 StarRocks 会立即调用 std::abort()（硬崩溃）。若为 false，则分配会被阻止，分配器返回失败（nullptr 或 ENOMEM），以便调用方处理错误。此检查仅对未通过 TRY_CATCH_BAD_ALLOC 路径包装的分配生效（mem hook 在捕获 bad-alloc 时采用不同流程）。在调试意外的大量分配时可启用以快速失败；在生产环境中除非希望在过大分配尝试时立即终止进程，否则保持禁用。
+- 是否动态：是
+- 描述: 当单次分配请求超过配置的大内存分配阈值时，此参数控制进程的响应方式。若为 true，检测到此类大分配时 StarRocks 会立即调用 std::abort()（硬崩溃）。若为 false，则分配会被阻止，分配器返回失败（nullptr 或 ENOMEM），以便调用方处理错误。此检查仅对未通过 TRY_CATCH_BAD_ALLOC 路径包装的分配生效（mem hook 在捕获 bad-alloc 时采用不同流程）。在调试意外的大量分配时可启用以快速失败；在生产环境中除非希望在过大分配尝试时立即终止进程，否则保持禁用。
 - 引入版本: v3.4.3, 3.5.0, 4.0.0
 
 ##### arrow_flight_port
@@ -244,8 +244,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 20
 - 类型: Int
-- 単位: -
-- 是否可变: No
+- 单位: -
+- 是否动态：否
 - 描述: 用于计算一致性相关任务内存预算的百分比上限。在 BE 启动期间，最终的一致性限制计算为从 `consistency_max_memory_limit`（字节）解析出的值与（`process_mem_limit * consistency_max_memory_limit_percent / 100`）两者的最小值。如果 `process_mem_limit` 未设置（-1），则一致性内存视为无限。对于 `consistency_max_memory_limit_percent`，小于 0 或大于 100 的值将被视为 100。调整此值会增加或减少为一致性操作保留的内存，从而影响查询和其他服务可用的内存。
 - 引入版本: v3.2.0
 
@@ -263,7 +263,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: false
 - 类型: Boolean
 - 单位: -
-- 是否可变: No
+- 是否动态：否
 - 描述: 是否禁用 MemPool。将此项设置为 `true` 时，会禁用 MemPool 的 chunk 池化机制，使每次分配得到其自身大小的 chunk，而不是重用或扩展池化的 chunk。禁用池化会减少长期保留的缓冲区内存，但代价是更频繁的分配、更多的 chunk 数量以及跳过完整性检查（因大量 chunk 而避免）。保持 `disable_mem_pools` 为 `false`（默认）可以受益于分配重用和更少的系统调用。仅在必须避免大规模池化内存保留（例如内存受限的环境或诊断运行）时，将其设为 `true`。
 - 引入版本: v3.2.0
 
@@ -324,10 +324,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### max_transmit_batched_bytes
 
 - 默认值: 262144
-- 类型: Long
+- 类型: Int
 - 单位: Bytes
-- 是否可变: No
-- 描述: 在单个传输请求中可累积的序列化字节数上限，超过该值后会将请求刷新到网络。发送端实现（例如 `ExchangeSinkOperator::Channel` 和 `DataStreamSender::Channel`）会将序列化的 ChunkPB 负载加入到 PTransmitChunkParams 请求中，并在累计字节数超过 `max_transmit_batched_bytes` 或达到 EOS 时发送该请求。增大此值可降低 RPC 频率并提高吞吐量，但会以更高的每次请求延迟和内存使用为代价；减小此值可降低延迟和内存使用，但会增加 RPC 频率。
+- 是否动态：否
+- 描述: 在单个传输请求中可累积的序列化字节数上限，超过该值后会将请求刷新到网络。发送端实现会将序列化的 ChunkPB 负载加入到 PTransmitChunkParams 请求中，并在累计字节数超过 `max_transmit_batched_bytes` 或达到 EOS 时发送该请求。增大此值可降低 RPC 频率并提高吞吐量，但会以更高的每次请求延迟和内存使用为代价；减小此值可降低延迟和内存使用，但会增加 RPC 频率。
 - 引入版本: v3.2.0
 
 ##### mem_limit
@@ -344,7 +344,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 85
 - 类型: long
 - 单位: 百分比 (0-100)
-- 是否可变: 是
+- 是否动态：是
 - 描述: 紧急内存水位，以进程内存限制的百分比表示。当进程内存消耗超过 `(limit * memory_urgent_level / 100)` 时，BE 会触发立即的内存回收，强制缩减 data cache、驱逐 update cache，并将 persistent/lake 的 MemTable 视为“已满”，以便尽快刷写/压缩。代码校验此设置必须大于 `memory_high_level`，且 `memory_high_level` 必须大于或等于 `1` 且小于或等于 `100`。较低的值会导致更激进、更早的回收（即更频繁的缓存驱逐和刷写）；较高的值会延迟回收，如果接近 100 则有 OOM 风险。请与 `memory_high_level` 及 Data Cache 相关的自动调整设置一起调优。
 - 引入版本: v3.2.0
 
@@ -463,7 +463,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 20000
 - 类型: Int
 - 单位: Milliseconds
-- 是否可变: No
+- 是否动态：否
 - 描述: 设置在远程 BE 上制作快照时使用的 Thrift RPC 超时时间（毫秒）。当远程快照创建经常超过默认超时时，增加此值；若希望在 BE 无响应时更快失败则减小该值。注意其他超时也可能影响端到端操作（例如有效的 tablet-writer 打开超时可能与 `tablet_writer_open_rpc_timeout_sec` 和 `load_timeout_sec` 有关）。
 - 引入版本: v3.2.0
 
@@ -902,8 +902,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 1048576
 - 类型: Int
-- 単位: Tasks
-- 是否可变: Yes
+- 单位: Tasks
+- 是否动态：是
 - 描述: 设置用于 shared-data（cloud-native / lake）模式下 PK 索引并行获取操作的 "cloud_native_pk_index_get" 线程池的最大队列大小（待处理任务数量）。该池的实际线程数由 `pk_index_parallel_get_threadpool_max_threads` 控制；此设置仅限制可排队等待执行的任务数量。非常大的默认值（2^20）实际上使队列近似无界；降低此值可以防止排队任务导致的内存过度增长，但在队列已满时可能导致任务提交阻塞或失败。应根据工作负载并发性和内存约束与 `pk_index_parallel_get_threadpool_max_threads` 一起调优。
 - 引入版本: -
 
@@ -930,7 +930,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: `${STARROCKS_HOME}`
 - 类型: string
 - 单位: -
-- 是否可变: No
+- 是否动态：否
 - 描述: 用于查询执行在发生中间数据溢写（例如外部排序、哈希连接和其他算子）时的可写 scratch 目录的逗号分隔列表。指定一个或多个以 `;` 分隔的路径（例如 `/mnt/ssd1/tmp;/mnt/ssd2/tmp`）。这些目录应当对 BE 进程可访问且可写，并具有足够的可用空间；StarRocks 会在它们之间选择以分散溢写 I/O。更改此项需要重启才能生效。如果目录丢失、不可写或已满，溢写可能失败或导致查询性能下降。
 - 引入版本: v3.2.0
 
@@ -1223,7 +1223,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 10000
 - 类型: Int
 - 单位: -
-- 是否可变: 否
+- 是否动态：否
 - 描述: 限制 StarRocks 在单个批次中从 Elasticsearch 请求的最大文档数。StarRocks 在为 ES reader 构建 `KEY_BATCH_SIZE` 时将 ES 请求批大小设置为 min(`es_index_max_result_window`, `chunk_size`)。如果 ES 请求超过 Elasticsearch 索引设置 `index.max_result_window`，Elasticsearch 会返回 HTTP 400 (Bad Request)。在扫描大型索引时调整此值，或在 Elasticsearch 端增加 ES `index.max_result_window` 以允许更大的单次请求。
 - 引入版本: v3.2.0
 
@@ -1232,7 +1232,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 600
 - 类型: Int
 - 单位: Seconds
-- 是否可变: Yes
+- 是否动态：是
 - 描述: 控制 LoadChannelMgr 在将已中止的 load channel 的 load ID 从 `_aborted_load_channels` 中移除之前保留这些 load ID 的时长（以秒为单位）。当 load 作业被取消或失败时，load ID 会被记录下来以便立即拒绝任何迟到到达的 load RPC；一旦延迟到期，该条目将在周期性后台清理（最小清理间隔为 60 秒）时被清除。将延迟设置得过低会有在中止后仍接受零散 RPC 的风险，而设置得过高则可能比必要时间更长地保留状态并消耗资源。根据对迟到请求拒绝的正确性与中止 load 的资源保留之间的权衡进行调优。
 - 引入版本: v3.5.11, v4.0.4
 
@@ -1686,19 +1686,19 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### lz4_expected_compression_ratio
 
 - 默认值: 2.1
-- 类型: double
-- 単位: 无量纲（压缩比）
-- 是否可变: 是
-- 描述: 序列化压缩策略用于判断观察到的 LZ4 压缩是否“良好”的阈值。在 compress_strategy.cpp 中，该值会在与 lz4_expected_compression_speed_mbps 一起计算奖励度量时用来除以观察到的 compress_ratio；如果组合奖励 `>` 1.0，策略会记录正反馈。增大此值会提高期望的压缩比（使条件更难满足），降低则更容易使观察到的压缩被视为令人满意。根据典型数据的可压缩性进行调优。有效范围：MIN=1, MAX=65537。
+- 类型: Double
+- 单位: -
+- 是否动态：是
+- 描述: 序列化压缩策略用于判断观察到的 LZ4 压缩是否“良好”的阈值。增大此值会提高期望的压缩比（使条件更难满足），降低则更容易使观察到的压缩被视为令人满意。根据典型数据的可压缩性进行调优。有效范围：MIN=1, MAX=65537。
 - 引入版本: v3.4.1, 3.5.0, 4.0.0
 
 ##### lz4_expected_compression_speed_mbps
 
 - 默认值: 600
-- 类型: double
-- 単位: MB/s
-- 是否可变: 是
-- 描述: 自适应压缩策略（CompressStrategy）中用于表示期望 LZ4 压缩吞吐量的值，单位为 MB/s。反馈例程会计算 reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps)。当 reward_ratio `>` 1.0 时增加正计数器（alpha），否则增加负计数器（beta）；这会影响未来数据是否被压缩。请根据你的硬件上典型的 LZ4 吞吐量调整此值——提高它会使策略更难将一次运行判定为“良好”（需要更高的观测速度），降低则更容易被判定为良好。必须为正的有限数。
+- 类型: Double
+- 单位: MB/s
+- 是否动态：是
+- 描述: 自适应压缩策略中用于表示期望 LZ4 压缩吞吐量的值，单位为 MB/s。反馈例程会计算 `reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps)`。当 reward_ratio 大于 1.0 时增加正计数器（alpha），否则增加负计数器（beta）；这会影响未来数据是否被压缩。请根据你的硬件上典型的 LZ4 吞吐量调整此值——提高它会使策略更难将一次运行判定为“良好”（需要更高的观测速度），降低则更容易被判定为良好。必须为正的有限数。
 - 引入版本: v3.4.1, 3.5.0, 4.0.0
 
 ##### make_snapshot_worker_count
@@ -1786,9 +1786,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 2
 - 类型: Long
-- 单位: Count
-- 是否可变: Yes
-- 描述: 控制写路径的每个 tablet 的反压：当某个 tablet 的排队（尚未刷写）memtable 数量达到或超过 `max_queueing_memtable_per_tablet` 时，`LocalTabletsChannel` 和 `LakeTabletsChannel` 中的写入者在提交更多写入工作之前会阻塞（sleep/retry）。这可以降低同时进行的 memtable 刷写并减少峰值内存使用，但代价是增加延迟或在高负载下发生 RPC 超时。将此值设高以允许更多并发 memtable（更多内存和 I/O 突发）；设低以限制内存压力并增加写入节流。
+- 单位: -
+- 是否动态：是
+- 描述: 控制写路径的每个 Tablet 的反压：当某个 Tablet 的排队（尚未刷写）memtable 数量达到或超过 `max_queueing_memtable_per_tablet` 时，`LocalTabletsChannel` 和 `LakeTabletsChannel` 中的写入者在提交更多写入工作之前会阻塞（sleep/retry）。这可以降低同时进行的 memtable 刷写并减少峰值内存使用，但代价是增加延迟或在高负载下发生 RPC 超时。将此值设高以允许更多并发 memtable（更多内存和 I/O 突发）；设低以限制内存压力并增加写入节流。
 - 引入版本: v3.2.0
 
 ##### max_row_source_mask_memory_bytes
@@ -1805,8 +1805,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 536870912
 - 类型: long
 - 单位: Bytes
-- 是否可变: Yes
-- 描述: 当前内存 tablet 写入 chunk 在被视为已满并入队发送之前允许的最大内存（以字节为单位）。在 NodeChannel::add_chunk 和 add_chunks 中，当 _cur_chunk->num_rows() < `chunk_size` 并且 _cur_chunk_mem_usage < config::max_tablet_write_chunk_bytes 时，该 chunk 被认为“未满”；否则该 chunk 会被推入请求队列。增大此值可以在加载宽表（列数多）时减少 RPC 频率，从而提高吞吐量，但代价是更高的内存使用和更大的 RPC 负载。需要调整此值以在减少 RPC 次数与内存及序列化/BRPC 限制之间取得平衡。
+- 是否动态：是
+- 描述: 当前内存 tablet 写入 chunk 在被视为已满并入队发送之前允许的最大内存（以字节为单位）。增大此值可以在加载宽表（列数多）时减少 RPC 频率，从而提高吞吐量，但代价是更高的内存使用和更大的 RPC 负载。需要调整此值以在减少 RPC 次数与内存及序列化/BRPC 限制之间取得平衡。
 - 引入版本: v3.2.12
 
 ##### max_update_compaction_num_singleton_deltas
@@ -1939,9 +1939,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 1048576
 - 类型: Int
-- 単位: Count
-- 是否可变: Yes
-- 描述: 控制用于 shared-data（cloud-native / lake）模式下 PK 索引 memtable 刷写的线程池（在 ExecEnv 中创建为 "cloud_native_pk_index_flush"）的最大队列大小（待处理任务数量）。该线程池的最大线程数由 `pk_index_memtable_flush_threadpool_max_threads` 管理。增大此值允许在执行前缓冲更多的 memtable flush 任务，这可以减少即时背压，但会增加由排队任务对象消耗的内存。减小它可以限制被缓冲的任务数量，并可能根据线程池行为更早引发背压或任务被拒绝。请根据可用内存和预期并发 flush 工作量进行调优。
+- 单位: -
+- 是否动态：是
+- 描述: 控制用于存算分离（云原生 / 数据湖）模式下 PK 索引 memtable 刷写的线程池（在 ExecEnv 中创建为 "cloud_native_pk_index_flush"）的最大队列大小（待处理任务数量）。该线程池的最大线程数由 `pk_index_memtable_flush_threadpool_max_threads` 管理。增大此值允许在执行前缓冲更多的 memtable flush 任务，这可以减少即时背压，但会增加由排队任务对象消耗的内存。减小它可以限制被缓冲的任务数量，并可能根据线程池行为更早引发背压或任务被拒绝。请根据可用内存和预期并发 flush 工作量进行调优。
 - 引入版本: -
 
 ##### pk_index_memtable_max_count
@@ -2395,7 +2395,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: 2
 - 类型：Int
 - 单位：-
-- 是否动态： 是
+- 是否动态：是
 - 描述：BE/CN 退出时需要等待正在执行的查询完成的轮次，一轮次固定 10 秒。设置为 `0` 表示禁用轮询等待，立即退出。自 v3.4 起，该参数变为动态参数，且默认值由 `0` 变为 `2`。
 - 引入版本：v2.5
 
@@ -2403,9 +2403,9 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: 10
 - 类型: Int
-- 单位: entries（每个主机缓存的 client 实例数）
-- 是否可变: 否
-- 描述: BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。此单一设置在 ExecEnv 初始化时用于创建 BackendServiceClientCache、FrontendServiceClientCache 和 BrokerServiceClientCache，因此它限制了这些缓存中每个主机所保留的 client stub/连接数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
+- 单位: -
+- 是否动态：否
+- 描述: BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
 - 引入版本: v3.2.0
 
 ##### starlet_filesystem_instance_cache_capacity
@@ -2732,7 +2732,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 默认值: false
 - 类型: Boolean
 - 单位: -
-- 是否动态: 是
+- 是否动态：是
 - 描述: `error_urls` Debug 过程中，是否允许 Operator 根据环境需求选择使用 FE 心跳的原始主机名，或强制解析为 IP 地址。
   - `true`：将主机名解析为 IP 地址。
   - `false`（默认）：在错误 URL 中保留原始主机名。
@@ -2742,8 +2742,8 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 - 默认值: true
 - 类型: Boolean
-- 単位: -
-- 是否可变: Yes
+- 单位: -
+- 是否动态：是
 - 描述: 启用后，被分类为可重试的 Tablet apply 失败（例如暂时的内存限制错误）会被重新调度以重试，而不是立即将 tablet 标记为错误。TabletUpdates 中的重试路径使用 `retry_apply_interval_second` 乘以当前失败计数并限制到 600s 的最大值来安排下一次尝试，因此随着连续失败，退避会增长。明确不可重试的错误（例如 corruption）会绕过重试并导致 apply 过程立即进入错误状态。重试会持续直到达到总体超时/终止条件，之后 apply 将进入错误状态。关闭此项会禁用对失败 apply 任务的自动重新调度，使失败的 apply 在没有重试的情况下直接转为错误状态。
 - 引入版本: v3.2.9
 
