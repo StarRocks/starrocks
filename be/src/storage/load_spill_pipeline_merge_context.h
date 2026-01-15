@@ -97,9 +97,15 @@ public:
         _ready_slots.insert(slot_idx);
     }
 
-    bool is_slot_ready(int64_t slot_idx) {
+    bool is_slot_ready(int64_t from_slot_idx, int64_t to_slot_idx) {
         std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
-        return _ready_slots.find(slot_idx) != _ready_slots.end();
+        for (int64_t i = from_slot_idx; i <= to_slot_idx; ++i) {
+            if (i >= 0 && _ready_slots.find(i) == _ready_slots.end()) {
+                // negative slot idx will be treated as ready
+                return false;
+            }
+        }
+        return true;
     }
 
 private:

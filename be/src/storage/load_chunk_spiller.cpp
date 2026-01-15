@@ -395,19 +395,17 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     int64_t stop_idx = -1;
 
     // Check previous slot id for continuity
-    if (!final_round && groups[0].slot_idx > 0 && !_pipeline_merge_context->is_slot_ready(groups[0].slot_idx - 1)) {
-        // No continuous blocks available yet
-        return result_task;
-    }
+    int64_t last_slot_idx = groups[0].slot_idx - 1;
 
     // BATCHING LOGIC: Accumulate continuous block groups until hitting size/memory limits
     for (size_t i = 0; i < groups.size(); i++) {
         auto& group = groups[i];
 
         // CONTINUITY CHECK: Ensure we only merge consecutive slot_idx ranges
-        if (!final_round && !_pipeline_merge_context->is_slot_ready(group.slot_idx)) {
+        if (!final_round && !_pipeline_merge_context->is_slot_ready(last_slot_idx, group.slot_idx)) {
             break;
         }
+        last_slot_idx = group.slot_idx;
 
         // Create iterator for this block group's data
         merge_inputs.push_back(

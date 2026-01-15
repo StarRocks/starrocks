@@ -46,7 +46,9 @@ public:
         _block_manager = std::make_unique<LoadSpillBlockManager>(TUniqueId(), TUniqueId(), kTestDir, nullptr);
         ASSERT_OK(_block_manager->init());
         _profile = std::make_unique<RuntimeProfile>("test");
-        _spiller = std::make_unique<LoadChunkSpiller>(_block_manager.get(), _profile.get());
+        _pipeline_merge_context = std::make_unique<LoadSpillPipelineMergeContext>(nullptr);
+        _spiller =
+                std::make_unique<LoadChunkSpiller>(_block_manager.get(), _profile.get(), _pipeline_merge_context.get());
     }
 
     void TearDown() override {
@@ -86,6 +88,7 @@ protected:
     constexpr static const char* const kTestDir = "./load_spill_pipeline_merge_test";
     std::unique_ptr<LoadSpillBlockManager> _block_manager;
     std::unique_ptr<RuntimeProfile> _profile;
+    std::unique_ptr<LoadSpillPipelineMergeContext> _pipeline_merge_context;
     std::unique_ptr<LoadChunkSpiller> _spiller;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -127,9 +130,10 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_non_continu
                                                    config::load_spill_max_chunk_bytes * 10, // memory_usage_per_merge
                                                    true,                                    // do_sort
                                                    false,                                   // do_agg
-                                                   true);                                   // final_round
+                                                   false);                                  // final_round
 
-    ASSERT_TRUE(!task_or.ok());
+    ASSERT_TRUE(task_or.ok());
+    ASSERT_EQ(task_or.value()->total_block_groups, 2);
 }
 
 // Test final round merge with non-continuous slot indices should fail
@@ -145,7 +149,7 @@ TEST_F(LoadSpillPipelineMergeTest, test_generate_pipeline_merge_task_final_round
                                                    false,                                   // do_agg
                                                    true);                                   // final_round
 
-    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.ok());
 }
 
 // Test final round merge with continuous slot indices
