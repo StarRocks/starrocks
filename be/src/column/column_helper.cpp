@@ -174,8 +174,13 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
         } else if (null_count == 0) {
             return true_count;
         } else {
-            // In fact, the null_count maybe is different with true_count, but it's no impact
-            return null_count;
+            size_t count = 0;
+            for (size_t i = 0; i < col->size(); i++) {
+                if (!null_data[i] && bool_data[i]) {
+                    count++;
+                }
+            }
+            return count;
         }
     } else {
         const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
@@ -206,8 +211,13 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
         } else if (null_count == 0) {
             return false_count;
         } else {
-            // In fact, the null_count maybe is different with false_count, but it's no impact
-            return null_count;
+            size_t count = 0;
+            for (size_t i = 0; i < col->size(); i++) {
+                if (!null_data[i] && !bool_data[i]) {
+                    count++;
+                }
+            }
+            return count;
         }
     } else {
         const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
