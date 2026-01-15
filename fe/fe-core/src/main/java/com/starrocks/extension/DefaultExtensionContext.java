@@ -33,7 +33,7 @@ public class DefaultExtensionContext implements ExtensionContext {
     /**
      * Stores metadata about a constructor for dependency injection.
      */
-    private static class ConstructorMetadata {
+    public static class ConstructorMetadata {
         private final Constructor<?> constructor;
         private final Class<?>[] parameterTypes;
 
@@ -98,7 +98,7 @@ public class DefaultExtensionContext implements ExtensionContext {
             // Get or resolve constructor metadata
             ConstructorMetadata metadata = constructorMetadataMap.get(clazz);
             if (metadata == null) {
-                metadata = resolveConstructor(clazz);
+                metadata = registerConstructor(clazz);
                 constructorMetadataMap.put(clazz, metadata);
             }
 
@@ -116,14 +116,15 @@ public class DefaultExtensionContext implements ExtensionContext {
     }
 
     /**
-     * Resolve which constructor to use for dependency injection.
+     * Register and resolve which constructor to use for dependency injection.
      * Rules:
      * 1. Prefer constructors annotated with @Inject
      * 2. Otherwise, use the single public constructor
      * 3. Otherwise, use the no-arg constructor
      * 4. Throw an exception for ambiguity
      */
-    public ConstructorMetadata resolveConstructor(Class<?> clazz) {
+    @Override
+    public DefaultExtensionContext.ConstructorMetadata registerConstructor(Class<?> clazz) {
         Constructor<?>[] constructors = clazz.getDeclaredConstructors();
 
         // Rule 1: Look for @Inject annotated constructor

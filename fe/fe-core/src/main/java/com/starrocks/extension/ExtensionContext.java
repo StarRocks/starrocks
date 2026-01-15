@@ -17,4 +17,11 @@ package com.starrocks.extension;
 public interface ExtensionContext {
     <T> T get(Class<T> capability);
     <T> void register(Class<T> capability, T instance);
+    
+    /**
+     * Register and resolve which constructor to use for dependency injection.
+     * @param clazz the class to resolve constructor for
+     * @return constructor metadata containing the resolved constructor
+     */
+    DefaultExtensionContext.ConstructorMetadata registerConstructor(Class<?> clazz);
 }
