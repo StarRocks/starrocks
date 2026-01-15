@@ -108,7 +108,7 @@ public class WarehouseIdleChecker extends FrontendDaemon {
     public static void decreaseRunningSQL(long wId, String sql) {
         AtomicLong runningSQL = getRunningSQLCount(wId);
         runningSQL.decrementAndGet();
-        String smallSql = sql != null ? sql.substring(0, Math.min(10, sql.length())) : "";
+        String smallSql = sql.substring(0, Math.min(20, sql.length()));
         updateJobLastFinishTime(wId, "Query: " + smallSql);
     }
 
