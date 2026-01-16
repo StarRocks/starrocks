@@ -157,113 +157,158 @@ PARALLEL_TEST(NetworkUtilTest, IsPrivateIP_InvalidInput) {
 
 //=============================================================================
 // extract_host_from_url() Tests
+// Uses libcurl's URL parser for consistent parsing with actual HTTP requests
 //=============================================================================
 
+// Helper macro to check StatusOr<std::string> result
+#define EXPECT_HOST_EQ(url, expected_host) \
+    do { \
+        auto result = extract_host_from_url(url); \
+        ASSERT_TRUE(result.ok()) << "Failed to parse URL: " << url; \
+        EXPECT_EQ(result.value(), expected_host); \
+    } while (0)
+
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_BasicUrls) {
-    EXPECT_EQ(extract_host_from_url("http://example.com"), "example.com");
-    EXPECT_EQ(extract_host_from_url("https://example.com"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com/"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com/path"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com/path/to/resource"), "example.com");
+    EXPECT_HOST_EQ("http://example.com", "example.com");
+    EXPECT_HOST_EQ("https://example.com", "example.com");
+    EXPECT_HOST_EQ("http://example.com/", "example.com");
+    EXPECT_HOST_EQ("http://example.com/path", "example.com");
+    EXPECT_HOST_EQ("http://example.com/path/to/resource", "example.com");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_WithPort) {
-    EXPECT_EQ(extract_host_from_url("http://example.com:8080"), "example.com");
-    EXPECT_EQ(extract_host_from_url("https://example.com:443"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com:8080/path"), "example.com");
-    EXPECT_EQ(extract_host_from_url("https://api.example.com:8080/v1/users"), "api.example.com");
+    EXPECT_HOST_EQ("http://example.com:8080", "example.com");
+    EXPECT_HOST_EQ("https://example.com:443", "example.com");
+    EXPECT_HOST_EQ("http://example.com:8080/path", "example.com");
+    EXPECT_HOST_EQ("https://api.example.com:8080/v1/users", "api.example.com");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_WithCredentials) {
-    EXPECT_EQ(extract_host_from_url("http://user:pass@example.com"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://user:pass@example.com/path"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://user:pass@example.com:8080/path"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://user@example.com"), "example.com");
+    EXPECT_HOST_EQ("http://user:pass@example.com", "example.com");
+    EXPECT_HOST_EQ("http://user:pass@example.com/path", "example.com");
+    EXPECT_HOST_EQ("http://user:pass@example.com:8080/path", "example.com");
+    EXPECT_HOST_EQ("http://user@example.com", "example.com");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_IPv4Addresses) {
-    EXPECT_EQ(extract_host_from_url("http://127.0.0.1"), "127.0.0.1");
-    EXPECT_EQ(extract_host_from_url("http://127.0.0.1:8080"), "127.0.0.1");
-    EXPECT_EQ(extract_host_from_url("http://192.168.1.1/api"), "192.168.1.1");
-    EXPECT_EQ(extract_host_from_url("http://10.0.0.1:3000/test"), "10.0.0.1");
+    EXPECT_HOST_EQ("http://127.0.0.1", "127.0.0.1");
+    EXPECT_HOST_EQ("http://127.0.0.1:8080", "127.0.0.1");
+    EXPECT_HOST_EQ("http://192.168.1.1/api", "192.168.1.1");
+    EXPECT_HOST_EQ("http://10.0.0.1:3000/test", "10.0.0.1");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_IPv6Addresses) {
     // IPv6 addresses in URLs are enclosed in brackets
-    EXPECT_EQ(extract_host_from_url("http://[::1]"), "::1");
-    EXPECT_EQ(extract_host_from_url("http://[::1]:8080"), "::1");
-    EXPECT_EQ(extract_host_from_url("http://[::1]/path"), "::1");
-    EXPECT_EQ(extract_host_from_url("http://[::1]:8080/test"), "::1");
-    EXPECT_EQ(extract_host_from_url("http://[2001:db8::1]"), "2001:db8::1");
-    EXPECT_EQ(extract_host_from_url("http://[2001:db8::1]:8080/api"), "2001:db8::1");
+    EXPECT_HOST_EQ("http://[::1]", "::1");
+    EXPECT_HOST_EQ("http://[::1]:8080", "::1");
+    EXPECT_HOST_EQ("http://[::1]/path", "::1");
+    EXPECT_HOST_EQ("http://[::1]:8080/test", "::1");
+    EXPECT_HOST_EQ("http://[2001:db8::1]", "2001:db8::1");
+    EXPECT_HOST_EQ("http://[2001:db8::1]:8080/api", "2001:db8::1");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_WithQueryAndFragment) {
-    EXPECT_EQ(extract_host_from_url("http://example.com?query=1"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com#fragment"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com/path?query=1#fragment"), "example.com");
-    EXPECT_EQ(extract_host_from_url("http://example.com:8080?q=1"), "example.com");
+    EXPECT_HOST_EQ("http://example.com?query=1", "example.com");
+    EXPECT_HOST_EQ("http://example.com#fragment", "example.com");
+    EXPECT_HOST_EQ("http://example.com/path?query=1#fragment", "example.com");
+    EXPECT_HOST_EQ("http://example.com:8080?q=1", "example.com");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_Subdomains) {
-    EXPECT_EQ(extract_host_from_url("http://api.example.com"), "api.example.com");
-    EXPECT_EQ(extract_host_from_url("http://www.example.com"), "www.example.com");
-    EXPECT_EQ(extract_host_from_url("http://sub.domain.example.com"), "sub.domain.example.com");
-    EXPECT_EQ(extract_host_from_url("https://api.v1.example.com:8443/users"), "api.v1.example.com");
+    EXPECT_HOST_EQ("http://api.example.com", "api.example.com");
+    EXPECT_HOST_EQ("http://www.example.com", "www.example.com");
+    EXPECT_HOST_EQ("http://sub.domain.example.com", "sub.domain.example.com");
+    EXPECT_HOST_EQ("https://api.v1.example.com:8443/users", "api.v1.example.com");
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractHost_InvalidUrls) {
-    // Invalid URLs should return empty string
-    EXPECT_EQ(extract_host_from_url(""), "");
-    EXPECT_EQ(extract_host_from_url("not-a-url"), "");
-    EXPECT_EQ(extract_host_from_url("example.com"), "");  // Missing scheme
-    EXPECT_EQ(extract_host_from_url("://example.com"), ""); // Missing scheme name
-    EXPECT_EQ(extract_host_from_url("http:/example.com"), ""); // Single slash
+    // Invalid URLs should return error Status
+    EXPECT_FALSE(extract_host_from_url("").ok());
+    EXPECT_FALSE(extract_host_from_url("not-a-url").ok());
+    EXPECT_FALSE(extract_host_from_url("example.com").ok());  // Missing scheme
+    EXPECT_FALSE(extract_host_from_url("://example.com").ok()); // Missing scheme name
+    // Note: curl accepts "http:/example.com" (single slash) - treats path as host
+}
+
+// SECURITY TEST: SSRF bypass prevention
+// libcurl REJECTS URLs with multiple @ characters as malformed, which is the safest behavior.
+// This prevents SSRF bypass attacks where attacker crafts URLs like http://x@allowed.com:y@evil.com/
+PARALLEL_TEST(NetworkUtilTest, ExtractHost_SSRFBypassPrevention) {
+    // Attack URLs with multiple @ are REJECTED by curl (safest behavior)
+    EXPECT_FALSE(extract_host_from_url("http://x@allowed.com:y@evil.com/").ok());
+    EXPECT_FALSE(extract_host_from_url("http://user@safe.com:pass@malicious.com/path").ok());
+    EXPECT_FALSE(extract_host_from_url("http://a@b@c@target.com/").ok());
+
+    // Normal credentials should still work correctly
+    EXPECT_HOST_EQ("http://user:pass@example.com/", "example.com");
+    EXPECT_HOST_EQ("http://user:p%40ss@example.com/", "example.com");  // URL-encoded @
 }
 
 //=============================================================================
 // extract_port_from_url() Tests
+// Uses libcurl's URL parser for consistent parsing with actual HTTP requests
 //=============================================================================
+
+// Helper macro to check StatusOr<int> result
+#define EXPECT_PORT_EQ(url, expected_port) \
+    do { \
+        auto result = extract_port_from_url(url); \
+        ASSERT_TRUE(result.ok()) << "Failed to parse URL: " << url; \
+        EXPECT_EQ(result.value(), expected_port); \
+    } while (0)
 
 PARALLEL_TEST(NetworkUtilTest, ExtractPort_DefaultPorts) {
     // HTTP default port
-    EXPECT_EQ(extract_port_from_url("http://example.com"), 80);
-    EXPECT_EQ(extract_port_from_url("http://example.com/path"), 80);
+    EXPECT_PORT_EQ("http://example.com", 80);
+    EXPECT_PORT_EQ("http://example.com/path", 80);
 
     // HTTPS default port
-    EXPECT_EQ(extract_port_from_url("https://example.com"), 443);
-    EXPECT_EQ(extract_port_from_url("https://example.com/path"), 443);
+    EXPECT_PORT_EQ("https://example.com", 443);
+    EXPECT_PORT_EQ("https://example.com/path", 443);
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractPort_ExplicitPorts) {
-    EXPECT_EQ(extract_port_from_url("http://example.com:8080"), 8080);
-    EXPECT_EQ(extract_port_from_url("https://example.com:8443"), 8443);
-    EXPECT_EQ(extract_port_from_url("http://example.com:3000/api"), 3000);
-    EXPECT_EQ(extract_port_from_url("http://127.0.0.1:9000"), 9000);
+    EXPECT_PORT_EQ("http://example.com:8080", 8080);
+    EXPECT_PORT_EQ("https://example.com:8443", 8443);
+    EXPECT_PORT_EQ("http://example.com:3000/api", 3000);
+    EXPECT_PORT_EQ("http://127.0.0.1:9000", 9000);
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractPort_CaseInsensitiveScheme) {
     // Mixed case schemes should work correctly
-    EXPECT_EQ(extract_port_from_url("HTTP://example.com"), 80);
-    EXPECT_EQ(extract_port_from_url("HTTPS://example.com"), 443);
-    EXPECT_EQ(extract_port_from_url("Http://example.com"), 80);
-    EXPECT_EQ(extract_port_from_url("Https://example.com"), 443);
-    EXPECT_EQ(extract_port_from_url("hTtP://example.com"), 80);
-    EXPECT_EQ(extract_port_from_url("hTtPs://example.com"), 443);
-    EXPECT_EQ(extract_port_from_url("HtTpS://example.com"), 443);
+    EXPECT_PORT_EQ("HTTP://example.com", 80);
+    EXPECT_PORT_EQ("HTTPS://example.com", 443);
+    EXPECT_PORT_EQ("Http://example.com", 80);
+    EXPECT_PORT_EQ("Https://example.com", 443);
+    EXPECT_PORT_EQ("hTtP://example.com", 80);
+    EXPECT_PORT_EQ("hTtPs://example.com", 443);
+    EXPECT_PORT_EQ("HtTpS://example.com", 443);
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractPort_IPv6Addresses) {
-    EXPECT_EQ(extract_port_from_url("http://[::1]"), 80);
-    EXPECT_EQ(extract_port_from_url("https://[::1]"), 443);
-    EXPECT_EQ(extract_port_from_url("http://[::1]:8080"), 8080);
-    EXPECT_EQ(extract_port_from_url("http://[2001:db8::1]:9000"), 9000);
+    EXPECT_PORT_EQ("http://[::1]", 80);
+    EXPECT_PORT_EQ("https://[::1]", 443);
+    EXPECT_PORT_EQ("http://[::1]:8080", 8080);
+    EXPECT_PORT_EQ("http://[2001:db8::1]:9000", 9000);
 }
 
 PARALLEL_TEST(NetworkUtilTest, ExtractPort_InvalidUrls) {
-    EXPECT_EQ(extract_port_from_url(""), 0);
-    EXPECT_EQ(extract_port_from_url("not-a-url"), 0);
-    EXPECT_EQ(extract_port_from_url("example.com"), 0);  // Missing scheme
+    // Invalid URLs should return error Status
+    EXPECT_FALSE(extract_port_from_url("").ok());
+    EXPECT_FALSE(extract_port_from_url("not-a-url").ok());
+    EXPECT_FALSE(extract_port_from_url("example.com").ok());  // Missing scheme
+}
+
+// SECURITY TEST: SSRF bypass prevention for port extraction
+// libcurl REJECTS URLs with multiple @ characters as malformed
+PARALLEL_TEST(NetworkUtilTest, ExtractPort_SSRFBypassPrevention) {
+    // Attack URLs with multiple @ are REJECTED by curl (safest behavior)
+    EXPECT_FALSE(extract_port_from_url("http://x@allowed.com:y@evil.com:8080/").ok());
+    EXPECT_FALSE(extract_port_from_url("http://x@allowed.com:443@evil.com/").ok());
+    EXPECT_FALSE(extract_port_from_url("https://x@allowed.com:80@evil.com/").ok());
+
+    // Normal credentials with port should work
+    EXPECT_PORT_EQ("http://user:pass@example.com:8080/", 8080);
 }
 
 //=============================================================================

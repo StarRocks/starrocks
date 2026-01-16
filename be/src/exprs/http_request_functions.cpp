@@ -377,14 +377,14 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
     // Still resolve DNS for pinning to prevent DNS rebinding attacks
     if (level == static_cast<int>(HttpSecurityLevel::TRUSTED)) {
         if (out_resolved_ips != nullptr) {
-            std::string host = extract_host_from_url(url);
-            if (!host.empty()) {
-                auto resolved = resolve_hostname_all_ips(host);
+            auto host_result = extract_host_from_url(url);
+            if (host_result.ok() && !host_result.value().empty()) {
+                auto resolved = resolve_hostname_all_ips(host_result.value());
                 if (resolved.ok()) {
                     *out_resolved_ips = resolved.value();
                 } else {
                     // Log warning when DNS resolution fails - potential security concern
-                    LOG(WARNING) << "DNS resolution failed in TRUSTED mode for host: " << host
+                    LOG(WARNING) << "DNS resolution failed in TRUSTED mode for host: " << host_result.value()
                                  << ". Continuing without DNS pinning protection.";
                 }
             }
@@ -406,7 +406,11 @@ Status validate_host_security(const std::string& url, const HttpRequestFunctionS
     }
 
     // Level 2 and 3: Extract host from URL
-    std::string host = extract_host_from_url(url);
+    auto host_result = extract_host_from_url(url);
+    if (!host_result.ok()) {
+        return Status::InvalidArgument(fmt::format("Invalid URL: {}", host_result.status().message()));
+    }
+    const std::string& host = host_result.value();
     if (host.empty()) {
         return Status::InvalidArgument(fmt::format("Invalid URL: cannot extract host from '{}'", url));
     }
@@ -506,26 +510,18 @@ static StatusOr<std::string> execute_http_request_with_config(HttpClient& client
     std::string host;
     int port = 0;
     if (!validated_ips.empty()) {
-        host = extract_host_from_url(url_str);
-        port = extract_port_from_url(url_str);
-
-        // If port extraction failed (returns 0), determine default port from URL scheme
-        // Use case-insensitive comparison for scheme detection
-        if (port <= 0) {
-            // extract_port_from_url returns 0 on failure, fallback to scheme-based default
-            if (url_str.size() >= 8) {
-                std::string scheme_prefix = url_str.substr(0, 8);
-                std::transform(scheme_prefix.begin(), scheme_prefix.end(),
-                               scheme_prefix.begin(), ::tolower);
-                if (scheme_prefix == "https://") {
-                    port = 443;
-                } else {
-                    port = 80;
-                }
-            } else {
-                port = 80;  // Default to HTTP
-            }
+        // Use libcurl's URL parser to ensure consistent parsing with actual request
+        auto host_result = extract_host_from_url(url_str);
+        if (host_result.ok()) {
+            host = host_result.value();
         }
+
+        auto port_result = extract_port_from_url(url_str);
+        if (port_result.ok()) {
+            port = port_result.value();
+        }
+        // Note: If port extraction fails, port remains 0 and DNS pinning will be skipped
+        // This is safe because the URL was already validated in validate_host_security()
     }
 
     // Initialize with URL

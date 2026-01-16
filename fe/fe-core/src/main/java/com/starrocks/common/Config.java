@@ -4106,10 +4106,9 @@ public class Config extends ConfigBase {
 
     @ConfField public static int ui_queries_sql_statement_max_length = 128;
 
-<<<<<<< HEAD
     @ConfField(mutable = true)
     public static boolean enable_hudi_lib_internal_metadata_table = true;
-=======
+
     /**
      * http_request function settings
      * Admin-enforced SSL verification for http_request function.

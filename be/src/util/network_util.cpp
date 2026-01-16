@@ -35,6 +35,9 @@
 #include "util/network_util.h"
 
 #include <arpa/inet.h>
+#include <curl/curl.h>
+#include <fmt/format.h>
+
 #include <common/logging.h>
 #include <ifaddrs.h>
 #include <netdb.h>
@@ -336,133 +339,121 @@ StatusOr<std::vector<std::string>> resolve_hostname_all_ips(const std::string& h
     return results;
 }
 
-std::string extract_host_from_url(const std::string& url) {
-    if (url.empty()) return "";
-
-    // Find the scheme separator
-    size_t scheme_end = url.find("://");
-    if (scheme_end == std::string::npos || scheme_end == 0) {
-        // No scheme separator found, or no scheme name before ://
-        return "";
-    }
-
-    size_t host_start = scheme_end + 3;
-
-    // Skip user:password@ if present
-    size_t at_pos = url.find('@', host_start);
-    size_t slash_pos = url.find('/', host_start);
-    if (at_pos != std::string::npos && (slash_pos == std::string::npos || at_pos < slash_pos)) {
-        host_start = at_pos + 1;
-    }
-
-    // Handle IPv6 address [::1]
-    if (host_start < url.size() && url[host_start] == '[') {
-        size_t bracket_end = url.find(']', host_start);
-        if (bracket_end != std::string::npos) {
-            return url.substr(host_start + 1, bracket_end - host_start - 1);
-        }
-        return "";
-    }
-
-    // Find end of host (port, path, or end of string)
-    size_t host_end = url.size();
-    for (size_t i = host_start; i < url.size(); ++i) {
-        if (url[i] == ':' || url[i] == '/' || url[i] == '?' || url[i] == '#') {
-            host_end = i;
-            break;
+// RAII wrapper for CURLU handle to ensure proper cleanup
+class CurlUrlHandle {
+public:
+    CurlUrlHandle() : _handle(curl_url()) {}
+    ~CurlUrlHandle() {
+        if (_handle) {
+            curl_url_cleanup(_handle);
         }
     }
+    CurlUrlHandle(const CurlUrlHandle&) = delete;
+    CurlUrlHandle& operator=(const CurlUrlHandle&) = delete;
 
-    return url.substr(host_start, host_end - host_start);
+    CURLU* get() const { return _handle; }
+    explicit operator bool() const { return _handle != nullptr; }
+
+private:
+    CURLU* _handle;
+};
+
+// RAII wrapper for curl_free to ensure proper cleanup of curl-allocated strings
+class CurlString {
+public:
+    explicit CurlString(char* str) : _str(str) {}
+    ~CurlString() {
+        if (_str) {
+            curl_free(_str);
+        }
+    }
+    CurlString(const CurlString&) = delete;
+    CurlString& operator=(const CurlString&) = delete;
+
+    const char* get() const { return _str; }
+    explicit operator bool() const { return _str != nullptr; }
+
+private:
+    char* _str;
+};
+
+StatusOr<std::string> extract_host_from_url(const std::string& url) {
+    if (url.empty()) {
+        return Status::InvalidArgument("URL is empty");
+    }
+
+    CurlUrlHandle curl_url;
+    if (!curl_url) {
+        return Status::InternalError("Failed to create CURL URL handle");
+    }
+
+    // Parse the URL using libcurl's URL parser
+    // This ensures we parse URLs exactly the same way curl will when making requests
+    CURLUcode rc = curl_url_set(curl_url.get(), CURLUPART_URL, url.c_str(), 0);
+    if (rc != CURLUE_OK) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
+    }
+
+    // Extract the host component
+    char* host = nullptr;
+    rc = curl_url_get(curl_url.get(), CURLUPART_HOST, &host, 0);
+    if (rc != CURLUE_OK || host == nullptr) {
+        return Status::InvalidArgument(
+                fmt::format("Failed to extract host from URL '{}': {}",
+                            url, curl_url_strerror(rc)));
+    }
+
+    CurlString host_guard(host);
+    std::string result(host_guard.get());
+
+    // Strip brackets from IPv6 addresses (curl returns [::1], we want ::1)
+    if (result.size() >= 2 && result.front() == '[' && result.back() == ']') {
+        result = result.substr(1, result.size() - 2);
+    }
+
+    return result;
 }
 
-int extract_port_from_url(const std::string& url) {
-    if (url.empty()) return 0;
-
-    // Determine default port based on scheme (case-insensitive comparison)
-    int default_port = 80;  // HTTP
-    if (url.size() >= 8) {
-        std::string scheme = boost::algorithm::to_lower_copy(url.substr(0, 8));
-        if (scheme == "https://") {
-            default_port = 443;  // HTTPS
-        }
+StatusOr<int> extract_port_from_url(const std::string& url) {
+    if (url.empty()) {
+        return Status::InvalidArgument("URL is empty");
     }
 
-    // Find the scheme separator
-    size_t scheme_end = url.find("://");
-    if (scheme_end == std::string::npos) {
-        return 0;  // Invalid URL
+    CurlUrlHandle curl_url;
+    if (!curl_url) {
+        return Status::InternalError("Failed to create CURL URL handle");
     }
 
-    size_t host_start = scheme_end + 3;
-
-    // Skip user:password@ if present
-    size_t at_pos = url.find('@', host_start);
-    size_t slash_pos = url.find('/', host_start);
-    if (at_pos != std::string::npos && (slash_pos == std::string::npos || at_pos < slash_pos)) {
-        host_start = at_pos + 1;
+    // Parse the URL using libcurl's URL parser
+    CURLUcode rc = curl_url_set(curl_url.get(), CURLUPART_URL, url.c_str(), 0);
+    if (rc != CURLUE_OK) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
     }
 
-    // Handle IPv6 address [::1]:port
-    if (host_start < url.size() && url[host_start] == '[') {
-        size_t bracket_end = url.find(']', host_start);
-        if (bracket_end != std::string::npos) {
-            // Check if there's a port after the bracket
-            if (bracket_end + 1 < url.size() && url[bracket_end + 1] == ':') {
-                size_t port_start = bracket_end + 2;
-                size_t port_end = url.find_first_of("/?#", port_start);
-                if (port_end == std::string::npos) port_end = url.size();
-                std::string port_str = url.substr(port_start, port_end - port_start);
-                try {
-                    int port = std::stoi(port_str);
-                    if (port <= 0 || port > 65535) {
-                        return 0;  // Invalid port range
-                    }
-                    return port;
-                } catch (...) {
-                    return 0;
-                }
-            }
-            return default_port;
-        }
-        return 0;  // Invalid IPv6 format
+    // Extract the port component
+    // CURLU_DEFAULT_PORT: If no port is specified, return the default port for the scheme
+    char* port_str = nullptr;
+    rc = curl_url_get(curl_url.get(), CURLUPART_PORT, &port_str, CURLU_DEFAULT_PORT);
+    if (rc != CURLUE_OK || port_str == nullptr) {
+        return Status::InvalidArgument(
+                fmt::format("Failed to extract port from URL '{}': {}",
+                            url, curl_url_strerror(rc)));
     }
 
-    // Find the port separator after host_start
-    size_t port_pos = std::string::npos;
-    for (size_t i = host_start; i < url.size(); ++i) {
-        if (url[i] == ':') {
-            port_pos = i;
-            break;
-        }
-        if (url[i] == '/' || url[i] == '?' || url[i] == '#') {
-            break;  // No port found
-        }
-    }
-
-    // No explicit port
-    if (port_pos == std::string::npos) {
-        return default_port;
-    }
-
-    // Extract port number
-    size_t port_start = port_pos + 1;
-    size_t port_end = url.find_first_of("/?#", port_start);
-    if (port_end == std::string::npos) port_end = url.size();
-
-    std::string port_str = url.substr(port_start, port_end - port_start);
-    if (port_str.empty()) {
-        return default_port;
-    }
+    CurlString port_guard(port_str);
 
     try {
-        int port = std::stoi(port_str);
+        int port = std::stoi(port_guard.get());
         if (port <= 0 || port > 65535) {
-            return 0;  // Invalid port range
+            return Status::InvalidArgument(
+                    fmt::format("Port out of range in URL '{}': {}", url, port));
         }
         return port;
-    } catch (...) {
-        return 0;  // Invalid port format
+    } catch (const std::exception& e) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid port in URL '{}': {}", url, e.what()));
     }
 }
 
