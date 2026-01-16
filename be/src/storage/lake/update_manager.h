@@ -99,7 +99,8 @@ public:
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
-                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment);
+                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                      uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
                                 Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
