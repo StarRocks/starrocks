@@ -377,12 +377,14 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     private void finishHook() {
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
     }
 
     protected void cancelHook(boolean cancelled) {
         if (cancelled) {
-            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
+                    "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
         }
     }
 
