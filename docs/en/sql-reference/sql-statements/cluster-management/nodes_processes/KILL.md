@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # KILL
 
-Kill terminates a connection or a query currently being performed by threads executing within StarRocks.
+Terminates a connection or a query currently being performed by threads executing within StarRocks.
 
 :::tip
 
