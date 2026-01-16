@@ -33,6 +33,8 @@ public:
     static Status encode_column(const ColumnPtr& column, const TypeDescriptor& type,
                                 ColumnBuilder<TYPE_VARIANT>* builder, bool allow_throw_exception);
     static StatusOr<VariantRowValue> encode_json_to_variant(const JsonValue& json);
+    static StatusOr<VariantRowValue> encode_shredded_column_row(const ColumnPtr& column, const TypeDescriptor& type,
+                                                                size_t row);
 };
 
 } // namespace starrocks
