@@ -1,0 +1,636 @@
+-- name: test_mv_schema_change2 @slow
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- result:
+-- !result
+CREATE TABLE t1 (
+  dt datetime,
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dt`, `c0`, `c1`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 SELECT '2026-01-01', generate_series % 10, generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 100));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY hash(c0) 
+PROPERTIES (
+  "fast_schema_change_mode" = "loose"
+)
+AS 
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc592-9acc-7fbd-9af8-37f4cc47ff64
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	1	10
+2026-01-01 00:00:00	2	10
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	1	10
+2026-01-01 00:00:00	2	10
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN cnt_c2 AS count(c2);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+cnt_c1	bigint	NO	true	None	
+cnt_c2	bigint	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	2	10	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	2	10	None
+-- !result
+INSERT INTO t1 VALUES ('2026-01-02', 0, "c1_0", "c2_0", 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc592-af6c-7597-bf7a-ee0af358f272
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	2	10	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	2	10	None
+-- !result
+ALTER TABLE t1 ADD COLUMN c4 int;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC t1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+c1	varchar(20)	YES	true	None	
+c2	varchar(200)	YES	false	None	
+c3	int	YES	false	None	
+c4	int	YES	false	None	
+-- !result
+INSERT INTO t1 VALUES ('2026-01-03', 0, "c1_0", "c2_0", 0, 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc592-c0fe-725b-bea1-4849577bf1ad
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	2	10	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	2	10	None
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN sum_c4 AS sum(c4);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+cnt_c1	bigint	NO	true	None	
+cnt_c2	bigint	YES	false	None	NONE
+sum_c4	bigint	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None
+2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	2	10	None	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None
+2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	2	10	None	None
+-- !result
+INSERT INTO t1 VALUES ('2026-01-04', 0, "c1_0", "c2_0", 0, 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc592-d6eb-7bbf-8a48-be385fc62e85
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None
+2026-01-02 00:00:00	0	1	1	None
+2026-01-03 00:00:00	0	1	1	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None
+2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	2	10	None	None
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN c4 AS c4;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+cnt_c1	bigint	NO	true	None	
+cnt_c2	bigint	YES	false	None	NONE
+sum_c4	bigint	YES	false	None	NONE
+c4	int	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None	None
+2026-01-02 00:00:00	0	1	1	None	None
+2026-01-03 00:00:00	0	1	1	None	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None	None
+2026-01-01 00:00:00	1	10	None	None	None
+2026-01-01 00:00:00	2	10	None	None	None
+-- !result
+INSERT INTO t1 VALUES ('2026-01-05', 0, "c1_0", "c2_0", 0, 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc592-ee4c-79c9-90ba-e395d461836b
+-- !result
+function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	None	10	None	None
+2026-01-02 00:00:00	0	None	1	1	None
+2026-01-03 00:00:00	0	None	1	1	None
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None	None
+2026-01-01 00:00:00	1	10	None	None	None
+2026-01-01 00:00:00	2	10	None	None	None
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN cnt_c2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+cnt_c1	bigint	NO	true	None	
+sum_c4	bigint	YES	false	None	NONE
+c4	int	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-02 00:00:00	0	1	None
+2026-01-05 00:00:00	0	1	0
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None
+2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	2	10	None	None
+-- !result
+INSERT INTO t1 VALUES ('2026-01-06', 0, "c1_0", "c2_0", 0, 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc593-05fa-796d-a491-09169259fa7c
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-02 00:00:00	0	1	None
+2026-01-05 00:00:00	0	1	0
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	None
+2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	2	10	None	None
+-- !result
+ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN sum_c4;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+cnt_c1	bigint	NO	true	None	
+c4	int	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-02 00:00:00	0	1
+2026-01-05 00:00:00	0	1
+-- !result
+SELECT * FROM test_mv1 ORDER BY c0 LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-02 00:00:00	0	1	None
+2026-01-03 00:00:00	0	1	None
+-- !result
+INSERT INTO t1 VALUES ('2026-01-07', 0, "c1_0", "c2_0", 0, 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019bc593-1caf-7f64-8621-8cc13dfef672
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-02 00:00:00	0	1
+2026-01-05 00:00:00	0	1
+-- !result
+SELECT * FROM test_mv1 ORDER BY c0 limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-02 00:00:00	0	1	None
+2026-01-03 00:00:00	0	1	None
+-- !result
+[UC]ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN c4;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot drop column 'c4' because it is used in GROUP BY clause.")
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+DROP TABLE t1;
+-- result:
+-- !result
+CREATE TABLE t2 (
+  dt datetime,
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`dt`, `c0`, `c1`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`c0`, `c1`) 
+PROPERTIES (
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 SELECT '2026-01-01', generate_series % 5, generate_series, generate_series, generate_series FROM TABLE(generate_series(1, 100));
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv2 
+PARTITION BY date_trunc('day', dt)  
+DISTRIBUTED BY HASH(`c0`, `c1`) 
+PROPERTIES (
+  "fast_schema_change_mode" = "force"
+)
+AS 
+SELECT dt, c0, c1 from t2;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+019bc593-2b5c-74a9-980c-a8e4efeb3f70
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	0	100
+2026-01-01 00:00:00	0	15
+-- !result
+SELECT dt, c0, c1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	0	100
+2026-01-01 00:00:00	0	15
+-- !result
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c2 AS c2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv2;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+c1	varchar(1048576)	YES	true	None	
+c2	varchar(200)	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1, c2 from t2", "test_mv2")
+-- result:
+False
+-- !result
+SELECT dt, c0, c1, c2 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None
+2026-01-01 00:00:00	0	100	None
+2026-01-01 00:00:00	0	15	None
+-- !result
+SELECT dt, c0, c1, c2 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	10
+2026-01-01 00:00:00	0	100	100
+2026-01-01 00:00:00	0	15	15
+-- !result
+INSERT INTO t2 VALUES ('2026-01-02', 0, "c1_0", "c2_0", 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+019bc593-3f41-7997-b97b-ba344e6b7250
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1, c2 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1, c2 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	10
+2026-01-01 00:00:00	0	100	100
+2026-01-01 00:00:00	0	15	15
+-- !result
+SELECT dt, c0, c1, c2 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	10
+2026-01-01 00:00:00	0	100	100
+2026-01-01 00:00:00	0	15	15
+-- !result
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3 AS c3 + 1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv2;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+c1	varchar(1048576)	YES	true	None	
+c2	varchar(200)	YES	false	None	NONE
+c3	bigint	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1, c2, c3 + 1 from t2", "test_mv2")
+-- result:
+False
+-- !result
+SELECT dt, c0, c1, c2, c3 + 1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	10	None
+2026-01-01 00:00:00	0	100	100	None
+2026-01-01 00:00:00	0	15	15	None
+-- !result
+SELECT dt, c0, c1, c2, c3 + 1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	10	11
+2026-01-01 00:00:00	0	100	100	101
+2026-01-01 00:00:00	0	15	15	16
+-- !result
+INSERT INTO t2 VALUES ('2026-01-03', 0, "c1_0", "c2_0", 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+019bc593-5747-7231-8ee4-8e6b2dbbdcfe
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1, c2, c3 + 1 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1, c3 + 1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	12
+2026-01-01 00:00:00	0	100	102
+2026-01-01 00:00:00	0	15	17
+-- !result
+SELECT dt, c0, c1, c2, c3 + 1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	10	11
+2026-01-01 00:00:00	0	100	100	101
+2026-01-01 00:00:00	0	15	15	16
+-- !result
+ALTER MATERIALIZED VIEW test_mv2 DROP COLUMN c2;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv2;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+c1	varchar(1048576)	YES	true	None	
+c3	bigint	YES	false	None	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1, c3 + 1 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1, c3 + 1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	12
+2026-01-01 00:00:00	0	100	102
+2026-01-01 00:00:00	0	15	17
+-- !result
+SELECT dt, c0, c1, c3 + 1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	11
+2026-01-01 00:00:00	0	100	101
+2026-01-01 00:00:00	0	15	16
+-- !result
+INSERT INTO t2 VALUES ('2026-01-04', 0, "c1_0", "c2_0", 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+019bc593-6f0b-79ce-8131-1d80b40e24fc
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1, c3 + 1 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1, c3 + 1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	12
+2026-01-01 00:00:00	0	100	102
+2026-01-01 00:00:00	0	15	17
+-- !result
+SELECT dt, c0, c1, c3 + 1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	11
+2026-01-01 00:00:00	0	100	101
+2026-01-01 00:00:00	0	15	16
+-- !result
+ALTER MATERIALIZED VIEW test_mv2 DROP COLUMN c3;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv2;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+c1	varchar(1048576)	YES	true	None	
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	0	100
+2026-01-01 00:00:00	0	15
+-- !result
+SELECT dt, c0, c1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	0	100
+2026-01-01 00:00:00	0	15
+-- !result
+INSERT INTO t2 VALUES ('2026-01-05', 0, "c1_0", "c2_0", 0);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+-- result:
+019bc593-853b-7ccb-8cde-427f8472ad94
+-- !result
+function: print_hit_materialized_view("select dt, c0, c1 from t2", "test_mv2")
+-- result:
+True
+-- !result
+SELECT dt, c0, c1 FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	0	100
+2026-01-01 00:00:00	0	15
+-- !result
+SELECT dt, c0, c1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10
+2026-01-01 00:00:00	0	100
+2026-01-01 00:00:00	0	15
+-- !result
+DROP MATERIALIZED VIEW test_mv2;
+-- result:
+-- !result
+DROP TABLE t2;
+-- result:
+-- !result

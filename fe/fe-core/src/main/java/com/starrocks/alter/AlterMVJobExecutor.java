@@ -788,7 +788,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // after schema change, refresh to refresh partitions to avoid data inconsistent.
             MaterializedView.AsyncRefreshContext mvAsyncRefreshContext =
                     mv.getRefreshScheme().getAsyncRefreshContext();
-            if (mvFastSchemaChangeMode.isChecked()) {
+            if (mvFastSchemaChangeMode.isForce()) {
                 mvAsyncRefreshContext.clearVisibleVersionMap();
                 LOG.info("After adding column to materialized view {}, clear all partition infos to trigger full refresh",
                         mv.getName());
@@ -802,6 +802,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 } else {
                     checkMVVisibleVersionAffectedBySchemaChange(mv, baseTable, mvAsyncRefreshContext, baseColumnCreatedTime);
                 }
+            } else {
+                LOG.info("Ignored check of MV visible version affected by schema change, " +
+                        "because MV fast schema change mode is loosed:" + mv.getName());
             }
 
             LOG.info("Logged schema change for materialized view '{}': added column '{}' with expression '{}'",
@@ -834,9 +837,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     // to trigger a full refresh for this partition.
                     if (partition.getLatestPhysicalPartition().getVisibleVersionTime() > baseColumnCreatedTime) {
                         removePartitionNames.add(entry.getKey());
-                        basePartitionInfoMap.remove(entry.getKey());
                     }
                 }
+                // remove the partition infos to trigger full refresh for this partition
+                removePartitionNames.stream()
+                        .forEach(partName -> basePartitionInfoMap.remove(partName));
                 LOG.info("After adding column to materialized view {}, remove partition infos {} " +
                                 "to trigger full refresh, base column created time: {}, " +
                                 "partition visible version time: {}",
