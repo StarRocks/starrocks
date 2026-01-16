@@ -940,7 +940,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(),
                 alterViewClause.getInlineViewDef(),
                 alterViewClause.getColumns(),
-                ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
+                ctx.getSessionVariable().getSqlMode(),
+                alterViewClause.getComment(),
+                alterViewClause.getOriginalViewDefineSql());
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         return null;
