@@ -536,7 +536,6 @@ public class GlobalStateMgr {
     private static GlobalStateMgr RESTORE_STATE = null;
     private static long restoreThreadId = -1;
 
-    private final ResourceUsageMonitor resourceUsageMonitor = ExtensionManager.getComponent(ResourceUsageMonitor.class);
     private final BaseSlotManager slotManager = ExtensionManager.getComponent(BaseSlotManager.class);
 
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
@@ -3016,7 +3015,7 @@ public class GlobalStateMgr {
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
-        return resourceUsageMonitor;
+        return slotManager.getResourceUsageMonitor();
     }
 
     public DictionaryMgr getDictionaryMgr() {

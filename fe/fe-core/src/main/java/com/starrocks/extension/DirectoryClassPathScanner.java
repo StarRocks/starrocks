@@ -59,7 +59,7 @@ public class DirectoryClassPathScanner {
 
     private boolean isUnderBasePackage(Path classFile) {
         String normalized =
-                classFile.toString().replace(File.separatorChar, '/');
+                classFile.toString().replace(File.separatorChar, '.');
         return BASE_PACKAGES.stream().anyMatch(normalized::contains);
     }
 

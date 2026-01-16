@@ -21,7 +21,6 @@ import com.starrocks.extension.StarRocksExtension;
 import com.starrocks.persist.gson.RuntimeTypeAdapterFactory;
 import com.starrocks.persist.gson.internal.RuntimeTypeAdapterTypes;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
-import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -34,8 +33,8 @@ public class MultiWarehouseExtension implements StarRocksExtension {
     public void onLoad(ExtensionContext ctx) {
         registerPersist();
 
-        ctx.register(WarehouseManager.class, new WarehouseManagerEPack());
-        ctx.register(BaseSlotManager.class, new WarehouseSlotManager(ctx.get(ResourceUsageMonitor.class)));
+        ctx.registerConstructor(WarehouseManager.class, WarehouseManagerEPack.class);
+        ctx.registerConstructor(BaseSlotManager.class, WarehouseSlotManager.class);
     }
 
     void registerPersist() {
