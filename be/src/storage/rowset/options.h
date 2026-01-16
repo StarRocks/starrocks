@@ -62,6 +62,8 @@ public:
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
     OlapReaderStatistics* stats = nullptr;
+
+    std::optional<size_t> segment_rows = std::nullopt;
 };
 
 } // namespace starrocks

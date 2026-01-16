@@ -31,11 +31,14 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
+import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.DICT_GRAM_NUM;
 import static com.starrocks.common.InvertedIndexParams.IndexParamsKey.PARSER;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.BUILTIN;
 import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class InvertedIndexUtil {
+
+    public static String INVERTED_INDEX_IMP_LIB_KEY = IMP_LIB.name().toLowerCase(Locale.ROOT);
 
     public static String INVERTED_INDEX_PARSER_KEY = PARSER.name().toLowerCase(Locale.ROOT);
 
@@ -62,6 +65,8 @@ public class InvertedIndexUtil {
      */
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
+    public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+
     public static String getInvertedIndexParser(Map<String, String> properties) {
         String parser = properties == null ? null : properties.get(INVERTED_INDEX_PARSER_KEY);
         // default is "none" if not set
@@ -84,9 +89,8 @@ public class InvertedIndexUtil {
             throw new SemanticException("The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
-        String impLibKey = IMP_LIB.name().toLowerCase(Locale.ROOT);
-        if (properties.containsKey(impLibKey)) {
-            String impValue = properties.get(impLibKey);
+        if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
+            String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
             if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
                 throw new SemanticException("Only support clucene or builtin implement for now. ");
             }
@@ -95,7 +99,7 @@ public class InvertedIndexUtil {
                 throw new SemanticException("Clucene inverted index does not support shared data mode");
             }
         } else if (RunMode.isSharedDataMode()) {
-            properties.put(impLibKey, BUILTIN.name().toLowerCase(Locale.ROOT));
+            properties.put(INVERTED_INDEX_IMP_LIB_KEY, BUILTIN.name().toLowerCase(Locale.ROOT));
         }
 
         String noMatchParamKey = properties.keySet().stream()
@@ -106,6 +110,7 @@ public class InvertedIndexUtil {
         }
 
         InvertedIndexUtil.checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
+        checkInvertedIndexNgram(properties);
 
         // add default properties
         addDefaultProperties(properties);
@@ -131,6 +136,26 @@ public class InvertedIndexUtil {
         } else if (!parser.equals(INVERTED_INDEX_PARSER_NONE)) {
             throw new SemanticException("INVERTED index with parser: " + parser
                     + " is not supported for column: " + indexColName + " of type " + colType);
+        }
+    }
+
+    public static void checkInvertedIndexNgram(Map<String, String> properties) {
+        String gramNum = properties == null ? null : properties.get(INVERTED_INDEX_DICT_GRAM_NUM_KEY);
+        if (gramNum == null) {
+            return;
+        }
+
+        if (!StringUtils.isNumeric(gramNum)) {
+            throw new SemanticException("INVERTED index dict gram num " + gramNum + " is a invalid number.");
+        }
+        int realGramNum = Integer.parseInt(gramNum);
+        if (realGramNum <= 0) {
+            throw new SemanticException("INVERTED index dict gram num " + gramNum + " should be greater than zero.");
+        }
+
+        String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        if (!BUILTIN.name().equalsIgnoreCase(impValue)) {
+            throw new SemanticException("INVERTED index with " + impValue + " implement is invalid for dict gram.");
         }
     }
 }
