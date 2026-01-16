@@ -28,8 +28,8 @@
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
 #include "types/variant_value.h"
-#include "util/variant_encoder.h"
 #include "util/slice.h"
+#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 
