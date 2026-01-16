@@ -79,7 +79,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 // index state is SHADOW
                 MaterializedIndex mvIndex = new MaterializedIndex(rollupIndexId,
                         MaterializedIndex.IndexState.SHADOW, shardGroupId);
-                MaterializedIndex baseIndex = physicalPartition.getIndex(baseIndexMetaId);
+                MaterializedIndex baseIndex = physicalPartition.getLatestIndex(baseIndexMetaId);
 
                 // create shard
                 Map<String, String> shardProperties = new HashMap<>();

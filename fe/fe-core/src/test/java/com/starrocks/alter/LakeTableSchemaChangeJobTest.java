@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.SchemaInfo;
@@ -241,7 +242,7 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -267,7 +268,7 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -294,7 +295,7 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -323,7 +324,7 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -355,7 +356,7 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -386,7 +387,7 @@ public class LakeTableSchemaChangeJobTest {
 
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
     }
 
     @Test
@@ -414,7 +415,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -463,7 +464,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -509,7 +510,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertNotNull(partition);
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getNextVersion());
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // Does not support cancel job in FINISHED_REWRITING state.
@@ -552,7 +553,7 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
 
         List<MaterializedIndex> shadowIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assertions.assertEquals(1, shadowIndexes.size());
 
         // The partition's visible version has not catch up with the commit version of this schema change job now.
@@ -596,11 +597,11 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(3, partition.getDefaultPhysicalPartition().getVisibleVersion());
         Assertions.assertEquals(4, partition.getDefaultPhysicalPartition().getNextVersion());
 
-        shadowIndexes = partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+        shadowIndexes = partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.SHADOW);
         Assertions.assertEquals(0, shadowIndexes.size());
 
         List<MaterializedIndex> normalIndexes =
-                    partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.VISIBLE);
         Assertions.assertEquals(1, normalIndexes.size());
         MaterializedIndex normalIndex = normalIndexes.get(0);
 

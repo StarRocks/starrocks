@@ -71,7 +71,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
                     break;
                 }
                 long version = physicalPartition.getVisibleVersion();
-                MaterializedIndex index = physicalPartition.getIndex(olapScanOperator.getSelectedIndexMetaId());
+                MaterializedIndex index = physicalPartition.getLatestIndex(olapScanOperator.getSelectedIndexMetaId());
 
                 for (Tablet tablet : index.getTablets()) {
                     // Note: the tablet row count metadata in FE maybe delay because of BE tablet row count.

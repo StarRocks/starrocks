@@ -180,9 +180,9 @@ public class TabletStatMgrTest {
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id =
-                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
         long tablet2Id =
-                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(1).getId();
+                table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -279,9 +279,9 @@ public class TabletStatMgrTest {
         long t2 = System.currentTimeMillis();
 
         LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(0);
+                .getLatestBaseIndex().getTablets().get(0);
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(1);
+                .getLatestBaseIndex().getTablets().get(1);
 
         Assertions.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
         Assertions.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
@@ -297,9 +297,9 @@ public class TabletStatMgrTest {
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(0).getId();
+                .getLatestBaseIndex().getTablets().get(0).getId();
         long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(1).getId();
+                .getLatestBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -332,9 +332,9 @@ public class TabletStatMgrTest {
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
         LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(0);
+                .getLatestBaseIndex().getTablets().get(0);
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(1);
+                .getLatestBaseIndex().getTablets().get(1);
 
         Assertions.assertEquals(0, tablet1.getRowCount(-1));
         Assertions.assertEquals(0, tablet1.getDataSize(true));
@@ -350,9 +350,9 @@ public class TabletStatMgrTest {
         LakeTable table = createLakeTableForTest();
 
         long tablet1Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(0).getId();
+                .getLatestBaseIndex().getTablets().get(0).getId();
         long tablet2Id = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(1).getId();
+                .getLatestBaseIndex().getTablets().get(1).getId();
 
         // db
         Database db = new Database(DB_ID, "db");
@@ -428,9 +428,9 @@ public class TabletStatMgrTest {
         Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
 
         LakeTablet tablet1 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(0);
+                .getLatestBaseIndex().getTablets().get(0);
         LakeTablet tablet2 = (LakeTablet) table.getPartition(PARTITION_ID).getDefaultPhysicalPartition()
-                .getBaseIndex().getTablets().get(1);
+                .getLatestBaseIndex().getTablets().get(1);
 
         Assertions.assertEquals(0, tablet1.getRowCount(-1));
         Assertions.assertEquals(0, tablet1.getDataSize(true));

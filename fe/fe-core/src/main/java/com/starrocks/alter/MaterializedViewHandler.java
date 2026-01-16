@@ -678,7 +678,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
         // check state
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex baseIndex = partition.getIndex(baseIndexMetaId);
+            MaterializedIndex baseIndex = partition.getLatestIndex(baseIndexMetaId);
             // up to here. index's state should only be NORMAL
             Preconditions.checkState(baseIndex.getState() == IndexState.NORMAL, baseIndex.getState().name());
         }
@@ -760,7 +760,7 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(mvSchemaHash != -1);
 
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex materializedIndex = partition.getIndex(mvIndexMetaId);
+            MaterializedIndex materializedIndex = partition.getLatestIndex(mvIndexMetaId);
             Preconditions.checkNotNull(materializedIndex);
         }
     }
@@ -776,12 +776,13 @@ public class MaterializedViewHandler extends AlterHandler {
         long mvIndexMetaId = olapTable.getIndexMetaIdByName(mvName);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex rollupIndex = partition.getIndex(mvIndexMetaId);
             // delete rollup index
-            partition.deleteRollupIndex(mvIndexMetaId);
+            List<MaterializedIndex> droppedIndices = partition.deleteMaterializedIndexByMetaId(mvIndexMetaId);
             // remove tablets from inverted index
-            for (Tablet tablet : rollupIndex.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+            for (MaterializedIndex index : droppedIndices) {
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
             }
         }
         olapTable.deleteIndexInfo(mvName);
@@ -799,12 +800,14 @@ public class MaterializedViewHandler extends AlterHandler {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
             for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-                MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexMetaId);
+                List<MaterializedIndex> droppedIndices = partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
 
                 if (!GlobalStateMgr.isCheckpointThread()) {
                     // remove from inverted index
-                    for (Tablet tablet : rollupIndex.getTablets()) {
-                        invertedIndex.deleteTablet(tablet.getId());
+                    for (MaterializedIndex rollupIndex : droppedIndices) {
+                        for (Tablet tablet : rollupIndex.getTablets()) {
+                            invertedIndex.deleteTablet(tablet.getId());
+                        }
                     }
                 }
             }

@@ -470,7 +470,7 @@ public class SnapshotRestoreJob extends AbstractJob {
             TStorageMedium storageMedium = dataProperty != null ? dataProperty.getStorageMedium() : TStorageMedium.HDD;
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                     TabletMeta tabletMeta = new TabletMeta(dbId, tableForRestore.getId(),
                             physicalPartitionId, index.getId(), storageMedium, isLakeTable);
                     for (Tablet tablet : index.getTablets()) {

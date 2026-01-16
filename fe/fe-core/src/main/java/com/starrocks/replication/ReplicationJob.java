@@ -838,8 +838,8 @@ public class ReplicationJob implements GsonPostProcessable {
         for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToMetaId().entrySet()) {
             long indexMetaId = indexNameToId.getValue();
             long srcIndexMetaId = srcTable.getIndexMetaIdByName(indexNameToId.getKey());
-            MaterializedIndex index = partition.getIndex(indexMetaId);
-            MaterializedIndex srcIndex = srcPartition.getIndex(srcIndexMetaId);
+            MaterializedIndex index = partition.getLatestIndex(indexMetaId);
+            MaterializedIndex srcIndex = srcPartition.getLatestIndex(srcIndexMetaId);
             IndexInfo indexInfo = initIndexInfo(table, srcTable, index, srcIndex, srcSystemInfoService);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }

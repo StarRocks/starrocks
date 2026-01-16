@@ -1337,7 +1337,7 @@ public class FrontendServiceImplTest {
         request.setTxnId(txnId);
         List<TTabletCommitInfo> commitInfos = new ArrayList<>();
         OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db, table);
-        tbl.getAllPhysicalPartitions().stream().map(PhysicalPartition::getBaseIndex)
+        tbl.getAllPhysicalPartitions().stream().map(PhysicalPartition::getLatestBaseIndex)
                 .map(MaterializedIndex::getTablets).flatMap(List::stream).forEach(tablet -> {
                     TTabletCommitInfo commitInfo = new TTabletCommitInfo();
                     commitInfo.setTabletId(tablet.getId());
@@ -1690,7 +1690,7 @@ public class FrontendServiceImplTest {
         List<Long> partitionIds = olapTable.getPhysicalPartitions().stream()
                 .map(PhysicalPartition::getId).toList();
         long partitionId = partitionIds.get(0);
-        List<Tablet> tablets = olapTable.getPhysicalPartition(partitionId).getBaseIndex().getTablets();
+        List<Tablet> tablets = olapTable.getPhysicalPartition(partitionId).getLatestBaseIndex().getTablets();
         Assertions.assertEquals(bucketNum, tablets.size());
 
         long tabletId = tablets.get(0).getId();

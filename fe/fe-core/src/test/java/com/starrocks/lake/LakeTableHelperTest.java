@@ -132,7 +132,7 @@ public class LakeTableHelperTest {
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
         subPartitions.forEach(physicalPartition -> {
             MaterializedIndex materializedIndex =
-                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
             materializedIndex.setShardGroupId(groupIdToClear);
         });
 

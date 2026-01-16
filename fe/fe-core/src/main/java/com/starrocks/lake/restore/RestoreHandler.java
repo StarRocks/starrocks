@@ -235,7 +235,7 @@ public class RestoreHandler {
                 List<RestoreTask.TabletRestoreEntry> tabletEntries = new ArrayList<>();
 
                 for (MaterializedIndex targetIndex :
-                        targetPhysicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        targetPhysicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     long targetIndexMetaId = targetIndex.getMetaId();
                     MaterializedIndexMeta targetIndexMeta = tableForRestore.getIndexMetaByMetaId(targetIndexMetaId);
                     if (targetIndexMeta == null) {
@@ -393,7 +393,7 @@ public class RestoreHandler {
                     long newIdxId = tableForRestore.getIndexNameToMetaId().get(entry2.getValue());
                     if (newIdxId != tableForRestore.getBaseIndexMetaId()) {
                         // Not base table, delete old index
-                        physicalPartition.deleteRollupIndex(entry2.getKey());
+                        physicalPartition.deleteMaterializedIndexByMetaId(entry2.getKey());
                     }
                 }
                 for (Map.Entry<Long, String> entry2 : origIdxIdToName.entrySet()) {

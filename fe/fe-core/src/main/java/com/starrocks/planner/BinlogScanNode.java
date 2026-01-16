@@ -126,7 +126,7 @@ public class BinlogScanNode extends ScanNode {
         long dbId = -1;
         String dbName = null;
         for (PhysicalPartition partition : CollectionUtils.emptyIfNull(olapTable.getAllPhysicalPartitions())) {
-            MaterializedIndex table = partition.getBaseIndex();
+            MaterializedIndex table = partition.getLatestBaseIndex();
             long partitionId = partition.getId();
             long tableId = olapTable.getId();
 

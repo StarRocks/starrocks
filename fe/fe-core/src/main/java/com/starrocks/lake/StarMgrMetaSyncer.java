@@ -514,7 +514,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
                 // no need to check db/table/partition again, everything still works
                 for (MaterializedIndex materializedIndex :
-                        physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long groupId = materializedIndex.getShardGroupId();
                     Set<Long> starmgrShardIdsSet = null;
                     if (redundantGroupToShards.get(groupId) != null) {

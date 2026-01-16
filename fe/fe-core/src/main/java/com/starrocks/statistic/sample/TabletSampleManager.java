@@ -92,7 +92,7 @@ public class TabletSampleManager {
                     continue;
                 }
                 for (PhysicalPartition physicalPartition : logicalPartition.getSubPartitions()) {
-                    for (Tablet tablet : physicalPartition.getBaseIndex().getTablets()) {
+                    for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
                         long tabletId = tablet.getId();
                         long rowCount = tablet.getFuzzyRowCount();
                         TabletStats tabletStats = new TabletStats(tabletId, physicalPartition.getId(), rowCount);

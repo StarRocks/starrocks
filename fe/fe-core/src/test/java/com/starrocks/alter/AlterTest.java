@@ -966,10 +966,10 @@ public class AlterTest {
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assertions.assertEquals(3,
                     replace1.getPartition("replace1").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assertions.assertEquals(1,
                     replace2.getPartition("replace2").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
 
         alterTableWithNewParser(replaceStmt, false);
 
@@ -977,10 +977,10 @@ public class AlterTest {
         replace2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assertions.assertEquals(1,
                     replace1.getPartition("replace1").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assertions.assertEquals(3,
                     replace2.getPartition("replace2").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assertions.assertEquals("replace1", replace1.getIndexNameByMetaId(replace1.getBaseIndexMetaId()));
         Assertions.assertEquals("replace2", replace2.getIndexNameByMetaId(replace2.getBaseIndexMetaId()));
     }
@@ -1350,7 +1350,7 @@ public class AlterTest {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             Assertions.assertEquals(physicalPartition.getVisibleVersion(), 1);
             Assertions.assertEquals(physicalPartition.getParentId(), partition.get().getId());
-            Assertions.assertNotNull(physicalPartition.getBaseIndex());
+            Assertions.assertNotNull(physicalPartition.getLatestBaseIndex());
             Assertions.assertFalse(physicalPartition.isImmutable());
             Assertions.assertEquals(physicalPartition.getShardGroupId(), PhysicalPartition.INVALID_SHARD_GROUP_ID);
             Assertions.assertTrue(physicalPartition.hasStorageData());

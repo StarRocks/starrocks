@@ -447,7 +447,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             Long physicalPartitionId = internalScanRange.partition_id;
 
             PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
-            final MaterializedIndex selectedTable = physicalPartition.getIndex(index.indexMetaId);
+            final MaterializedIndex selectedTable = physicalPartition.getLatestIndex(index.indexMetaId);
             final Tablet selectedTablet = selectedTable.getTablet(tabletId);
             if (selectedTablet == null) {
                 throw new StarRocksException("Tablet " + tabletId + " doesn't exist in partition " + physicalPartitionId);
@@ -768,7 +768,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 final List<Tablet> tablets = Lists.newArrayList();
-                final MaterializedIndex selectedIndex = physicalPartition.getIndex(index.indexMetaId);
+                final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
                 final Collection<Long> tabletIds = distributionPrune(selectedIndex, partition.getDistributionInfo());
                 LOG.debug("distribution prune tablets: {}", tabletIds);
 
@@ -801,7 +801,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             Collection<PhysicalPartition> physicalPartitions = partition.getSubPartitions();
             totalPartitionNum += physicalPartitions.size();
             for (PhysicalPartition physicalPartition : physicalPartitions) {
-                final MaterializedIndex selectedTable = physicalPartition.getIndex(index.indexMetaId);
+                final MaterializedIndex selectedTable = physicalPartition.getLatestIndex(index.indexMetaId);
                 totalTabletsNum += selectedTable.getTablets().size();
             }
         }
@@ -1260,7 +1260,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 return false;
             }
             long visibleVersion = partition.getVisibleVersion();
-            MaterializedIndex materializedIndex = partition.getIndex(selectedIndexMetaId);
+            MaterializedIndex materializedIndex = partition.getLatestIndex(selectedIndexMetaId);
             for (Long id : entry.getValue()) {
                 LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(id);
                 if (tablet.getQueryableReplicasSize(visibleVersion, schemaHash) != aliveBackendSize) {
@@ -1584,7 +1584,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex materializedIndex = physicalPartition.getIndex(index.indexMetaId);
+                MaterializedIndex materializedIndex = physicalPartition.getLatestIndex(index.indexMetaId);
                 for (long tabletId : materializedIndex.getTabletIdsInOrder()) {
                     tabletToPartitionMap.put(tabletId, physicalPartition.getId());
                 }
