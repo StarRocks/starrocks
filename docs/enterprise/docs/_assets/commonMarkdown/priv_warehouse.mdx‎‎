@@ -1,0 +1,8 @@
+### Warehouse
+
+| Privilege | Description                                  |
+| --------- | -------------------------------------------- |
+| USAGE     | Uses a warehouse.                            |
+| ALTER     | Suspends or resumes a warehouse.             |
+| DROP      | Drops a warehouse.                           |
+| ALL       | Has all the above privileges on a warehouse. |
