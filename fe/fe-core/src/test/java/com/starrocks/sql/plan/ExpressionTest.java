@@ -877,8 +877,8 @@ public class ExpressionTest extends PlanTestBase {
                         "c5 IN ('292278994-08-17', '1970-02-01') AND " +
                         "c5 IN ('292278994-08-17', '1970-02-01')  " +
                         " FROM test_in_pred_norm",
-                "<slot 7> : (5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-02-01')) AND " +
-                        "(6: c5 IN (CAST('292278994-08-17' AS DATE), '1970-02-01'))");
+                "<slot 7> : (CAST(5: c4 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-02-01 00:00:00')) " +
+                        "AND (CAST(6: c5 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-02-01 00:00:00'))");
 
         String plan = getFragmentPlan("SELECT " +
                 "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
