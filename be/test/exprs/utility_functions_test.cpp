@@ -115,7 +115,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         Columns columns;
         columns.emplace_back(std::move(var1_col));
         ColumnPtr result = UtilityFunctions::uuid_numeric(ctx, columns).value();
-        Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
+        const Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
         std::set<int128_t> vals;
         vals.insert(col->get_data().begin(), col->get_data().end());
         ASSERT_EQ(vals.size(), chunk_size);

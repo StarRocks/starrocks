@@ -28,7 +28,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -55,6 +54,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetApplicableRolesRequest;
@@ -325,7 +325,7 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
 
         // SORT KEYS
-        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
         if (index.getSortKeyIdxes() == null) {
             tableConfigInfo.setSort_key(pkSb);
         } else {
@@ -360,7 +360,7 @@ public class InformationSchemaDataSource {
             public String dbName;
             public long dbId;
             public Table table;
-        };
+        }
         long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
         TreeSet<Element> sortedElements = new TreeSet<>(Comparator.comparing(Element::getTableId));
         for (String dbName : result.authorizedDbs) {
@@ -470,8 +470,6 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setCooldown_time(dataProperty.getCooldownTimeMs() / 1000);
         // LAST_CONSISTENCY_CHECK_TIME
         partitionMetaInfo.setLast_consistency_check_time(partition.getLastCheckTime() / 1000);
-        // IS_IN_MEMORY
-        partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
         partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
         // IS_TEMP
@@ -483,10 +481,11 @@ public class InformationSchemaDataSource {
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION
-            partitionMetaInfo.setCompact_version(statistics != null ? statistics.getCompactionVersion().getVersion() : 0);
+            partitionMetaInfo.setCompact_version(statistics != null && statistics.getCompactionVersion() != null ?
+                    statistics.getCompactionVersion().getVersion() : 0);
             DataCacheInfo cacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
             // ENABLE_DATACACHE
-            partitionMetaInfo.setEnable_datacache(cacheInfo.isEnabled());
+            partitionMetaInfo.setEnable_datacache(cacheInfo != null && cacheInfo.isEnabled());
             // AVG_CS
             partitionMetaInfo.setAvg_cs(compactionScore != null ? compactionScore.getAvg() : 0.0);
             // P50_CS
@@ -495,11 +494,9 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setMax_cs(compactionScore != null ? compactionScore.getMax() : 0.0);
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
-                    table.getPartitionFilePathInfo(physicalPartition.getPathId()).getFullPath());
+                    table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
             // METADATA_SWITCH_VERSION
             partitionMetaInfo.setMetadata_switch_version(physicalPartition.getMetadataSwitchVersion());
-            // PATH_ID
-            partitionMetaInfo.setPath_id(physicalPartition.getPathId());
         }
 
         partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
@@ -522,6 +519,16 @@ public class InformationSchemaDataSource {
         context.setCurrentUserIdentity(result.currentUser);
         context.setCurrentRoleIds(result.currentUser);
 
+        PatternMatcher matcher = null;
+        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
+        if (request.isSetTable_name()) {
+            try {
+                matcher = PatternMatcher.createMysqlPattern(request.getTable_name(), caseSensitive);
+            } catch (SemanticException e) {
+                throw new TException("Pattern is in bad format: " + request.getTable_name());
+            }
+        }
+
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
@@ -538,10 +545,9 @@ public class InformationSchemaDataSource {
             List<BasicTable> tables = new ArrayList<>();
             List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
             for (String tableName : tableNames) {
-                if (request.isSetTable_name()) {
-                    if (!tableName.equals(request.getTable_name())) {
-                        continue;
-                    }
+                if (request.isSetTable_name() &&
+                        !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                    continue;
                 }
 
                 BasicTable table = null;
@@ -759,7 +765,6 @@ public class InformationSchemaDataSource {
         return response;
     }
 
-
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
@@ -771,8 +776,8 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            totalRowsOfTable = partition.getBaseIndex().getRowCount() + totalRowsOfTable;
-            totalBytesOfTable = partition.getBaseIndex().getDataSize() + totalBytesOfTable;
+            totalRowsOfTable = partition.getLatestBaseIndex().getRowCount() + totalRowsOfTable;
+            totalBytesOfTable = partition.getLatestBaseIndex().getDataSize() + totalBytesOfTable;
         }
         // TABLE_ROWS
         info.setTable_rows(totalRowsOfTable);

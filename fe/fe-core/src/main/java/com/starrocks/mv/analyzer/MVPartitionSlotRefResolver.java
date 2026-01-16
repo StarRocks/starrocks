@@ -243,7 +243,7 @@ public class MVPartitionSlotRefResolver {
                                 ((SlotRef) partitionByExpr).getColumnName() : ExprToSql.toSql(partitionByExpr);
                         throw new SemanticException("window function %s ’s partition expressions" +
                                 " should contain the partition column %s of materialized view",
-                                analyticExpr.getFnCall().getFnName().getFunction(),
+                                analyticExpr.getFnCall().getFunctionName(),
                                 name
                         );
                     }

@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -133,27 +132,6 @@ public class DictionaryMgrTest {
     public void testResetStateFunction() throws Exception {
         Dictionary dictionary = new Dictionary();
         dictionary.resetState();
-    }
-
-    @Test
-    public void testFollower() throws Exception {
-        new Expectations() {
-            {
-                globalStateMgr.isLeader();
-                minTimes = 0;
-                result = false;
-            }
-        };
-
-        Dictionary dictionary = new Dictionary();
-        List<Dictionary> dictionaries = Lists.newArrayList();
-        dictionaries.add(dictionary);
-
-        DictionaryMgrInfo dictionaryMgrInfo = new DictionaryMgrInfo(1, 1, dictionaries);
-
-        dictionaryMgr.syncDictionaryMeta(dictionaries);
-        dictionaryMgr.scheduleTasks();
-        dictionaryMgr.replayModifyDictionaryMgr(dictionaryMgrInfo);
     }
 
     @Test
@@ -313,6 +291,5 @@ public class DictionaryMgrTest {
         
         // Test that worker can be instantiated and has proper initialization
         Assertions.assertNotNull(worker);
-        worker.run();
     }
 }

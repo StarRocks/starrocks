@@ -61,6 +61,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/utils.h"
 #include "util/crc32c.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/json_flattener.h"
 #include "util/slice.h"
@@ -76,6 +77,10 @@ bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segm
                                                          60);
 
 namespace starrocks {
+
+#ifdef BE_TEST
+bool Segment::_s_allow_batch_update_mode = true;
+#endif
 
 using strings::Substitute;
 
@@ -347,15 +352,16 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     return _new_iterator(schema, read_options);
 }
 
-Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter,
-                                            const SegmentReadOptions& opts) {
+Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
+                                            const IndexReadOptions& index_opt) {
     auto column_reader_iter = _column_readers.find(ucid);
 
     if (column_reader_iter != _column_readers.end()) {
         std::shared_ptr<TabletIndex> index_meta;
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
         if (index_meta.get() != nullptr) {
-            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts));
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts),
+                                                                           index_opt);
         }
     }
     return Status::OK();
@@ -496,7 +502,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         const TypeInfoPtr& type_info = get_type_info(column);
         auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
                 column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
-                num_rows());
+                num_rows(), path);
         ColumnIteratorOptions iter_opts;
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
@@ -649,9 +655,30 @@ size_t Segment::_column_index_mem_usage() const {
     return size;
 }
 
+void Segment::turn_off_batch_update_cache_size() {
+#ifdef BE_TEST
+    if (!_s_allow_batch_update_mode) return;
+#endif
+    if (_batch_on_flags_counter.fetch_sub(1, std::memory_order_relaxed) == 1) {
+        if (_dirty_cache_counter.exchange(0) > 0) {
+            if (_tablet_manager != nullptr) {
+                auto mem_cost = mem_usage();
+                _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+            }
+        }
+    }
+}
+
 void Segment::update_cache_size() {
     if (_tablet_manager != nullptr) {
-        _tablet_manager->update_segment_cache_size(file_name(), reinterpret_cast<intptr_t>(this));
+        // could be race condition on this `_batch_on_flags_counter` check, but it is ok to be inaccurate in such case.
+        if (_batch_on_flags_counter.load(std::memory_order_relaxed) == 0) {
+            auto mem_cost = mem_usage();
+            _tablet_manager->update_segment_cache_size(file_name(), mem_cost, reinterpret_cast<intptr_t>(this));
+        } else {
+            // under batch mode, only increase the _dirty_cache_counter
+            _dirty_cache_counter.fetch_add(1, std::memory_order_relaxed);
+        }
     }
 }
 

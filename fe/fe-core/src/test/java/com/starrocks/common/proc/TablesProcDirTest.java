@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -53,13 +54,13 @@ public class TablesProcDirTest {
         Map<String, Long> indexNameToId = Maps.newHashMap();
         indexNameToId.put("index1", 1000L);
 
-        List<Partition> p1 = Lists.newArrayList(new Partition(1001L, 1011L, "p", null, null));
+        List<Partition> p1 = Lists.newArrayList(new Partition(1001L, 1011L, "p", new MaterializedIndex(), null));
         List<Column> col1 = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
         PartitionInfo pt1 = new ListPartitionInfo(PartitionType.LIST, col1);
         OlapTable tb1 = new OlapTable(1000L, "tb1", col1, null, pt1, null);
         new Expectations(tb1) {
             {
-                tb1.getIndexNameToId();
+                tb1.getIndexNameToMetaId();
                 minTimes = 0;
                 result = indexNameToId;
 
@@ -73,13 +74,13 @@ public class TablesProcDirTest {
             }
         };
 
-        List<Partition> p2 = Lists.newArrayList(new Partition(20001L, 20011L, "p", null, null));
+        List<Partition> p2 = Lists.newArrayList(new Partition(20001L, 20011L, "p", new MaterializedIndex(), null));
         List<Column> col2 = Lists.newArrayList(new Column("dt", DateType.DATE));
         PartitionInfo pt2 = new RangePartitionInfo(col2);
         OlapTable tb2 = new OlapTable(2000L, "tb2", col2, null, pt2, null);
         new Expectations(tb2) {
             {
-                tb2.getIndexNameToId();
+                tb2.getIndexNameToMetaId();
                 minTimes = 0;
                 result = indexNameToId;
 

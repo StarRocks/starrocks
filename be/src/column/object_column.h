@@ -55,8 +55,6 @@ public:
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
 
-    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}
-
     void operator=(const ObjectColumn&) = delete;
 
     ObjectColumn& operator=(ObjectColumn&& rhs) noexcept {
@@ -90,9 +88,9 @@ public:
 
     size_t byte_size(size_t idx) const override;
 
-    void reserve(size_t n) override { _pool.reserve(n); }
+    void reserve(size_t n) override;
 
-    void resize(size_t n) override { _pool.resize(n); }
+    void resize(size_t n) override;
 
     void assign(size_t n, size_t idx) override;
 
@@ -151,10 +149,6 @@ public:
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
-
-    void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const override;
-
-    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
@@ -236,9 +230,9 @@ public:
         return Status::OK();
     }
 
-    StatusOr<ColumnPtr> upgrade_if_overflow() override;
+    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
 
-    StatusOr<ColumnPtr> downgrade() override { return nullptr; }
+    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
 
     bool has_large_column() const override { return false; }
 

@@ -96,6 +96,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `audit_log_roll_interval` 时间段内，允许保留的审计日志文件的最大数目。
 - 引入版本：-
 
+##### bdbje_log_level
+
+- 默认值：INFO
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：控制 StarRocks 中 BDB JE 使用的日志级别。在 BDB 环境初始化期间，此值将会应用到 `com.sleepycat.je` 包的 Java logger 以及 BDB JE 环境的文件日志级别。有效值：`SEVERE`、`WARNING`、`INFO`、`CONFIG`、`FINE`、`FINER`、`FINEST`、`ALL`、`OFF`。设置为 `ALL` 将启用所有日志消息。增加冗长度会提高日志量，可能影响磁盘 I/O 和性能。
+- 引入版本：v3.2.0
+
+##### big_query_log_modules
+
+- 默认值：`{"query"}`
+- 类型：String[]
+- 单位：-
+- 是否动态：否
+- 描述：启用按模块大查询日志的模块名后缀列表。典型值为逻辑组件名称。例如，默认的 `query` 会产生 `big_query.query`。
+- 引入版本：v3.2.0
+
+##### big_query_log_roll_num
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：每个 `big_query_log_roll_interval` 周期内要保留的已滚动 FE 大查询日志文件的最大数量。当日志按时间或按 `log_roll_size_mb` 滚动时，StarRocks 最多保留 `big_query_log_roll_num` 个带索引的文件。超过此数量的旧文件可能会被 rollover 删除，且可以通过 `big_query_log_delete_age` 根据最后修改时间进一步删除文件。
+- 引入版本：v3.2.0
+
 ##### dump_log_delete_age
 
 - 默认值：7d
@@ -143,6 +170,141 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。
 - 引入版本：-
 
+##### edit_log_write_slow_log_threshold_ms
+
+- 默认值：2000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：JournalWriter 用于检测并记录缓慢 Edit Log 批量写入的阈值（以毫秒为单位）。在一次批量提交后，如果该批次的持续时间超过此值，JournalWriter 会发出带有批次大小、持续时间和当前 Journal 队列大小的 WARN（速率限制为大约每 ~2s 一次）。此设置仅控制 FE Leader 上潜在 I/O 或复制延迟的日志/告警；它不会更改提交或滚动行为（参见 `edit_log_roll_num` 和与提交相关的设置）。无论此阈值如何，指标更新仍会发生。
+- 引入版本：v3.2.3
+
+##### enable_audit_sql
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否启用 SQL 审计。当此项设置为 `true` 时，FE 审计子系统会将由 ConnectProcessor 处理的语句的 SQL 文本记录到 FE 审计日志（`fe.audit.log`）。存储的语句遵循其他控制：加密语句会被脱敏（`AuditEncryptionChecker`），如果设置了 `enable_sql_desensitize_in_log`，敏感凭据可能会被屏蔽或脱敏，摘要记录由 `enable_sql_digest` 控制。当设置为 `false` 时，ConnectProcessor 会在审计事件中将语句文本替换为 "?" —— 其他审计字段（user、host、duration、status、通过 `qe_slow_log_ms` 检测的慢查询以及指标）仍然会被记录。启用 SQL 审计可以提高取证和故障排查的可见性，但可能暴露敏感的 SQL 内容并增加日志量和 I/O；禁用它可提高隐私，但代价是审计日志中失去完整语句的可见性。
+- 引入版本：-
+
+##### enable_profile_log
+
+- 默认值：True
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否启用 Profile 日志。当此功能启用时，FE 会将每个查询的 Profile 日志（由 `ProfileManager` 生成并序列化的 `queryDetail` JSON）写入 Profile Log Sink。只有在 `enable_collect_query_detail_info` 也启用时才会执行此日志记录；当启用 `enable_profile_log_compress` 时，JSON 可能会在记录前进行 gzip 压缩。Profile 日志文件由 `profile_log_dir`、`profile_log_roll_num`、`profile_log_roll_interval` 管理，并根据 `profile_log_delete_age` 进行轮转/删除（支持 `7d`、`10h`、`60m`、`120s` 等格式）。禁用此功能会停止写入 Profile 日志（从而减少磁盘 I/O、压缩 CPU 和存储使用）。
+- 引入版本：v3.2.5
+
+##### enable_qe_slow_log
+
+- 默认值：True
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用后，FE 内置的审计插件会将测得执行时间（"Time" 字段）超过由 `qe_slow_log_ms` 配置的阈值的查询事件写入慢查询审计日志。如果禁用，则这些慢查询条目将被抑制（常规查询和连接审计日志不受影响）。慢审计条目遵循全局 `audit_log_json_format` 设置。使用此标志可以独立于常规审计日志控制慢查询审计的生成；当 `qe_slow_log_ms` 较低或工作负载产生大量长时间运行查询时，关闭它可能减少日志 I/O。
+- 引入版本：3.2.11
+
+##### enable_sql_desensitize_in_log
+
+- 默认值：False
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：当此项设置为 `true` 时，系统在将 SQL 写入日志和 Query Detail 记录之前会替换或隐藏敏感的 SQL 内容。遵循此配置的代码路径包括审计日志、查询详情和内部执行器日志。启用该功能后，非法的 SQL 可能会被替换为固定的脱敏消息，凭证（user/password）会被隐藏，并且要求 SQL 格式化器生成已清理的表示（也可以启用 Digest 风格的输出）。这可以减少审计/内部日志中敏感字面量和凭证的泄露，但也意味着日志和查询详情不再包含原始完整的 SQL 文本（可能影响重放或调试）。
+- 引入版本：-
+
+##### internal_log_dir
+
+- 默认值：`Config.STARROCKS_HOME_DIR + "/log"`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：FE 日志子系统用于存放内部日志（`fe.internal.log`）的目录。此配置会被替换到 Log4j 配置中，用于决定 InternalFile appender 将内部/物化视图/统计日志写入何处，以及 `internal.<module>` 下的各模块 logger 将其文件放置到哪里。请确保该目录存在、可写且有足够的磁盘空间。该目录中文件的日志轮转与保留由 `log_roll_size_mb`、`internal_log_roll_num`、`internal_log_delete_age` 和 `internal_log_roll_interval` 控制。如果启用了 `sys_log_to_console`，内部日志可能会写到控制台而不是该目录。
+- 引入版本：v3.2.4
+
+##### internal_log_json_format
+
+- 默认值：False
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当 `internal_log_json_format` 为 true 时，系统发出的内部统计/审计条目会作为紧凑的 JSON 对象写入 Statistic Audit Logger。该 JSON 包含键 "executeType"（InternalType: QUERY 或 DML）、"queryId"、"sql" 和 "time"（耗时毫秒）。当为 false 时，相同的信息作为单行格式化文本记录（"statistic execute: ... | QueryId: [...] | SQL: ..."）。启用 JSON 有利于机器解析和与日志处理器的集成，但也会在日志中包含原始 SQL 文本，可能暴露敏感信息并增加日志大小。
+- 引入版本：-
+
+##### internal_log_modules
+
+- 默认值：`{"base", "statistic"}`
+- 类型：String[]
+- 单位：-
+- 是否动态：否
+- 描述：一个将接收专用内部日志记录的模块标识符列表。对于每个条目 X，Log4j 会创建一个名为 `internal.&lt;X&gt;` 的 logger，级别为 INFO 且 additivity="false"。这些 logger 会被路由到 internal appender（写入 `fe.internal.log`），当启用 `sys_log_to_console` 时则输出到控制台。根据需要使用简短名称或包片段 —— 精确的 logger 名称将成为 `internal.` + 配置的字符串。内部日志文件的滚动和保留遵循 `internal_log_dir`、`internal_log_roll_num`、`internal_log_delete_age`、`internal_log_roll_interval` 和 `log_roll_size_mb` 的设置。添加模块会将其运行时消息分离到内部 logger 流中，便于调试和审计。
+- 引入版本：v3.2.4
+
+##### internal_log_roll_interval
+
+- 默认值：DAY
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：控制 FE 内部日志 appender 的基于时间的滚动间隔。接受（不区分大小写）的值为 `HOUR` 和 `DAY`。`HOUR` 生成每小时的文件模式 (`"%d{yyyyMMddHH}"`)，`DAY` 生成每日的文件模式 (`"%d{yyyyMMdd}"`)，这些模式由 RollingFile TimeBasedTriggeringPolicy 用于命名旋转后的 `fe.internal.log` 文件。无效的值会导致初始化失败（在构建活动 Log4j 配置时会抛出 IOException）。滚动行为还取决于相关设置，例如 `internal_log_dir`、`internal_roll_maxsize`、`internal_log_roll_num` 和 `internal_log_delete_age`。
+- 引入版本：v3.2.4
+
+##### internal_log_roll_num
+
+- 默认值：90
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：内部 appender（`fe.internal.log`）保留的最大已滚动内部 FE 日志文件数。该值作为 Log4j DefaultRolloverStrategy 的 `max` 属性使用；在发生滚动时，StarRocks 会保留最多 `internal_log_roll_num` 个归档文件并删除更旧的文件（也受 `internal_log_delete_age` 控制）。较低的值可减少磁盘使用但缩短日志历史；较高的值可保留更多历史内部日志。该项与 `internal_log_dir`、`internal_log_roll_interval` 和 `internal_roll_maxsize` 配合工作。
+- 引入版本：v3.2.4
+
+##### log_cleaner_audit_log_min_retention_days
+
+- 默认值：3
+- 类型：Int
+- 单位：天
+- 是否动态：是
+- 描述：审计日志文件的最小保留天数。即使磁盘使用率很高，也不会删除比此值更新的审计日志文件。这确保了审计日志能够保留用于合规和故障排除目的。
+- 引入版本：-
+
+##### log_cleaner_check_interval_second
+
+- 默认值：300
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：检查磁盘使用率和清理日志的时间间隔（秒）。清理器会定期检查每个日志目录的磁盘使用率，并在必要时触发清理。默认值为 300 秒（5 分钟）。
+- 引入版本：-
+
+##### log_cleaner_disk_usage_target
+
+- 默认值：60
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：日志清理后的目标磁盘使用率（百分比）。日志清理将持续进行，直到磁盘使用率降至低于此阈值。清理器会逐个删除最旧的日志文件，直到达到目标值。
+- 引入版本：-
+
+##### log_cleaner_disk_usage_threshold
+
+- 默认值：80
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：触发日志清理的磁盘使用率阈值（百分比）。当日志目录的磁盘使用率超过此阈值时，将开始清理日志。清理器会独立检查每个配置的日志目录，并处理超过此阈值的目录。
+- 引入版本：-
+
+##### log_cleaner_disk_util_based_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用基于磁盘使用率的自动日志清理功能。启用后，当日志目录的磁盘使用率超过阈值时，将自动清理日志文件。日志清理器作为后台守护进程在 FE 节点上运行，有助于防止日志文件积累导致的磁盘空间耗尽。
+- 引入版本：-
+
 ##### log_roll_size_mb
 
 - 默认值：1024
@@ -152,14 +314,77 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：单个系统日志或审计日志文件的大小上限。
 - 引入版本：-
 
+##### profile_log_delete_age
+
+- 默认值：1d
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：控制 FE profile 日志文件在可删除之前保留的时长。该值被注入到 Log4j 的 `&lt;IfLastModified age="..."/&gt;` 策略（通过 `Log4jConfig`）中，并与诸如 `profile_log_roll_interval` 和 `profile_log_roll_num` 的轮转设置一起生效。支持的后缀：`d`（天）、`h`（小时）、`m`（分钟）、`s`（秒）。例如：`7d`（7 天）、`10h`（10 小时）、`60m`（60 分钟）、`120s`（120 秒）。
+- 引入版本：v3.2.5
+
+##### profile_log_dir
+
+- 默认值：`Config.STARROCKS_HOME_DIR + "/log"`
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：FE profile 日志写入的目录路径。`Log4jConfig` 使用此值来放置与 profile 相关的 appender（在该目录下创建类似 `fe.profile.log` 和 `fe.features.log` 的文件）。这些文件的轮换和保留由 `profile_log_roll_size_mb`、`profile_log_roll_num` 和 `profile_log_delete_age` 控制；时间戳后缀格式由 `profile_log_roll_interval` 控制（支持 DAY 或 HOUR）。由于默认值位于 `STARROCKS_HOME_DIR` 内，请确保 FE 进程对该目录具有写入及轮换/删除权限。
+- 引入版本：v3.2.5
+
+##### profile_log_roll_interval
+
+- 默认值：DAY
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：控制用于生成 Profile 日志文件名中日期部分的时间粒度。有效值（不区分大小写）为 `HOUR` 和 `DAY`。`HOUR` 模式会产生 `"%d{yyyyMMddHH}"`（按小时分桶），`DAY` 模式会产生 `"%d{yyyyMMdd}"`（按天分桶）。该值在计算 Log4j 配置中的 `profile_file_pattern` 时使用，仅影响基于时间的轮转文件名部分；基于大小的轮转仍由 `profile_log_roll_size_mb` 控制，保留行为由 `profile_log_roll_num` / `profile_log_delete_age` 控制。无效值会在日志初始化期间引发 `IOException（Error Message: "profile_log_roll_interval config error: <value>"）`。对于高流量的 Profiling 场景请选择 `HOUR` 以限制每小时每文件大小，或选择 `DAY` 进行日级聚合。
+- 引入版本：v3.2.5
+
+##### profile_log_roll_num
+
+- 默认值：5
+- 类型：Int
+- 单位：Number of files
+- 是否动态：否
+- 描述：指定 Log4j 的 DefaultRolloverStrategy 为 profile logger 保留的最大轮换 profile 日志文件数。该值会作为 `${profile_log_roll_num}` 注入到日志 XML 中（例如 `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`）。轮换由 `profile_log_roll_size_mb` 或 `profile_log_roll_interval` 触发；发生轮换时，Log4j 最多保留这么多带索引的文件，较旧的索引文件将成为可删除对象。磁盘上的实际保留还受 `profile_log_delete_age` 和 `profile_log_dir` 位置的影响。较低的值可降低磁盘使用，但限制可保留的历史；较高的值则保留更多历史 profile 日志。
+- 引入版本：v3.2.5
+
+##### profile_log_roll_size_mb
+
+- 默认值：1024
+- 类型：Int
+- 单位：MB
+- 是否动态：否
+- 描述：设置触发基于大小的 FE profile 日志文件滚动的阈值（以兆字节为单位）。该值被 Log4j 的 RollingFile SizeBasedTriggeringPolicy 用于 `ProfileFile` appender；当 profile 日志超过 `profile_log_roll_size_mb` 时会发生轮转。达到 `profile_log_roll_interval` 时也会按时间发生轮转 —— 任一条件满足都会触发轮转。结合 `profile_log_roll_num` 和 `profile_log_delete_age` 使用，该项控制保留多少历史 profile 文件以及何时删除旧文件。轮转文件的压缩由 `enable_profile_log_compress` 控制。
+- 引入版本：v3.2.5
+
 ##### qe_slow_log_ms
 
 - 默认值：5000
 - 类型：Long
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：Slow query 的认定时长。如果查询的响应时间超过此阈值，则会在审计日志 `fe.audit.log` 中记录为 slow query。
 - 引入版本：-
+
+##### slow_lock_log_every_ms
+
+- 默认值：3000L
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：在对同一个 SlowLockLogStats 实例再次输出“慢锁”警告之前，至少要等待的最小间隔（毫秒）。当锁等待时间超过 `slow_lock_threshold_ms` 后，LockUtils 会检查此值并在最近一次记录的慢锁事件发生到现在未达到 `slow_lock_log_every_ms` 毫秒时抑制额外警告。在长时间争用期间使用较大的值以减少日志量，或使用较小的值以获取更频繁的诊断信息。更改在运行时对后续检查生效。
+- 引入版本：v3.2.0
+
+##### slow_lock_threshold_ms
+
+- 默认值：3000L
+- 类型：long
+- 单位：毫秒
+- 是否动态：是
+- 描述：用于将一个锁操作或持有的锁归类为“慢”的阈值（毫秒）。当锁的等待时间或持有时间超过此值时，StarRocks 将（视上下文）输出诊断日志、包含堆栈跟踪或 waiter/owner 信息，并且在 LockManager 中在该延迟后启动死锁检测。此配置由 LockUtils（慢锁日志）、QueryableReentrantReadWriteLock（筛选慢读取者）、LockManager（死锁检测延迟和慢锁跟踪）、LockChecker（周期性慢锁检测）以及其他调用方（例如 DiskAndTabletLoadReBalancer 日志）使用。降低该值会提高敏感度并增加日志/诊断开销；将其设置为 0 或负值会禁用基于初始等待的死锁检测延迟行为。请与 `slow_lock_log_every_ms`、`slow_lock_print_stack` 和 `slow_lock_stack_trace_reserve_levels` 一起调整。
+- 引入版本：3.2.0
 
 ##### sys_log_delete_age
 
@@ -179,23 +404,41 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：系统日志文件的保存目录。
 - 引入版本：-
 
+##### sys_log_enable_compress
+
+- 默认值：false
+- 类型：boolean
+- 单位：-
+- 是否动态：否
+- 描述：当此项设置为 `true` 时，系统会在轮转的系统日志文件名后追加 ".gz" 后缀，从而使 Log4j 在轮转时生成 gzip 压缩的 FE 系统日志（例如，`fe.log.*`）。此值在生成 Log4j 配置时读取（Log4jConfig.initLogging / generateActiveLog4jXmlConfig），并控制用于 RollingFile filePattern 的 `sys_file_postfix` 属性。启用此功能可减少保留日志的磁盘占用，但会在轮转期间增加 CPU 和 I/O 开销，并改变日志文件名，因此读取日志的工具或脚本必须能够处理 .gz 文件。注意，审计日志使用单独的压缩配置，即 `audit_log_enable_compress`。
+- 引入版本：v3.2.12
+
+##### sys_log_format
+
+- 默认值："plaintext"
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：选择用于 FE 日志的 Log4j layout。有效值：`"plaintext"`（默认）和 `"json"`。值不区分大小写。`"plaintext"` 配置 PatternLayout，包含可读的时间戳、级别、线程、class.method:line 以及 WARN/ERROR 的堆栈跟踪。`"json"` 配置 JsonTemplateLayout，输出结构化 JSON 事件（UTC 时间戳、级别、线程 id/name、源文件/方法/行、消息、异常 stackTrace），适合日志聚合器（ELK、Splunk）。JSON 输出遵守 `sys_log_json_max_string_length` 和 `sys_log_json_profile_max_string_length` 关于最大字符串长度的限制。
+- 引入版本：v3.2.10
+
 ##### sys_log_json_max_string_length
 
-- 默认值: 1048576
-- 类型: Int
-- 単位: Bytes
-- 是否可变: 否
-- 描述: 设置用于系统 JSON 格式系统日志的 JsonTemplateLayout 的 "maxStringLength" 值。当 `sys_log_format` 被设置为 `"json"` 时，如果字符串类型字段（例如 "message" 和字符串化的异常堆栈跟踪）的长度超过此限制则会被截断。该值在 `Log4jConfig.generateActiveLog4jXmlConfig()` 中注入到生成的 Log4j XML，并应用于 default、warning、audit、dump 和 bigquery 布局；Profile 布局使用单独的配置（`sys_log_json_profile_max_string_length`）。降低此值可减少日志大小，但可能截断有用信息。由于此设置不可变，更改需要重启或重新配置负责重新生成 Log4j 配置的进程。
-- 引入版本: v3.2.11
+- 默认值：1048576
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：设置用于系统 JSON 格式系统日志的 JsonTemplateLayout 的 "maxStringLength" 值。当 `sys_log_format` 被设置为 `"json"` 时，如果字符串类型字段（例如 "message" 和字符串化的异常堆栈跟踪）的长度超过此限制则会被截断。该值在 `Log4jConfig.generateActiveLog4jXmlConfig()` 中注入到生成的 Log4j XML，并应用于 default、warning、audit、dump 和 bigquery 布局；Profile 布局使用单独的配置（`sys_log_json_profile_max_string_length`）。降低此值可减少日志大小，但可能截断有用信息。由于此设置不可变，更改需要重启或重新配置负责重新生成 Log4j 配置的进程。
+- 引入版本：v3.2.11
 
 ##### sys_log_json_profile_max_string_length
 
-- 默认值: 104857600 (100 MB)
-- 类型: Int
-- 単位: Bytes
-- 是否可变: 否
-- 描述: 当 `sys_log_format` 为 `"json"` 时，为 Profile（及相关功能）日志 Appender 设置 JsonTemplateLayout 的 maxStringLength。JSON 格式的 Profile 日志中的字符串字段值将被截断到此字节长度；非字符串字段不受影响。此设置在 Log4jConfig（JsonTemplateLayout 的 maxStringLength）中应用，在使用纯文本日志时被忽略。请将值设置为能够包含所需完整消息的足够大值，但注意过大的值会增加日志大小和 I/O。
-- 引入版本: v3.2.11
+- 默认值：104857600 (100 MB)
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：当 `sys_log_format` 为 `"json"` 时，为 Profile（及相关功能）日志 Appender 设置 JsonTemplateLayout 的 maxStringLength。JSON 格式的 Profile 日志中的字符串字段值将被截断到此字节长度；非字符串字段不受影响。此设置在 Log4jConfig（JsonTemplateLayout 的 maxStringLength）中应用，在使用纯文本日志时被忽略。请将值设置为能够包含所需完整消息的足够大值，但注意过大的值会增加日志大小和 I/O。
+- 引入版本：v3.2.11
 
 ##### sys_log_level
 
@@ -226,6 +469,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：每个 `sys_log_roll_interval` 时间段内，允许保留的系统日志文件的最大数目。
 - 引入版本：-
 
+##### sys_log_to_console
+
+- 默认值：false (除非环境变量 `SYS_LOG_TO_CONSOLE` 被设置为 "1")
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：当此项设置为 `true` 时，系统会配置 Log4j 将所有日志发送到控制台（ConsoleErr appender），而不是基于文件的 appender。该值在生成活动的 Log4j XML 配置时读取（影响 root logger 和按模块的 logger appender 选择）。其值在进程启动时从环境变量 `SYS_LOG_TO_CONSOLE` 捕获。运行时更改不会生效。该配置常用于容器化或 CI 环境，在这些环境中更偏向于通过 stdout/stderr 收集日志而不是写入日志文件。
+- 引入版本：v3.2.0
+
 ##### sys_log_verbose_modules
 
 - 默认值：空字符串
@@ -234,6 +486,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：否
 - 描述：打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。
 - 引入版本：-
+
+##### sys_log_warn_modules
+
+- 默认值：`{}`
+- 类型：String[]
+- 单位：-
+- 是否动态：否
+- 描述：一个记录器名称或包前缀列表，系统在启动时会将其配置为 WARN 级别的记录器并路由到警告 appender（SysWF）— 即 `fe.warn.log` 文件。条目会被插入到生成的 Log4j 配置中（与内置的 warn 模块一起，例如 org.apache.kafka、org.apache.hudi 和 org.apache.hadoop.io.compress），并生成类似 `<Logger name="... " level="WARN"><AppenderRef ref="SysWF"/></Logger>` 的 logger 元素。建议使用完全限定的包和类前缀（例如 "com.example.lib"）来抑制在常规日志中产生噪声的 INFO/DEBUG 输出，并允许将警告单独捕获。
+- 引入版本：v3.2.13
 
 ### 服务器
 
@@ -300,6 +561,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：HTTP 服务器支持的 Backlog 队列长度。
 - 引入版本：-
 
+##### http_max_initial_line_length
+
+- 默认值：`4096`
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：设置由 HttpServer 中使用的 Netty `HttpServerCodec` 接受的 HTTP 初始请求行（method + request-target + HTTP version）的最大允许长度（字节）。该值会传递给 Netty 的解码器，初始行长度超过此值的请求将被拒绝（TooLongFrameException）。仅在必须支持非常长的请求 URI 时才增大此值；更大的值会增加内存使用并可能提高对畸形请求或滥用请求的暴露面。应与 `http_max_header_size` 和 `http_max_chunk_size` 一起调整。
+- 引入版本：`v3.2.0`
+
 ##### http_port
 
 - 默认值：8030
@@ -336,6 +606,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：MySQL 服务器中用于处理任务的最大线程数。
 - 引入版本：-
 
+##### memory_tracker_interval_seconds
+
+- 默认值：60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：FE MemoryUsageTracker 守护线程轮询并记录 FE 进程和已注册 MemoryTrackable 模块内存使用情况的时间间隔（以秒为单位）。当 `memory_tracker_enable` 为 `true` 时，tracker 按此节奏运行，更新 MEMORY_USAGE，并记录聚合的 JVM 与被跟踪模块的使用情况。
+- 引入版本：v3.2.4
+
 ##### mysql_nio_backlog_num
 
 - 默认值：1024
@@ -368,12 +647,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### mysql_service_nio_enable_keep_alive
 
-- 默认值: true
-- 类型: Boolean
-- 单位: -
-- 是否可变: 否
-- 描述: 是否为 MySQL 连接启用 TCP Keep-Alive。适用于位于负载均衡器后且长时间空闲的连接。
-- 引入版本: -
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否为 MySQL 连接启用 TCP Keep-Alive。适用于位于负载均衡器后且长时间空闲的连接。
+- 引入版本：-
 
 ##### net_use_ipv6_when_priority_networks_empty
 
@@ -422,21 +701,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### ssl_cipher_blacklist
 
-- 默认值: Empty string
-- 类型: String
-- 単位: -
-- 是否可变: No
+- 默认值：Empty string
+- 类型：String
+- 单位：-
+- 是否动态：否
 - 描述:基于 IANA 名称的 SSL 密文 Suite 黑名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
-- 引入版本: v4.0
+- 引入版本：v4.0
 
 ##### ssl_cipher_whitelist
 
-- 默认值: Empty string
-- 类型: String
-- 単位: -
-- 是否可变: No
-- 描述: 基于 IANA 名称的 SSL 密文 Suite 白名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
-- 引入版本: v4.0
+- 默认值：Empty string
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：基于 IANA 名称的 SSL 密文 Suite 白名单，多项以逗号分隔，支持正则表达式。如果同时设置了白名单和黑名单，则黑名单优先。
+- 引入版本：v4.0
 
 ##### thrift_backlog_num
 
@@ -451,10 +730,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：5000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：否
 - 描述：Thrift 客户端链接的空闲超时时间，即链接超过该时间无新请求后则将链接断开。
 - 引入版本：-
+
+##### thrift_rpc_max_body_size
+
+- 默认值：`-1`
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：控制在构造服务器的 Thrift 协议（传递给 `ThriftServer` 中的 TBinaryProtocol.Factory）时允许的最大 Thrift RPC 消息体大小（以字节为单位）。值为 `-1` 表示禁用限制（无界）。设置为正值会强制上限，使得超过该大小的消息会被 Thrift 层拒绝，这有助于限制内存使用并降低超大请求或 DoS 风险。请将此值设置为足够大的大小以容纳预期的有效载荷（大型 struct 或批量数据），以避免拒绝合法请求。
+- 引入版本：`v3.2.0`
 
 ##### thrift_server_max_worker_threads
 
@@ -476,6 +764,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### 元数据与集群管理
 
+##### alter_max_worker_queue_size
+
+- 默认值：`4096`
+- 类型：Int
+- 单位：Tasks
+- 是否动态：否
+- 描述：控制 alter 子系统使用的内部工作线程池队列的容量。该值与 `alter_max_worker_threads` 一起在 `AlterHandler` 中传递给 `ThreadPoolManager.newDaemonCacheThreadPool`。当待处理的 alter 任务数量超过 `alter_max_worker_queue_size` 时，新提交的任务将被拒绝，可能会抛出 `RejectedExecutionException`（参见 `AlterHandler.handleFinishAlterTask`）。调整此值以在内存使用与允许的并发 alter 任务积压量之间取得平衡。
+- 引入版本：`v3.2.0`
+
 ##### automated_cluster_snapshot_interval_seconds
 
 - 默认值：600
@@ -489,7 +786,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：600000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：接连两次 Hive 元数据缓存刷新之间的间隔。
 - 引入版本：v2.5.5
@@ -530,6 +827,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 引入版本：-
 
+##### bdbje_reserved_disk_size
+
+- 默认值：`512L * 1024 * 1024` (536870912)
+- 类型：Long
+- 单位：Bytes
+- 是否动态：否
+- 描述：限制 Berkeley DB JE 将被保留为“未保护”（可删除）的日志/数据文件的字节数。StarRocks 通过 BDBEnvironment 中的 `EnvironmentConfig.RESERVED_DISK` 将此值传递给 JE；JE 的内置默认值为 0（无限制）。StarRocks 的默认值（512 MiB）可防止 JE 为未保护文件保留过多磁盘空间，同时允许安全清理过期文件。在磁盘受限的系统上调整此值：减小它可以让 JE 更早释放文件，增大它可以让 JE 保留更多保留空间。更改需要重启进程才能生效。
+- 引入版本：`v3.2.0`
+
 ##### bdbje_reset_election_group
 
 - 默认值：false
@@ -557,14 +863,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
 - 引入版本：v3.3.0
 
+##### brpc_connection_pool_size
+
+- 默认值：`16`
+- 类型：Int
+- 单位：Connections
+- 是否动态：否
+- 描述：FE 的 BrpcProxy 为每个端点使用的最大池化 BRPC 连接数。此值通过 `setMaxTotoal` 和 `setMaxIdleSize` 应用到 RpcClientOptions，因此它直接限制了并发的出站 BRPC 请求数，因为每个请求都必须从连接池借用一个连接。在高并发场景下增加此值以避免请求排队；增加会提高 socket 和内存使用，并可能增加远端服务器负载。调优时需考虑相关设置，例如 `brpc_idle_wait_max_time`、`brpc_short_connection`、`brpc_inner_reuse_pool`、`brpc_reuse_addr` 和 `brpc_min_evictable_idle_time_ms`。更改此值不会热重载，需要重启生效。
+- 引入版本：`v3.2.0`
+
 ##### catalog_try_lock_timeout_ms
 
 - 默认值：5000
 - 类型：Long
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：全局锁（Global Lock）获取的超时时长。
 - 引入版本：-
+
+##### checkpoint_timeout_seconds
+
+- 默认值：`24 * 3600`
+- 类型：Long
+- 单位：秒
+- 是否动态：是
+- 描述：leader 的 CheckpointController 在等待某个 checkpoint worker 完成 checkpoint 时的最长等待时间（单位：秒）。控制器会将该值转换为纳秒并轮询 worker 的结果队列；如果在此超时时间内未收到成功完成，则将该 checkpoint 视为失败，createImage 返回失败。增大此值可以容纳运行时间更长的 checkpoint，但会延迟失败检测及随后镜像传播；减小此值可以更快触发故障转移/重试，但可能对较慢的 worker 产生误超时。此设置仅控制 CheckpointController 在创建 checkpoint 时的等待时长，不会改变 worker 的内部 checkpoint 行为。
+- 引入版本：`v3.4.0, v3.5.0`
 
 ##### db_used_data_quota_update_interval_secs
 
@@ -629,6 +953,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否收集查询的 Profile 信息。设置为 `true` 时，系统会收集查询的 Profile。设置为 `false` 时，系统不会收集查询的 profile。
 - 引入版本：-
 
+##### enable_internal_sql
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：当此项设置为 `true` 时，内部组件（例如 SimpleExecutor）执行的内部 SQL 语句会被保留并写入内部审计或日志消息（如果设置了 `enable_sql_desensitize_in_log`，还可以进一步脱敏）。当设置为 `false` 时，内部 SQL 文本会被压制：格式化代码（`SimpleExecutor.formatSQL`）返回 "?"，实际语句不会输出到内部审计或日志消息。此配置不会改变内部语句的执行语义，仅控制内部 SQL 的日志记录和可见性以保护隐私或安全。
+- 引入版本：-
+
 ##### enable_legacy_compatibility_for_replication
 
 - 默认值：false
@@ -658,6 +991,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 您只能在创建集群时启用此功能。**集群启动后，此配置项的值无法通过任何方式修改**。任何修改尝试均会导致错误。当 FE 检测到此配置项的值与集群首次启动时不一致时，FE 将无法启动。  
   - 目前，此功能不支持 JDBC Catalog 和表名。若需对 JDBC 或 ODBC 数据源进行大小写不敏感处理，请勿启用此功能。
 - 引入版本：v4.0
+
+##### enable_task_history_archive
+
+- 默认值：`true`
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用后，已完成的 task-run 记录会归档到持久化的 task-run history 表，并记录到 edit log，这样查找（例如 `lookupHistory`、`lookupHistoryByTaskNames`、`lookupLastJobOfTasks`）会包含归档结果。归档由 FE leader 执行，在单元测试期间会跳过（`FeConstants.runningUnitTest`）。启用时，会绕过内存过期和强制 GC 路径（代码会在 `removeExpiredRuns` 和 `forceGC` 中提前返回），因此保留/驱逐由持久化归档处理，而不是由 `task_runs_ttl_second` 和 `task_runs_max_history_number` 控制。禁用时，历史保留在内存中并由这些配置进行裁剪。
+- 引入版本：v3.3.1, v3.4.0, v3.5.0
+
+##### enable_task_run_fe_evaluation
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用后，FE 将在 `TaskRunsSystemTable.supportFeEvaluation` 中对系统表 `task_runs` 执行本地评估。FE 端评估仅允许对列与常量进行的合取等值谓词，并且仅限于列 `QUERY_ID` 和 `TASK_NAME`。启用此项可通过避免更广泛的扫描或额外的远程处理来提高针对性查找的性能；禁用会强制 planner 跳过对 `task_runs` 的 FE 评估，可能降低谓词裁剪效果并影响这些过滤条件的查询延迟。
+- 引入版本：v3.3.13, v3.4.3, v3.5.0
 
 ##### heartbeat_mgr_blocking_queue_size
 
@@ -695,6 +1046,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否忽略元数据落后的情形。如果为 true，非主 FE 将忽略主 FE 与其自身之间的元数据延迟间隙，即使元数据延迟间隙超过 `meta_delay_toleration_second`，非主 FE 仍将提供读取服务。当您尝试停止 Leader FE 较长时间，但仍希望非 Leader FE 可以提供读取服务时，该参数会很有帮助。
 - 引入版本：-
 
+##### lock_checker_interval_second
+
+- 默认值：30
+- 类型：Int
+- 单位： Seconds
+- 是否动态：是
+- 描述：LockChecker 前端守护进程（名为 "deadlock-checker"）两次执行之间的时间间隔，单位为秒。该守护进程执行死锁检测和慢锁扫描。减小该值可降低检测延迟，但会增加调度和 CPU 开销；增大该值可减少开销但会延迟检测和慢锁上报。设置与 `lock_checker_enable_deadlock_check`（启用死锁检查）和 `slow_lock_threshold_ms`（定义何谓慢锁）相关联。
+- 引入版本：v3.2.0
+
 ##### master_sync_policy
 
 - 默认值：SYNC
@@ -714,7 +1074,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：5000
 - 类型：Long
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：否
 - 描述：FE 所在 StarRocks 集群中 Leader FE 与非 Leader FE 之间能够容忍的最大时钟偏移。
 - 引入版本：-
@@ -776,14 +1136,32 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - `WRITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。
 - 引入版本：-
 
+##### thrift_rpc_retry_times
+
+- 默认值：3
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 Thrift RPC 调用的总重试次数。该值被 `ThriftRPCRequestExecutor`（及其调用者如 `NodeMgr`、`VariableMgr`）用作重试循环次数——例如值为 3 表示最多包含初次尝试在内共三次尝试。遇到 `TTransportException` 时，Executor 会尝试重开连接并重试直到达到该次数；若原因是 `SocketTimeoutException` 或重开连接失败，则不会重试。每次尝试都受 `thrift_rpc_timeout_ms` 配置的单次尝试超时限制。增大此值可提高对瞬时连接故障的鲁棒性，但可能增加总体 RPC 延迟和资源消耗。
+- 引入版本：v3.2.0
+
+##### thrift_rpc_timeout_ms
+
+- 默认值：10000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：用作 Thrift RPC 调用的默认网络/套接字超时时间。在 `ThriftConnectionPool`（前端和后端池使用）创建 Thrift 客户端时，此值会传给 TSocket；在计算如 `ConfigBase`、`LeaderOpExecutor`、`GlobalStateMgr`、`NodeMgr`、`VariableMgr` 和 `CheckpointWorker` 等位置的 RPC 调用超时时，也会将其加入到操作的执行超时中（例如 `ExecTimeout*1000 + thrift_rpc_timeout_ms`）。增大此值可使 RPC 调用容忍更长的网络或远端处理延迟；减小则在慢网络上更快失败切换。更改此值会影响执行 Thrift RPC 的 FE 代码路径中的连接创建和请求截止时间。
+- 引入版本：v3.2.0
+
 ##### txn_latency_metric_report_groups
 
 - 默认值：空字符串
 - 类型：String
 - 单位：-
-- 是否可变: 是
+- 是否动态：是
 - 描述：需要汇报的事务延迟监控指标组，多个指标组通过逗号分隔。导入类型基于监控组分类，被启用的组其名称会作为 'type' 标签添加到监控指标中。常见的组包括 `stream_load`、`routine_load`、`broker_load`、`insert`，以及 `compaction` (仅适用于存算分离集群)。示例：`"stream_load,routine_load"`。
-- 引入版本: v4.0
+- 引入版本：v4.0
 
 ##### txn_rollback_limit
 
@@ -795,6 +1173,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：-
 
 ### 用户，角色及权限
+
+##### enable_task_info_mask_credential
+
+- 默认值：True
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当为 true 时，StarRocks 会在通过 `information_schema.tasks` 和 `information_schema.task_runs` 返回任务定义前，对其中的凭据进行脱敏处理。在 `information_schema.task_runs` 中，无论定义来自任务运行状态还是在为空时来自任务定义查找，都会应用相同的脱敏。当为 false 时，将返回原始任务定义（可能会暴露凭据）。掩码是 CPU/字符串处理工作，当任务或 TaskRun 数量很大时可能耗时；仅在你需要未脱敏定义且接受安全风险时禁用。
+- 引入版本：v3.5.6
 
 ##### privilege_max_role_depth
 
@@ -885,7 +1272,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述： 当一次物化视图刷新涉及多个分区时，该参数用于控制默认每次刷新多少个分区。
+- 描述：当一次物化视图刷新涉及多个分区时，该参数用于控制默认每次刷新多少个分区。
 从 3.3.0 版本开始，系统默认每次仅刷新一个分区，以避免内存占用过高的问题；而在此前的版本中，系统会尝试一次性刷新所有分区，这可能导致刷新任务因内存不足（OOM）而失败。但也需注意：当每次物化视图刷新涉及大量分区时，默认每次仅刷新一个分区可能导致调度频繁、整体刷新耗时较长，甚至生成过多的刷新记录。因此，在特定场景下，可适当调整该参数值，以提升刷新效率并控制调度开销。
 - 引入版本：v3.3.0
 
@@ -1103,6 +1490,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 引入版本：v3.1
 
+##### enable_statistic_collect_on_update
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 UPDATE 语句是否可以触发自动统计信息采集。启用时，修改表数据的 UPDATE 操作可以通过由 `enable_statistic_collect_on_first_load` 控制的基于导入的统计信息框架来调度统计信息采集。禁用此配置将跳过 UPDATE 语句的统计信息采集，同时保持由导入触发的统计信息采集行为不变。
+- 引入版本：v3.5.11, v4.0.4
+
 ##### enable_udf
 
 - 默认值：false
@@ -1161,10 +1557,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：5000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：如果一条 HTTP 请求的时间超过了该参数指定的时长，会生成日志来跟踪该请求。
 - 引入版本：v2.5.15，v3.1.5
+
+##### lock_checker_enable_deadlock_check
+
+- 默认值：False
+- 类型：Boolean
+- 单位： -
+- 是否动态：是
+- 描述：启用后，系统在 JVM 级别执行死锁检测，并记录违规线程的堆栈跟踪。该检查在 LockChecker 守护进程内运行（其频率由 `lock_checker_interval_second` 控制），并将详细的堆栈信息写入日志，这可能会消耗大量 CPU 和 I/O。仅在排查正在发生或可复现的死锁问题时启用该选项；在正常运行中保持启用会增加开销并产生大量日志。
+- 引入版本：v3.2.0
 
 ##### low_cardinality_threshold
 
@@ -1269,10 +1674,40 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：10
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：否
 - 描述：两个版本发布操作之间的时间间隔。
 - 引入版本：-
+
+##### query_queue_v2_concurrency_level
+
+- 默认值：4
+- 类型：Int
+- 单位： -
+- 是否动态：是
+- 描述：控制在计算系统总查询槽位（total query slots）时使用多少个逻辑并发“层”。在存算一体模式下，总槽位 = `query_queue_v2_concurrency_level * number_of_BEs * cores_per_BE`（从 BackendResourceStat 推导）。在多 Warehouse 模式下，有效并发会缩减为 `max(1, query_queue_v2_concurrency_level / 4)`。如果配置值为非正数，则视为 `4`。更改此值会增加或减少 totalSlots（从而影响并发查询容量）并影响每槽资源：memBytesPerSlot 通过将每个 worker 的内存除以 `(cores_per_worker * concurrency)` 得到，CPU 记账使用 `query_queue_v2_cpu_costs_per_slot`。应根据集群规模成比例设置；非常大的值可能会降低每槽内存并导致资源碎片化。
+- 引入版本：v3.3.4, v3.4.0, v3.5.0
+
+##### query_queue_v2_cpu_costs_per_slot
+
+- 默认值：`1000000000`
+- 类型：Long
+- 单位：planner CPU cost units
+- 是否动态：是
+- 描述：每个 slot 的 CPU 成本阈值，用于根据查询的 planner CPU cost 估算该查询需要多少 slot。调度器将以 integer(plan_cpu_costs / `query_queue_v2_cpu_costs_per_slot`) 的方式计算 slot 数量，然后将结果限定在 [1, totalSlots] 范围内（totalSlots 来源于查询队列 V2 的 `V2` 参数）。V2 代码会将非正值规范化为 1（Math.max(1, value)），因此非正值实际上等同于 `1`。增大此值会减少每个查询分配的 slot（偏向更少但每个占用更多 slot 的查询）；减小此值会增加每个查询的 slot。应与 `query_queue_v2_num_rows_per_slot` 及并发设置一起调整，以在并行度与资源粒度之间取得平衡。
+- 引入版本：v3.3.4, v3.4.0, v3.5.0
+
+##### query_queue_v2_schedule_strategy
+
+- 默认值：SWRR
+- 类型：String
+- 单位： -
+- 是否动态：是
+- 描述：选择 Query Queue V2 用于对待处理查询排序的调度策略。有效值（不区分大小写）
+  - `SWRR`（Smooth Weighted Round Robin）（默认值）：适合需要公平加权共享的混合/混合型负载
+  - `SJF`（Short Job First + Aging）：优先短作业并使用 Aging 防止饥饿。该值通过不区分大小写的枚举查找解析
+  无法识别的值会记录为错误并使用默认策略。此配置仅在启用 Query Queue V2 时生效，并与 Query Queue V2 的大小调整设置（如 `query_queue_v2_concurrency_level`）相互作用。
+- 引入版本：v3.3.12, v3.4.2, v3.5.0
 
 ##### semi_sync_collect_statistic_await_seconds
 
@@ -1390,6 +1825,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：统计信息内存 Cache 失效时间。
 - 引入版本：-
+
+##### task_check_interval_second
+
+- 默认值：60
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：任务后台作业执行之间的间隔。减小该值会使后台维护（任务清理、检查）更频繁地运行并更快地响应，但会增加 CPU 和 I/O 开销；增大该值则减少开销但会延迟清理和过期任务的检测。请根据维护响应速度和资源使用情况来调整此值。
+- 引入版本：v3.2.0
 
 ### 导入导出
 
@@ -1509,19 +1953,19 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：10000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：发布写事务到 StarRocks 外表的超时时长，单位为毫秒。默认值 `10000` 表示超时时长为 10 秒。
 - 引入版本：-
 
 ##### finish_transaction_default_lock_timeout_ms
 
-- 默认值: 1000
-- 类型: Int
-- 单位: MilliSeconds
-- 是否可变: 是
-- 描述: 完成事务时获取数据库和表锁的默认超时时间。
-- 引入版本: v4.0.0, v3.5.8
+- 默认值：1000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：完成事务时获取数据库和表锁的默认超时时间。
+- 引入版本：v4.0.0, v3.5.8
 
 ##### history_job_keep_max_second
 
@@ -1585,6 +2029,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：控制 BE 副本最大容忍的导入落后时长，超过这个时长就进行克隆。
 - 引入版本：-
+
+##### loads_history_retained_days
+
+- 默认值：30
+- 类型：Int
+- 单位：天
+- 是否动态：是
+- 描述：在内部表 `_statistics_.loads_history` 中保留导入历史信息的天数。增加或减少此值会调整已完成导入作业在每日分区中保留的时长；它影响新表的创建和 keeper 的修剪行为，但不会自动重建过去的分区。`LoadsHistorySyncer` 在管理导入历史生命周期时依赖此保留策略；其同步节奏由 `loads_history_sync_interval_second` 控制。
+- 引入版本：v3.3.6, v3.4.0, v3.5.0
+
+##### loads_history_sync_interval_second
+
+- 默认值：60
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：由 LoadsHistorySyncer 用于调度周期性同步的时间间隔（秒），用于将已完成的 load 作业从 `information_schema.loads` 同步到内部表 `_statistics_.loads_history`。构造函数中将该值乘以 1000L 以设置 FrontendDaemon 的间隔。syncer 在每次运行时也会重新读取该配置，并在变化时调用 setInterval，因此更新可以在运行时生效而无需重启。syncer 会跳过首次运行（以允许表创建），且仅导入结束时间超过一分钟的 load；较小的频繁值会增加 DML 和 executor 负载，而较大的值会延迟历史 load 记录的可用性。关于目标表的保留/分区行为，请参见 `loads_history_retained_days`。
+- 引入版本：v3.3.6, v3.4.0, v3.5.0
 
 ##### max_broker_load_job_concurrency
 
@@ -1785,6 +2247,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Stream Load 的默认超时时间。
 - 引入版本：-
 
+##### stream_load_task_keep_max_second
+
+- 默认值：3 * 24 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：已完成或已取消的 StreamLoad 任务的保留窗口（秒）。当任务达到最终状态且其结束时间戳早于此阈值时（代码以毫秒比较：currentMs - endTimeMs > stream_load_task_keep_max_second * 1000），该任务将有资格被 `StreamLoadMgr.cleanOldStreamLoadTasks` 移除，并在加载持久化状态时被丢弃。适用于 `StreamLoadTask` 和 `StreamLoadMultiStmtTask`。如果总任务数超过 `stream_load_task_keep_max_num`，可能会提前触发清理（同步任务由 `cleanSyncStreamLoadTasks` 优先处理）。请根据历史记录/可调试性与内存使用之间的权衡设置此值。
+- 引入版本：v3.2.0
+
 ##### transaction_clean_interval_second
 
 - 默认值：30
@@ -1830,6 +2301,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：Yarn 配置文件的保存目录。
 - 引入版本：-
 
+### 统计信息
+
 ### 存储
 
 ##### alter_table_timeout_second
@@ -1858,6 +2331,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：副本一致性检测的超时时间。
 - 引入版本：-
+
+##### consistency_check_cooldown_time_second
+
+- 默认值：24 * 3600
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：控制对同一 Tablet 进行一致性检查的最小间隔。在 Tablet 选择期间，只有当 `tablet.getLastCheckTime() < (currentTimeMillis - consistency_check_cooldown_time_second * 1000)` 时，该 Tablet 才被视为可选。默认值 (24 * 3600) 大致保证每个 Tablet 每天最多检查一次，以减少后端磁盘 I/O。降低此值会增加检查频率和资源使用；提高此值会减少 I/O，但会降低不一致性检测的速度。该值在从索引的 Tablet 列表中过滤 cooldownedTablets 时全局生效。
+- 引入版本：v3.5.5
+
+##### consistency_tablet_meta_check_interval_ms
+
+- 默认值：2 * 3600 * 1000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：用于在 TabletInvertedIndex 与 LocalMetastore 之间运行完整 Tablet Meta 一致性扫描的间隔。当 runAfterCatalogReady 中的守护线程检测到 current time 减去 lastTabletMetaCheckTime 超过此值时，会触发 一致性检查。首次发现无效 Tablet 时，会将其 toBeCleanedTime 设置为当前时间加 (consistency_tablet_meta_check_interval_ms / 2)，因此实际删除会延迟到后续一次扫描。增大此值可降低扫描频率和负载（清理更慢）；减小此值可更快地检测并移除陈旧 tablet（开销更高）。
+- 引入版本：v3.2.0
 
 ##### default_replication_num
 
@@ -1902,6 +2393,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 >
 > - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
 > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
+
+##### enable_online_optimize_table
+
+- 默认值：`true`
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制在创建优化（optimize）任务时 StarRocks 是否使用非阻塞的在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（没有分区/键/排序规范，分发方式不是 `RandomDistributionDesc`，存储类型不是 `COLUMN_WITH_ROW`，启用了副本存储，并且该表不是云原生表或物化视图）时，planner 会创建 `OnlineOptimizeJobV2` 来执行优化而不阻塞写入。如果为 false 或任一兼容性条件不满足，StarRocks 将回退到 `OptimizeJobV2`，在优化期间可能会阻塞写操作。
+- 引入版本：`v3.3.3, v3.4.0, v3.5.0`
 
 ##### enable_strict_storage_medium_check
 
@@ -2001,7 +2501,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：1000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：Tablet Checker 在释放并重新获取表锁之前，每个周期持有锁的最大时间（毫秒）。小于 100 的值将被视为 100。
 - 引入版本：v3.5.9, v4.0.2
@@ -2097,7 +2597,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 默认值：15 * 60 * 1000
 - 类型：Long
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：克隆 Tablet 调度时，如果超过该时间一直未被调度，则将该 Tablet 的调度优先级升高，以尽可能优先调度。
 - 引入版本：-
@@ -2456,6 +2956,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否使用 Compute Engine 上面绑定的 Service Account。
 - 引入版本：v3.5.1
 
+##### hdfs_file_system_expire_seconds
+
+- 默认值：300
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：HdfsFsManager 管理的未使用缓存 HDFS/ObjectStore FileSystem 的生存时间（以秒为单位）。FileSystemExpirationChecker（每 60s 运行一次）使用此值调用每个 HdfsFs.isExpired(...)；当过期时，管理器会关闭底层 FileSystem 并将其从缓存中移除。访问器方法（例如 `HdfsFs.getDFSFileSystem`、`getUserName`、`getConfiguration`）会更新最后访问时间戳，因此过期基于不活动时间。较低的值可以减少空闲资源占用但会增加重开销；较高的值会更长时间保留句柄，可能会消耗更多资源。
+- 引入版本：v3.2.0
+
 ##### lake_autovacuum_grace_period_minutes
 
 - 默认值：30
@@ -2494,7 +3003,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_allow_partial_success
 
-- 默认值: true
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -2632,13 +3141,42 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：存算分离集群下 FE 与 StarMgr 定期同步元数据的时间间隔。
 - 引入版本：-
 
+### 数据湖
+
+##### lake_batch_publish_min_version_num
+
+- 默认值：`1`
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：设置形成 lake 表发布批次所需的连续事务版本的最小数量。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 用于选择依赖事务。值为 `1` 允许单事务发布（不进行批处理）。值 >1 要求至少有该数量的连续版本、单表、非复制事务可用；如果版本不连续、出现复制事务，或架构变更消耗了某个版本，则中止批处理。增大此值可以通过将提交分组来提高发布吞吐，但在等待足够数量的连续事务时可能会延迟发布。
+- 引入版本：v3.2.0
+
+##### lake_enable_batch_publish_version
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当启用时，PublishVersionDaemon 会在存算分离模式（RunMode 为 shared_data）下，将同一Lake表/分区的待发布事务批量收集并一次性发布版本，而不是逐事务发布。它通过调用 `getReadyPublishTransactionsBatch()` 并使用 `publishVersionForLakeTableBatch(...)` 执行分组发布，以减少 RPC 次数并提升吞吐。如果关闭，则退回到 `publishVersionForLakeTable(...)` 的逐事务发布。实现内部使用集合协调在途任务以避免开关切换时的重复发布，线程池规模受 `lake_publish_version_max_threads` 影响。
+- 引入版本：v3.2.0
+
+##### lake_use_combined_txn_log
+
+- 默认值：`false`
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用时，StarRocks 允许 Lake 表对相关事务使用 combined transaction log 路径。仅在集群以 shared-data 模式运行（RunMode.isSharedDataMode()）时此标志才会被考虑。设置 `lake_use_combined_txn_log = true` 时，类型为 BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING 和 BATCH_LOAD_JOB 的加载事务将有资格使用 combined txn logs（参见 LakeTableHelper.supportCombinedTxnLog）。包含 compaction 的代码路径通过 isTransactionSupportCombinedTxnLog 检查 combined-log 支持。如果禁用或不在 shared-data 模式下，则不使用 combined transaction log 行为。
+- 引入版本：`v3.3.7, v3.4.0, v3.5.0`
+
 ### 其他
 
 ##### agent_task_resend_wait_time_ms
 
 - 默认值：5000
 - 类型：Long
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：Agent task 重新发送前的等待时间。当代理任务的创建时间已设置，并且距离现在超过该值，才能重新发送代理任务。该参数用于防止过于频繁的代理任务发送。
 - 引入版本：-
@@ -2719,10 +3257,19 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：86400 * 1000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：是
 - 描述：Backup 作业的超时时间。
 - 引入版本：-
+
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 `SHOW PROC /BACKENDS/{id}` 命令中启用对每个磁盘的 tablet 数量的采集
+- 引入版本：v4.0.1, v3.5.8
 
 ##### enable_colocate_restore
 
@@ -2732,6 +3279,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：是
 - 描述：是否为 Colocate 表启用备份恢复。`true` 表示启用 Colocate 表备份恢复，`false` 表示禁用。
 - 引入版本：v3.2.10、v3.3.3
+
+##### enable_materialized_view_concurrent_prepare
+
+- 默认值：True
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否并发准备物化视图以提高性能。
+- 引入版本：v3.4.4
 
 ##### enable_metric_calculator
 
@@ -2758,7 +3314,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - Unit:
 - 是否动态：是
 - 描述：是否开启Query级别的用于透明加速改写的物化视图Cache，用于加速改写性能。
-- 引入版本： v3.3
+- 引入版本：v3.3
 
 ##### enable_mv_refresh_collect_profile
 
@@ -2827,7 +3383,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 默认值：600000
 - 类型：Int
-- 单位：Milliseconds
+- 单位：毫秒
 - 是否动态：否
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
@@ -3001,7 +3557,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - Unit:
 - 是否动态：是
 - 描述：用于物化视图改写的 MV 计划缓存的最大大小。如果存在大量用于透明改写的物化视图，可以考虑增加此配置项的大小。默认1000个。
-- 引入版本： v3.2
+- 引入版本：v3.2
 
 ##### mv_plan_cache_thread_pool_size
 
@@ -3010,7 +3566,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - Unit:
 - 是否动态：是
 - 描述：用于物化视图改写的 MV 计划缓存的默认线程池大小，默认3个。
-- 引入版本： v3.2
+- 引入版本：v3.2
 
 ##### mv_refresh_default_planner_optimize_timeout
 
@@ -3138,6 +3694,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：是否开启了插件功能。只能在 Leader FE 安装/卸载插件。
 - 引入版本：-
 
+##### proc_profile_mem_enable
+
+- 默认值：True
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：通过 AsyncProfiler 启用进程内存分配 Profile 采集。当为 true 时，ProcProfileCollector 会在 `sys_log_dir/proc_profile` 下生成名为 `mem-profile-<timestamp>.html` 的 HTML Profile 文件，在采样期间睡眠 `proc_profile_collect_time_s` 秒，并使用 `proc_profile_jstack_depth` 控制 Java 栈深度。生成的文件会根据 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 进行压缩和清理。Collector 会使用 `STARROCKS_HOME_DIR` 调整 AsyncProfiler 的本地提取路径以避免 `/tmp` 的 noexec 问题。该功能用于排查内存分配热点；启用会增加 CPU、I/O 和磁盘使用，并可能产生较大文件。
+- 引入版本：v3.2.12
+
 ##### query_detail_explain_level
 
 - 默认值：COSTS
@@ -3200,6 +3765,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 是否动态：否
 - 描述：小文件的根目录。
 - 引入版本：-
+
+##### task_runs_max_history_number
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：内存中保留的任务运行记录的最大数量，并在查询归档的 task-run 历史时用作默认的 LIMIT。当 `enable_task_history_archive` 为 false 时，此值约束内存中的历史：Force GC 会修剪较旧的条目，使得只保留最新的 `task_runs_max_history_number` 条记录。当查询归档历史（且未提供显式 LIMIT）时，如果该值大于 0，`TaskRunHistoryTable.lookup` 会使用 `"ORDER BY create_time DESC LIMIT <value>"`。注意：将此值设置为 0 会禁用查询侧的 LIMIT（无限制），但会导致内存中的历史被截断为零（除非启用了归档）。
+- 引入版本：v3.2.0
 
 ##### tmp_dir
 

@@ -36,7 +36,9 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -78,7 +80,7 @@ public class MaterializedIndexTest {
     }
 
     @Test
-    public void testVisibleForTransaction() throws Exception {
+    public void testVisibleForTransaction() {
         index = new MaterializedIndex(10);
         Assertions.assertEquals(IndexState.NORMAL, index.getState());
         Assertions.assertTrue(index.visibleForTransaction(0));
@@ -97,5 +99,15 @@ public class MaterializedIndexTest {
         Assertions.assertFalse(index.visibleForTransaction(9));
         Assertions.assertTrue(index.visibleForTransaction(10));
         Assertions.assertTrue(index.visibleForTransaction(11));
+    }
+
+    @Test
+    public void testGsonPostProcess() {
+        MaterializedIndex index = new MaterializedIndex();
+        Deencapsulation.setField(index, "id", 1L);
+        Assertions.assertEquals(1L, index.getId());
+        Assertions.assertEquals(0L, index.getMetaId());
+        index.gsonPostProcess();
+        Assertions.assertEquals(1L, index.getMetaId());
     }
 }

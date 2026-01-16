@@ -53,6 +53,8 @@ public:
 
     Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
+    std::string to_string() const override { return fmt::format("PlainEncoder<{}>", typeid(T).name()); }
+
 private:
     enum { SIZE_OF_TYPE = sizeof(T) };
 
@@ -75,6 +77,8 @@ public:
     }
 
     Slice build() override { return {_buffer.data(), _buffer.size()}; }
+
+    std::string to_string() const override { return "PlainEncoder<Slice>"; }
 
 private:
     faststring _buffer;
@@ -99,6 +103,8 @@ public:
         return {_buffer.data(), _buffer.size()};
     }
 
+    std::string to_string() const override { return "PlainEncoder<bool>"; }
+
 private:
     faststring _buffer;
     BitWriter _bit_writer;
@@ -109,6 +115,8 @@ class PlainDecoder final : public Decoder {
 public:
     PlainDecoder() = default;
     ~PlainDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("PlainDecoder<{}>", typeid(T).name()); }
 
     static Status decode(const std::string& buffer, T* value) {
         int byte_size = sizeof(T);
@@ -168,6 +176,8 @@ public:
     PlainDecoder() = default;
     ~PlainDecoder() override = default;
 
+    std::string to_string() const override { return "PlainDecoder<Slice>"; }
+
     static Status decode(const std::string& buffer, Slice* value) {
         value->data = const_cast<char*>(buffer.data());
         value->size = buffer.size();
@@ -187,7 +197,7 @@ public:
         DCHECK(dst->is_nullable());
         size_t null_cnt = null_infos.num_nulls;
         if (dst->is_nullable()) {
-            NullColumn* null_column = down_cast<NullableColumn*>(dst)->mutable_null_column();
+            NullColumn* null_column = down_cast<NullableColumn*>(dst)->null_column_raw_ptr();
             auto& null_data = null_column->get_data();
             size_t prev_num_rows = null_data.size();
             raw::stl_vector_resize_uninitialized(&null_data, count + prev_num_rows);
@@ -253,7 +263,7 @@ public:
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         size_t num_decoded = 0;
         if (dst->is_nullable()) {
-            down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+            down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
         }
 
 #define CHECK_DECODING_BOUND                                                                                  \
@@ -354,6 +364,8 @@ public:
     PlainDecoder() = default;
     ~PlainDecoder() override = default;
 
+    std::string to_string() const override { return "PlainDecoder<bool>"; }
+
     Status set_data(const Slice& data) override {
         _batched_bit_reader.reset(reinterpret_cast<const uint8_t*>(data.data), data.size);
         _decoded_values_buffer.reset();
@@ -452,6 +464,8 @@ public:
     FLBAPlainEncoder() = default;
     ~FLBAPlainEncoder() override = default;
 
+    std::string to_string() const override { return "FLBAPlainEncoder"; }
+
     Status append(const uint8_t* vals, size_t count) override {
         if (count == 0) return Status::OK();
 
@@ -474,6 +488,8 @@ class FLBAPlainDecoder final : public Decoder {
 public:
     FLBAPlainDecoder() = default;
     ~FLBAPlainDecoder() override = default;
+
+    std::string to_string() const override { return "FLBAPlainDecoder"; }
 
     static Status decode(const std::string& buffer, Slice* value) {
         value->data = const_cast<char*>(buffer.data());
@@ -514,7 +530,7 @@ public:
         // fill null columns
         _next_null_column(count, null_infos, nullable_column);
         // fill data columns
-        auto* binary_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        auto* binary_column = down_cast<BinaryColumn*>(nullable_column->data_column_raw_ptr());
         size_t null_cnt = null_infos.num_nulls;
         size_t read_count = count - null_cnt;
 

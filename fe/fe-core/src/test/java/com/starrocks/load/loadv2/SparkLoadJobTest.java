@@ -381,7 +381,7 @@ public class SparkLoadJobTest {
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
-        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+        partitionInfo.addPartition(partitionId, null, (short) 1, null);
 
         new Expectations() {
             {
@@ -398,13 +398,15 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
-                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
+                result = indexId;
+                index.getMetaId();
                 result = indexId;
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
@@ -448,9 +450,9 @@ public class SparkLoadJobTest {
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
         Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
-        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Map<Long, Integer> indexMetaIdToSchemaHash = Deencapsulation.getField(job, "indexMetaIdToSchemaHash");
+        Assertions.assertTrue(indexMetaIdToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexMetaIdToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(replicaId, tabletId, backendId);
@@ -480,7 +482,7 @@ public class SparkLoadJobTest {
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
-        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+        partitionInfo.addPartition(partitionId, null, (short) 1, null);
 
         List<Replica> allQueryableReplicas = Lists.newArrayList();
         allQueryableReplicas.add(replica);
@@ -501,13 +503,15 @@ public class SparkLoadJobTest {
                 table.getPartitionInfo();
                 result = partitionInfo;
 
-                table.getSchemaByIndexId(Long.valueOf(12));
+                table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
-                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
+                result = indexId;
+                index.getMetaId();
                 result = indexId;
 
                 index.getTablets();
@@ -543,9 +547,9 @@ public class SparkLoadJobTest {
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
         Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
-        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Map<Long, Integer> indexMetaIdToSchemaHash = Deencapsulation.getField(job, "indexMetaIdToSchemaHash");
+        Assertions.assertTrue(indexMetaIdToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexMetaIdToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(tableId, tabletId, backendId);
@@ -581,7 +585,7 @@ public class SparkLoadJobTest {
         SparkLoadJob job = getEtlStateJob(originStmt);
         job.state = JobState.LOADING;
         Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
-        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No partitions have data available for loading",
+        ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No rows were imported from upstream",
                 () -> Deencapsulation.invoke(job, "submitPushTasks"));
     }
 }

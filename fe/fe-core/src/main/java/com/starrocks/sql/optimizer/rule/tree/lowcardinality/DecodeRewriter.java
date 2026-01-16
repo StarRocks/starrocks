@@ -237,9 +237,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 new PhysicalHashAggregateOperator(aggregate.getType(), groupBys, partitions, aggregations,
                         aggregate.isSplit(), aggregate.getLimit(), predicate,
                         projection);
+        op.setWithLocalShuffle(aggregate.isWithLocalShuffle());
         op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
         op.setUseSortAgg(aggregate.isUseSortAgg());
         op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
+        op.setWithoutColocateRequirement(aggregate.isWithoutColocateRequirement());
+        op.setLocalLimit(aggregate.getLocalLimit());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }
 

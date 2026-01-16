@@ -24,7 +24,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -66,6 +65,7 @@ import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
@@ -397,7 +397,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Expr partitionExpr = ((ExpressionRangePartitionInfo) partitionInfo)
                 .getPartitionExprs(materializedView.getIdToColumn()).get(0);
         Assertions.assertTrue(partitionExpr instanceof FunctionCallExpr);
-        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFnName().getFunction());
+        Assertions.assertEquals("date_trunc", ((FunctionCallExpr) partitionExpr).getFunctionName());
         Assertions.assertEquals("k1", ((SlotRef) ((FunctionCallExpr) partitionExpr).getChild(1)).getColumnName());
     }
 
@@ -1994,8 +1994,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 }
 
                 // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
-                return table.getIndexIdToMeta().values().stream()
-                        .filter(x -> x.getIndexId() != table.getBaseIndexId())
+                return table.getIndexMetaIdToMeta().values().stream()
+                        .filter(x -> x.getIndexMetaId() != table.getBaseIndexMetaId())
                         .allMatch(MaterializedIndexMeta::isColocateMVIndex);
             }
         };
@@ -2088,8 +2088,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 }
 
                 // If all indexes except the basic index are all colocate, we can use colocate mv index optimization.
-                return table.getIndexIdToMeta().values().stream()
-                        .filter(x -> x.getIndexId() != table.getBaseIndexId())
+                return table.getIndexMetaIdToMeta().values().stream()
+                        .filter(x -> x.getIndexMetaId() != table.getBaseIndexMetaId())
                         .allMatch(MaterializedIndexMeta::isColocateMVIndex);
             }
         };
@@ -2978,8 +2978,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl5");
             Assertions.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().size() >= 2);
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().entrySet().stream()
                     .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             newStarRocksAssert.dropDatabase("test_mv_different_db");
             starRocksAssert.dropMaterializedView("test_mv_use_different_tbl");
@@ -3023,8 +3023,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
@@ -3050,8 +3050,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test_mv_different_db");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
 
@@ -3086,8 +3086,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "case_when_t1");
             Assertions.assertNotNull(table);
             OlapTable olapTable = (OlapTable) table;
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
-            Assertions.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().size() >= 2);
+            Assertions.assertTrue(olapTable.getIndexMetaIdToMeta().entrySet().stream()
                     .noneMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
             List<Column> fullSchemas = table.getFullSchema();
             Assertions.assertTrue(fullSchemas.size() == 3);
@@ -3889,7 +3889,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvName = createMaterializedViewStatement.getTableName();
+            TableName mvName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
             Assertions.assertNotNull(table);
             Assertions.assertTrue(table instanceof MaterializedView);
@@ -3910,7 +3910,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvTableName = createMaterializedViewStatement.getTableName();
+            TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             mvName = mvTableName.getTbl();
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
@@ -4745,7 +4745,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         System.out.println(result);
         Assertions.assertTrue(result.contains("rack:*"));
         for (Tablet tablet : materializedView.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()) {
             Assertions.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 

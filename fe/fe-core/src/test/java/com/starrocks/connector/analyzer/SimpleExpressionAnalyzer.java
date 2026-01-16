@@ -108,10 +108,10 @@ public class SimpleExpressionAnalyzer {
     private boolean isHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             // expand this in the future.
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
+            if (((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_MAP) ||
+                    ((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.ARRAY_FILTER)) {
                 return true;
-            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
+            } else if (((FunctionCallExpr) expr).getFunctionName().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
                 ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
                 return true;
@@ -123,7 +123,7 @@ public class SimpleExpressionAnalyzer {
     private Expr rewriteHighOrderFunction(Expr expr) {
         Preconditions.checkState(expr instanceof FunctionCallExpr);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)
+        if (functionCallExpr.getFunctionName().equals(FunctionSet.ARRAY_FILTER)
                 && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
             // array_filter(lambda_func_expr, arr1...) -> array_filter(arr1, array_map(lambda_func_expr, arr1...))
             FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
@@ -574,7 +574,7 @@ public class SimpleExpressionAnalyzer {
 
             Type[] childTypes = new Type[1];
             childTypes[0] = IntegerType.BIGINT;
-            Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
+            Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
             node.setFn(fn);

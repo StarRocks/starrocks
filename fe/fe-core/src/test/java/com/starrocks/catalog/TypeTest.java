@@ -68,6 +68,7 @@ import com.starrocks.type.TypeDeserializer;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.type.VariantType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -217,7 +218,7 @@ public class TypeTest {
                 {TypeFactory.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
                 {TypeFactory.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
                 {TypeFactory.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
-                {TypeFactory.createVarchar(16), "VARCHAR(16)"},
+                {TypeFactory.createVarcharType(16), "VARCHAR(16)"},
                 {TypeFactory.createCharType(16), "CHAR(16)"},
                 {IntegerType.INT, "INT"},
                 {FloatType.FLOAT, "FLOAT"},
@@ -478,5 +479,27 @@ public class TypeTest {
         Assertions.assertFalse(ArrayType.ARRAY_INT.supportZoneMap());
         Assertions.assertFalse(MapType.MAP_VARCHAR_VARCHAR.supportZoneMap());
         Assertions.assertFalse(new StructType(Lists.newArrayList(IntegerType.INT)).supportZoneMap());
+    }
+
+    @Test
+    public void testVariantCastRules() {
+        // scalar types that can cast to VARIANT
+        Assertions.assertTrue(TypeManager.canCastTo(IntegerType.INT, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(VarcharType.VARCHAR, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(DecimalType.DECIMAL32, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(NullType.NULL, VariantType.VARIANT));
+
+        // scalar types that cannot cast to VARIANT
+        Assertions.assertFalse(TypeManager.canCastTo(HLLType.HLL, VariantType.VARIANT));
+        Assertions.assertFalse(TypeManager.canCastTo(BitmapType.BITMAP, VariantType.VARIANT));
+        Assertions.assertFalse(TypeManager.canCastTo(PercentileType.PERCENTILE, VariantType.VARIANT));
+        Assertions.assertFalse(TypeManager.canCastTo(FunctionType.FUNCTION, VariantType.VARIANT));
+        Assertions.assertFalse(TypeManager.canCastTo(VarbinaryType.VARBINARY, VariantType.VARIANT));
+
+        // non-scalar types can cast to VARIANT if elements/fields are supported
+        Assertions.assertTrue(TypeManager.canCastTo(ArrayType.ARRAY_INT, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(MapType.MAP_VARCHAR_VARCHAR, VariantType.VARIANT));
+        Assertions.assertTrue(TypeManager.canCastTo(new StructType(Lists.newArrayList(IntegerType.INT)),
+                VariantType.VARIANT));
     }
 }

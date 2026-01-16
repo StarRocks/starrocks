@@ -166,12 +166,31 @@ public class Memo {
 
     private void mergeGroup(Group srcGroup, Group dstGroup) {
         mergeGroupImpl(srcGroup, dstGroup);
+        removeSelfReferencing(dstGroup);
         // When some rule merge two groups to one group, or
         // the GroupExpressions of one group are all removed.
         // The group is empty, We should remove it.
         Set<Group> groups = getAllEmptyGroups();
         for (Group group : groups) {
             removeOneGroup(group);
+        }
+    }
+
+    private void removeSelfReferencing(Group group) {
+        List<GroupExpression> removeList = Lists.newArrayList();
+        for (GroupExpression ge : group.getLogicalExpressions()) {
+            if (ge.getInputs().stream().anyMatch(g -> g == group)) {
+                removeList.add(ge);
+            }
+        }
+        for (GroupExpression ge : group.getPhysicalExpressions()) {
+            if (ge.getInputs().stream().anyMatch(g -> g == group)) {
+                removeList.add(ge);
+            }
+        }
+        for (GroupExpression ge : removeList) {
+            group.removeGroupExpression(ge);
+            groupExpressions.remove(ge);
         }
     }
 

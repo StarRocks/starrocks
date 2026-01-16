@@ -471,6 +471,13 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         final_vacuum_version = std::min(final_vacuum_version, tablet_vacuumed_version);
         max_vacuum_version = std::max(max_vacuum_version, tablet_vacuumed_version);
     }
+    if (!bundle_file_deleter.is_empty() && !enable_file_bundling) {
+        // If the enable_file_bundling flag is not set in the vacuum request issued by the FE,
+        // it indicates that the request does not contain the complete tablet information for the partition.
+        // Due to this lack of sufficient information, bundle files cannot be deleted.
+        // It may happen when downgrade FE from a version that supports file bundling to a version that does not.
+        bundle_file_deleter.clear();
+    }
     // delete bundle files
     if (max_vacuum_version > 0 && !bundle_file_deleter.is_empty()) {
         RETURN_IF_ERROR(collect_alive_bundle_files(tablet_mgr, tablet_infos, max_vacuum_version, root_dir,

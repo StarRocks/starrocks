@@ -897,8 +897,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             // warehouse
             if (RunMode.isSharedDataMode()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
-                jobInfo.add(warehouse.getName());
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                if (warehouse != null) {
+                    jobInfo.add(warehouse.getName());
+                } else {
+                    jobInfo.add(String.format("Warehouse id: %d not exist.", warehouseId));
+                }
             } else {
                 jobInfo.add("");
             }
@@ -1061,12 +1065,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setNum_scan_bytes(loadingStatus.getLoadStatistic().sourceScanBytes());
             // warehouse
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                try {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                if (warehouse != null) {
                     info.setWarehouse(warehouse.getName());
-                } catch (Exception e) {
-                    LOG.warn("Failed to get warehouse for job {}, error: {}", id, e.getMessage());
-                    info.setWarehouse("");
+                } else {
+                    info.setWarehouse(String.format("Warehouse id: %d not exist.", warehouseId));
                 }
             } else {
                 info.setWarehouse("");

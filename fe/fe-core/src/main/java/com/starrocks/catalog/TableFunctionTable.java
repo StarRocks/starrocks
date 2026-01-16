@@ -64,7 +64,6 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeDeserializer;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.fs.FileStatus;
@@ -128,6 +127,7 @@ public class TableFunctionTable extends Table {
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
+    public static final String PROPERTY_AUTO_DETECT_TYPES = "auto_detect_types";
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
@@ -137,6 +137,7 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
     private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
     private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    private static final String PROPERTY_CSV_INCLUDE_HEADER = "csv.include_header";
 
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
     private static final Set<String> SUPPORTED_PARQUET_VERSIONS = Sets.newHashSet("1.0", "2.4", "2.6");
@@ -178,6 +179,7 @@ public class TableFunctionTable extends Table {
     // for load/query data
     private int autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
     private int autoDetectSampleRows = DEFAULT_AUTO_DETECT_SAMPLE_ROWS;
+    private boolean autoDetectTypes = true;
 
     private List<String> columnsFromPath = new ArrayList<>();
     private boolean strictMode = false;
@@ -200,6 +202,7 @@ public class TableFunctionTable extends Table {
     private byte csvEscape;
     private long csvSkipHeader;
     private boolean csvTrimSpace;
+    private boolean csvIncludeHeader = false;
 
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
@@ -394,6 +397,7 @@ public class TableFunctionTable extends Table {
         if (CSV.equalsIgnoreCase(format)) {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
+            tTableFunctionTable.setCsv_include_header(csvIncludeHeader);
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         TParquetOptions parquetOptions = new TParquetOptions();
@@ -505,6 +509,21 @@ public class TableFunctionTable extends Table {
             }
         }
 
+        if (properties.containsKey(PROPERTY_AUTO_DETECT_TYPES)) {
+            String property = properties.get(PROPERTY_AUTO_DETECT_TYPES);
+            if (property.equalsIgnoreCase("true")) {
+                autoDetectTypes = true;
+            } else if (property.equalsIgnoreCase("false")) {
+                autoDetectTypes = false;
+            } else {
+                throw new DdlException(
+                    String.format(
+                        "Illegal value of %s: %s, only true/false allowed", PROPERTY_AUTO_DETECT_TYPES, property
+                    )
+                );
+            }
+        }
+
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
             csvColumnSeparator = Delimiter.convertDelimiter(properties.get(PROPERTY_CSV_COLUMN_SEPARATOR));
             int len = csvColumnSeparator.getBytes(StandardCharsets.UTF_8).length;
@@ -605,6 +624,7 @@ public class TableFunctionTable extends Table {
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
         params.setSchema_sample_file_row_count(autoDetectSampleRows);
+        params.setSchema_sample_types(autoDetectTypes);
         params.setEnclose(csvEnclose);
         params.setEscape(csvEscape);
         params.setSkip_header(csvSkipHeader);
@@ -706,7 +726,7 @@ public class TableFunctionTable extends Table {
     private List<Column> getSchemaFromPath() {
         List<Column> columns = new ArrayList<>();
         for (String colName : columnsFromPath) {
-            columns.add(new Column(colName, TypeFactory.createDefaultString(), true));
+            columns.add(new Column(colName, StringType.DEFAULT_STRING, true));
         }
         return columns;
     }
@@ -896,6 +916,15 @@ public class TableFunctionTable extends Table {
                 throw new SemanticException("The valid bytes length for '%s' is [%d, %d]", PROPERTY_CSV_ROW_DELIMITER,
                         1, CsvFormat.MAX_ROW_DELIMITER_LENGTH);
             }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_INCLUDE_HEADER)) {
+            String includeHeader = properties.get(PROPERTY_CSV_INCLUDE_HEADER);
+            if (!includeHeader.equalsIgnoreCase("true") && !includeHeader.equalsIgnoreCase("false")) {
+                throw new SemanticException("got invalid parameter \"csv.include_header\" = \"%s\", " +
+                        "expect a boolean value (true or false).", includeHeader);
+            }
+            this.csvIncludeHeader = includeHeader.equalsIgnoreCase("true");
         }
 
         // parquet options

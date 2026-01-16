@@ -53,7 +53,7 @@ Status Decoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos,
 }
 void Decoder::_next_null_column(size_t count, const NullInfos& null_infos, NullableColumn* dst) {
     size_t null_cnt = null_infos.num_nulls;
-    NullColumn* null_column = down_cast<NullableColumn*>(dst)->mutable_null_column();
+    NullColumn* null_column = down_cast<NullableColumn*>(dst)->null_column_raw_ptr();
     const uint8_t* __restrict is_nulls = null_infos.nulls_data();
     auto& null_data = null_column->get_data();
     size_t prev_num_rows = null_data.size();

@@ -23,6 +23,7 @@ set(RUNTIME_FILES
     buffer_control_result_writer.cpp
     client_cache.cpp
     local_pass_through_buffer.cpp
+    lookup_stream_mgr.cpp
     data_stream_mgr.cpp
     sender_queue.cpp
     data_stream_sender.cpp
@@ -30,6 +31,7 @@ set(RUNTIME_FILES
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
+    exec.cpp
     global_variables.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp

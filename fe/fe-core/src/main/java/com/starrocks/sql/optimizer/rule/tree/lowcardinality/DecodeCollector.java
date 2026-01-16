@@ -29,6 +29,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UnionFind;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,7 +85,6 @@ import org.jetbrains.annotations.TestOnly;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -243,32 +243,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // 2 -> (1,2,3)
         // 3 -> (1,2,3)
         // 4 -> (4)
-        Map<Integer, Set<Integer>> relations = Maps.newHashMap();
+        UnionFind<Integer> unionFind = new UnionFind<>();
         dependencyStringIds.forEach((k, v) -> {
-            relations.computeIfAbsent(k, x -> Sets.newHashSet());
-            final Set<Integer> relation = relations.get(k);
-            relation.addAll(v);
-            relation.add(k);
             for (Integer dependency : v) {
-                relations.put(dependency, relation);
+                unionFind.union(k, dependency);
             }
         });
 
-        final Set<Set<Integer>> relationSets = new HashSet<>(relations.values());
-        // for each relation group if any element in group is disable then disable all group
-        for (Set<Integer> relationSet : relationSets) {
-            for (Integer cid : relationSet) {
-                if (disableRewriteStringColumns.contains(cid)) {
-                    unionAll(disableRewriteStringColumns, relationSet);
-                    break;
-                }
-            }
-        }
-    }
-
-    private void unionAll(ColumnRefSet columnRefSet, Set<Integer> cids) {
-        for (Integer cid : cids) {
-            columnRefSet.union(cid);
+        for (int columnId : disableRewriteStringColumns.getColumnIds()) {
+            unionFind.getEquivGroup(columnId).forEach(disableRewriteStringColumns::union);
         }
     }
 
@@ -1108,9 +1091,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     // complex type may be support prune subfield, doesn't read data
     private boolean checkComplexTypeInvalid(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
-        String colName = scan.getColRefToColumnMetaMap().get(column).getName();
+        String colId = scan.getColRefToColumnMetaMap().get(column).getColumnId().getId();
         for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
-            if (!StringUtils.equalsIgnoreCase(colName, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
+            if (!StringUtils.equalsIgnoreCase(colId, path.getPath()) || path.getType() != TAccessPathType.ROOT) {
                 continue;
             }
             // check the read path
@@ -1128,10 +1111,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if (!sessionVariable.isEnableJSONV2DictOpt()) {
             return false;
         }
-        String colName = scan.getColRefToColumnMetaMap().get(column).getName();
+        String colId = scan.getColRefToColumnMetaMap().get(column).getColumnId().getId();
         for (ColumnAccessPath path : scan.getColumnAccessPaths()) {
             if (path.isExtended() &&
-                    path.getLinearPath().equals(colName) &&
+                    path.getLinearPath().equals(colId) &&
                     path.getType() == TAccessPathType.ROOT &&
                     path.getValueType().isStringType()) {
                 return true;

@@ -247,8 +247,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
     private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
 
-    private boolean isInMemory = false;
-
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
@@ -330,6 +328,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    // Maximum number of parallel compaction subtasks per tablet
+    // 0 means disable parallel compaction, positive value enables it
+    // Default: 3
+    @SerializedName(value = "lakeCompactionMaxParallel")
+    private int lakeCompactionMaxParallel = 3;
+
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
@@ -382,9 +386,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_REPLICATION_NUM:
                 buildReplicationNum();
                 break;
-            case OperationType.OP_MODIFY_IN_MEMORY:
-                buildInMemory();
-                break;
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
                 buildPersistentIndexType();
@@ -394,9 +395,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
-                break;
-            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
-                buildMvProperties();
                 break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
@@ -421,6 +419,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 buildBinlogAvailableVersion();
                 break;
+            case OperationType.OP_MODIFY_FLAT_JSON_CONFIG:
+                buildFlatJsonConfig();
+                break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionTTL();
                 buildPartitionLiveNumber();
@@ -431,6 +432,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
+                buildLakeCompactionMaxParallel();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -441,11 +443,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildInMemory() {
+        if (properties != null) {
+            properties.remove(PropertyAnalyzer.PROPERTIES_INMEMORY);
+        }
+        return this;
+    }
+
     // TODO: refactor the postProcessing code into listener-based instead of procedure-oriented
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
         buildMVPartitionRefreshStrategy();
+        buildPartitionRetentionCondition();
         buildAutoRefreshPartitionsLimit();
         buildMVRefreshMode();
         buildExcludedTriggerTables();
@@ -456,6 +466,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
         buildMVTransparentRewriteMode();
+        buildLocation();
         return this;
     }
 
@@ -527,6 +538,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
             }
         }
         return this;
+    }
+
+    public void setReplicationNum(short replicationNum) {
+        this.replicationNum = replicationNum;
     }
 
     public TableProperty buildReplicationNum() {
@@ -727,11 +742,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildInMemory() {
-        isInMemory = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_INMEMORY, "false"));
-        return this;
-    }
-
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
                 RunMode.isSharedDataMode() ? "default" : "local");
@@ -850,6 +860,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public void setDataCachePartitionDuration(PeriodDuration dataCachePartitionDuration) {
+        this.dataCachePartitionDuration = dataCachePartitionDuration;
+    }
+
     public TableProperty buildDataCachePartitionDuration() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
             dataCachePartitionDuration = TimeUtils.parseHumanReadablePeriodOrDuration(
@@ -864,6 +878,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                     properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
+    }
+
+    public void setStorageCoolDownTTL(PeriodDuration storageCoolDownTTL) {
+        this.storageCoolDownTTL = storageCoolDownTTL;
     }
 
     public TableProperty buildStorageCoolDownTTL() {
@@ -908,6 +926,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
             compactionStrategy = TCompactionStrategy.DEFAULT;
         } else if (defaultStrategy.equalsIgnoreCase(REAL_TIME_COMPACTION_STRATEGY)) {
             compactionStrategy = TCompactionStrategy.REAL_TIME;
+        }
+        return this;
+    }
+
+    public TableProperty buildLakeCompactionMaxParallel() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+        if (value != null) {
+            try {
+                lakeCompactionMaxParallel = Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                LOG.warn("Invalid lake_compaction_max_parallel value: {}", value);
+                lakeCompactionMaxParallel = 0;
+            }
         }
         return this;
     }
@@ -989,19 +1020,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public boolean isSetPartitionRefreshNumber() {
-        return partitionRefreshNumber != INVALID;
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
     }
 
     public int getPartitionRefreshNumber() {
-        return partitionRefreshNumber == INVALID ? Config.default_mv_partition_refresh_number : partitionRefreshNumber;
+        if (isSetPartitionRefreshNumber()) {
+            return partitionRefreshNumber;
+        } else {
+            return Config.default_mv_partition_refresh_number;
+        }
     }
 
     public boolean isSetPartitionRefreshStrategy() {
-        return !Strings.isNullOrEmpty(partitionRefreshStrategy);
+        return properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_STRATEGY)
+                && !Strings.isNullOrEmpty(partitionRefreshStrategy);
     }
 
     public String getPartitionRefreshStrategy() {
-        return Strings.isNullOrEmpty(partitionRefreshStrategy) ? Config.default_mv_partition_refresh_strategy
+        return !isSetPartitionRefreshStrategy() ? Config.default_mv_partition_refresh_strategy
                 : partitionRefreshStrategy;
     }
 
@@ -1085,10 +1121,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this.mvTransparentRewriteMode;
     }
 
-    public boolean isInMemory() {
-        return isInMemory;
-    }
-
     public boolean enablePersistentIndex() {
         return enablePersistentIndex;
     }
@@ -1115,6 +1147,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TCompactionStrategy getCompactionStrategy() {
         return compactionStrategy;
+    }
+
+    public int getLakeCompactionMaxParallel() {
+        return lakeCompactionMaxParallel;
     }
 
     public Multimap<String, String> getLocation() {
@@ -1298,6 +1334,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildLakeCompactionMaxParallel();
         buildEnableStatisticCollectOnFirstLoad();
     }
 }

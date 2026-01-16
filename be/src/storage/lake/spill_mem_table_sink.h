@@ -27,19 +27,30 @@ namespace lake {
 
 class TabletWriter;
 
+// Sink for writing memtable data with spilling support
+// When spilling is enabled, chunks are written to temporary blocks first, then merged to segments.
+// The slot_idx parameter is used to track the original flush order for correct merging.
 class SpillMemTableSink : public MemTableSink {
 public:
     SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
     ~SpillMemTableSink() override = default;
 
+    // Spill chunk to temporary storage or write directly if eos and no prior spills
+    // @param slot_idx: slot index for tracking flush order in parallel flush mode
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
-                       int64_t* flush_data_size = nullptr) override;
+                       int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
 
+    // Spill chunk with deletes to temporary storage
+    // @param slot_idx: slot index for tracking flush order in parallel flush mode
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
-                                    int64_t* flush_data_size = nullptr) override;
+                                    int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
 
     Status merge_blocks_to_segments();
+
+    // Parallel merge spill blocks to segments when config enable_load_spill_parallel_merge is true
+    Status merge_blocks_to_segments_parallel(bool do_agg, const SchemaPtr& schema);
+    Status merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema);
 
     spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }
 

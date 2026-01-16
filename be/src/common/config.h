@@ -203,6 +203,10 @@ CONF_mInt32(replication_min_speed_limit_kbps, "50");
 CONF_mInt32(replication_min_speed_time_seconds, "300");
 // Clear expired replication snapshots interval
 CONF_mInt32(clear_expired_replication_snapshots_interval_seconds, "3600");
+// The lake replication slow log threshold
+CONF_mInt64(lake_replication_slow_log_ms, "30000");
+// The buffer size used for reading remote data during lake replication
+CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -423,11 +427,59 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
-// Enable parallel execution within tablet for primary key tables.
-CONF_mBool(enable_pk_parallel_execution, "true");
-// The minimum threshold of data size for enabling pk parallel execution.
-// Default is 300MB.
-CONF_mInt64(pk_parallel_execution_threshold_bytes, "314572800");
+// Enable eager build of PK index files during import and compaction.
+CONF_mBool(enable_pk_index_eager_build, "true");
+// The minimum threshold of data size for enabling pk index eager build.
+// Default is 100MB.
+CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+// Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
+CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
+// The queue size for pk index parallel compaction threadpool in shared-data mode.
+CONF_mInt32(pk_index_parallel_compaction_threadpool_size, "1048576");
+// The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
+// smaller than this threshold, the task will not be split.
+// Default is 32MB.
+CONF_mInt64(pk_index_parallel_compaction_task_split_threshold_bytes, "33554432");
+// Target file size for primary key index in shared-data mode.
+// Default is 64MB.
+CONF_mInt64(pk_index_target_file_size, "67108864");
+// Compaction score ratio for primary key index in shared-data mode.
+// E.g. if we have N fileset, the compaction score will be N * pk_index_compaction_score_ratio
+// Default is 1.5.
+CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
+// early sst compaction threshold for primary key index in shared-data mode.
+CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
+// Whether enable parallel compaction for primary key index in shared-data mode.
+CONF_mBool(enable_pk_index_parallel_compaction, "true");
+// Whether enable parallel get for primary key index in shared-data mode.
+CONF_mBool(enable_pk_index_parallel_execution, "true");
+// The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
+CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
+// The threadpool max thread num for pk index get in shared-data mode.
+CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
+// The queue size for pk index parallel get threadpool in shared-data mode.
+CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
+// Memtable flush threadpool max thread num for pk index in shared-data mode.
+CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
+// The queue size for pk index memtable flush threadpool in shared-data mode.
+CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
+// The maximum number of memtables for pk index in shared-data mode.
+CONF_mInt32(pk_index_memtable_max_count, "2");
+// The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
+CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
+// The parameters for pk index size-tiered compaction strategy.
+CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
+CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");
+CONF_mInt64(pk_index_size_tiered_max_level, "5");
+// Used to control the sampling interval size for SSTable files.
+CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
+// Controls merge condition evaluation behavior within the same transaction for primary key tables.
+// When enabled (true), allows load spilling and parallel execution optimizations for condition updates
+// by skipping merge condition checks on data from the same transaction. This improves performance
+// when ingesting large batches with condition updates, as same-transaction conflicts don't need
+// complex comparison logic.
+// Default: false (conservative, validates all conditions even within same transaction)
+CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -471,6 +523,17 @@ CONF_mBool(enable_load_channel_rpc_async, "true");
 CONF_mInt32(load_channel_rpc_thread_pool_num, "-1");
 // The queue size for Load channel rpc thread pool
 CONF_Int32(load_channel_rpc_thread_pool_queue_size, "1024000");
+// Time(seconds) for load channel to wait for clean up load id after aborted.
+//
+// When a load job is cancelled or failed, load channel will be aborted.
+// In order to reject any late-arrival request, load channel will keep
+// the aborted load id for this duration before cleaning up.
+// * Setting it too small may cause late-arrival requests being accepted incorrectly.
+// * Setting it too large may cause resources to be held for a long time.
+// NOTE: The background thread will clean up periodically.
+// In production, the minimum interval is 60 seconds.
+// Default is 600 seconds.
+CONF_mInt32(load_channel_abort_clean_up_delay_seconds, "600");
 // Number of thread for async delta writer.
 // Default value is max(cpucores/2, 16)
 CONF_mInt32(number_tablet_writer_threads, "0");
@@ -826,7 +889,7 @@ CONF_Int32(vector_chunk_size, "4096");
 // Valid range: [0-1000].
 // `0` will disable late materialization.
 // `1000` will enable late materialization always.
-CONF_Int32(late_materialization_ratio, "10");
+CONF_mInt32(late_materialization_ratio, "10");
 
 // Valid range: [0-1000].
 // `0` will disable late materialization select metric type.
@@ -935,6 +998,10 @@ CONF_Int64(pipeline_sink_brpc_dop, "64");
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
 CONF_mBool(pipeline_print_profile, "false");
+CONF_mBool(pipeline_timeout_diagnostic, "false");
+// If this value is greater than 0 and the query time exceeds the timeout, then execute gcore on the process.
+CONF_Int64(pipeline_gcore_timeout_threshold_sec, "-1");
+CONF_String(pipeline_gcore_output_dir, "${STARROCKS_HOME}/log");
 
 // The arguments of multilevel feedback pipeline_driver_queue. It prioritizes small queries over larger ones,
 // when the value of level_time_slice_base_ns is smaller and queue_ratio_of_adjacent_queue is larger.
@@ -1193,6 +1260,20 @@ CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
+
+// Maximum data volume (bytes) per parallel compaction subtask.
+// If total picked rowsets data size is less than this threshold, parallel compaction
+// will be skipped and fallback to normal compaction flow.
+// Default: 5GB
+CONF_mInt64(lake_compaction_max_bytes_per_subtask, "5368709120");
+
+// Maximum rowset size (bytes) for compaction consideration.
+// Non-overlapped rowsets larger than this threshold are considered "well-compacted"
+// and will be skipped in compaction score calculation (treated as score 0).
+// This is also used in split_rowsets_into_groups to skip large non-overlapped rowsets.
+// Default: 4GB
+CONF_mInt64(lake_compaction_max_rowset_size, "4294967296");
+
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -1713,6 +1794,11 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 
+// Enable tablet write log tracking for write amplification analysis
+CONF_mBool(enable_tablet_write_log, "false");
+// Maximum number of log entries to keep in memory buffer (per CN/BE)
+CONF_mInt32(tablet_write_log_buffer_size, "100000");
+
 CONF_mBool(skip_schema_in_rowset_meta, "true");
 
 CONF_mBool(enable_bit_unpack_simd, "true");
@@ -1746,10 +1832,14 @@ CONF_mBool(enable_load_spill, "true");
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
 // Max merge input bytes during spill merge. Default is 1024MB.
 CONF_mInt64(load_spill_max_merge_bytes, "1073741824");
+// Max memory usage per merge during spill merge. Default is 1024MB.
+CONF_mInt64(load_spill_memory_usage_per_merge, "1073741824");
 // Max memory used for merge load spill blocks.
 CONF_mInt64(load_spill_merge_memory_limit_percent, "30");
 // Upper bound of spill merge thread count
 CONF_mInt64(load_spill_merge_max_thread, "16");
+// Enable parallel spill merge inside single tablet
+CONF_mBool(enable_load_spill_parallel_merge, "true");
 // Do lazy load when PK column larger than this threshold. Default is 300MB.
 CONF_mInt64(pk_column_lazy_load_threshold_bytes, "314572800");
 // Batch size for column mode partial update when processing insert rows.
@@ -1797,4 +1887,25 @@ CONF_Int32(llm_max_queue_size, "4096");
 CONF_Int32(llm_max_concurrent_queries, "8");
 
 CONF_Int32(llm_cache_size, "131072");
+
+CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+
+// used by global late materialization, may be removed in the future
+CONF_mInt64(fetch_max_buffer_chunk_num, "8");
+CONF_mInt64(max_batch_num_per_fetch_operator, "8");
+CONF_mInt64(max_chunk_num_per_fetch_batch, "8");
+CONF_mBool(enable_fetch_local_pass_through, "true");
+CONF_mInt64(max_lookup_batch_request, "8");
+// For table schema service: max retry attempts for fetching schema from FE.
+CONF_mInt32(table_schema_service_max_retries, "3");
+
+// Enable cow optimization for column operations, used to avoid the overhead of reference counting when accessing columns.
+CONF_mBool(enable_cow_optimization, "true");
+// The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
+CONF_Int32(cow_optimization_diagnose_level, "0");
+
+// If the first predicate column's selectivity is higher than this threshold, trigger sampling
+// to potentially find a better predicate order. When selectivity is already good (low), sampling
+// is unlikely to help and will be skipped.
+CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 } // namespace starrocks::config

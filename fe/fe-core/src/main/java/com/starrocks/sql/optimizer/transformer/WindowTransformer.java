@@ -143,7 +143,7 @@ public class WindowTransformer {
                 ExprCastFunction.uncheckedCastChild(callExpr, IntegerType.BIGINT, 1);
 
                 AnalyticWindowBoundary.BoundaryType rightBoundaryType = AnalyticWindowBoundary.BoundaryType.FOLLOWING;
-                if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LAG)) {
+                if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LAG)) {
                     rightBoundaryType = AnalyticWindowBoundary.BoundaryType.PRECEDING;
                 }
 
@@ -180,9 +180,9 @@ public class WindowTransformer {
             // need to also change the function.
             String reversedFnName = null;
 
-            if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
+            if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
                 reversedFnName = AnalyticExpr.LASTVALUE;
-            } else if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
+            } else if (callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
                 reversedFnName = AnalyticExpr.FIRSTVALUE;
             }
 
@@ -197,7 +197,7 @@ public class WindowTransformer {
         if (windowFrame != null
                 && windowFrame.getLeftBoundary().getBoundaryType() == AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING
                 && windowFrame.getRightBoundary().getBoundaryType() != AnalyticWindowBoundary.BoundaryType.PRECEDING
-                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
+                && callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
                 !callExpr.getIgnoreNulls()) {
             windowFrame.setRightBoundary(new AnalyticWindowBoundary(AnalyticWindowBoundary.BoundaryType.CURRENT_ROW, null));
         }
@@ -214,8 +214,8 @@ public class WindowTransformer {
         }
 
         // Change first_value/last_value RANGE windows to ROWS
-        if ((callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
-                || callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
+        if ((callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)
+                || callExpr.getFunctionName().equalsIgnoreCase(AnalyticExpr.LASTVALUE))
                 && windowFrame != null
                 && windowFrame.getType() == AnalyticWindow.Type.RANGE) {
             windowFrame = new AnalyticWindow(AnalyticWindow.Type.ROWS, windowFrame.getLeftBoundary(),

@@ -17,6 +17,7 @@
 #include <memory>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -86,7 +87,7 @@ public:
         if (pair == _infos_mapping.end()) {
             return nullptr;
         }
-        return pair->second.get();
+        return pair->second;
     }
 
     const AggregateFunction* get_general_info(const std::string& name, const bool is_window_function,
@@ -95,11 +96,12 @@ public:
         if (pair == _general_mapping.end()) {
             return nullptr;
         }
-        return pair->second.get();
+        return pair->second;
     }
 
     template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_general_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+        track_function(fun);
         _general_mapping.emplace(std::make_tuple(name, false, false), fun);
         _general_mapping.emplace(std::make_tuple(name, false, true), fun);
         if (is_window) {
@@ -108,21 +110,30 @@ public:
         }
     }
 
+    template <typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_general_window_mapping_notnull(const std::string& name, SpecificAggFunctionPtr fun) {
+        track_function(fun);
+        _general_mapping.emplace(std::make_tuple(name, true, false), fun);
+        _general_mapping.emplace(std::make_tuple(name, true, true), fun);
+    }
+
     template <class StateType, typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
     void add_general_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+        track_function(fun);
         _general_mapping.emplace(std::make_tuple(name, false, false), fun);
         auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun);
-        _general_mapping.emplace(std::make_tuple(name, false, true), nullable_agg);
+        _general_mapping.emplace(std::make_tuple(name, false, true), track_function(nullable_agg));
 
         if (is_window) {
             _general_mapping.emplace(std::make_tuple(name, true, false), fun);
             auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(fun);
-            _general_mapping.emplace(std::make_tuple(name, true, true), nullable_agg);
+            _general_mapping.emplace(std::make_tuple(name, true, true), track_function(nullable_agg));
         }
     }
 
     template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
+        track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), fun);
         if (is_window) {
@@ -136,16 +147,17 @@ public:
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
     void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                AggNullPred null_pred = AggNullPred()) {
+        track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         auto nullable_agg =
                 AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun, null_pred);
-        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), nullable_agg);
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), track_function(nullable_agg));
 
         if (is_window) {
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
             auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(
                     fun, std::move(null_pred));
-            _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), nullable_agg);
+            _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), track_function(nullable_agg));
         }
     }
 
@@ -154,10 +166,11 @@ public:
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
     void add_window_mapping(const std::string& name, SpecificAggFunctionPtr fun,
                             AggNullPred null_pred = AggNullPred()) {
+        track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
         auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(
                 fun, std::move(null_pred));
-        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), nullable_agg);
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), track_function(nullable_agg));
     }
 
     template <LogicalType ArgType, LogicalType RetType, class StateType,
@@ -165,15 +178,16 @@ public:
               IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
     void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
                                         AggNullPred null_pred = AggNullPred()) {
+        track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun, null_pred);
-        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), variadic_agg);
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), track_function(variadic_agg));
 
         if (is_window) {
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
             auto variadic_agg =
                     AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun, std::move(null_pred));
-            _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), variadic_agg);
+            _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), track_function(variadic_agg));
         }
     }
 
@@ -203,28 +217,31 @@ public:
     AggregateFunctionPtr create_array_function(std::string& name) {
         if constexpr (IsNull) {
             if (name == "dict_merge") {
-                auto dict_merge = AggregateFactory::MakeDictMergeAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState, false>(dict_merge);
+                auto dict_merge = track_function(AggregateFactory::MakeDictMergeAggregateFunction());
+                return track_function(
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState, false>(dict_merge));
             } else if (name == "retention") {
-                auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retentoin);
+                auto retention = track_function(AggregateFactory::MakeRetentionAggregateFunction());
+                return track_function(
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retention));
             } else if (name == "window_funnel") {
                 if constexpr (ArgLT == TYPE_INT || ArgLT == TYPE_BIGINT || ArgLT == TYPE_DATE ||
                               ArgLT == TYPE_DATETIME) {
-                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>();
-                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgLT>>(
-                            windowfunnel);
+                    auto windowfunnel = track_function(AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>());
+                    return track_function(
+                            AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgLT>>(
+                                    windowfunnel));
                 }
             }
         } else {
             if (name == "dict_merge") {
-                return AggregateFactory::MakeDictMergeAggregateFunction();
+                return track_function(AggregateFactory::MakeDictMergeAggregateFunction());
             } else if (name == "retention") {
-                return AggregateFactory::MakeRetentionAggregateFunction();
+                return track_function(AggregateFactory::MakeRetentionAggregateFunction());
             } else if (name == "window_funnel") {
                 if constexpr (ArgLT == TYPE_INT || ArgLT == TYPE_BIGINT || ArgLT == TYPE_DATE ||
                               ArgLT == TYPE_DATETIME) {
-                    return AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>();
+                    return track_function(AggregateFactory::MakeWindowfunnelAggregateFunction<ArgLT>());
                 }
             }
         }
@@ -238,25 +255,28 @@ public:
         if constexpr (IsNull) {
             using ResultType = RunTimeCppType<ResultLT>;
             if (name == "decimal_avg") {
-                auto avg = AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
-                                                                            IsWindowFunc>(avg);
+                auto avg = track_function(AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>());
+                return track_function(
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
+                                                                             IsWindowFunc>(avg));
             } else if (name == "decimal_sum") {
-                auto sum = AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
-                                                                            IsWindowFunc>(sum);
+                auto sum = track_function(AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>());
+                return track_function(
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
+                                                                             IsWindowFunc>(sum));
             } else if (name == "decimal_multi_distinct_sum") {
-                auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgLT, ResultLT>,
-                                                                            IsWindowFunc>(distinct_sum);
+                auto distinct_sum = track_function(AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>());
+                return track_function(
+                        AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgLT, ResultLT>,
+                                                                             IsWindowFunc>(distinct_sum));
             }
         } else {
             if (name == "decimal_avg") {
-                return AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>();
+                return track_function(AggregateFactory::MakeDecimalAvgAggregateFunction<ArgLT>());
             } else if (name == "decimal_sum") {
-                return AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>();
+                return track_function(AggregateFactory::MakeDecimalSumAggregateFunction<ArgLT>());
             } else if (name == "decimal_multi_distinct_sum") {
-                return AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>();
+                return track_function(AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgLT>());
             }
         }
         return nullptr;
@@ -265,9 +285,18 @@ public:
     AggregateFuncResolver(const AggregateFuncResolver&) = delete;
     const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
 
+    template <typename T>
+    const T* track_function(const T* func) {
+        if (func != nullptr) {
+            _functions.insert(func);
+        }
+        return func;
+    }
+
 private:
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
     std::unordered_map<GeneralFuncKey, AggregateFunctionPtr, GeneralFuncMapHash> _general_mapping;
+    std::unordered_set<AggregateFunctionPtr> _functions;
 };
 
 } // namespace starrocks

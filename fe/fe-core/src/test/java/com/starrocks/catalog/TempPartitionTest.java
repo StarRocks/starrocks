@@ -660,7 +660,6 @@ public class TempPartitionTest extends StarRocksTestBase {
 
         Partition p2 = tbl2.getPartition("p2");
         Assertions.assertNotNull(p2);
-        Assertions.assertFalse(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
         Assertions.assertEquals(1, p2.getDistributionInfo().getBucketNum());
 
         stmtStr = "alter table db2.tbl2 replace partition (p2) with temporary partition (tp4)";
@@ -669,7 +668,6 @@ public class TempPartitionTest extends StarRocksTestBase {
         // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition. and p2 bucket is 3, 'in_memory' is true.
         p2 = tbl2.getPartition("p2");
         Assertions.assertNotNull(p2);
-        Assertions.assertTrue(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
         Assertions.assertEquals(3, p2.getDistributionInfo().getBucketNum());
     }
 

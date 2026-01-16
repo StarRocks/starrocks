@@ -17,9 +17,11 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -2801,16 +2803,66 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "  RESULT SINK");
 
+        sql = "select * from t0 where v1 = 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:OlapScanNode");
+
+        sql = "select /*+SET_VAR(prefer_compute_node=true)*/ t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1\n" +
+                "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
+                "\n" +
+                "  RESULT SINK");
+
+        sql = "select /*+SET_VAR(prefer_compute_node=true)*/ * from t0 where v1 = 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:OlapScanNode");
+
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
         try {
-            connectContext.getSessionVariable().setPreferComputeNode(true);
+            sql = "select t0.v1 from t0 join[shuffle] t1 on t0.v2 = t1.v5";
             plan = getFragmentPlan(sql);
             assertContains(plan, "PLAN FRAGMENT 0\n" +
                     " OUTPUT EXPRS:1: v1\n" +
-                    "  PARTITION: UNPARTITIONED\n" +
+                    "  PARTITION: HASH_PARTITIONED: 2: v2\n" +
                     "\n" +
                     "  RESULT SINK");
+
+            sql = "select * from t0 where v1 = 10";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "PLAN FRAGMENT 0\n" +
+                    " OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n" +
+                    "  PARTITION: RANDOM\n" +
+                    "\n" +
+                    "  RESULT SINK\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+
+            sql = "select v1 from t0 where v2 = 1 union select v4 from t1 where v5 = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "RESULT SINK\n" +
+                    "\n" +
+                    "  9:AGGREGATE (merge finalize)\n" +
+                    "  |  group by: 7: v1\n" +
+                    "  |  \n" +
+                    "  8:EXCHANGE");
         } finally {
-            connectContext.getSessionVariable().setPreferComputeNode(false);
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
         }
     }
 
@@ -3579,5 +3631,19 @@ public class JoinTest extends PlanTestBase {
                 "  |  analytic partition by: 1: v1\n" +
                 "  |  offset: 0");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testLeftPredicate() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql1 = "with tt as (select * from test_all_type_not_null) "
+                + "select t1.* "
+                + "from tt t1 left join "
+                + "     tt t2 on t1.t1c = t2.t1c "
+                + " and t1.t1a between t2.id_datetime and t2.id_date "
+                + "where t1.t1a>=date_add('2026-01-01',-200) and t1.t1a<=date_format(date_add('2026-01-01',0) , '%Y-%m-31');";
+
+        String plan = getFragmentPlan(sql1);
+        assertNotContains(plan, "CAST(29: id_date AS VARCHAR) >= '2025-06-15 00:00:00'");
     }
 }

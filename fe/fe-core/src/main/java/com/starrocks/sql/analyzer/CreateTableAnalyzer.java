@@ -19,13 +19,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
@@ -40,6 +38,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.TemporaryTableMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -49,6 +48,7 @@ import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
@@ -59,6 +59,7 @@ import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -90,24 +91,29 @@ public class CreateTableAnalyzer {
     private static final Logger LOG = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
     public static void analyze(CreateTableStmt statement, ConnectContext context) {
-        final TableName tableNameObject = statement.getDbTbl();
-        tableNameObject.normalization(context);
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table reference cannot be null");
+        }
+        tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+        statement.setTableRef(tableRef);
 
-        final String catalogName = tableNameObject.getCatalog();
+        final String catalogName = tableRef.getCatalogName();
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        final String tableName = tableNameObject.getTbl();
+        final String db = tableRef.getDbName();
+        final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, tableNameObject.getDb());
-        if (db == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
+        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        if (dbObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
         }
         if (statement instanceof CreateTemporaryTableStmt) {
-            analyzeTemporaryTable(statement, context, catalogName, db, tableName);
+            analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
         } else {
             if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .tableExists(context, catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
+                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -115,12 +121,13 @@ public class CreateTableAnalyzer {
         analyzeEngineName(statement, catalogName);
         analyzeCharsetName(statement);
 
-        analyzeMultiExprsPartition(statement, tableNameObject);
+        com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
+        analyzeMultiExprsPartition(statement, tableNameObj);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
-        analyzeSortKeys(statement);
         analyzePartitionDesc(statement);
         analyzeDistributionDesc(statement);
+        analyzeSortKeys(statement); // analyzeSortKeys must be called after analyzeDistributionDesc
         analyzeColumnRef(statement, catalogName);
 
         if (statement.isHasGeneratedColumn()) {
@@ -128,6 +135,9 @@ public class CreateTableAnalyzer {
         }
 
         analyzeIndexDefs(statement);
+        if (statement.isOlapEngine()) {
+            validateComplexTypeDefaultValues(statement);
+        }
     }
 
     private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
@@ -434,6 +444,7 @@ public class CreateTableAnalyzer {
         stmt.setKeysDesc(keysDesc);
     }
 
+    // analyzeSortKeys must be called after analyzeDistributionDesc
     private static void analyzeSortKeys(CreateTableStmt stmt) {
         if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
             return;
@@ -445,7 +456,7 @@ public class CreateTableAnalyzer {
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
         List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
-        if (Config.enable_range_distribution) {
+        if (stmt.getDistributionDesc() instanceof RangeDistributionDesc) {
             // For range distribution, the sort columns must be the same as the key
             // columns or only in a different order for none duplicate key table
             if (keysType != KeysType.DUP_KEYS) {
@@ -482,8 +493,11 @@ public class CreateTableAnalyzer {
                     keyColIdxes.add(idx);
                 }
 
-                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
-                if (!res) {
+                if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
+                    throw new SemanticException("The sort columns must be same with primary key columns " +
+                                                "and the order must be consistent");
+                } else if (keysType != KeysType.PRIMARY_KEYS &&
+                                !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
                 }
             }
@@ -574,7 +588,7 @@ public class CreateTableAnalyzer {
             if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
                 if (stmt.isIcebergEngine()) {
-                    String fnName = ((FunctionCallExpr) expr).getFnName().getFunction();
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + fnName;
                     expr.resetFnName(null, fnName);
                 }
@@ -758,10 +772,10 @@ public class CreateTableAnalyzer {
                 }
                 Expr expr = column.getGeneratedColumnExpr(columns);
                 if (expr instanceof FunctionCallExpr) {
-                    if (null != ((FunctionCallExpr) expr).getFnName().getDb()) {
+                    if (null != ((FunctionCallExpr) expr).getDbName()) {
                         throw new SemanticException("Iceberg transform expression should not have db name");
                     }
-                    String fnName = ((FunctionCallExpr) expr).getFnName().getFunction();
+                    String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     if (fnName.equalsIgnoreCase("year") ||
                             fnName.equalsIgnoreCase("month") ||
                             fnName.equalsIgnoreCase("day") ||
@@ -799,7 +813,7 @@ public class CreateTableAnalyzer {
             throw new SemanticException("Generated Column does not support AGG table");
         }
 
-        final TableName tableNameObject = stmt.getDbTbl();
+        final com.starrocks.catalog.TableName tableNameObject = com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef());
 
         List<Column> columns = stmt.getColumns();
         Map<String, Column> columnsMap = Maps.newHashMap();
@@ -943,5 +957,30 @@ public class CreateTableAnalyzer {
         }
 
         statement.setIndexes(indexes);
+    }
+
+    private static void validateComplexTypeDefaultValues(CreateTableStmt statement) {
+        Map<String, String> properties = statement.getProperties();
+        boolean fastSchemaEvolution = true;
+
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+            fastSchemaEvolution = Boolean.parseBoolean(value);
+        }
+
+        if (!fastSchemaEvolution) {
+            List<Column> columns = statement.getColumns();
+            if (columns != null) {
+                for (Column column : columns) {
+                    if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                        throw new SemanticException(
+                                "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
+                                        "Table '" + statement.getTableName() + "' has fast_schema_evolution=false. " +
+                                        "Please remove the 'fast_schema_evolution'='false' property or remove the default " +
+                                        "value for column '" + column.getName() + "'");
+                    }
+                }
+            }
+        }
     }
 }

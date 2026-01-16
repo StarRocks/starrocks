@@ -31,15 +31,15 @@ using DecimalTestCase = std::tuple<std::string, std::string, std::string>;
 using DecimalTestCaseArray = std::vector<DecimalTestCase>;
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
-                              int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
+                                     int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     using LhsCppType = RunTimeCppType<LhsType>;
     using LhsColumnType = RunTimeColumnType<LhsType>;
 
     using RhsCppType = RunTimeCppType<RhsType>;
     using RhsColumnType = RunTimeColumnType<RhsType>;
 
-    Columns columns;
+    MutableColumns columns;
     columns.reserve(2);
     auto lhs_column = LhsColumnType::create(lhs_precision, lhs_scale);
     auto rhs_column = RhsColumnType::create(rhs_precision, rhs_scale);
@@ -78,15 +78,15 @@ Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_pr
 }
 
 template <LogicalType Type>
-Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
-                              int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
+                                     int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_vector_vector<Type, Type>(test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                              front_fill_size, rear_fill_size);
 }
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
-                             int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                    int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     auto& lhs_datum = std::get<0>(test_case);
     auto& rhs_datum = std::get<1>(test_case);
     using LhsCppType = RunTimeCppType<LhsType>;
@@ -94,7 +94,7 @@ Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision
     using RhsCppType = RunTimeCppType<RhsType>;
     using RhsColumnType = RunTimeColumnType<RhsType>;
 
-    Columns columns;
+    MutableColumns columns;
     columns.reserve(2);
 
     auto lhs_column = LhsColumnType::create(lhs_precision, lhs_scale);
@@ -121,36 +121,36 @@ Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision
         rhs_data[i] = RhsCppType(0);
     }
     lhs_column->resize(1);
-    columns.push_back(ConstColumn::create(std::move(lhs_column), num_rows));
+    columns.emplace_back(ConstColumn::create(std::move(lhs_column), num_rows));
     columns.emplace_back(std::move(rhs_column));
     return columns;
 }
 
 template <LogicalType Type>
-Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
-                             int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                    int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_const_vector<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                             front_fill_size, rear_fill_size);
 }
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
-                             int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                    int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     DecimalTestCase const_vector_test_case = {std::get<1>(test_case), std::get<0>(test_case), std::get<2>(test_case)};
     auto const_vector_columns =
             prepare_const_vector<RhsType, LhsType>(const_vector_test_case, rhs_precision, rhs_scale, lhs_precision,
                                                    lhs_scale, front_fill_size, rear_fill_size);
-    return Columns{const_vector_columns[1], const_vector_columns[0]};
+    return ColumnHelper::to_mutable_columns({std::move(const_vector_columns[1]), std::move(const_vector_columns[0])});
 }
 
 template <LogicalType Type>
-Columns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
-                             int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                    int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_vector_const<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                             front_fill_size, rear_fill_size);
 }
 
-ColumnPtr add_null_column(ColumnPtr&& column) {
+MutableColumnPtr add_null_column(MutableColumnPtr&& column) {
     auto null_column = NullColumn::create(column->size());
     auto* nulls = &null_column->get_data().front();
     for (int i = 0; i < column->size(); ++i) {
@@ -160,55 +160,59 @@ ColumnPtr add_null_column(ColumnPtr&& column) {
 }
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
-                                      int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                             int rhs_precision, int rhs_scale, size_t front_fill_size,
+                                             size_t rear_fill_size) {
     auto columns = prepare_vector_const<LhsType, RhsType>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                           front_fill_size, rear_fill_size);
-    return Columns{add_null_column(std::move(columns[0])), columns[1]};
+    return ColumnHelper::to_mutable_columns({add_null_column(std::move(columns[0])), std::move(columns[1])});
 }
 
 template <LogicalType Type>
-Columns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
-                                      int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                             int rhs_precision, int rhs_scale, size_t front_fill_size,
+                                             size_t rear_fill_size) {
     return prepare_nullable_vector_const<Type, Type>(test_case, lhs_precision, rhs_scale, rhs_precision, rhs_scale,
                                                      front_fill_size, rear_fill_size);
 }
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
-                                      int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                             int rhs_precision, int rhs_scale, size_t front_fill_size,
+                                             size_t rear_fill_size) {
     auto columns = prepare_const_vector<LhsType, RhsType>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                           front_fill_size, rear_fill_size);
-    return Columns{columns[0], add_null_column(std::move(columns[1]))};
+    return ColumnHelper::to_mutable_columns({std::move(columns[0]), add_null_column(std::move(columns[1]))});
 }
 
 template <LogicalType Type>
-Columns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
-                                      int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
+MutableColumns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                             int rhs_precision, int rhs_scale, size_t front_fill_size,
+                                             size_t rear_fill_size) {
     return prepare_const_nullable_vector<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                      front_fill_size, rear_fill_size);
 }
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test_case, int lhs_precision, int lhs_scale,
-                                                int rhs_precision, int rhs_scale, size_t front_fill_size,
-                                                size_t rear_fill_size) {
+MutableColumns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test_case, int lhs_precision,
+                                                       int lhs_scale, int rhs_precision, int rhs_scale,
+                                                       size_t front_fill_size, size_t rear_fill_size) {
     auto columns = prepare_vector_vector<LhsType, RhsType>(test_case, lhs_precision, lhs_scale, rhs_precision,
                                                            rhs_scale, front_fill_size, rear_fill_size);
-    return Columns{add_null_column(std::move(columns[0])), add_null_column(std::move(columns[1]))};
+    return ColumnHelper::to_mutable_columns({std::move(columns[0]), add_null_column(std::move(columns[1]))});
 }
 
 template <LogicalType Type>
-Columns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test_case, int lhs_precision, int lhs_scale,
-                                                int rhs_precision, int rhs_scale, size_t front_fill_size,
-                                                size_t rear_fill_size) {
+MutableColumns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test_case, int lhs_precision,
+                                                       int lhs_scale, int rhs_precision, int rhs_scale,
+                                                       size_t front_fill_size, size_t rear_fill_size) {
     return prepare_nullable_vector_nullable_vector<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision,
                                                                rhs_scale, front_fill_size, rear_fill_size);
 }
 
 template <LogicalType LhsType, LogicalType RhsType>
-Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
-                            int rhs_scale) {
+MutableColumns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                   int rhs_precision, int rhs_scale) {
     using LhsCppType = RunTimeCppType<LhsType>;
     using LhsColumnType = RunTimeColumnType<LhsType>;
     using RhsCppType = RunTimeCppType<RhsType>;
@@ -225,12 +229,13 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
     auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column.get())->get_data().front();
     DecimalV3Cast::from_string<LhsCppType>(&lhs_data[0], lhs_precision, lhs_scale, lhs_datum.c_str(), lhs_datum.size());
     DecimalV3Cast::from_string<RhsCppType>(&rhs_data[0], rhs_precision, rhs_scale, rhs_datum.c_str(), rhs_datum.size());
-    return Columns{ConstColumn::create(std::move(lhs_column), 1), ConstColumn::create(std::move(rhs_column), 1)};
+    return ColumnHelper::to_mutable_columns(
+            {ConstColumn::create(std::move(lhs_column), 1), ConstColumn::create(std::move(rhs_column), 1)});
 }
 
 template <LogicalType Type>
-Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
-                            int rhs_scale) {
+MutableColumns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
+                                   int rhs_precision, int rhs_scale) {
     return prepare_const_const<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale);
 }
 
@@ -238,7 +243,7 @@ using Func = std::function<ColumnPtr(ColumnPtr const&, ColumnPtr const&)>;
 
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode,
           bool assert_overflow = false>
-void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Columns columns, int result_precision,
+void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, MutableColumns columns, int result_precision,
                                    int result_scale, size_t off, [[maybe_unused]] const std::vector<bool>& overflows) {
     using ColumnWiseOp = UnpackConstColumnDecimalBinaryFunction<Op, overflow_mode>;
     using CppType = RunTimeCppType<ResultType>;
@@ -281,16 +286,16 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         ASSERT_TRUE(!columns[0]->is_constant() || !columns[1]->is_constant());
     }
 
-    ColumnType* decimal_column;
+    const ColumnType* decimal_column;
     if (result->is_nullable()) {
-        auto nullable_column = down_cast<NullableColumn*>(result.get());
+        auto nullable_column = down_cast<const NullableColumn*>(result.get());
         decimal_column = (ColumnType*)ColumnHelper::get_data_column(nullable_column);
     } else {
         decimal_column = ColumnHelper::cast_to_raw<ResultType>(result.get());
     }
     ASSERT_EQ(result_precision, decimal_column->precision());
     ASSERT_EQ(result_scale, decimal_column->scale());
-    CppType* data = &decimal_column->get_data().front();
+    const CppType* data = &decimal_column->get_data().front();
 
     for (auto i = 0; i < test_cases.size(); i++) {
         auto& tc = test_cases[i];
@@ -299,7 +304,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         auto& expect = std::get<2>(tc);
         auto row_idx = i + off;
 
-        CppType& value = data[row_idx];
+        const CppType& value = data[row_idx];
         auto actual = DecimalV3Cast::to_string<CppType>(value, decimal_column->precision(), decimal_column->scale());
         //std::cout << "test#" << i << ": lhs=" << lhs_datum << ", rhs=" << rhs_datum << ", expect=" << expect
         //          << ", actual=" << actual << std::endl;
@@ -325,8 +330,9 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
 
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode,
           bool assert_overflow = false>
-void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray const& test_cases, Columns columns,
-                                                         int result_precision, int result_scale, size_t off,
+void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray const& test_cases,
+                                                         MutableColumns&& columns, int result_precision,
+                                                         int result_scale, size_t off,
                                                          [[maybe_unused]] const std::vector<bool>& overflows) {
     using CppType = RunTimeCppType<ResultType>;
     using ColumnType = RunTimeColumnType<ResultType>;
@@ -335,23 +341,25 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
     ColumnPtr result = nullptr;
     if constexpr (is_add_op<Op> || is_sub_op<Op> || is_mul_op<Op>) {
         using ColumnWiseOp = VectorizedStrictDecimalBinaryFunction<Op, overflow_mode>;
-        result = ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(columns[0], columns[1]);
+        result = ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(std::move(columns[0]),
+                                                                               std::move(columns[1]));
     } else {
         using ColumnWiseOp = VectorizedUnstrictDecimalBinaryFunction<ResultType, Op, overflow_mode>;
-        result = ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(columns[0], columns[1]);
+        result = ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(std::move(columns[0]),
+                                                                               std::move(columns[1]));
     }
 
     ASSERT_TRUE(result.get() != nullptr);
-    ColumnType* decimal_column;
+    const ColumnType* decimal_column;
     if (result->is_nullable()) {
-        auto nullable_column = down_cast<NullableColumn*>(result.get());
+        auto nullable_column = down_cast<const NullableColumn*>(result.get());
         decimal_column = (ColumnType*)ColumnHelper::get_data_column(nullable_column);
     } else {
         decimal_column = ColumnHelper::cast_to_raw<ResultType>(result.get());
     }
     ASSERT_EQ(result_precision, decimal_column->precision());
     ASSERT_EQ(result_scale, decimal_column->scale());
-    CppType* data = &decimal_column->get_data().front();
+    const CppType* data = &decimal_column->get_data().front();
 
     for (auto i = 0; i < test_cases.size(); i++) {
         auto& tc = test_cases[i];
@@ -360,7 +368,7 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
         auto& expect = std::get<2>(tc);
         auto row_idx = i + off;
 
-        CppType& value = data[row_idx];
+        const CppType& value = data[row_idx];
         auto actual = DecimalV3Cast::to_string<CppType>(value, decimal_column->precision(), decimal_column->scale());
         if constexpr (check_overflow<overflow_mode>) {
             if constexpr (assert_overflow) {
@@ -385,10 +393,10 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
-    Columns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                              rhs_scale, 0, 0);
+    MutableColumns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale,
+                                                                     rhs_precision, rhs_scale, 0, 0);
     test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
-            test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
+            test_cases, std::move(columns), result_precision, result_scale, 0, std::vector<bool>());
 }
 
 template <LogicalType Type, typename Op, OverflowMode overflow_mode>
@@ -402,10 +410,10 @@ template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, type
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
-    Columns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale, rhs_precision,
-                                                              rhs_scale, 0, 0);
+    MutableColumns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale,
+                                                                     rhs_precision, rhs_scale, 0, 0);
     test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode, true>(
-            test_cases, columns, result_precision, result_scale, 0, overflows);
+            test_cases, std::move(columns), result_precision, result_scale, 0, overflows);
 }
 
 template <LogicalType Type, typename Op, OverflowMode overflow_mode>
@@ -425,10 +433,10 @@ void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision
     int front_fill_size = rand_int(gen);
     int rear_fill_size = rand_int(gen);
     for (auto& tc : test_cases) {
-        Columns columns = prepare_const_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
-                                                                 front_fill_size, rear_fill_size);
+        MutableColumns columns = prepare_const_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
+                                                                        rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                DecimalTestCaseArray{tc}, std::move(columns), result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
@@ -449,10 +457,10 @@ void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision
     int front_fill_size = rand_int(gen);
     int rear_fill_size = rand_int(gen);
     for (auto& tc : test_cases) {
-        Columns columns = prepare_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
-                                                                 front_fill_size, rear_fill_size);
+        MutableColumns columns = prepare_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
+                                                                        rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                DecimalTestCaseArray{tc}, std::move(columns), result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
@@ -468,9 +476,10 @@ template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, type
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
     for (auto& tc : test_cases) {
-        Columns columns = prepare_const_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale);
+        MutableColumns columns =
+                prepare_const_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale);
         test_decimal_binary_functions<LhsType, RhsType, ResultType, Op, overflow_mode>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, 0, std::vector<bool>());
+                DecimalTestCaseArray{tc}, std::move(columns), result_precision, result_scale, 0, std::vector<bool>());
     }
 }
 
@@ -490,10 +499,10 @@ void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_
     int front_fill_size = rand_int(gen);
     int rear_fill_size = rand_int(gen);
     for (auto& tc : test_cases) {
-        Columns columns = prepare_nullable_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
-                                                                          rhs_scale, front_fill_size, rear_fill_size);
+        MutableColumns columns = prepare_nullable_vector_const<LhsType, RhsType>(
+                tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                DecimalTestCaseArray{tc}, std::move(columns), result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
@@ -513,10 +522,10 @@ void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_
     int front_fill_size = rand_int(gen);
     int rear_fill_size = rand_int(gen);
     for (auto& tc : test_cases) {
-        Columns columns = prepare_const_nullable_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
-                                                                          rhs_scale, front_fill_size, rear_fill_size);
+        MutableColumns columns = prepare_const_nullable_vector<LhsType, RhsType>(
+                tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                DecimalTestCaseArray{tc}, std::move(columns), result_precision, result_scale, front_fill_size,
                 std::vector<bool>());
     }
 }
@@ -530,10 +539,10 @@ void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_
 template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, OverflowMode overflow_mode>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
-    Columns columns = prepare_nullable_vector_nullable_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale,
-                                                                                rhs_precision, rhs_scale, 0, 0);
+    MutableColumns columns = prepare_nullable_vector_nullable_vector<LhsType, RhsType>(
+            test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, 0, 0);
     test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, overflow_mode>(
-            test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
+            test_cases, std::move(columns), result_precision, result_scale, 0, std::vector<bool>());
 }
 
 template <LogicalType Type, typename Op, OverflowMode overflow_mode>

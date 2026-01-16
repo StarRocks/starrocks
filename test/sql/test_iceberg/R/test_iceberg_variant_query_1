@@ -1,0 +1,459 @@
+-- name: test_iceberg_variant_query_1
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/warehouse/");
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/warehouse/iceberg_variant > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+-- result:
+-- !result
+CREATE TABLE if not exists variant_test_unified (
+    -- Primary key and test metadata
+    id INT,
+    test_scenario STRING,  -- 'basic_types', 'complex_to_variant', 'variant_to_complex', 'deep_nested'
+    test_case STRING,
+
+    -- ========================================
+    -- Basic types columns (for basic type <-> VARIANT tests)
+    -- ========================================
+    int_val INT,
+    bigint_val BIGINT,
+    float_val FLOAT,
+    double_val DOUBLE,
+    decimal_val DECIMAL(10, 2),
+    string_val STRING,
+    boolean_val BOOLEAN,
+
+    -- VARIANT columns from basic types
+    variant_from_int VARIANT,
+    variant_from_bigint VARIANT,
+    variant_from_float VARIANT,
+    variant_from_double VARIANT,
+    variant_from_decimal VARIANT,
+    variant_from_string VARIANT,
+    variant_from_boolean VARIANT,
+
+    -- ========================================
+    -- Complex types -> VARIANT test columns
+    -- ========================================
+    struct_data STRUCT<
+        user_id INT,
+        profile STRUCT<
+            name STRING,
+            age INT,
+            contact STRUCT<
+                email STRING,
+                phones ARRAY<STRING>,
+                address STRUCT<
+                    city STRING,
+                    zip STRING,
+                    coordinates STRUCT<lat DOUBLE, lng DOUBLE>
+                >
+            >
+        >,
+        preferences MAP<STRING, STRING>,
+        tags ARRAY<STRING>
+    >,
+
+    array_data ARRAY<STRUCT<
+        id INT,
+        name STRING,
+        `values` ARRAY<DOUBLE>,
+        metadata MAP<STRING, STRING>
+    >>,
+
+    map_data MAP<STRING, STRUCT<
+        count INT,
+        percentage DOUBLE,
+        active BOOLEAN,
+        nested MAP<STRING, INT>
+    >>,
+
+    -- ========================================
+    -- VARIANT -> complex types test columns
+    -- ========================================
+    variant_struct_data VARIANT,
+    variant_array_data VARIANT,
+    variant_map_data VARIANT,
+    variant_simple_struct VARIANT,
+    variant_simple_array VARIANT,
+    variant_simple_map VARIANT,
+
+    -- ========================================
+    -- Deep nested VARIANT for path extraction
+    -- ========================================
+    variant_deep_nested VARIANT
+
+) PROPERTIES (
+    'format-version' = '3'  
+);
+-- result:
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00000-0-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00001-1-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00002-2-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00003-3-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00004-4-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00005-5-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00006-6-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00007-7-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00008-8-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_test_unified execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/variant_query_1/data/00009-9-3f040690-719d-4a7c-aa99-f1ce04647eb9-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+SELECT '=== Test 1: Basic Type <-> VARIANT Bidirectional Casting ===' as test_section;
+-- result:
+=== Test 1: Basic Type <-> VARIANT Bidirectional Casting ===
+-- !result
+SELECT
+    id,
+    test_case,
+
+    -- INT
+    int_val as original_int,
+    CAST(int_val AS DECIMAL(22,8)) as original_int_dec,
+    variant_from_int,
+    get_variant_int(variant_from_int, '$') as extracted_int,
+    CAST(variant_query(variant_from_int, '$') AS DECIMAL(22,8)) as extracted_int_dec,
+    get_variant_double(variant_from_int, '$') as extracted_int_dec_double,
+
+    -- BIGINT
+    bigint_val as original_bigint,
+    CAST(bigint_val AS DECIMAL(22,8)) as original_bigint_dec,
+    get_variant_int(variant_from_bigint, '$') as extracted_bigint,
+    CAST(variant_query(variant_from_bigint, '$') AS DECIMAL(22,8)) as extracted_bigint_dec,
+    get_variant_double(variant_from_bigint, '$') as extracted_bigint_dec2,
+
+    -- FLOAT
+    float_val as original_float,
+    CAST(float_val AS DECIMAL(22,8)) as original_float_dec,
+    CAST(variant_query(variant_from_float, '$') AS DECIMAL(22,8)) as extracted_float_dec,
+    get_variant_double(variant_from_float, '$') as extracted_float_dec2,
+
+    -- DOUBLE
+    double_val as original_double,
+    CAST(double_val AS DECIMAL(22,8)) as original_double_dec,
+    CAST(variant_query(variant_from_double, '$') AS DECIMAL(22,8)) as extracted_double_dec,
+    get_variant_double(variant_from_double, '$') as extracted_double_dec2,
+
+    -- DECIMAL
+    decimal_val as original_decimal,
+    CAST(decimal_val AS DECIMAL(22,8)) as original_decimal_dec,
+    variant_from_decimal,
+    CAST(variant_query(variant_from_decimal, '$') AS DECIMAL(22,8)) as extracted_decimal_from_variant,
+    get_variant_double(variant_from_decimal, '$') as extracted_decimal_from_variant2,
+
+    -- STRING / BOOLEAN (keep originals and extractions)
+    string_val as original_string,
+    get_variant_string(variant_from_string, '$') as extracted_string,
+    boolean_val as original_boolean,
+    CAST(variant_query(variant_from_boolean, '$') AS BOOLEAN) as extracted_boolean
+FROM variant_test_unified
+WHERE test_scenario = 'basic_types'
+ORDER BY id;
+-- result:
+1	positive_values	100	100.00000000	100	100	100.00000000	100.0	1000000	1000000.00000000	1000000	1000000.00000000	1000000.0	3.14	3.14000010	3.14000000	3.14	2.718281828	2.71828183	2.71828183	2.718281828	123.45	123.45000000	123.45	123.45000000	123.45	hello	hello	1	1
+2	negative_values	-50	-50.00000000	-50	-50	-50.00000000	-50.0	-500000	-500000.00000000	-500000	-500000.00000000	-500000.0	-1.5	-1.50000000	-1.50000000	-1.5	-0.5	-0.50000000	-0.50000000	-0.5	-99.99	-99.99000000	-99.99	-99.99000000	-99.99	world	world	0	0
+3	zero_and_empty	0	0E-8	0	0	0E-8	0.0	0	0E-8	0	0E-8	0.0	0.0	0E-8	0E-8	0.0	0.0	0E-8	0E-8	0.0	0.00	0E-8	0.0	0E-8	0.0			None	None
+4	all_null	None	None	null	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	null	None	None	None	None	None	None
+-- !result
+SELECT
+    id,
+    test_case,
+    int_val as original_int,
+    CAST(variant_from_int AS INT) as variant_to_int,
+    CASE WHEN CAST(variant_from_int AS INT) = int_val OR (CAST(variant_from_int AS INT) IS NULL AND int_val IS NULL)
+         THEN 'PASS' ELSE 'FAIL' END as int_roundtrip_check,
+    bigint_val as original_bigint,
+    CAST(variant_from_bigint AS BIGINT) as variant_to_bigint,
+    CASE WHEN CAST(variant_from_bigint AS BIGINT) = bigint_val OR (CAST(variant_from_bigint AS BIGINT) IS NULL AND bigint_val IS NULL)
+         THEN 'PASS' ELSE 'FAIL' END as bigint_roundtrip_check,
+    double_val as original_double,
+    CAST(variant_query(variant_from_double,'$') AS DECIMAL(22, 8)) as variant_to_double,
+    CASE WHEN ABS(CAST(variant_query(variant_from_double,'$') AS DECIMAL(22, 8)) - double_val) < 0.0001 OR (CAST(variant_query(variant_from_double,'$') AS DECIMAL(22, 8)) IS NULL AND double_val IS NULL)
+         THEN 'PASS' ELSE 'FAIL' END as double_roundtrip_check,
+    string_val as original_string,
+    CAST(variant_from_string AS STRING) as variant_to_string,
+    CASE WHEN CAST(variant_from_string AS STRING) = string_val OR (CAST(variant_from_string AS STRING) IS NULL AND string_val IS NULL)
+         THEN 'PASS' ELSE 'FAIL' END as string_roundtrip_check,
+    boolean_val as original_boolean,
+    CAST(variant_from_boolean AS BOOLEAN) as variant_to_boolean,
+    CASE WHEN CAST(variant_from_boolean AS BOOLEAN) = boolean_val OR (CAST(variant_from_boolean AS BOOLEAN) IS NULL AND boolean_val IS NULL)
+         THEN 'PASS' ELSE 'FAIL' END as boolean_roundtrip_check
+FROM variant_test_unified
+WHERE test_scenario = 'basic_types'
+ORDER BY id;
+-- result:
+1	positive_values	100	100	PASS	1000000	1000000	PASS	2.718281828	2.71828183	PASS	hello	hello	PASS	1	1	PASS
+2	negative_values	-50	-50	PASS	-500000	-500000	PASS	-0.5	-0.50000000	PASS	world	world	PASS	0	0	PASS
+3	zero_and_empty	0	0	PASS	0	0	PASS	0.0	0E-8	PASS			PASS	None	None	PASS
+4	all_null	None	None	PASS	None	None	PASS	None	None	PASS	None	None	PASS	None	None	PASS
+-- !result
+SELECT '=== Test 3: VARIANT -> STRUCT Casting ===' as test_section;
+-- result:
+=== Test 3: VARIANT -> STRUCT Casting ===
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_simple_struct,
+    -- Cast VARIANT to simple STRUCT
+    CAST(variant_simple_struct AS STRUCT<name STRING, age INT, salary DECIMAL>) as reconstructed_struct
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	{"age":30,"name":"Alice","salary":50000.0}	{"name":"Alice","age":30,"salary":50000}
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_simple_struct,
+    -- Manual field extraction
+    get_variant_string(variant_simple_struct, '$.name') as name,
+    get_variant_int(variant_simple_struct, '$.age') as age,
+    cast(variant_query(variant_simple_struct, '$.salary') as decimal(10, 1)) as salary,
+    -- Verify values match expected
+    CASE WHEN get_variant_string(variant_simple_struct, '$.name') = 'Alice' THEN 'PASS' ELSE 'FAIL' END as name_check,
+    CASE WHEN get_variant_int(variant_simple_struct, '$.age') = 30 THEN 'PASS' ELSE 'FAIL' END as age_check,
+    CASE WHEN cast(variant_query(variant_simple_struct, '$.salary') as decimal(10, 1)) = 50000.0 THEN 'PASS' ELSE 'FAIL' END as salary_check
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	{"age":30,"name":"Alice","salary":50000.0}	Alice	30	50000.0	PASS	PASS	PASS
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_struct_data,
+    get_variant_int(variant_struct_data, '$.user_id') as user_id,
+    get_variant_string(variant_struct_data, '$.profile.name') as profile_name,
+    get_variant_int(variant_struct_data, '$.profile.age') as profile_age
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	{"preferences":{"language":"en","theme":"dark","timezone":"PST"},"profile":{"age":28,"contact":{"address":{"city":"Seattle","coordinates":{"lat":47.6062,"lng":-122.3321},"zip":"98101"},"email":"charlie@example.com","phones":["+1-555-1000","+1-555-1001"]},"name":"Charlie Brown"},"tags":["developer","golang","kubernetes"],"user_id":1001}	1001	Charlie Brown	28
+-- !result
+SELECT '=== Test 5: VARIANT -> ARRAY Casting ===' as test_section;
+-- result:
+=== Test 5: VARIANT -> ARRAY Casting ===
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_simple_array,
+    -- Cast VARIANT to ARRAY
+    CAST(variant_simple_array AS ARRAY<INT>) as reconstructed_array
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	[1,2,3,4,5]	[1,2,3,4,5]
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_simple_array,
+    -- Extract individual elements
+    get_variant_int(variant_simple_array, '$[0]') as elem1,
+    get_variant_int(variant_simple_array, '$[1]') as elem2,
+    get_variant_int(variant_simple_array, '$[2]') as elem3,
+    get_variant_int(variant_simple_array, '$[3]') as elem4,
+    get_variant_int(variant_simple_array, '$[4]') as elem5,
+    -- Verify values
+    CASE WHEN get_variant_int(variant_simple_array, '$[0]') = 1 THEN 'PASS' ELSE 'FAIL' END as elem1_check,
+    CASE WHEN get_variant_int(variant_simple_array, '$[1]') = 2 THEN 'PASS' ELSE 'FAIL' END as elem2_check
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	[1,2,3,4,5]	1	2	3	4	5	PASS	PASS
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_array_data,
+    -- Extract complex array elements
+    get_variant_int(variant_array_data, '$[0].id') as item1_id,
+    get_variant_string(variant_array_data, '$[0].name') as item1_name,
+    CAST(variant_query(variant_array_data, '$[0].values[0]') as DECIMAL(22, 8)) as item1_value1,
+    get_variant_string(variant_array_data, '$[0].metadata.status') as item1_status
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	[{"id":1,"metadata":{"priority":"high","status":"active"},"name":"Alpha","values":[1.1,2.2,3.3]},{"id":2,"metadata":{"priority":"medium","status":"pending"},"name":"Beta","values":[4.4,5.5]},{"id":3,"metadata":{"status":"inactive"},"name":"Gamma","values":[6.6]}]	1	Alpha	1.10000000	active
+-- !result
+SELECT '=== Test 7: VARIANT -> MAP Casting ===' as test_section;
+-- result:
+=== Test 7: VARIANT -> MAP Casting ===
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_simple_map,
+    -- Cast VARIANT to MAP
+    CAST(variant_simple_map AS MAP<STRING, INT>) as reconstructed_map
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	{"key1":10,"key2":20,"key3":30}	{"key1":10,"key2":20,"key3":30}
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_simple_map,
+    -- Extract individual keys
+    get_json_int(variant_simple_map, '$.key1') as key1_value,
+    get_json_int(variant_simple_map, '$.key2') as key2_value,
+    get_json_int(variant_simple_map, '$.key3') as key3_value,
+    -- Verify values
+    CASE WHEN get_json_int(variant_simple_map, '$.key1') = 10 THEN 'PASS' ELSE 'FAIL' END as key1_check,
+    CASE WHEN get_json_int(variant_simple_map, '$.key2') = 20 THEN 'PASS' ELSE 'FAIL' END as key2_check,
+    CASE WHEN get_json_int(variant_simple_map, '$.key3') = 30 THEN 'PASS' ELSE 'FAIL' END as key3_check
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	{"key1":10,"key2":20,"key3":30}	10	20	30	PASS	PASS	PASS
+-- !result
+SELECT '=== Test 8: Deep Nested VARIANT Path Extraction ===' as test_section;
+-- result:
+=== Test 8: Deep Nested VARIANT Path Extraction ===
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_deep_nested,
+    get_variant_string(variant_deep_nested, '$.order.id') as order_id,
+    get_variant_string(variant_deep_nested, '$.order.customer.name') as customer_name,
+    get_variant_string(variant_deep_nested, '$.order.customer.contact.email') as customer_email,
+    get_variant_string(variant_deep_nested, '$.order.customer.contact.address.city') as customer_city,
+    CAST(variant_query(variant_deep_nested, '$.order.customer.contact.address.coordinates.lat') as decimal(22, 8)) latitude,
+    CAST(variant_query(variant_deep_nested, '$.order.customer.contact.address.coordinates.lng') as decimal(22, 8)) longitude,
+    get_variant_string(variant_deep_nested, '$.order.items[0].sku') as item_sku,
+    CAST(variant_query(variant_deep_nested, '$.order.items[0].price') as decimal(22, 8)) as item_price,
+    get_variant_int(variant_deep_nested, '$.order.items[0].quantity') as item_quantity
+FROM variant_test_unified
+WHERE test_scenario = 'deep_nested' AND test_case = 'ecommerce_order';
+-- result:
+9	ecommerce_order	{"order":{"customer":{"contact":{"address":{"city":"Seattle","coordinates":{"lat":47.6062,"lng":-122.4194}},"email":"alice@test.com"},"name":"Alice"},"id":"ORD-2024-001","items":[{"price":99.99,"quantity":2,"sku":"ITEM-001"}]}}	ORD-2024-001	Alice	alice@test.com	Seattle	47.60620000	-122.41940000	ITEM-001	99.99000000	2
+-- !result
+SELECT
+    id,
+    test_case,
+    variant_deep_nested,
+    get_variant_string(variant_deep_nested, '$.user.id') as user_id,
+    get_variant_string(variant_deep_nested, '$.user.profile.name') as user_name,
+    get_variant_int(variant_deep_nested, '$.user.profile.stats.followers') as followers,
+    get_variant_int(variant_deep_nested, '$.user.profile.stats.engagement.likes') as total_likes,
+    get_variant_int(variant_deep_nested, '$.user.profile.stats.engagement.comments') as total_comments,
+    CASE WHEN get_variant_string(variant_deep_nested, '$.user.id') = 'user_123' THEN 'PASS' ELSE 'FAIL' END as user_id_check,
+    CASE WHEN get_variant_int(variant_deep_nested, '$.user.profile.stats.followers') = 1000 THEN 'PASS' ELSE 'FAIL' END as followers_check
+FROM variant_test_unified
+WHERE test_scenario = 'deep_nested' AND test_case = 'user_profile';
+-- result:
+10	user_profile	{"user":{"id":"user_123","profile":{"name":"Bob","stats":{"engagement":{"comments":200,"likes":5000},"followers":1000}}}}	user_123	Bob	1000	5000	200	PASS	PASS
+-- !result
+SELECT '=== Test 9: Bidirectional Roundtrip Validation ===' as test_section;
+-- result:
+=== Test 9: Bidirectional Roundtrip Validation ===
+-- !result
+SELECT
+    id,
+    test_case,
+    -- Verify VARIANT -> basic types casting works
+    CASE WHEN get_variant_string(variant_simple_struct, '$.name') = 'Alice'
+         THEN 'PASS' ELSE 'FAIL' END as variant_struct_name_check,
+    CASE WHEN get_variant_int(variant_simple_struct, '$.age') = 30
+         THEN 'PASS' ELSE 'FAIL' END as variant_struct_age_check,
+    CASE WHEN get_variant_int(variant_simple_array, '$[0]') = 1
+         THEN 'PASS' ELSE 'FAIL' END as variant_array_elem1_check,
+    CASE WHEN get_variant_int(variant_simple_map, '$.key1') = 10
+         THEN 'PASS' ELSE 'FAIL' END as variant_map_key1_check
+FROM variant_test_unified
+WHERE test_scenario = 'variant_to_complex' AND id = 7;
+-- result:
+7	variant_to_complex_types	PASS	PASS	PASS	PASS
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+drop table variant_test_unified force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

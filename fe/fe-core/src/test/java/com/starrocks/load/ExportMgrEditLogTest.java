@@ -20,14 +20,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
@@ -35,6 +34,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -43,19 +46,19 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.when;
 
 public class ExportMgrEditLogTest {
     private ExportMgr masterExportMgr;
     private Database testDatabase;
     private OlapTable testTable;
+    private ConnectContext connectContext;
     private static final String TEST_DB_NAME = "test_db";
     private static final long TEST_DB_ID = 100L;
     private static final long TEST_TABLE_ID = 1000L;
@@ -102,7 +105,7 @@ public class ExportMgrEditLogTest {
         testTable = new OlapTable(TEST_TABLE_ID, TEST_TABLE_NAME, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         testTable.setIndexMeta(indexId, TEST_TABLE_NAME, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
-        testTable.setBaseIndexId(indexId);
+        testTable.setBaseIndexMetaId(indexId);
         testTable.addPartition(partition);
         
         testDatabase.registerTableUnlocked(testTable);
@@ -111,9 +114,10 @@ public class ExportMgrEditLogTest {
         masterExportMgr = GlobalStateMgr.getCurrentState().getExportMgr();
 
         // Setup ConnectContext for addExportJob
-        ConnectContext connectContext = new ConnectContext(null);
+        connectContext = new ConnectContext(null);
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         connectContext.setThreadLocalInfo();
+        connectContext.setDatabase(TEST_DB_NAME);
         
         // Verify ConnectContext is set
         Assertions.assertNotNull(ConnectContext.get());
@@ -206,18 +210,20 @@ public class ExportMgrEditLogTest {
     }
 
     private ExportStmt createMockExportStmt() {
-        ExportStmt stmt = mock(ExportStmt.class);
-        when(stmt.getTblName()).thenReturn(new TableName(TEST_DB_NAME, TEST_TABLE_NAME));
-        when(stmt.getBrokerDesc()).thenReturn(new BrokerDesc("test_broker", Maps.newHashMap()));
-        when(stmt.getColumnSeparator()).thenReturn("\t");
-        when(stmt.getRowDelimiter()).thenReturn("\n");
-        when(stmt.isIncludeQueryId()).thenReturn(true);
-        when(stmt.getProperties()).thenReturn(Maps.newHashMap());
-        when(stmt.getPath()).thenReturn("hdfs://test/path");
-        when(stmt.getFileNamePrefix()).thenReturn("export_");
-        when(stmt.getPartitions()).thenReturn(null);
-        when(stmt.getColumnNames()).thenReturn(null);
+        TableRef tableRef = new TableRef(
+                QualifiedName.of(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        TEST_DB_NAME, TEST_TABLE_NAME)),
+                null, NodePosition.ZERO);
+        BrokerDesc brokerDesc = new BrokerDesc("test_broker", Maps.newHashMap());
+        ExportStmt stmt = new ExportStmt(tableRef, null, "hdfs://test/path", Maps.newHashMap(), brokerDesc);
+        stmt.setPartitions(null);
+        try {
+            Field field = ExportStmt.class.getDeclaredField("fileNamePrefix");
+            field.setAccessible(true);
+            field.set(stmt, "export_");
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException("failed to init export stmt", e);
+        }
         return stmt;
     }
 }
-

@@ -274,7 +274,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException();
     }
 
-    public Optional<String> mayGetDatabaseName() {
+    public Optional<Long> mayGetDatabaseId() {
         return Optional.empty();
     }
 
@@ -310,7 +310,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     public boolean isOlapTable() {
-        return type == TableType.OLAP;
+        return getType() == TableType.OLAP;
     }
 
     public boolean isOlapExternalTable() {
@@ -852,6 +852,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
                 !type.equals(TableType.VIEW) &&
                 !isConnectorView();
+    }
+
+    /**
+     * Get the set of operations supported by this table type.
+     * Subclasses can override this method to define their own supported operations.
+     * By default, tables support read operations.
+     *
+     * @return Set of supported operations
+     */
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ);
+    }
+
+    /**
+     * Check if this table supports the specified operation.
+     *
+     * @param operation The operation to check
+     * @return true if the operation is supported, false otherwise
+     */
+    public boolean supportsOperation(TableOperation operation) {
+        return getSupportedOperations().contains(operation);
     }
 
     public boolean isSupportBackupRestore() {

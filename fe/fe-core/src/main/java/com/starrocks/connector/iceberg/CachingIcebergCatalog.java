@@ -31,6 +31,7 @@ import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
@@ -176,6 +177,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public Map<String, String> getCatalogProperties() {
+        return delegate.getCatalogProperties();
+    }
+
+    @Override
     public List<String> listAllDatabases(ConnectContext connectContext) {
         return delegate.listAllDatabases(connectContext);
     }
@@ -191,10 +197,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public Database getDB(ConnectContext connectContext, String dbName) {
-        if (databases.asMap().containsKey(dbName)) {
-            return databases.getIfPresent(dbName);
+        Database db = databases.getIfPresent(dbName);
+        if (db != null) {
+            return db;
         }
-        Database db = delegate.getDB(connectContext, dbName);
+
+        db = delegate.getDB(connectContext, dbName);
         databases.put(dbName, db);
         return db;
     }
@@ -221,12 +229,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableCacheKey key = new IcebergTableCacheKey(icebergTableName, connectContext);
         try {
             return tables.get(key);
+        } catch (NoSuchTableException e) {
+            throw e;
         } catch (Exception e) {
-            Throwable c = e.getCause();
-            if (c instanceof NoSuchTableException) {
-                throw (NoSuchTableException) c;
-            }
-            throw new StarRocksConnectorException("Load table failed: " + dbName + "." + tableName, c);
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
+            throw new StarRocksConnectorException(String.format("Failed to get iceberg table %s.%s.%s. %s",
+                    catalogName, dbName, tableName, errMsg), e);
         }
     }
 
@@ -326,10 +335,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public synchronized void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         IcebergTableCacheKey key = new IcebergTableCacheKey(icebergTableName, ctx);
-        if (tables.getIfPresent(key) == null) {
+        Table cachedTable = tables.getIfPresent(key);
+        if (cachedTable == null) {
             partitionCache.invalidate(icebergTableName);
         } else {
-            BaseTable currentTable = (BaseTable) tables.getIfPresent(key);
+            BaseTable currentTable = (BaseTable) cachedTable;
             BaseTable updateTable = (BaseTable) delegate.getTable(ctx, dbName, tableName);
             if (updateTable == null) {
                 invalidateCache(icebergTableName);
@@ -372,7 +382,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         IcebergTableCacheKey keyWithoutSnap = new IcebergTableCacheKey(new IcebergTableName(dbName, tableName), ctx);
-        IcebergTableCacheKey updateKey = new IcebergTableCacheKey(updatedIcebergTableName, ctx);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
         // update tables before refresh partition cache
@@ -439,21 +448,28 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void invalidateTableCache(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
+    }
+
+    @Override
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
-
     }
 
     private void invalidateCache(IcebergTableName key) {
         tables.invalidate(new IcebergTableCacheKey(key, new ConnectContext()));
         // will invalidate all snapshots of this table
         partitionCache.invalidate(key);
-        Set<String> paths = metaFileCacheMap.get(key);
+        tableLatestAccessTime.remove(key);
+        tableLatestRefreshTime.remove(key);
+
+        Set<String> paths = metaFileCacheMap.remove(key);
         if (paths != null && !paths.isEmpty()) {
             dataFileCache.invalidateAll(paths);
             deleteFileCache.invalidateAll(paths);
-            paths.clear();
         }
     }
 

@@ -221,6 +221,12 @@ public class JsonPathRewriteTest extends PlanTestBase {
                         "select get_json_string(c2, 'f1') from extend_predicate3",
                         "get_json_string(2: c2, 'f1')",
                         ""
+                ),
+                // [22] With lambda function
+                Arguments.of(
+                        "SELECT * FROM extend_predicate " +
+                                "WHERE any_match(x -> get_json_double(x, '$.longitude') > 0, CAST(c2 AS ARRAY<JSON>)) ",
+                        "get_json_double", "any_match"
                 )
         );
     }
@@ -377,4 +383,31 @@ public class JsonPathRewriteTest extends PlanTestBase {
         starRocksAssert.dropMaterializedView("test_json_mv");
         starRocksAssert.dropTable("test_json_mv_base");
     }
+
+    /**
+     * Verify that JsonPathRewriteRule uses ColumnId rather than the mutable column name
+     * when constructing extended column access paths for JSON columns that have been renamed.
+     */
+    @Test
+    public void testJsonPathRewriteWithRenamedJsonColumn() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+
+        starRocksAssert.withTable(
+                "create table json_rename (\n" +
+                        "  id int,\n" +
+                        "  j json\n" +
+                        ") properties('replication_num'='1')");
+        try {
+            starRocksAssert.ddl("alter table json_rename rename column j to j_new");
+            String sql = "select get_json_string(j_new, 'f1') from json_rename";
+            String verbosePlan = getVerboseExplain(sql);
+            // The ExtendedColumnAccessPath should still be rooted at the original ColumnId "j"
+            assertContains(verbosePlan, "ExtendedColumnAccessPath: [/j(varchar)/f1(varchar)]");
+        } finally {
+            starRocksAssert.dropTable("json_rename");
+        }
+    }
 }
+

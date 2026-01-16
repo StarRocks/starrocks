@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
@@ -49,6 +48,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -387,7 +387,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 RelationId.of(queryStatement.getQueryRelation()).hashCode(),
                 node.getName().getValue().toLowerCase(),
                 getColumnNames(node.getColumnNames()),
-                queryStatement);
+                queryStatement,
+                false,
+                true);
     }
 
     public List<String> getColumnNames(Optional<List<Identifier>> columnNames) {
@@ -499,8 +501,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 if (!arg.getChildren().isEmpty()) {
                     // need to covert array[row(1,2), row(3,4))] to array[1,3], array[2,4], so SR could unnest it
                     Expr firstArrayElement = arg.getChildren().get(0);
-                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFnName().
-                            getFunction().equalsIgnoreCase("row")) {
+                    if (firstArrayElement instanceof FunctionCallExpr && ((FunctionCallExpr) firstArrayElement).getFunctionName().
+                            equalsIgnoreCase("row")) {
                         List<List<Expr>> items = new ArrayList<>();
                         for (Expr row : arg.getChildren()) {
                             int rowIndex = 0;
@@ -1081,9 +1083,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
-        FunctionName fnName = FunctionName.createFnName("coalesce");
-
-        return new FunctionCallExpr(fnName, new FunctionParams(false, children));
+        return new FunctionCallExpr("coalesce", new FunctionParams(false, children));
     }
 
     @Override
@@ -1324,7 +1324,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String tableName = parts.get(parts.size() - 1);
         List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
                 map(Identifier::getValue).collect(Collectors.toList()) : null;
-        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+        QualifiedName qualifiedName = convertQualifiedName(node.getTarget());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new InsertStmt(tableRef, null,
                 tableName.concat(UUID.randomUUID().toString()), columnAliases,
                 (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }
@@ -1339,9 +1341,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         }
 
+        QualifiedName qualifiedName = convertQualifiedName(node.getName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         CreateTableStmt createTableStmt = new CreateTableStmt(node.isNotExists(),
                 false,
-                qualifiedNameToTableName(convertQualifiedName(node.getName())),
+                tableRef,
                 null,
                 "",
                 null,
@@ -1360,8 +1364,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
         boolean ifExists = node.isExists();
-        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
-        return new DropTableStmt(ifExists, tableName, false, true);
+        QualifiedName qualifiedName = convertQualifiedName(node.getTableName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new DropTableStmt(ifExists, tableRef, false, true);
     }
 
     public Type getType(DataType dataType) {

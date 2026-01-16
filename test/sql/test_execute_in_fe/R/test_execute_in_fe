@@ -1,4 +1,4 @@
--- name: test_execute_in_fe
+-- name: test_execute_in_fe @no_arrow_flight_sql
 set enable_constant_execute_in_fe = true;
 -- result:
 -- !result

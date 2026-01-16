@@ -53,15 +53,15 @@ public class TasksSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TASK_NAME", TypeFactory.createVarchar(64))
+                        .column("TASK_NAME", TypeFactory.createVarcharType(64))
                         .column("CREATE_TIME", DateType.DATETIME)
-                        .column("SCHEDULE", TypeFactory.createVarchar(64))
-                        .column("CATALOG", TypeFactory.createVarchar(64))
-                        .column("DATABASE", TypeFactory.createVarchar(64))
-                        .column("DEFINITION", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("SCHEDULE", TypeFactory.createVarcharType(64))
+                        .column("CATALOG", TypeFactory.createVarcharType(64))
+                        .column("DATABASE", TypeFactory.createVarcharType(64))
+                        .column("DEFINITION", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXPIRE_TIME", DateType.DATETIME)
                         .column("PROPERTIES", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("CREATOR", TypeFactory.createVarchar(64))
+                        .column("CREATOR", TypeFactory.createVarcharType(64))
                         .build(), TSchemaTableType.SCH_TASKS);
     }
 

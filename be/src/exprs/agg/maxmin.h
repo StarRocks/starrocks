@@ -49,7 +49,7 @@ struct MaxAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -83,7 +83,7 @@ struct MinAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
+    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -238,8 +238,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -335,8 +335,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        *dst = src[0];
+                                     MutableColumnPtr& dst) const override {
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

@@ -125,7 +125,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_cloud(si
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        scan_ranges.push_back(param);
+        scan_ranges.emplace_back(param);
     }
 
     return scan_ranges;
@@ -202,7 +202,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_hive(siz
 
         TScanRangeParams param;
         param.__set_scan_range(scan_range);
-        scan_ranges.push_back(param);
+        scan_ranges.emplace_back(param);
     }
 
     return scan_ranges;
@@ -274,7 +274,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_stream_l
     params->src_tuple_id = 0;
     for (int i = 0; i < types.size(); i++) {
         params->expr_of_dest_slot[i] = TExpr();
-        params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
+        params->expr_of_dest_slot[i].nodes.emplace_back();
         params->expr_of_dest_slot[i].nodes[0].__set_type(types[i].to_thrift());
         params->expr_of_dest_slot[i].nodes[0].__set_node_type(TExprNodeType::SLOT_REF);
         params->expr_of_dest_slot[i].nodes[0].__set_is_nullable(true);

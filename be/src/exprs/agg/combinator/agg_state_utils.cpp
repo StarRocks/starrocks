@@ -54,9 +54,9 @@ const AggStateDesc* AggStateUtils::get_agg_state_desc(const AggregateFunction* a
 
 // Get the aggregate state function according to the agg_state_desc and function name.
 // If the function is not an aggregate state function, return nullptr.
-StatusOr<AggregateFunctionPtr> AggStateUtils::get_agg_state_function(const AggStateDesc& agg_state_desc,
-                                                                     const std::string& func_name,
-                                                                     const std::vector<TypeDescriptor>& arg_types) {
+StatusOr<const AggregateFunction*> AggStateUtils::get_agg_state_function(const AggStateDesc& agg_state_desc,
+                                                                         const std::string& func_name,
+                                                                         const std::vector<TypeDescriptor>& arg_types) {
     auto nested_func_name = agg_state_desc.get_func_name();
     bool is_merge_or_union = AggStateUtils::is_agg_state_merge(nested_func_name, func_name) ||
                              AggStateUtils::is_agg_state_union(nested_func_name, func_name);
@@ -72,7 +72,7 @@ StatusOr<AggregateFunctionPtr> AggStateUtils::get_agg_state_function(const AggSt
             return Status::InternalError(fmt::format(
                     "Merge combinator function {} fails to get the nested agg func: {}", func_name, nested_func_name));
         }
-        return std::make_shared<AggStateMerge>(std::move(agg_state_desc), nested_func);
+        return new AggStateMerge(std::move(agg_state_desc), nested_func);
     } else if (AggStateUtils::is_agg_state_union(nested_func_name, func_name)) {
         // aggregate _union combinator
         auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
@@ -80,7 +80,7 @@ StatusOr<AggregateFunctionPtr> AggStateUtils::get_agg_state_function(const AggSt
             return Status::InternalError(fmt::format(
                     "Union combinator function {} fails to get the nested agg func: {}", func_name, nested_func_name));
         }
-        return std::make_shared<AggStateUnion>(std::move(agg_state_desc), nested_func);
+        return new AggStateUnion(std::move(agg_state_desc), nested_func);
     } else if (AggStateUtils::is_agg_state_combine(nested_func_name, func_name)) {
         // aggregate _combine combinator
         auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
@@ -89,7 +89,7 @@ StatusOr<AggregateFunctionPtr> AggStateUtils::get_agg_state_function(const AggSt
                     fmt::format("Combine combinator function {} fails to get the nested agg func: {}", func_name,
                                 nested_func_name));
         }
-        return std::make_shared<AggStateCombine>(std::move(agg_state_desc), nested_func);
+        return new AggStateCombine(std::move(agg_state_desc), nested_func);
     } else if (AggStateUtils::is_agg_state_if(nested_func_name, func_name)) {
         // aggregate _if combinator
         auto* nested_func = AggStateDesc::get_agg_state_func(&agg_state_desc);
@@ -97,7 +97,7 @@ StatusOr<AggregateFunctionPtr> AggStateUtils::get_agg_state_function(const AggSt
             return Status::InternalError(fmt::format("if combinator function {} fails to get the nested agg func: {}",
                                                      func_name, nested_func_name));
         }
-        return std::make_shared<AggStateIf>(std::move(agg_state_desc), nested_func);
+        return new AggStateIf(std::move(agg_state_desc), nested_func);
     } else {
         return Status::InternalError(fmt::format("Agg function combinator is not implemented: {}", func_name));
     }

@@ -19,6 +19,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -65,6 +66,7 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.NullOrder;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -85,6 +87,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -102,6 +105,12 @@ public class IcebergTable extends Table {
     public static final String SPEC_ID = "$spec_id";
     public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
     public static final String ROW_ID = "_row_id";
+    public static final String FILE_PATH = MetadataColumns.FILE_PATH.name();
+    public static final String ROW_POSITION = MetadataColumns.ROW_POSITION.name();
+
+    public static final Set<String> ICEBERG_META_COLUMNS = Set.of(
+            DATA_SEQUENCE_NUMBER, SPEC_ID, ROW_ID, FILE_PATH, ROW_POSITION
+    );
 
     private String catalogName;
     @SerializedName(value = "dn")
@@ -435,11 +444,11 @@ public class IcebergTable extends Table {
                                     throw new SemanticException("Unsupported function call %s", expr.toString());
                                 }
                                 Function builtinFunction = ExprUtils.getBuiltinFunction(
-                                        ((FunctionCallExpr) expr).getFnName().getFunction(),
+                                        ((FunctionCallExpr) expr).getFunctionName(),
                                         args, Function.CompareMode.IS_IDENTICAL);
                                 ((FunctionCallExpr) expr).setFn(builtinFunction);
 
-                                if (((FunctionCallExpr) expr).getFnName().getFunction().equals(
+                                if (((FunctionCallExpr) expr).getFunctionName().equals(
                                         FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + "truncate")) {
                                     ((FunctionCallExpr) expr).setType(column.getType());
                                 } else {
@@ -532,6 +541,11 @@ public class IcebergTable extends Table {
                 .equalsIgnoreCase(PARQUET_FORMAT);
     }
 
+    public boolean isParquetFormat() {
+        return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
+                .equalsIgnoreCase(PARQUET_FORMAT);
+    }
+
     @Override
     public boolean supportPreCollectMetadata() {
         return true;
@@ -576,6 +590,12 @@ public class IcebergTable extends Table {
             case ADD_FILES -> AddFilesProcedure.getInstance();
             default -> throw new StarRocksConnectorException("Unsupported table operation %s", op);
         };
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.INSERT, TableOperation.DROP, TableOperation.CREATE,
+                TableOperation.ALTER, TableOperation.DELETE);
     }
 
     public void setIcebergMetricsReporter(IcebergMetricsReporter reporter) {

@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <iomanip>
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -32,6 +35,8 @@
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -50,7 +55,10 @@ public:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        remove_test_dir_ignore_error();
+        Segment::toggle_batch_update_cache_mode(true);
+    }
 
 protected:
     constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader";
@@ -99,7 +107,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -108,9 +116,9 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -119,6 +127,16 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     // write tablet metadata
     _tablet_metadata->set_version(2);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    int invocation_counter = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("lake::TabletManager::update_segment_cache_size",
+                                          [&](void* arg) { ++invocation_counter; });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("lake::TabletManager::update_segment_cache_size");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_EQ(0, invocation_counter);
 
     // test reader
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
@@ -140,6 +158,11 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
             EXPECT_EQ(v1[i], read_chunk_ptr->get(k0.size() + i)[1].get_int32());
         }
     }
+    // With the fix: 2 segments, 2 calls per segment: 1 for _open, 1 for initializing column iterators
+    // total = 2 segments × (1 segment open + 1 column init) = 4 calls
+    // Without the fix: there would be 6 invocations: 2 segment opens and 2 column inits per segment.
+    // total = 2 segments × (1 segment open + 2 column inits) = 6 calls
+    ASSERT_EQ(4, invocation_counter);
 
     read_chunk_ptr->reset();
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
@@ -211,7 +234,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -220,9 +243,9 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -240,7 +263,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(1, files.size());
 
         // add rowset metadata
@@ -249,9 +272,9 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_id(2);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -348,7 +371,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -357,9 +380,9 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -501,7 +524,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         ASSERT_OK(writer->write(chunk0));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(1, files.size());
 
         // add rowset metadata
@@ -510,9 +533,9 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -628,7 +651,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -638,9 +661,9 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -658,7 +681,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(1, files.size());
 
         // add rowset metadata
@@ -668,9 +691,9 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -827,7 +850,7 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         ASSERT_OK(writer->write(chunk1));
         ASSERT_OK(writer->finish());
 
-        auto files = writer->files();
+        const auto& files = writer->segments();
         ASSERT_EQ(2, files.size());
 
         // add rowset metadata
@@ -836,9 +859,9 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         auto* segs_size = rowset->mutable_segment_size();
-        for (auto& file : writer->files()) {
-            segs->Add(std::move(file.path));
-            segs_size->Add(std::move(file.size.value()));
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
         }
 
         writer->close();
@@ -876,4 +899,234 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     reader->close();
 }
 
+class LakeDuplicateTablet10kColumnReaderTest : public TestBase {
+public:
+    LakeDuplicateTablet10kColumnReaderTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS, kColumnSize);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override {
+        remove_test_dir_ignore_error();
+        Segment::toggle_batch_update_cache_mode(true);
+    }
+
+    void test_10k_column_read_perf_body(bool enable_batch_update, size_t* time_costs);
+
+    StatusOr<std::pair<size_t, size_t>> testOneRoundGetColumnInit(const Chunk& chunk, size_t num_rows,
+                                                                  size_t num_columns);
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_duplicate_lake_tablet_reader_10k";
+    constexpr static const size_t kColumnSize = 10000;
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+};
+
+static Chunk generate_chunk(SchemaPtr schema, size_t num_rows, size_t num_columns) {
+    Columns columns;
+    columns.reserve(num_columns);
+    for (int i = 0; i < num_columns; ++i) {
+        auto col = Int32Column::create();
+        std::vector<int> col_v;
+        col_v.reserve(num_rows);
+        for (int j = 0; j < num_rows; ++j) {
+            col_v.emplace_back(i * 1000 + j);
+        }
+        col->append_numbers(col_v.data(), col_v.size() * sizeof(int));
+        columns.push_back(std::move(col));
+    }
+    return Chunk(std::move(columns), schema);
+}
+
+void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool enable_batch_update,
+                                                                            size_t* time_costs) {
+    Segment::toggle_batch_update_cache_mode(enable_batch_update);
+
+    auto chunk = generate_chunk(_schema, 100, kColumnSize);
+    const int segment_rows = chunk.num_rows();
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    // clear historic rowsets
+    _tablet_metadata->clear_rowsets();
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+
+        const auto& files = writer->segments();
+        ASSERT_EQ(1, files.size());
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+        writer->close();
+    }
+
+    // write tablet metadata
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    int invocation_counter = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("lake::TabletManager::update_segment_cache_size",
+                                          [&](void* arg) { ++invocation_counter; });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("lake::TabletManager::update_segment_cache_size");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_EQ(0, invocation_counter);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams params;
+    ASSERT_OK(reader->open(params));
+
+    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    read_chunk_ptr->reset();
+    ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
+    ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
+    LOG(INFO) << "[BatchUpdateMode=" << enable_batch_update
+              << "] Segment init time cost: " << reader->stats().segment_init_ns << "ns";
+    if (time_costs != nullptr) {
+        *time_costs = reader->stats().segment_init_ns;
+    }
+    if (enable_batch_update) {
+        ASSERT_EQ(2, invocation_counter); // 1 segment open + 1 batch update
+    } else {
+        ASSERT_EQ(1 + kColumnSize, invocation_counter);
+    }
+
+    read_chunk_ptr->reset();
+    ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+    reader->close();
+}
+
+// Perf comparison details (columns=10000): batch=false, time_costs=1334756936ns; batch=true, time_costs=32745137ns. Perf diff times: 40.8x
+TEST_F(LakeDuplicateTablet10kColumnReaderTest, test_10k_column_read_perf) {
+    size_t time_costs_false = 0;
+    size_t time_costs_true = 0;
+    test_10k_column_read_perf_body(false, &time_costs_false);
+    test_10k_column_read_perf_body(true, &time_costs_true);
+    LOG(WARNING) << "Perf comparison details (columns=" << kColumnSize
+                 << "): batch=false, time_costs=" << time_costs_false
+                 << "ns; batch=true, time_costs=" << time_costs_true << "ns. Perf diff times: " << std::setprecision(3)
+                 << (double)time_costs_false / time_costs_true << "x";
+}
+
+StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::testOneRoundGetColumnInit(
+        const Chunk& chunk, size_t num_rows, size_t num_columns) {
+    const int segment_rows = chunk.num_rows();
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    // clear all historic rowsets
+    _tablet_metadata->clear_rowsets();
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        RETURN_IF_ERROR(writer->open());
+        RETURN_IF_ERROR(writer->write(chunk));
+        RETURN_IF_ERROR(writer->finish());
+        const auto& files = writer->segments();
+        EXPECT_EQ(1, files.size());
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+        writer->close();
+    }
+
+    _tablet_metadata->set_version(next_id());
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    int invocation_counter = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("lake::TabletManager::update_segment_cache_size",
+                                          [&](void* arg) { ++invocation_counter; });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("lake::TabletManager::update_segment_cache_size");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    EXPECT_EQ(0, invocation_counter);
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    RETURN_IF_ERROR(reader->prepare());
+    TabletReaderParams params;
+    RETURN_IF_ERROR(reader->open(params));
+
+    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    read_chunk_ptr->reset();
+    RETURN_IF_ERROR(reader->get_next(read_chunk_ptr.get()));
+    EXPECT_EQ(segment_rows, read_chunk_ptr->num_rows());
+    read_chunk_ptr->reset();
+    EXPECT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+    reader->close();
+    return std::make_pair(reader->stats().segment_init_ns, invocation_counter);
+}
+
+// Perf comparison details(Columns=5000): batch=false, time_costs=268474431ns; batch=true, time_costs=13515903ns. Perf diff times: 19.9x
+// This case takes time, disable it by default.
+TEST_F(LakeDuplicateTablet10kColumnReaderTest, DISABLED_test_bench_5kcolumn_init) {
+    constexpr size_t num_columns = 5000;
+    constexpr size_t num_rows = 100;
+    constexpr size_t round = 10;
+    _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS, num_columns);
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    auto chunk = generate_chunk(_schema, num_rows, num_columns);
+
+    size_t total_time_ns_false = 0;
+    Segment::toggle_batch_update_cache_mode(false);
+    {
+        size_t total_invocations = 0;
+        for (int i = 0; i < round; ++i) {
+            auto result = testOneRoundGetColumnInit(chunk, num_rows, num_columns);
+            ASSERT_OK(result.status());
+            auto [time_cost, invocation_counter] = result.value();
+            total_time_ns_false += time_cost;
+            total_invocations += invocation_counter;
+        }
+        LOG(INFO) << "[BatchUpdateMode=false] Done running " << round
+                  << " round, average time cost: " << total_time_ns_false / round
+                  << "ns, average update cache invocation: " << total_invocations / round;
+    }
+    size_t total_time_ns_true = 0;
+    Segment::toggle_batch_update_cache_mode(true);
+    {
+        size_t total_invocations = 0;
+        for (int i = 0; i < round; ++i) {
+            auto result = testOneRoundGetColumnInit(chunk, num_rows, num_columns);
+            ASSERT_OK(result.status());
+            auto [time_cost, invocation_counter] = result.value();
+            total_time_ns_true += time_cost;
+            total_invocations += invocation_counter;
+        }
+        LOG(INFO) << "[BatchUpdateMode=true] Done running " << round
+                  << " round, average time cost: " << total_time_ns_true / round
+                  << "ns, average update cache invocation: " << total_invocations / round;
+    }
+    LOG(WARNING) << "Perf comparison details(Columns=" << num_columns
+                 << "): batch=false, time_costs=" << total_time_ns_false / round
+                 << "ns; batch=true, time_costs=" << total_time_ns_true / round
+                 << "ns. Perf diff times: " << std::setprecision(3) << (double)total_time_ns_false / total_time_ns_true
+                 << "x";
+}
 } // namespace starrocks::lake

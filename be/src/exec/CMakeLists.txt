@@ -21,6 +21,8 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+    fetch_node.cpp
+    lookup_node.cpp
     capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
@@ -37,6 +39,7 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    range_tablet_sink_sender.cpp
     write_combined_txn_log.cpp
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
@@ -81,7 +84,7 @@ set(EXEC_FILES
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
-    spillable_chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter.cpp
     cross_join_node.cpp
     union_node.cpp
     raw_values_node.cpp
@@ -106,8 +109,8 @@ set(EXEC_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    iceberg/iceberg_delete_builder.cpp
-    iceberg/iceberg_delete_file_iterator.cpp
+    range_router.cpp
+    iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
@@ -159,6 +162,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/schema_be_tablet_write_log_scanner.cpp
     schema_scanner/schema_pipe_files.cpp
     schema_scanner/schema_pipes.cpp
     schema_scanner/schema_recyclebin_catalogs.cpp
@@ -178,7 +182,7 @@ set(EXEC_FILES
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
-    schema_scanner/schema_dynamic_tablet_jobs_scanner.cpp
+    schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp
@@ -211,6 +215,7 @@ set(EXEC_FILES
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
+    pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -312,6 +317,12 @@ set(EXEC_FILES
     pipeline/schedule/pipeline_timer.cpp
     pipeline/wait_operator.cpp
     pipeline/runtime_filter_types.cpp
+    pipeline/fetch_task.cpp
+    pipeline/fetch_processor.cpp
+    pipeline/fetch_sink_operator.cpp
+    pipeline/fetch_source_operator.cpp
+    pipeline/lookup_request.cpp
+    pipeline/lookup_operator.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp

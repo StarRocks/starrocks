@@ -170,7 +170,7 @@ TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
         Chunk chunk;
         ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
         if (ptr->is_nullable()) {
-            ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
+            ptr = down_cast<const NullableColumn*>(ptr.get())->data_column();
         }
         ASSERT_TRUE(ptr->is_map());
         ASSERT_EQ(ptr->size(), 3);
@@ -217,7 +217,7 @@ TEST_F(VectorizedCaseExprTest, whenSliceCase) {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
             if (ptr->is_nullable()) {
-                ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
+                ptr = down_cast<const NullableColumn*>(ptr.get())->data_column();
             }
             ASSERT_TRUE(ptr->is_timestamp());
 
@@ -270,7 +270,7 @@ TEST_F(VectorizedCaseExprTest, whenDecimalCase) {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
             if (ptr->is_nullable()) {
-                ptr = down_cast<NullableColumn*>(ptr.get())->data_column();
+                ptr = down_cast<const NullableColumn*>(ptr.get())->data_column();
             }
             ASSERT_TRUE(ptr->is_decimal());
 

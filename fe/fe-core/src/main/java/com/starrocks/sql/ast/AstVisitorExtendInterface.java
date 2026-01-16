@@ -17,9 +17,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.DictQueryExpr;
@@ -29,16 +27,12 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
-import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LambdaFunctionExpr;
-import com.starrocks.sql.ast.expression.LargeInPredicate;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.MapExpr;
-import com.starrocks.sql.ast.expression.MultiInPredicate;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.PlaceHolderExpr;
-import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
@@ -235,10 +229,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowCreateRoutineLoadStatement(ShowCreateRoutineLoadStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     default R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -252,12 +242,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     default R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
-
-    default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
 
     default R visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, C context) {
         return visitDDLStatement(statement, context);
@@ -312,14 +296,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- UDF Statement-----------------------------------------------------------
 
-    default R visitShowFunctionsStatement(ShowFunctionsStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitDropFunctionStatement(DropFunctionStmt statement, C context) {
-        return visitDDLStatement(statement, context);
-    }
-
     default R visitCreateFunctionStatement(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -357,14 +333,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowWarningStatement(ShowWarningStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowVariablesStatement(ShowVariablesStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     default R visitShowProcStmt(ShowProcStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -397,23 +365,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    default R visitShowCollationStatement(ShowCollationStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowCharsetStatement(ShowCharsetStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-
-    default R visitShowProcedureStatement(ShowProcedureStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    default R visitShowStatusStatement(ShowStatusStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Authz Statement ----------------------------------------------------
 
     default R visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt statement, C context) {
@@ -426,11 +377,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     default R visitCancelBackupStatement(CancelBackupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-
-    default R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
 
     // ------------------------------- DataCache Management Statement -------------------------------------------------
 
@@ -482,10 +428,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
 
     default R visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, C context) {
         return visitDDLStatement(statement, context);
-    }
-
-    default R visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, C context) {
-        return visitShowStatement(statement, context);
     }
 
     default R visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, C context) {
@@ -545,14 +487,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitDropColumnClause(DropColumnClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitAddPartitionColumnClause(AddPartitionColumnClause clause, C context) {
-        return visitNode(clause, context);
-    }
-
-    default R visitDropPartitionColumnClause(DropPartitionColumnClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -739,27 +673,7 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitBinaryPredicate(BinaryPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitCompoundPredicate(CompoundPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
     default R visitExistsPredicate(ExistsPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitInPredicate(InPredicate node, C context) {
-        return visitPredicate(node, context);
-    }
-
-    default R visitLargeInPredicate(LargeInPredicate node, C context) {
-        return visitInPredicate(node, context);
-    }
-
-    default R visitMultiInPredicate(MultiInPredicate node, C context) {
         return visitPredicate(node, context);
     }
 
@@ -841,10 +755,6 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
     }
 
     default R visitHintNode(HintNode node, C context) {
-        return visitNode(node, context);
-    }
-
-    default R visitSetVarHint(SetVarHint node, C context) {
         return visitNode(node, context);
     }
 

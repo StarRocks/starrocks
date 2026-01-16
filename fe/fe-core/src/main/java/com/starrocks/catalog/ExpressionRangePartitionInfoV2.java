@@ -211,7 +211,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
                 Expr subExpr = castExpr.getChild(0);
                 if (subExpr instanceof FunctionCallExpr) {
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) subExpr;
-                    String functionName = functionCallExpr.getFnName().getFunction();
+                    String functionName = functionCallExpr.getFunctionName();
                     return FunctionSet.FROM_UNIXTIME.equals(functionName)
                             || FunctionSet.FROM_UNIXTIME_MS.equals(functionName);
                 }
@@ -226,7 +226,7 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         }
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
             return FunctionSet.STR2DATE.equals(functionName);
         }
         return false;

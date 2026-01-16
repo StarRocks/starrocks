@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -30,6 +29,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -95,7 +95,7 @@ public class RoutineLoadMgrEditLogTest {
         OlapTable olapTable = new OlapTable(tableId, tableName, columns, KeysType.DUP_KEYS,
                 partitionInfo, distributionInfo);
         olapTable.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
-        olapTable.setBaseIndexId(indexId);
+        olapTable.setBaseIndexMetaId(indexId);
         olapTable.addPartition(partition);
         
         // Register table to database

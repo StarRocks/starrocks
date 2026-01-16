@@ -219,7 +219,11 @@ Ret type_dispatch_predicate(LogicalType ltype, bool assert, Functor fun, Args...
             CHECK(false) << "Unknown type: " << ltype;
             __builtin_unreachable();
         } else {
-            return Ret{};
+            if constexpr (std::is_void_v<Ret>) {
+                return;
+            } else {
+                return Ret{};
+            }
         }
     }
 }

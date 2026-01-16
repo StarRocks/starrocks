@@ -23,7 +23,6 @@ set(UTIL_FILES
   arrow/starrocks_column_to_arrow.cpp
   arrow/utils.cpp
   await.cpp
-  bfd_parser.cpp
   base85.cpp
   bloom_filter.cpp
   block_split_bloom_filter.cpp
@@ -116,10 +115,12 @@ set(UTIL_FILES
   internal_service_recoverable_stub.cpp
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
-  variant_util.cpp
+  variant_converter.cpp
+  variant_encoder.cpp
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp
+  variant.cpp
 )
 
 ADD_BE_LIB(Util

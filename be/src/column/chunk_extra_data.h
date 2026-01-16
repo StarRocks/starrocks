@@ -47,7 +47,8 @@ public:
     void filter(const Buffer<uint8_t>& selection);
     void filter_range(const Buffer<uint8_t>& selection, size_t from, size_t to);
 
-    ChunkExtraColumnsDataPtr clone_empty(size_t size) const;
+    ChunkExtraDataPtr clone_empty(size_t size) const override;
+    ChunkExtraDataPtr clone() const override;
 
     void append(const ChunkExtraColumnsData& src, size_t offset, size_t count);
     void append_selective(const ChunkExtraColumnsData& src, const uint32_t* indexes, uint32_t from, uint32_t size);

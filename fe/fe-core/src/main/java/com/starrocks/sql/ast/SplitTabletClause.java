@@ -22,28 +22,28 @@ import java.util.Map;
 
 public class SplitTabletClause extends AlterTableClause {
 
-    private final PartitionNames partitionNames;
+    private final PartitionRef partitionNames;
 
     private final TabletList tabletList;
 
     private final Map<String, String> properties;
 
-    private long dynamicTabletSplitSize;
+    private long tabletReshardTargetSize;
 
     public SplitTabletClause() {
         this(null, null, null);
-        this.dynamicTabletSplitSize = Config.dynamic_tablet_split_size;
+        this.tabletReshardTargetSize = Config.tablet_reshard_target_size;
     }
 
     public SplitTabletClause(
-            PartitionNames partitionNames,
+            PartitionRef partitionNames,
             TabletList tabletList,
             Map<String, String> properties) {
         this(partitionNames, tabletList, properties, NodePosition.ZERO);
     }
 
     public SplitTabletClause(
-            PartitionNames partitionNames,
+            PartitionRef partitionNames,
             TabletList tabletList,
             Map<String, String> properties,
             NodePosition pos) {
@@ -53,7 +53,7 @@ public class SplitTabletClause extends AlterTableClause {
         this.properties = properties;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
@@ -65,12 +65,12 @@ public class SplitTabletClause extends AlterTableClause {
         return properties;
     }
 
-    public long getDynamicTabletSplitSize() {
-        return dynamicTabletSplitSize;
+    public long getTabletReshardTargetSize() {
+        return tabletReshardTargetSize;
     }
 
-    public void setDynamicTabletSplitSize(long dynamicTabletSplitSize) {
-        this.dynamicTabletSplitSize = dynamicTabletSplitSize;
+    public void setTabletReshardTargetSize(long tabletReshardTargetSize) {
+        this.tabletReshardTargetSize = tabletReshardTargetSize;
     }
 
     @Override

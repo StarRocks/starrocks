@@ -220,9 +220,10 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
     // For no args function call (pi, e)
     if (result.value()->is_constant() && ptr != nullptr) {
-        result.value()->resize(ptr->num_rows());
+        result.value()->as_mutable_raw_ptr()->resize(ptr->num_rows());
     }
-    RETURN_IF_ERROR(result.value()->unfold_const_children(_type));
+    auto mut_col = result.value()->as_mutable_raw_ptr();
+    RETURN_IF_ERROR(mut_col->unfold_const_children(_type));
     return result;
 }
 

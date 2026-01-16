@@ -25,9 +25,11 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PartitionKeySerializer;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
@@ -319,7 +321,7 @@ public class ExternalOlapTable extends OlapTable {
         long start = System.currentTimeMillis();
 
         state = OlapTableState.valueOf(meta.getState());
-        baseIndexId = meta.getBase_index_id();
+        baseIndexMetaId = meta.getBase_index_id();
         colocateGroup = meta.getColocate_group();
         bfFpp = meta.getBloomfilter_fpp();
 
@@ -383,14 +385,13 @@ public class ExternalOlapTable extends OlapTable {
                     PartitionKey endKey = PartitionKeySerializer.read(input);
                     Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
                     short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
-                    boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
                     TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
                     DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                             thriftDataProperty.getCold_time());
                     // TODO: confirm false is ok
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                     rangePartitionInfo.addPartition(partitionId, tRange.isSetIs_temp() && tRange.isIs_temp(),
-                            range, dataProperty, replicaNum, inMemory);
+                            range, dataProperty, replicaNum, null);
                 }
                 break;
             case UNPARTITIONED:
@@ -400,12 +401,11 @@ public class ExternalOlapTable extends OlapTable {
                         .entrySet()) {
                     long partitionId = entry.getKey();
                     short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
-                    boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
                     TDataProperty thriftDataProperty =
                             singePartitionDesc.getBase_desc().getData_property().get(partitionId);
                     DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                             thriftDataProperty.getCold_time());
-                    partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
+                    partitionInfo.addPartition(partitionId, dataProperty, replicaNum, null);
                 }
                 break;
             default:
@@ -414,8 +414,8 @@ public class ExternalOlapTable extends OlapTable {
         }
         long endOfPartitionBuild = System.currentTimeMillis();
 
-        indexIdToMeta.clear();
-        indexNameToId.clear();
+        indexMetaIdToMeta.clear();
+        indexNameToMetaId.clear();
 
         for (TIndexMeta indexMeta : meta.getIndexes()) {
             List<Column> columns = new ArrayList<>();
@@ -444,7 +444,7 @@ public class ExternalOlapTable extends OlapTable {
                     KeysType.valueOf(indexMeta.getSchema_meta()
                             .getKeys_type()),
                     null);
-            indexIdToMeta.put(index.getIndexId(), index);
+            indexMetaIdToMeta.put(index.getIndexMetaId(), index);
             // TODO(wulei)
             // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
         }
@@ -471,9 +471,7 @@ public class ExternalOlapTable extends OlapTable {
                     defaultDistributionInfo);
 
             PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
-                    partitionMeta.getPartition_name(),
-                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
-                    null);
+                    partitionMeta.getPartition_id()); // TODO(wulei): fix it
             physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
 
             logicalPartition.addSubPartition(physicalPartition);
@@ -507,7 +505,7 @@ public class ExternalOlapTable extends OlapTable {
                     index.addTablet(tablet, tabletMeta, false);
                 }
                 if (indexMeta.getPartition_id() == physicalPartition.getId()) {
-                    if (index.getId() != baseIndexId) {
+                    if (index.getMetaId() != baseIndexMetaId) {
                         physicalPartition.createRollupIndex(index);
                     } else {
                         physicalPartition.setBaseIndex(index);

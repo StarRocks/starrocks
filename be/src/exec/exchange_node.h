@@ -92,7 +92,7 @@ private:
     // our input rows are a prefix of the rows we produce
     RowDescriptor _input_row_desc;
 
-    std::unique_ptr<Chunk> _input_chunk;
+    ChunkUniquePtr _input_chunk;
     bool _is_finished = false;
 
     // True if this is a merging exchange node. If true, GetNext() is delegated to the

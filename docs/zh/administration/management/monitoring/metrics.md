@@ -651,6 +651,18 @@ displayed_sidebar: docs
 - 类型：瞬时值
 - 描述：每个 BE 节点上最高的 Compaction Score。
 
+### starrocks_fe_slow_lock_held_time_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：检测到慢锁时追踪锁持有时间（毫秒）的直方图指标。当锁等待时间超过 `slow_lock_threshold_ms` 配置参数时更新此指标。它追踪检测到慢锁事件时所有锁持有者中的最大锁持有时间。每个指标包括分位数值（0.75、0.95、0.98、0.99、0.999）、`_sum` 和 `_count` 输出。注意：在高竞争情况下，此指标可能无法准确反映确切的锁持有时间，因为指标在等待时间超过阈值时更新，但持有时间可能会继续增加，直到持有者完成操作并释放锁。然而，即使发生死锁，此指标仍然可以更新。
+
+### starrocks_fe_slow_lock_wait_time_ms
+
+- 单位：毫秒
+- 类型：Summary
+- 描述：检测到慢锁时追踪锁等待时间（毫秒）的直方图指标。当锁等待时间超过 `slow_lock_threshold_ms` 配置参数时更新此指标。它准确追踪在锁竞争场景中线程等待获取锁的时间。每个指标包括分位数值（0.75、0.95、0.98、0.99、0.999）、`_sum` 和 `_count` 输出。此指标提供精确的等待时间测量。注意：当发生死锁时无法更新此指标，因此不能用于检测死锁情况。
+
 ### update_compaction_outputs_total
 
 - 单位：个
@@ -1839,3 +1851,97 @@ displayed_sidebar: docs
 - 单位：毫秒
 - 类型：Summary
 - 描述：事务最终确认的延迟，从发布任务完成到事务被标记为 `VISIBLE` 的最终 `finish` 时间。这包括任何最终步骤或所需的确认。
+
+### Merge Commit 指标
+
+这些指标用于跟踪等型批量写入路径中的 merge commit 操作。
+
+#### merge_commit_request_total
+
+- 单位：个
+- 类型：累积值
+- 描述：BE 收到的 merge commit 请求总数。
+
+#### merge_commit_request_bytes
+
+- 单位：字节
+- 类型：累积值
+- 描述：所有 merge commit 请求接收的数据总量。
+
+#### merge_commit_success_total
+
+- 单位：个
+- 类型：累积值
+- 描述：成功完成的 merge commit 请求数。
+
+#### merge_commit_fail_total
+
+- 单位：个
+- 类型：累积值
+- 描述：失败的 merge commit 请求数。
+
+#### merge_commit_pending_total
+
+- 单位：个
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务数量。
+
+#### merge_commit_pending_bytes
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：当前等待执行的 merge commit 任务持有的数据总量。
+
+#### merge_commit_send_rpc_total
+
+- 单位：个
+- 类型：累积值
+- 描述：用于启动 merge commit 的 RPC 请求数。
+
+#### merge_commit_register_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 注册的 stream load pipe 数量。
+
+#### merge_commit_unregister_pipe_total
+
+- 单位：个
+- 类型：累积值
+- 描述：为 merge commit 取消注册的 stream load pipe 数量。
+
+延迟指标会输出百分位序列，例如 `merge_commit_request_latency_99` 和 `merge_commit_request_latency_90`，单位为微秒。端到端延迟遵循以下公式：
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **注意**：在 v3.4.11、v3.5.12 和 v4.0.4 之前，这些延迟指标的单位为纳秒。
+
+#### merge_commit_request
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 请求的端到端处理延迟。
+
+#### merge_commit_pending
+
+- 单位：微秒
+- 类型：Summary
+- 描述：merge commit 任务在执行前等待的时间。
+
+#### merge_commit_wait_plan
+
+- 单位：微秒
+- 类型：Summary
+- 描述：RPC 请求与等待 stream load pipe 可用的合计耗时。
+
+#### merge_commit_append_pipe
+
+- 单位：微秒
+- 类型：Summary
+- 描述：向 stream load pipe 追加数据的耗时。
+
+#### merge_commit_wait_finish
+
+- 单位：微秒
+- 类型：Summary
+- 描述：等待 merge commit 导入完成的耗时。

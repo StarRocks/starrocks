@@ -2,31 +2,48 @@
 
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
 
-create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0} as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_view${uuid0}/iceberg_db/${uuid0}"
+);
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
+ CREATE TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`day_partition` (
+  `k1` int(11) DEFAULT NULL,
+  `ts` datetime DEFAULT NULL
+)
+PARTITION BY day(`ts`);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`day_partition` values (1, '2023-06-01 00:00:00');
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_${uuid0} as select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.day_partition;
 
-create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
-properties ("owner"="alex") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_${uuid0};
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+drop view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_${uuid0};
 
-show create table iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+ CREATE TABLE iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`iceberg_v2_parquet_partitioned_table` (
+  `k1` int(11) DEFAULT NULL,
+  `k2` string DEFAULT NULL,
+  `k3` string DEFAULT NULL
+)
+PARTITION BY (`k3`);
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.`iceberg_v2_parquet_partitioned_table` values (1, 'beijing', 'zhangsan'), (2, 'shanghai', 'lisi');
 
-show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex") as select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0} order by k1;
 
-create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0}
-properties ("owner"="alex", "comment"="this is a test view") as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+show create view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0};
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0} order by k1;
+drop view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0};
 
-show create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0}
+properties ("owner"="alex", "comment"="this is a test view") as select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_with_properties_${uuid0};
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0} order by k1;
+
+show create view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0};
+
+drop view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_with_properties_${uuid0};
 
 create database default_catalog.test_internal_db_${uuid0};
 
@@ -34,35 +51,40 @@ create view if not exists default_catalog.test_internal_db_${uuid0}.test_interna
 
 drop database default_catalog.test_internal_db_${uuid0};
 
-create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} order by k1;
 
-alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+alter view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} add dialect select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
 
-alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+alter view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} add dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
 
-alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} modify dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+alter view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} modify dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} order by k1;
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} order by k1;
 
-alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} set properties ('k1'='v1');
+alter view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0} set properties ('k1'='v1');
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+drop view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_alter_iceberg_view_${uuid0};
 
 -- test iceberg view with CTE
-create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} as
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_cte_${uuid0} as
 with cte as (select 1 as col1) select * from cte;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_cte_${uuid0};
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+drop view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_cte_${uuid0};
 
-create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} as
-with cte as (select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table) select * from cte;
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_cte_${uuid0} as
+with cte as (select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table) select * from cte;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0} order by k1;
+select * from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_cte_${uuid0} order by k1;
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_cte_${uuid0};
+drop view iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.test_iceberg_view_cte_${uuid0};
 
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.day_partition;
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.iceberg_v2_parquet_partitioned_table;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_view${uuid0}/iceberg_db/${uuid0} > /dev/null || echo "exit 0" >/dev/null

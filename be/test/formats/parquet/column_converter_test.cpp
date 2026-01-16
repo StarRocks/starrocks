@@ -60,7 +60,7 @@ protected:
         return scan_range;
     }
 
-    static void check_chunk_values(std::shared_ptr<Chunk>& chunk, const std::string& expected_value) {
+    static void check_chunk_values(ChunkPtr& chunk, const std::string& expected_value) {
         chunk->check_or_die();
         size_t mid = chunk->num_rows() / 2;
         for (size_t i = 0; i < chunk->num_rows(); i++) {

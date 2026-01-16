@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -296,7 +297,7 @@ public abstract class HyperQueryJob {
     public static List<HyperQueryJob> createMultiColumnQueryJobs(ConnectContext context, Database db, Table table,
                                                                  List<List<String>> columnGroups,
                                                                  StatsConstants.AnalyzeType analyzeType,
-                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 List<StatisticsType> statisticsTypes,
                                                                  Map<String, String> properties) {
         List<ColumnStats> columnStats = columnGroups.stream()
                 .map(group -> group.stream()

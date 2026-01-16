@@ -133,3 +133,25 @@ WHERE (t0.v1 + t1.v4) * 2 = (t0.v2 + t1.v5) * 2
 -- result:
 0
 -- !result
+SELECT COUNT(*) FROM t0 JOIN t1 ON t0.v1 = t1.v4  WHERE abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) AND abs(t0.v1 + t1.v4) > 5;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t0 JOIN t1 ON t0.v1 = t1.v4 and abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) AND abs(t0.v1 + t1.v4) > 5;
+-- result:
+0
+-- !result
+SELECT COUNT(*) FROM t0 JOIN t1 WHERE abs(t0.v1 + t1.v4) = abs(t0.v2 + t1.v5) AND abs(t0.v1 + t1.v4) > 5;
+-- result:
+0
+-- !result
+SELECT COUNT(*), abs(t0.v1) FROM t0 LEFT SEMI JOIN t1 ON t0.v1 = t1.v4 where abs(t0.v1) + abs(t0.v2) > 10 AND abs(t0.v1) + abs(t0.v2) < 100 AND abs(t0.v1) > 5 group by abs(t0.v1);
+-- result:
+1	6
+1	7
+1	8
+1	9
+-- !result
+SELECT COUNT(*), abs(t0.v1) FROM t0 LEFT ANTI JOIN t1 ON t0.v1 = t1.v4 where abs(t0.v1) + abs(t0.v2) > 10 AND abs(t0.v1) + abs(t0.v2) < 100 AND abs(t0.v1) > 5 group by abs(t0.v1);
+-- result:
+-- !result

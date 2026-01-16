@@ -425,7 +425,7 @@ public class DecimalV3FunctionAnalyzer {
     public static Function getDecimalV3Function(ConnectContext session,
                                                 FunctionCallExpr node,
                                                 Type[] argumentTypes) {
-        return getDecimalV3Function(session, node.getFnName().getFunction(), node.getParams(),
+        return getDecimalV3Function(session, node.getFunctionName(), node.getParams(),
                 argumentTypes, node.getPos());
     }
 
@@ -573,6 +573,7 @@ public class DecimalV3FunctionAnalyzer {
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
+            case FunctionSet.ARRAY_SORT_LAMBDA:
             case FunctionSet.REVERSE:
             case FunctionSet.ARRAY_INTERSECT:
             case FunctionSet.ARRAY_CONCAT: {

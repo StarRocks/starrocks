@@ -41,6 +41,7 @@ typedef i32 TPlanNodeId
 typedef i32 TTupleId
 typedef i32 TSlotId
 typedef i64 TTableId
+typedef i64 TDatabaseId
 typedef i64 TTabletId
 typedef i64 TVersion
 typedef i64 TVersionHash
@@ -217,6 +218,7 @@ enum TTaskType {
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
+    EXTERNAL_CLUSTER_SNAPSHOT,
     NUM_TASK_TYPE
 }
 
@@ -576,6 +578,12 @@ struct TIcebergColumnStats {
     6: optional map<i32, binary> upper_bounds;
 }
 
+enum TIcebergFileContent {
+    DATA,
+    POSITION_DELETES,
+    EQUALITY_DELETES,
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -585,6 +593,8 @@ struct TIcebergDataFile {
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
     8: optional string partition_null_fingerprint;
+    9: optional TIcebergFileContent file_content;
+    10: optional string referenced_data_file;
 }
 
 struct THiveFileInfo {
@@ -629,10 +639,16 @@ struct TParquetOptions {
     4: optional string version
 }
 
+enum TInfinityType {
+    NONE_INFINITY = 0,
+    MINIMUM = 1,
+    MAXIMUM = 2,
+}
+
 struct TVariant {
     1: optional TTypeDesc type
-    2: optional i64 int_value
-    3: optional string string_value
+    2: optional string value
+    3: optional TInfinityType infinity_type
 }
 
 struct TTuple {

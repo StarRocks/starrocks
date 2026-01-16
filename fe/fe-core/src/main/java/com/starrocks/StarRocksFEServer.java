@@ -43,6 +43,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.failpoint.FailPoint;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
@@ -123,7 +124,9 @@ public class StarRocksFEServer {
             java.util.logging.Logger.getLogger("com.github.benmanes.caffeine").setLevel(java.util.logging.Level.OFF);
 
             // set dns cache ttl
-            java.security.Security.setProperty("networkaddress.cache.ttl", "60");
+            java.security.Security.setProperty("networkaddress.cache.ttl", String.valueOf(Config.dns_cache_ttl_seconds));
+
+            ExtensionManager.getInstance().loadExtensionsFromDir(Config.ext_dir);
 
             RestoreClusterSnapshotMgr.init(starRocksDir + "/conf/cluster_snapshot.yaml", cmdLineOpts.isStartFromSnapshot());
 

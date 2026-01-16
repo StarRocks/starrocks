@@ -34,26 +34,49 @@ public:
 
     std::unique_ptr<ThreadPoolToken> create_token();
 
+    std::unique_ptr<ThreadPoolToken> create_tablet_internal_parallel_merge_token();
+
 private:
-    // ThreadPool for merge.
+    // The _merge_pool is used for executing merge tasks at the tablet level.
+    // For large tablets, tasks within a single tablet are further subdivided,
+    // and the _tablet_internal_parallel_merge_pool is responsible for executing
+    // these internal-tablet sub-tasks.
+    //
+    // The reason these two thread pools are not unified is that tasks in _merge_pool
+    // depend on the completion of tasks in _tablet_internal_parallel_merge_pool.
+    // Merging them into a single pool would create a circular dependency,
+    // leading to potential deadlocks.
     std::unique_ptr<ThreadPool> _merge_pool;
+    // ThreadPool for internal-tablet parallel merge
+    std::unique_ptr<ThreadPool> _tablet_internal_parallel_merge_pool;
+};
+
+// Wrapper for block group with slot index for parallel flush ordering
+// When parallel flush is enabled, multiple memtables flush concurrently to block groups.
+// The slot_idx preserves the original submission order so that blocks can be merged
+// in the correct sequence, ensuring data consistency and version ordering.
+struct BlockGroupPtrWithSlot {
+    spill::BlockGroupPtr block_group;
+    // Slot index assigned when the memtable flush task was submitted.
+    // Used to sort block groups before merging to restore original order.
+    int64_t slot_idx = -1;
 };
 
 class LoadSpillBlockContainer {
 public:
-    void append_block(const spill::BlockPtr& block);
-    void create_block_group();
+    void append_block(spill::BlockGroup* block_group, const spill::BlockPtr& block);
+    spill::BlockGroup* create_block_group(int64_t slot_idx);
     bool empty();
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
-    std::vector<spill::BlockGroup>& block_groups() { return _block_groups; }
+    std::vector<BlockGroupPtrWithSlot>& block_groups() { return _block_groups; }
     size_t total_bytes() const { return _total_bytes; }
 
 private:
     // Mutex for the container.
     std::mutex _mutex;
     // Blocks generated when loading. Each block group contains multiple blocks which are ordered.
-    std::vector<spill::BlockGroup> _block_groups;
+    std::vector<BlockGroupPtrWithSlot> _block_groups;
     // total groups bytes
     size_t _total_bytes = 0;
 };

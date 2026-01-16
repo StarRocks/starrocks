@@ -307,6 +307,7 @@ set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LO
 
 add_library(libxml2 STATIC IMPORTED GLOBAL)
 set_target_properties(libxml2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libxml2.a)
+include_directories(${THIRDPARTY_DIR}/include/libxml2)
 
 add_library(azure-core STATIC IMPORTED GLOBAL)
 set_target_properties(azure-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-core.a)

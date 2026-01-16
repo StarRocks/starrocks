@@ -20,6 +20,7 @@ option java_package = "com.starrocks.proto";
 import "types.proto";
 import "lake_types.proto";
 import "status.proto";
+import "tablet_schema.proto";
 
 option cc_generic_services = true;
 
@@ -39,12 +40,10 @@ message PublishVersionRequest {
     repeated TxnInfoPB txn_infos = 7;
     repeated int64 rebuild_pindex_tablet_ids = 8;
     optional bool enable_aggregate_publish = 9;
-    // Distribution key column physical names (column id)
-    repeated string distribution_columns = 10;
-    // This field is used for 2 cases to specify the dynamic tablets info (not included in tablet_ids):
-    // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_DYNAMIC_TABLET.
+    // This field is used for 2 cases to specify the resharding tablets info (not included in tablet_ids):
+    // 1. The split or merge tablet transaction, in which the txn type in txn_infos is TXN_TABLET_RESHARD.
     // 2. The nornal write transaction but need cross-publish during tablet splitting or merging.
-    optional DynamicTabletsInfoPB dynamic_tablets_info = 11;
+    repeated ReshardingTabletInfoPB resharding_tablet_infos = 10;
 }
 
 message PublishVersionResponse {
@@ -55,6 +54,8 @@ message PublishVersionResponse {
     // Mapping from tablet id to row_nums when the partition is first imported
     map<int64, int64> tablet_row_nums = 4;
     map<int64, TabletMetadataPB> tablet_metas = 5;
+    // New tablet ranges for tablet splitting
+    map<int64, TabletRangePB> tablet_ranges = 6;
 }
 
 message ComputeNodePB {
@@ -102,6 +103,16 @@ message DeleteTxnLogResponse {
     optional StatusPB status = 1;
 }
 
+// Configuration for per-tablet parallel compaction
+message TabletParallelConfig {
+    // Enable parallel compaction within a single tablet
+    optional bool enable_parallel = 1 [default = false];
+    // Maximum number of parallel compaction tasks per tablet
+    optional int32 max_parallel_per_tablet = 2 [default = 3];
+    // Maximum data volume (bytes) per subtask
+    optional int64 max_bytes_per_subtask = 3 [default = 1073741824]; // 1GB
+}
+
 message CompactRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
@@ -111,6 +122,9 @@ message CompactRequest {
     optional bytes encryption_meta = 6;
     optional bool force_base_compaction = 7;
     optional bool skip_write_txnlog = 8;
+    
+    // Configuration for per-tablet parallel compaction
+    optional TabletParallelConfig parallel_config = 13;
 }
 
 message AggregateCompactRequest {
@@ -141,6 +155,16 @@ message CompactStat {
     optional int32 in_queue_time_sec = 52;
 }
 
+// Subtask status for parallel compaction
+message TabletSubtaskStatus {
+    optional int64 tablet_id = 1;
+    optional int32 subtask_id = 2;
+    repeated uint32 input_rowset_ids = 3;
+    optional int64 input_bytes = 4;
+    optional int64 output_bytes = 5;
+    optional StatusPB status = 6;
+}
+
 message CompactResponse {
     repeated int64 failed_tablets = 1;
     // optional int64 execution_time = 2; // ms
@@ -152,6 +176,9 @@ message CompactResponse {
     repeated CompactStat compact_stats = 8;
     optional int64 success_compaction_input_file_size = 9;
     repeated TxnLogPB txn_logs = 10;
+    
+    // Subtask statuses for parallel compaction
+    repeated TabletSubtaskStatus subtask_statuses = 11;
 }
 
 message DropTableRequest {
@@ -170,6 +197,11 @@ message DeleteDataRequest {
     repeated int64 tablet_ids = 1;
     optional int64 txn_id = 2;
     optional DeletePredicatePB delete_predicate = 3;
+    // Schema key identifying the table schema. The delete predicate is generated
+    // based on this schema. This key is used for fast schema evolution v2 during
+    // delete operation, allowing the backend to update tablet metadata schema 
+    // during transaction publishing if needed.
+    optional TableSchemaKeyPB schema_key = 4;
 }
 
 message DeleteDataResponse {
@@ -359,24 +391,57 @@ message VacuumFullResponse {
     optional int64 vacuumed_file_size = 3;
 }
 
-message FindSplitPointRequest {
-    message TabletSplitInfo {
-        optional int64 tablet_id = 1;
-        // How many new tablets should this tablet be split into
-        optional int32 split_count = 2;
-    }
-
-    repeated TabletSplitInfo tablet_split_infos = 1;
+message GetTabletMetadatasRequest {
+    // all tablets in one physical partition
+    repeated int64 tablet_ids = 1;
+    // included
+    optional int64 max_version = 2;
+    // included
+    optional int64 min_version = 3;
+    // whether check missing files, like segment, delete vector, pk index sst, cols file
+    optional bool check_missing_files = 4;
 }
 
-message FindSplitPointResponse {
-    message TabletSplitResult {
-        optional int64 tablet_id = 1;
-        repeated TabletRangePB split_ranges = 2;
-    }
+message TabletMetadataEntry {
+    optional TabletMetadataPB metadata = 1;
+    // segment, delete vector, cols, pk index sst file
+    repeated string missing_files = 2;
+}
 
+message TabletResult {
+    optional int64 tablet_id = 1;
+    // tablet-level status
+    optional StatusPB status = 2;
+    // multi-version tablet metadatas
+    repeated TabletMetadataEntry metadata_entries = 3;
+}
+
+message GetTabletMetadatasResponse {
+    // rpc-level status
     optional StatusPB status = 1;
-    repeated TabletSplitResult tablet_split_results = 2;
+    repeated TabletResult tablet_results = 2;
+}
+
+message RepairTabletMetadataRequest {
+    // all tablet metadatas with the same version in one physical partition
+    repeated TabletMetadataPB tablet_metadatas = 1;
+    // whether enable file bundling
+    optional bool enable_file_bundling = 2;
+    // whether write bundling file
+    // only one node needs to write bundling tablet metadata file for all tablets in one physical partition
+    optional bool write_bundling_file = 3;
+}
+
+message TabletMetadataRepairStatus {
+    optional int64 tablet_id = 1;
+    // tablet-level status
+    optional StatusPB status = 2;
+}
+
+message RepairTabletMetadataResponse {
+    // rpc-level status
+    optional StatusPB status = 1;
+    repeated TabletMetadataRepairStatus tablet_repair_statuses = 2;
 }
 
 service LakeService {
@@ -399,6 +464,7 @@ service LakeService {
     rpc vacuum(VacuumRequest) returns (VacuumResponse);
     rpc vacuum_full(VacuumFullRequest) returns (VacuumFullResponse);
     rpc aggregate_compact(AggregateCompactRequest) returns (CompactResponse);
-    rpc find_split_point(FindSplitPointRequest) returns (FindSplitPointResponse);
+    rpc get_tablet_metadatas(GetTabletMetadatasRequest) returns (GetTabletMetadatasResponse);
+    rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
 }
 

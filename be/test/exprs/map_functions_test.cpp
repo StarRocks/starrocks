@@ -26,8 +26,8 @@ namespace starrocks {
 TypeDescriptor map_type(LogicalType key, LogicalType value) {
     TypeDescriptor type_creator;
     type_creator.type = LogicalType::TYPE_MAP;
-    type_creator.children.emplace_back(TypeDescriptor(key));
-    type_creator.children.emplace_back(TypeDescriptor(value));
+    type_creator.children.emplace_back(key);
+    type_creator.children.emplace_back(value);
     return type_creator;
 }
 
@@ -40,7 +40,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map) {
     input_values_type.type = LogicalType::TYPE_ARRAY;
     input_values_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
-    ColumnPtr input_keys = ColumnHelper::create_column(input_keys_type, true);
+    MutableColumnPtr input_keys = ColumnHelper::create_column(input_keys_type, true);
     // keys:   [[1,2,3], NULL, [4,5], [6,7], NULL, [9]]
     // values: [[a,b,c], [d],   NULL, [f,g], NULL, [h]]
     {
@@ -69,7 +69,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map) {
             input_keys->append_datum(datum);
         }
     }
-    ColumnPtr input_values = ColumnHelper::create_column(input_values_type, true);
+    MutableColumnPtr input_values = ColumnHelper::create_column(input_values_type, true);
     {
         // [a,b,c]
         {
@@ -118,7 +118,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch1) {
     input_values_type.type = LogicalType::TYPE_ARRAY;
     input_values_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
-    ColumnPtr input_keys = ColumnHelper::create_column(input_keys_type, true);
+    MutableColumnPtr input_keys = ColumnHelper::create_column(input_keys_type, true);
     // keys:   [[1,2,3], NULL, [4,5]]
     // values: [[a,b,c], [d],  [h]]
     {
@@ -135,7 +135,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch1) {
             input_keys->append_datum(datum);
         }
     }
-    ColumnPtr input_values = ColumnHelper::create_column(input_values_type, true);
+    MutableColumnPtr input_values = ColumnHelper::create_column(input_values_type, true);
     {
         // [a,b,c]
         {
@@ -166,7 +166,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch2) {
     input_values_type.type = LogicalType::TYPE_ARRAY;
     input_values_type.children.emplace_back(LogicalType::TYPE_VARCHAR);
 
-    ColumnPtr input_keys = ColumnHelper::create_column(input_keys_type, true);
+    MutableColumnPtr input_keys = ColumnHelper::create_column(input_keys_type, true);
     // keys:   [[1,2,3]]
     // values: [[a]]
     {
@@ -176,7 +176,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch2) {
             input_keys->append_datum(datum);
         }
     }
-    ColumnPtr input_values = ColumnHelper::create_column(input_values_type, true);
+    MutableColumnPtr input_values = ColumnHelper::create_column(input_values_type, true);
     {
         // [a]
         {
@@ -191,7 +191,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_mismatch2) {
 PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
-    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
 
     DatumMap map;
     map[(int32_t)1] = (int32_t)11;
@@ -328,7 +328,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
 PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
-    ColumnPtr map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
+    MutableColumnPtr map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
     {
         //   [1->44, 2->55, 4->66]
         //   [2->77, 3->88]
@@ -356,7 +356,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
         map_column_nullable->append_datum(Datum{});
     }
 
-    ColumnPtr map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
+    MutableColumnPtr map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
     {
         //   [1->44, 2->55, 4->66]
         //   [2->77, 3->88]
@@ -390,7 +390,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     // [false]
     // [NULL]
     // [true]
-    ColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
+    MutableColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
     bool_array_not_nullable->append_datum(DatumArray{Datum(), true, false});
     bool_array_not_nullable->append_datum(DatumArray{});
     bool_array_not_nullable->append_datum(DatumArray{false});
@@ -402,7 +402,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     // [false]
     // [null]
     // [false, null]
-    ColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
+    MutableColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     bool_array_nullable->append_datum(DatumArray{Datum(), true, false});
     bool_array_nullable->append_datum(Datum{});
     bool_array_nullable->append_datum(DatumArray{false});
@@ -450,14 +450,14 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
     {
-        UInt32Column::Ptr offsets = UInt32Column::create();
-        Int32Column::Ptr keys_data = Int32Column::create();
-        NullColumn::Ptr keys_null = NullColumn::create();
-        NullableColumn::Ptr keys = NullableColumn::create(keys_data, keys_null);
-        Int32Column::Ptr values_data = Int32Column::create();
-        NullColumn::Ptr values_null = NullColumn::create();
-        NullableColumn::Ptr values = NullableColumn::create(values_data, values_null);
-        MapColumn::Ptr column = MapColumn::create(keys, values, offsets);
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(std::move(keys_data), std::move(keys_null));
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(std::move(values_data), std::move(values_null));
+        auto column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
 
         DatumMap map;
         map[(int32_t)1] = (int32_t)11;
@@ -486,14 +486,14 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
         ASSERT_EQ("{}", res->debug_item(3));
     }
     {
-        UInt32Column::Ptr offsets = UInt32Column::create();
-        BinaryColumn::Ptr keys_data = BinaryColumn::create();
-        NullColumn::Ptr keys_null = NullColumn::create();
-        NullableColumn::Ptr keys = NullableColumn::create(keys_data, keys_null);
-        BinaryColumn::Ptr values_data = BinaryColumn::create();
-        NullColumn::Ptr null_column = NullColumn::create();
-        NullableColumn::Ptr values = NullableColumn::create(values_data, null_column);
-        MapColumn::Ptr column = MapColumn::create(keys, values, offsets);
+        auto offsets = UInt32Column::create();
+        auto keys_data = BinaryColumn::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(std::move(keys_data), std::move(keys_null));
+        auto values_data = BinaryColumn::create();
+        auto null_column = NullColumn::create();
+        auto values = NullableColumn::create(std::move(values_data), std::move(null_column));
+        auto column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
 
         DatumMap map;
         map[(Slice) "a"] = (Slice) "hello";
@@ -512,14 +512,15 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
         ASSERT_EQ("{'def':'haha','g h':'let's dance'}", res->debug_item(1));
     }
     { // nested map
-        UInt32Column::Ptr offsets = UInt32Column::create();
-        Int32Column::Ptr keys_data = Int32Column::create();
-        NullColumn::Ptr keys_null = NullColumn::create();
-        NullableColumn::Ptr keys = NullableColumn::create(keys_data, keys_null);
-        Int32Column::Ptr values_data = Int32Column::create();
-        NullColumn::Ptr values_null = NullColumn::create();
-        NullableColumn::Ptr values = NullableColumn::create(values_data, values_null);
-        MapColumn::Ptr column = MapColumn::create(keys, values, offsets);
+        auto offsets = UInt32Column::create();
+        auto keys_data = Int32Column::create();
+        auto keys_null = NullColumn::create();
+        auto keys = NullableColumn::create(std::move(keys_data), std::move(keys_null));
+        auto nest_keys = keys->clone_empty();
+        auto values_data = Int32Column::create();
+        auto values_null = NullColumn::create();
+        auto values = NullableColumn::create(std::move(values_data), std::move(values_null));
+        auto column = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
 
         DatumMap map;
         map[(int32_t)1] = (int32_t)11;
@@ -540,8 +541,7 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
         // {} empty
         column->append_datum(DatumMap());
 
-        UInt32Column::Ptr nest_offsets = UInt32Column::create();
-        auto nest_keys = keys->clone_empty();
+        auto nest_offsets = UInt32Column::create();
         nest_keys->append_datum(1);
         nest_keys->append_datum(1);
         nest_keys->append_datum(1);
@@ -550,8 +550,8 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
         nest_offsets->get_data().push_back(2);
         nest_offsets->get_data().push_back(4);
 
-        auto nest_map =
-                MapColumn::create(std::move(nest_keys), ColumnHelper::cast_to_nullable_column(column), nest_offsets);
+        auto nest_map = MapColumn::create(std::move(nest_keys),
+                                          ColumnHelper::cast_to_nullable_column(std::move(column)), nest_offsets);
         auto res = MapFunctions::distinct_map_keys(nullptr, {nest_map}).value();
 
         ASSERT_EQ("{1:{4:66}}", res->debug_item(0));
@@ -562,7 +562,7 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
 PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
-    ColumnPtr map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
+    MutableColumnPtr map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
     {
         //   [11->44, 2->55, 4->66]
         //   [2->77, 3->88]
@@ -590,7 +590,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
         map_column_nullable->append_datum(Datum{});
     }
 
-    ColumnPtr map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
+    MutableColumnPtr map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
     {
         //   [1->44, 2->55, 4->66]
         //   [2->77, 3->88]
@@ -621,7 +621,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
 
     auto mapn = down_cast<NullableColumn*>(map_column_nullable->clone().get())->data_column();
 
-    ConstColumn::Ptr const_column = ConstColumn::create(mapn, 5);
+    auto const_column = ConstColumn::create(std::move(mapn), 5);
 
     {
         auto result = MapFunctions::map_concat(nullptr, {map_column_nullable, map_column_not_nullable}).value();
@@ -685,7 +685,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
 PARALLEL_TEST(MapFunctionsTest, test_map_entries) {
     TypeDescriptor type_map_int_varchar = map_type(TYPE_INT, TYPE_VARCHAR);
 
-    ColumnPtr column = ColumnHelper::create_column(type_map_int_varchar, true);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_varchar, true);
 
     // Test case 1: Normal map with multiple entries
     // {1:'a', 2:'b', 3:'c'}
@@ -787,7 +787,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_entries_not_nullable) {
     // Test non-nullable map column
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
-    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, false);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_int, false);
 
     // {1:10, 2:20}
     DatumMap map1;
@@ -830,7 +830,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_entries_const_column) {
     // Test with const column
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
 
-    ColumnPtr map_column = ColumnHelper::create_column(type_map_int_int, false);
+    MutableColumnPtr map_column = ColumnHelper::create_column(type_map_int_int, false);
 
     // {1:100, 2:200}
     DatumMap map1;
@@ -839,7 +839,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_entries_const_column) {
     map_column->append_datum(map1);
 
     // Create const column with 3 rows
-    ConstColumn::Ptr const_column = ConstColumn::create(map_column, 3);
+    auto const_column = ConstColumn::create(std::move(map_column), 3);
 
     auto result = MapFunctions::map_entries(nullptr, {const_column}).value();
     EXPECT_EQ(3, result->size());
@@ -883,7 +883,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_entries_nested_types) {
     type_map_int_array.children.emplace_back(LogicalType::TYPE_INT);
     type_map_int_array.children.emplace_back(type_array_int);
 
-    ColumnPtr column = ColumnHelper::create_column(type_map_int_array, false);
+    MutableColumnPtr column = ColumnHelper::create_column(type_map_int_array, false);
 
     // {1:[10,20], 2:[30,40,50]}
     DatumMap map1;

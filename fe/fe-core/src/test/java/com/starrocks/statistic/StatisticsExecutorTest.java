@@ -25,13 +25,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -128,7 +126,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context));
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        Assertions.assertThrows(DdlException.class, () -> collectJob.collectStatisticSync(sql, context, analyzeStatus));
 
         new Expectations(context) {
             {
@@ -137,7 +136,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
-        collectJob.collectStatisticSync(sql, context);
+        collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
     @Test
@@ -307,29 +306,22 @@ public class StatisticsExecutorTest extends PlanTestBase {
     }
 
     @Test
-    public void testSpecifyStatisticsCollectWarehouse() {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
+    public void testDropHistogramWithEmptyColumnNames() {
+        // Test that dropHistogram and dropExternalHistogram methods handle empty column lists
+        // without throwing exceptions (which would happen if SQL with "in ()" was generated)
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        ConnectContext context = StatisticUtils.buildConnectContext();
 
-        String sql = "analyze table test.t0_stats";
-        FeConstants.enableUnitStatistics = false;
-        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
+        // Should not throw any exception when columnNames is empty
+        statisticExecutor.dropHistogram(context, 1L, Lists.newArrayList());
+        statisticExecutor.dropHistogram(context, 1L, null);
 
-        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
-        Table table =
-                connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
+        // Should not throw any exception when columnNames is empty for external histogram
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "test-uuid", null);
 
-        connectContext.setCurrentWarehouse("xxx");
-        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
-        Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
-        connectContext.setCurrentWarehouse("default_warehouse");
-        FeConstants.enableUnitStatistics = true;
+        // Should not throw any exception for the overloaded version with catalog/db/table names
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", Lists.newArrayList());
+        statisticExecutor.dropExternalHistogram(context, "catalog", "db", "table", null);
     }
 }

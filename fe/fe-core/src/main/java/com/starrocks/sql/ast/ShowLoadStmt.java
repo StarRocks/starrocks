@@ -25,8 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static com.starrocks.common.util.Util.normalizeName;
-
 // SHOW LOAD STATUS statement used to get status of load job.
 //
 // syntax:
@@ -59,7 +57,7 @@ public class ShowLoadStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public Expr getWhereClause() {

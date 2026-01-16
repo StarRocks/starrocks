@@ -40,6 +40,8 @@ public:
     DictEncoder() = default;
     ~DictEncoder() override = default;
 
+    std::string to_string() const override { return fmt::format("DictEncoder<{}>", typeid(T).name()); }
+
     Status append(const uint8_t* vals, size_t count) override {
         const T* ptr = (const T*)vals;
         for (int i = 0; i < count; ++i) {
@@ -91,14 +93,16 @@ public:
     CacheAwareDictDecoder() { _dict_size_threshold = CpuInfo::get_l2_cache_size(); }
     ~CacheAwareDictDecoder() override = default;
 
+    std::string to_string() const override { return "CacheAwareDictDecoder"; }
+
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         switch (content_type) {
         case DICT_CODE: {
             FixedLengthColumn<int32_t>* data_column;
             if (dst->is_nullable()) {
                 auto nullable_column = down_cast<NullableColumn*>(dst);
-                nullable_column->null_column()->append_default(count);
-                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column().get());
+                nullable_column->null_column_raw_ptr()->append_default(count);
+                data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column_raw_ptr());
             } else {
                 data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
             }
@@ -172,7 +176,7 @@ public:
         auto nullable_column = down_cast<NullableColumn*>(dst);
 
         size_t read_count = count - null_cnt;
-        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column().get());
+        Int32Column* data_column = down_cast<Int32Column*>(nullable_column->data_column_raw_ptr());
         // resize data
         data_column->resize_uninitialized(cur_size + count);
         int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -208,6 +212,8 @@ class DictDecoder final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictDecoder<{}>", typeid(T).name()); }
 
     // initialize dictionary
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
@@ -270,7 +276,7 @@ public:
         // assign null infos
         size_t null_cnt = null_infos.num_nulls;
         auto nullable_column = down_cast<NullableColumn*>(dst);
-        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+        FixedLengthColumn<T>* data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         // resize data
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -324,8 +330,8 @@ private:
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
-            nullable_column->null_column()->append_default(count);
-            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column().get());
+            nullable_column->null_column_raw_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<T>*>(nullable_column->data_column_raw_ptr());
         } else {
             data_column = down_cast<FixedLengthColumn<T>*>(dst);
         }
@@ -394,6 +400,8 @@ class DictDecoder<Slice> final : public CacheAwareDictDecoder {
 public:
     DictDecoder() = default;
     ~DictDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("DictDecoder<Slice>"); }
 
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
         auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(num_values * sizeof(Slice));
@@ -616,7 +624,7 @@ private:
                 return Status::InternalError("Index not in dictionary bounds");
             }
             if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             for (int i = 0; i < count; ++i) {

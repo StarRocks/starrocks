@@ -14,6 +14,7 @@
 
 #include "exec/workgroup/work_group.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "common/config.h"
@@ -118,12 +119,27 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
           _driver_sched_entity(this),
           _scan_sched_entity(this),
           _connector_scan_sched_entity(this) {
-    if (twg.__isset.cpu_core_limit && twg.cpu_core_limit > 0) {
+    const int num_cores = CpuInfo::num_cores();
+    if (twg.__isset.cpu_weight_percent && twg.cpu_weight_percent > 0) {
+        _cpu_weight = std::max<size_t>(1, num_cores * twg.cpu_weight_percent / 100);
+    } else if (twg.__isset.cpu_core_limit && twg.cpu_core_limit > 0) {
         _cpu_weight = twg.cpu_core_limit;
     }
 
-    if (twg.__isset.exclusive_cpu_cores) {
+    if (twg.__isset.exclusive_cpu_percent && twg.exclusive_cpu_percent > 0) {
+        const size_t exclusive_cpu_cores = num_cores * twg.exclusive_cpu_percent / 100;
+        if (exclusive_cpu_cores > 0) {
+            _exclusive_cpu_cores = exclusive_cpu_cores;
+        } else {
+            _cpu_weight = 1;
+        }
+    } else if (twg.__isset.exclusive_cpu_cores) {
         _exclusive_cpu_cores = twg.exclusive_cpu_cores;
+    }
+
+    if (twg.__isset.inactive && twg.inactive) {
+        _exclusive_cpu_cores = 0;
+        _cpu_weight = 1;
     }
 
     if (twg.__isset.mem_limit) {
@@ -168,25 +184,6 @@ TWorkGroup WorkGroup::to_thrift() const {
     TWorkGroup twg;
     twg.__set_id(_id);
     twg.__set_version(_version);
-    return twg;
-}
-
-TWorkGroup WorkGroup::to_thrift_verbose() const {
-    TWorkGroup twg;
-    twg.__set_id(_id);
-    twg.__set_name(_name);
-    twg.__set_version(_version);
-    twg.__set_workgroup_type(_type);
-    std::string state = is_marked_del() ? "dead" : "alive";
-    twg.__set_state(state);
-    twg.__set_cpu_core_limit(_cpu_weight);
-    twg.__set_mem_limit(_memory_limit);
-    twg.__set_concurrency_limit(_concurrency_limit);
-    twg.__set_num_drivers(_acc_num_drivers);
-    twg.__set_big_query_mem_limit(_big_query_mem_limit);
-    twg.__set_big_query_scan_rows_limit(_big_query_scan_rows_limit);
-    twg.__set_big_query_cpu_second_limit(big_query_cpu_second_limit());
-    twg.__set_spill_mem_limit_threshold(_spill_mem_limit_threshold);
     return twg;
 }
 
@@ -525,10 +522,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
-            auto id = wg_it->second->id();
-            auto version = wg_it->second->version();
+            const auto id = wg_it->second->id();
+            const auto version = wg_it->second->version();
+            const auto mem_pool = wg_it->second->mem_pool();
             _sum_cpu_weight -= wg_it->second->cpu_weight();
             _workgroups.erase(wg_it);
+            _shared_mem_tracker_manager.deregister_workgroup(mem_pool);
             auto version_it = _workgroup_versions.find(id);
             if (version_it != _workgroup_versions.end() && version_it->second <= version) {
                 _workgroup_versions.erase(version_it);
@@ -564,7 +563,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
         return;
     }
 
-    auto parent_mem_tracker = _shared_mem_tracker_manager.get_parent_mem_tracker(wg);
+    auto parent_mem_tracker = _shared_mem_tracker_manager.register_workgroup(wg);
     wg->init(parent_mem_tracker);
     _workgroups[unique_id] = wg;
 
@@ -579,7 +578,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
             auto& old_wg = _workgroups[old_unique_id];
 
             _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
-            old_wg->mark_del();
+            old_wg->mark_del(_workgroup_expiration_time);
             _workgroup_expired_versions.push_back(old_unique_id);
             LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
 
@@ -633,7 +632,7 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (wg_it != _workgroups.end()) {
         const auto& old_wg = wg_it->second;
         _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
-        old_wg->mark_del();
+        old_wg->mark_del(_workgroup_expiration_time);
         _executors_manager.update_shared_executors();
         _workgroup_expired_versions.push_back(unique_id);
         LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
@@ -650,6 +649,11 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
         }
     }
     return alive_workgroups;
+}
+
+std::vector<std::string> WorkGroupManager::list_memory_pools() const {
+    std::shared_lock read_lock(_mutex);
+    return _shared_mem_tracker_manager.list_mem_trackers();
 }
 
 void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) const {
@@ -685,6 +689,11 @@ void WorkGroupManager::change_num_connector_scan_threads(uint32_t num_connector_
 void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val) {
     std::unique_lock write_lock(_mutex);
     _executors_manager.change_enable_resource_group_cpu_borrowing(val);
+}
+
+void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds value) {
+    std::unique_lock write_lock(_mutex);
+    _workgroup_expiration_time = value;
 }
 
 // ------------------------------------------------------------------------------------

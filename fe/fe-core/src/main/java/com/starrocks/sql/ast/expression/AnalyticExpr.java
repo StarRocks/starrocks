@@ -340,6 +340,6 @@ public class AnalyticExpr extends Expr {
                 FunctionSet.COUNT,
                 FunctionSet.ARRAY_AGG,
                 FunctionSet.ARRAY_AGG_DISTINCT);
-        return supportFunctions.contains(fnCall.getFnName().getFunction());
+        return supportFunctions.contains(fnCall.getFunctionName());
     }
 }

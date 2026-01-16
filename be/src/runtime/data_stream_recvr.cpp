@@ -301,7 +301,7 @@ DataStreamRecvr::~DataStreamRecvr() {
     DCHECK(_mgr == nullptr) << "Must call close()";
 }
 
-Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
+Status DataStreamRecvr::get_chunk(ChunkUniquePtr* chunk) {
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);
     Chunk* tmp_chunk = nullptr;
@@ -310,7 +310,7 @@ Status DataStreamRecvr::get_chunk(std::unique_ptr<Chunk>* chunk) {
     return status;
 }
 
-Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence) {
+Status DataStreamRecvr::get_chunk_for_pipeline(ChunkUniquePtr* chunk, const int32_t driver_sequence) {
     // TODO: notify here
     DCHECK(!_is_merging);
     DCHECK_EQ(_sender_queues.size(), 1);

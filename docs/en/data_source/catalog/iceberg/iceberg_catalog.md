@@ -6,6 +6,7 @@ keywords: ['iceberg']
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 import QSTip from '../../../_assets/commonMarkdown/quickstart-iceberg-tip.mdx'
+import IcebergCatalogIcebergRestSecurityLink from '../../../_assets/commonMarkdown/iceberg_catalog_iceberg_rest_security_link.mdx'
 
 # Iceberg catalog
 
@@ -137,7 +138,7 @@ The type of your data source. Set the value to `iceberg`.
 
 Parameter(s) about how StarRocks manages data access to the catalog.
 
-For detailed instructions on managing data access for Iceberg Catalogs, see [Security Setup for Iceberg REST Catalog](./iceberg_rest_security.md).
+<IcebergCatalogIcebergRestSecurityLink />
 
 ##### catalog.access.control
 
@@ -306,6 +307,10 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
   - Required: No
   - Description: Whether to support querying objects under nested namespace. Default: `false`.
 
+- `iceberg.catalog.rest.view-endpoints-enabled`
+  - Required: No
+  - Description: Whether to enable view endpoints for view-related operations. If set to `false`, view operations like `getView` will be disabled. Default: `true`.
+
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
@@ -416,6 +421,10 @@ The following table describes the parameter you need to configure in `MetastoreP
   - Required: No
   - Description: The password for the database.
 
+- `iceberg.catalog.jdbc.init-catalog-tables`
+  - Required: No
+  - Description: Whether to create the tables `iceberg_namespace_properties` and `iceberg_tables` for storing metadata in the database specified by `iceberg.catalog.uri`. The default value is `false`. Specify `true` if these two tables have not yet been created in the database specified by `iceberg.catalog.uri`.
+
 The following example creates an Iceberg catalog named `iceberg_jdbc` and uses JDBC as metastore:
 
 ```SQL
@@ -424,12 +433,16 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "jdbc",
-    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.warehouse" = "s3://my_bucket/warehouse_location",
     "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
     "iceberg.catalog.jdbc.user" = "username",
-    "iceberg.catalog.jdbc.password" = "password"
+    "iceberg.catalog.jdbc.password" = "password",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
 );
 ```
+If using MySQL or other custom JDBC drivers, the corresponding JAR files need to be placed in the `fe/lib` and `be/lib/jni-packages` directories.
 
 </TabItem>
 
@@ -1263,455 +1276,21 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ---
 
-### Create an Iceberg database
+### Iceberg DDL Operations
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
-
-:::tip
-
-You can grant and revoke privileges by using [GRANT](../../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md).
-
-:::
-
-[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to create an Iceberg database in that catalog:
-
-```SQL
-CREATE DATABASE <database_name>
-[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
-```
-
-You can use the `location` parameter to specify the file path in which you want to create the database. Both HDFS and cloud storage are supported. If you do not specify the `location` parameter, StarRocks creates the database in the default file path of the Iceberg catalog.
-
-The `prefix` varies based on the storage system you use:
-
-#### HDFS
-
-`Prefix` value: `hdfs`
-
-#### Google GCS
-
-`Prefix` value: `gs`
-
-#### Azure Blob Storage
-
-`Prefix` value:
-
-- If your storage account allows access over HTTP, the `prefix` is `wasb`.
-- If your storage account allows access over HTTPS, the `prefix` is `wasbs`.
-
-#### Azure Data Lake Storage Gen1
-
-`Prefix` value: `adl`
-
-#### Azure Data Lake Storage Gen2
-
-`Prefix` value:
-
-- If your storage account allows access over HTTP, the`prefix` is `abfs`.
-- If your storage account allows access over HTTPS, the `prefix` is `abfss`.
-
-#### AWS S3 or other S3-compatible storage (for example, MinIO)
-
-`Prefix` value: `s3`
+For DDL operations (CREATE/DROP DATABASE, CREATE/DROP TABLE, CREATE/ALTER VIEW), see [Iceberg DDL operations](./DDL.md).
 
 ---
 
-### Drop an Iceberg database
+### Iceberg DML Operations
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../../sql-reference/sql-statements/Database/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
-
-When you drop an Iceberg database, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
-
-[Switch to an Iceberg catalog](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg database in that catalog:
-
-```SQL
-DROP DATABASE <database_name>;
-```
+For DML operations (INSERT), see [Iceberg DML operations](./DML.md).
 
 ---
 
-### Create an Iceberg table
+### Iceberg Procedures
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
-
-[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to create an Iceberg table in that database.
-
-#### Syntax
-
-```SQL
-CREATE TABLE [IF NOT EXISTS] [database.]table_name
-(column_definition1[, column_definition2, ...
-partition_column_definition1,partition_column_definition2...])
-[partition_desc]
-[ORDER BY sort_desc)]
-[PROPERTIES ("key" = "value", ...)]
-[AS SELECT query]
-```
-
-#### Parameters
-
-##### column_definition
-
-The syntax of `column_definition` is as follows:
-
-```SQL
-col_name col_type [COMMENT 'comment']
-```
-
-:::note
-
-All non-partition columns must use `NULL` as the default value. This means that you must specify `DEFAULT "NULL"` for each of the non-partition columns in the table creation statement. Additionally, partition columns must be defined following non-partition columns and cannot use `NULL` as the default value.
-
-:::
-
-##### partition_desc
-
-The syntax of `partition_desc` is as follows:
-
-```SQL
-PARTITION BY (partition_expr[, partition_expr...])
-```
-
-Each `partition_expr` can be one of the following forms:
-
-```SQL
-column_name
-| transform_expr(column_name)
-| transform_expr(column_name, parameter)
-```
-
-Currently, StarRocks supports partition transformation expressions defined in the Apache Iceberg specification [transform expr](https://iceberg.apache.org/spec/#partitioning). This enables StarRocks to create Iceberg tables with hidden partitions based on transformed column values.
-
-:::note
-
-Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
-
-:::
-
-
-##### ORDER BY
-
-From v4.0 onwards, StarRocks supports specifying sort keys for an Iceberg table via the ORDER BY clause, which can be used to sort the data in the same data file according to the specified sort key.
-
-The ORDER BY clause can contain more than one sort key, in the following format:
-
-```SQL
-ORDER BY (column_name [sort_direction] [nulls_order], ...)
-```
-
-- `column_name`: The name of the column to be used as the sort key. It must be a column existed in the table schema. Currently, Transform expressions are not supported.
-- `sort_direction`: Sorting direction. Valid values: `ASC` (Default) and `DESC`.
-- `nulls_order`: The order of NULL values. Valid values: `NULLS FIRST` (Default when `ASC` is specified) and `NULLS LAST` (Default when `DESC` is specified).
-
-`sort_direction` and `nulls_order` are optional. For example, each of the following is a valid `sort_desc`:
-
-- `column_name`
-- `column_name ASC`
-- `column_name DESC NULLS FIRST`
-
-##### PROPERTIES
-
-You can specify the table attributes in the `"key" = "value"` format in `PROPERTIES`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
-
-The following table describes a few key properties.
-
-###### location
-
-Description: The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:
-
-- If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs.
-- If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.
-
-###### file_format
-
-Description: The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`.
-
-###### compression_codec
-
-Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. This property is deprecated in v3.2.3, since which version the compression algorithm used for sinking data to Iceberg tables is uniformly controlled by the session variable [connector_sink_compression_codec](../../../sql-reference/System_variable.md#connector_sink_compression_codec).
-
----
-
-### Examples
-
-1. Create a non-partitioned table named `unpartition_tbl`. The table consists of two columns, `id` and `score`, as shown below:
-
-   ```SQL
-   CREATE TABLE unpartition_tbl
-   (
-       id int,
-       score double
-   );
-   ```
-
-2. Create a partitioned table named `partition_tbl_1`. The table consists of three columns, `action`, `id`, and `dt`, of which `id` and `dt` are defined as partition columns, as shown below:
-
-   ```SQL
-   CREATE TABLE partition_tbl_1
-   (
-       action varchar(20),
-       id int,
-       dt date
-   )
-   PARTITION BY (id,dt);
-   ```
-
-3. Query an existing table named `partition_tbl_1`, and create a partitioned table named `partition_tbl_2` based on the query result of `partition_tbl_1`. For `partition_tbl_2`, `id` and `dt` are defined as partition columns, as shown below:
-
-   ```SQL
-   CREATE TABLE partition_tbl_2
-   PARTITION BY (id, dt)
-   AS SELECT * from employee;
-   ```
-
-4. Create a table named `partition_tbl_3` with hidden partitions. The table contains three columns: `action`, `id`, and `dt`. Among them, `id` and `dt` are used as partition keys, but the partitions are defined by transformation expressions, so these partitions are hidden.
-
-```sql
-  CREATE TABLE partition_tbl_3 (
-    action VARCHAR(20),
-    id INT,
-    dt DATE
-  )
-  PARTITION BY bucket(id, 10), year(dt);
-```
----
-
-### Sink data to an Iceberg table
-
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported). This feature is supported from v3.1 onwards.
-
-[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following syntax to sink the data of StarRocks table to a Parquet-formatted Iceberg table in that database.
-
-#### Syntax
-
-```SQL
-INSERT {INTO | OVERWRITE} <table_name>
-[ (column_name [, ...]) ]
-{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
-
--- If you want to sink data to specified partitions, use the following syntax:
-INSERT {INTO | OVERWRITE} <table_name>
-PARTITION (par_col1=<value> [, par_col2=<value>...])
-{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
-```
-
-:::note
-
-Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
-
-:::
-
-#### Parameters
-
-##### INTO
-
-To append the data of the StarRocks table to the Iceberg table.
-
-##### OVERWRITE
-
-To overwrite the existing data of the Iceberg table with the data of the StarRocks table.
-
-##### column_name
-
-The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned.
-
-##### expression
-
-Expression that assigns values to the destination column.
-
-##### DEFAULT
-
-Assigns a default value to the destination column.
-
-##### query
-
-Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks.
-
-##### PARTITION
-
-The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property.
-
-#### Examples
-
-1. Insert three data rows into the `partition_tbl_1` table:
-
-   ```SQL
-   INSERT INTO partition_tbl_1
-   VALUES
-       ("buy", 1, "2023-09-01"),
-       ("sell", 2, "2023-09-02"),
-       ("buy", 3, "2023-09-03");
-   ```
-
-2. Insert the result of a SELECT query, which contains simple computations, into the `partition_tbl_1` table:
-
-   ```SQL
-   INSERT INTO partition_tbl_1 (id, action, dt) SELECT 1+1, 'buy', '2023-09-03';
-   ```
-
-3. Insert the result of a SELECT query, which reads data from the `partition_tbl_1` table, into the same table:
-
-   ```SQL
-   INSERT INTO partition_tbl_1 SELECT 'buy', 1, date_add(dt, INTERVAL 2 DAY)
-   FROM partition_tbl_1
-   WHERE id=1;
-   ```
-
-4. Insert the result of a SELECT query into the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_2` table:
-
-   ```SQL
-   INSERT INTO partition_tbl_2 SELECT 'order', 1, '2023-09-01';
-   ```
-
-   Or
-
-   ```SQL
-   INSERT INTO partition_tbl_2 partition(dt='2023-09-01',id=1) SELECT 'order';
-   ```
-
-5. Overwrite all `action` column values in the partitions that meet two conditions, `dt='2023-09-01'` and `id=1`, of the `partition_tbl_1` table with `close`:
-
-   ```SQL
-   INSERT OVERWRITE partition_tbl_1 SELECT 'close', 1, '2023-09-01';
-   ```
-
-   Or
-
-   ```SQL
-   INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
-   ```
-
----
-
-### Drop an Iceberg table
-
-Similar to the internal tables of StarRocks, if you have the [DROP](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
-
-When you drop an Iceberg table, the table's file path and data on your HDFS cluster or cloud storage will not be dropped along with the table.
-
-When you forcibly drop an Iceberg table (namely, with the `FORCE` keyword specified in the DROP TABLE statement), the table's data on your HDFS cluster or cloud storage will be dropped along with the table, but the table's file path is retained.
-
-[Switch to an Iceberg catalog and a database in it](#switch-to-an-iceberg-catalog-and-a-database-in-it), and then use the following statement to drop an Iceberg table in that database.
-
-```SQL
-DROP TABLE <table_name> [FORCE];
-```
-
-### Create Iceberg view
-
-You can define Iceberg views in StarRocks or add StarRocks dialect to an existing Iceberg view. Queries against such Iceberg views support abstracting the StarRocks dialect of these views. This feature is supported from v3.5 onwards.
-
-```SQL
-CREATE VIEW [IF NOT EXISTS]
-[<catalog>.<database>.]<view_name>
-(
-    <column_name>[ COMMENT 'column comment']
-    [, <column_name>[ COMMENT 'column comment'], ...]
-)
-[COMMENT 'view comment']
-AS <query_statement>
-```
-
-#### Example
-
-Create an Iceberg view `iceberg_view1` based on an Iceberg table `iceberg_table`.
-
-```SQL
-CREATE VIEW IF NOT EXISTS iceberg.iceberg_db.iceberg_view1 AS
-SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-### Add or modify StarRocks dialect for existing Iceberg view
-
-If your Iceberg views are created from other systems, such as Apache Spark, meanwhile, you want to query these views from StarRocks, you can add StarRocks dialect to these views. This feature is supported from v3.5 onwards.
-
-:::note
-
-- You must guarantee that the essential meanings of both dialects of the view are identical. StarRocks and other systems do not guarantee the consistency among different definitions.
-- You can define only one StarRocks dialect for each Iceberg view. You can change the definition of the dialect using the MODIFY clause.
-
-:::
-
-```SQL
-ALTER VIEW
-[<catalog>.<database>.]<view_name>
-(
-    <column_name>
-    [, <column_name>]
-)
-{ ADD | MODIFY } DIALECT
-<query_statement>
-```
-
-#### Example
-
-1. Add StarRocks dialect to an existing Iceberg view `iceberg_view2`.
-
-```SQL
-ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-2. Modify StarRocks dialect for an existing Iceberg view `iceberg_view2`.
-
-```SQL
-ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
-```
-
-### Manual compaction
-
-From v4.0 onwards, StarRocks supports manual compaction on Iceberg tables.
-
-Each time data is loaded into an Iceberg table, new data and metadata files are generated. As time elapses, excessive data files can significantly slow down the query plan generation and cause an impact on the performance.
-
-In this case, you need to perform manual compaction on the table or partitions to merge the small data files, and thereby improve the performance.
-
-#### Syntax
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name 
-EXECUTE rewrite_data_files
-("key"=value [,"key"=value, ...]) 
-[WHERE <predicate>]
-```
-
-#### Parameters
-
-##### `rewrite_data_files` properties
-
-`"key"=value` pairs that declare the manual compaction behaviors. Note that you need to wrap the key in double quotes.
-
-###### `min_file_size_bytes`
-
-- Description: The upper limit of a small data file. Data files whose size is less this value will be merged during the compaction.
-- Unit: Byte
-- Type: Int
-- Default: 268,435,456 (256 MB)
-
-###### `batch_size`
-
-- Description: The maximum size of data that can be processed in each batch.
-- Unit: Byte
-- Type: Int
-- Default: 10,737,418,240 (10 GB)
-
-###### `rewrite_all`
-
-- Description: Whether to rewrite all data files during the compaction, ignoring the parameters that filter data files with specific requirements.
-- Unit: -
-- Type: Boolean
-- Default: false
-
-##### `WHERE` clause
-
-- Description: The filter predicate used to specify the partition(s) to be involved in the compaction.
-
-#### Example
-
-The following example performs manual compaction on specific partitions in the Iceberg table `t1`. The partitions are represented by the clause `WHERE part_col = 'p1'`. In these partitions, data files that are smaller than 134,217,728 bytes (128 MB) will be merged during the compaction.
-
-```SQL
-ALTER TABLE t1 EXECUTE rewrite_data_files("min_file_size_bytes"= 134217728) WHERE part_col = 'p1';
-```
+For procedures, see [Iceberg Procedures](./procedures.md).
 
 ---
 

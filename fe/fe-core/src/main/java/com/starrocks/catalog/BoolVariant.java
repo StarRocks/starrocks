@@ -15,7 +15,10 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.thrift.TInfinityType;
+import com.starrocks.thrift.TVariant;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.Objects;
 
@@ -54,7 +57,16 @@ public class BoolVariant extends Variant {
     }
 
     @Override
-    public int compareTo(Variant other) {
+    public TVariant toThrift() {
+        TVariant variant = new TVariant();
+        variant.setType(TypeSerializer.toThrift(type));
+        variant.setValue(getStringValue());
+        variant.setInfinity_type(TInfinityType.NONE_INFINITY);
+        return variant;
+    }
+
+    @Override
+    protected int compareToImpl(Variant other) {
         if (other instanceof LargeIntVariant) {
             return -other.compareTo(this);
         }

@@ -42,6 +42,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
@@ -54,9 +55,11 @@ import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -65,6 +68,9 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResourceProvider;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -99,7 +105,6 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static StreamConnection connection;
 
     private static PQueryStatistics statistics = new PQueryStatistics();
-
 
     @BeforeAll
     public static void setUpClass() {
@@ -450,6 +455,115 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testQueryWithInlineWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        Config.enable_collect_query_detail_info = true;
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+        // Mock statement executor
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(3, "wh3"));
+
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select /*+SET_VAR(enable_constant_execute_in_fe=false,warehouse='wh2')*/ 1");
+            ByteBuffer packet = serializer.toByteBuffer();
+
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+            ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            ctx.setQualifiedUser(UserIdentity.ROOT.getUser());
+            ctx.setQueryId(UUIDUtil.genUUID());
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+
+            QueryDetail queryDetail = ctx.getQueryDetail();
+            Assertions.assertEquals("wh2", queryDetail.getWarehouse());
+
+            DefaultCoordinator coordinator = (DefaultCoordinator) ctx.getExecutor().getCoordinator();
+            Assertions.assertEquals(2, coordinator.getJobSpec().getComputeResource().getWarehouseId());
+
+            AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+            Assertions.assertEquals("wh2", auditEvent.warehouse);
+        } finally {
+            Config.enable_collect_query_detail_info = false;
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
+    }
+
+    @Test
+    public void testQueryWithSetWarehouse() throws Exception {
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
+        Config.enable_collect_query_detail_info = true;
+
+        new MockUp<WarehouseComputeResourceProvider>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+        // Mock statement executor
+        // Create mock for StmtExecutor using MockUp instead of @Mocked parameter
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return statistics;
+            }
+        };
+
+        try {
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(2, "wh2"));
+            GlobalStateMgr.getCurrentState().getWarehouseMgr().addWarehouse(new DefaultWarehouse(3, "wh3"));
+
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select /*+SET_VAR(enable_constant_execute_in_fe=false)*/ 1");
+            ByteBuffer packet = serializer.toByteBuffer();
+
+            ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+            ctx.getSessionVariable().setWarehouseName("wh3");
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+
+            processor.processOnce();
+            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+
+            QueryDetail queryDetail = ctx.getQueryDetail();
+            Assertions.assertEquals("wh3", queryDetail.getWarehouse());
+
+            DefaultCoordinator coordinator = (DefaultCoordinator) ctx.getExecutor().getCoordinator();
+            Assertions.assertEquals(3, coordinator.getJobSpec().getComputeResource().getWarehouseId());
+
+            AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+            Assertions.assertEquals("wh3", auditEvent.warehouse);
+        } finally {
+            Config.enable_collect_query_detail_info = false;
+            Config.run_mode = RunMode.SHARED_NOTHING.getName();
+            RunMode.detectRunMode();
+        }
+    }
+
+    @Test
     public void testQueryFail() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
@@ -682,7 +796,7 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
         };
 
-        TMasterOpResult result = processor.proxyExecute(request);
+        TMasterOpResult result = processor.proxyExecute(request, null);
         Assertions.assertNotNull(result);
     }
 
@@ -710,7 +824,7 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
         };
 
-        TMasterOpResult result = processor.proxyExecute(request);
+        TMasterOpResult result = processor.proxyExecute(request, null);
         Assertions.assertNotNull(result);
         Assertions.assertTrue(context.getState().isError());
     }
@@ -723,91 +837,91 @@ public class ConnectProcessorTest extends DDLTestBase {
         // Create a prepared statement packet for COM_STMT_EXECUTE
         ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
         ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
-        
+
         // Create a prepared statement context with a query statement
         PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
         PrepareStmtContext prepareCtx = new PrepareStmtContext(prepareStmt, ctx, null);
         ctx.putPreparedStmt("1", prepareCtx);
-        
+
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        
+
         // Track method calls
         AtomicReference<Boolean> tracersRegistered = new AtomicReference<>(false);
         AtomicReference<Boolean> tracersInitialized = new AtomicReference<>(false);
-        
+
         // Mock Tracers
         new MockUp<Tracers>() {
             @Mock
             public void register(ConnectContext context) {
                 tracersRegistered.set(true);
             }
-            
+
             @Mock
             public void init(ConnectContext context, String traceMode, String traceModule) {
                 tracersInitialized.set(true);
             }
         };
-        
+
         // Mock StmtExecutor
         new MockUp<StmtExecutor>() {
             @Mock
             public void execute() throws Exception {
                 // Do nothing for test
             }
-            
+
             @Mock
             public PQueryStatistics getQueryStatisticsForAuditLog() {
                 return statistics;
             }
-            
+
             @Mock
             public StatementBase getParsedStmt() {
                 return prepareStmt;
             }
         };
-        
+
         processor.processOnce();
-        
+
         // Verify that tracers are properly initialized for query statements
         Assertions.assertTrue(tracersRegistered.get(), "Tracers should be registered for query statements");
         Assertions.assertTrue(tracersInitialized.get(), "Tracers should be initialized for query statements");
         Assertions.assertEquals(MysqlCommand.COM_STMT_EXECUTE, myContext.getCommand());
         Assertions.assertEquals("SELECT 1 + 2 AS `1 + 2`", processor.executor.getOriginStmtInString());
     }
-    
+
     /**
      * Helper method to create a COM_STMT_EXECUTE packet
      */
     private ByteBuffer createExecutePacket(int stmtId, List<Object> params) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
-        
+
         // Command type COM_STMT_EXECUTE (0x17 = 23)
         serializer.writeInt1(23);
-        
+
         // Statement ID
         serializer.writeInt4(stmtId);
-        
+
         // Flags (0 = CURSOR_TYPE_NO_CURSOR)
         serializer.writeInt1(0);
-        
+
         // Iteration count (always 1)
         serializer.writeInt4(1);
-        
+
         // NULL bitmap (empty for no parameters)
         int nullBitmapLength = (params.size() + 7) / 8;
         if (nullBitmapLength > 0) {
             byte[] nullBitmap = new byte[nullBitmapLength];
             serializer.writeBytes(nullBitmap);
         }
-        
+
         // new_params_bind_flag (0 = types not included)
         if (params.size() > 0) {
             serializer.writeInt1(0);
         }
-        
+
         return serializer.toByteBuffer().order(ByteOrder.LITTLE_ENDIAN);
     }
-    
+
     /**
      * Helper method to create a mock PrepareStmt
      */

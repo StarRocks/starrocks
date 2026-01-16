@@ -71,7 +71,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_schedule_mode
 * default_rowset_type
 * enable_group_level_query_queue
-* enable_plan_capture
 * enable_query_history
 * enable_query_queue_load
 * enable_query_queue_select
@@ -83,8 +82,6 @@ SET GLOBAL query_mem_limit = 137438953472;
 * license
 * lower_case_table_names
 * performance_schema
-* plan_capture_include_pattern
-* plan_capture_interval_seconds
 * query_cache_size
 * query_history_keep_seconds
 * query_history_load_interval_seconds
@@ -176,10 +173,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 変数は **アルファベット順** に説明されています。`global` ラベルが付いた変数はグローバルにのみ有効です。他の変数はグローバルまたは単一のセッションで有効にすることができます。
 
-### SQL_AUTO_IS_NULL
-
-JDBC 接続プール C3P0 との互換性のために使用されます。実際の用途はありません。
-
 ### activate_all_roles_on_login (global)
 
 * **説明**: StarRocks ユーザーが StarRocks クラスタに接続する際に、すべてのロール（デフォルトロールと付与されたロールを含む）を有効にするかどうか。
@@ -190,11 +183,15 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### array_low_cardinality_optimize
+
+* **スコープ**: Session
+* **説明**: オプティマイザが array&lt;varchar&gt; カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array&lt;varchar&gt;` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array&lt;varchar&gt;` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
+* **デフォルト**: `true`
+* **タイプ**: boolean
+* **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
+
 ### auto_increment_increment
-
-MySQL クライアント互換性のために使用されます。実際の用途はありません。
-
-### autocommit
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
 
@@ -215,11 +212,28 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データ型**: 文字列
 * **導入バージョン**: v3.2.4
 
-### cbo_decimal_cast_string_strict
+### cbo_cte_force_reuse_node_count
 
-* **説明**: CBO が DECIMAL 型から STRING 型にデータを変換する方法を制御します。この変数が `true` に設定されている場合、v2.5.x 以降のバージョンで組み込まれたロジックが優先され、システムは厳密な変換を実行します（つまり、生成された文字列を切り捨て、スケールの長さに基づいて 0 を埋めます）。この変数が `false` に設定されている場合、v2.5.x より前のバージョンで組み込まれたロジックが優先され、システムはすべての有効な桁を処理して文字列を生成します。
-* **デフォルト**: true
-* **導入バージョン**: v2.5.14
+* **説明**: Common Table Expressions (CTE) に対するオプティマイザのショートカットを制御するセッションスコープの閾値。RelationTransformer.visitCTE 内でプランナは CTE プロデューサーツリーのノード数をカウントします（cteContext.getCteNodeCount）。そのカウントがこの閾値以上かつ閾値が 0 より大きい場合、transformer は CTE の再利用を強制します：プロデューサープランのインライン化／変換をスキップし、事前計算された式マッピング（入力なし）で consume 演算子を構築し、代わりに生成されたカラム参照を使用します。これにより非常に大きな CTE プロデューサーツリーに対するオプティマイザの時間を削減できますが、物理プランの最適性が若干低下する可能性があります。値を `0` に設定すると force-reuse 最適化が無効になります。この変数は SessionVariable に getter/setter があり、セッション単位で適用されます。
+* **スコープ**: Session
+* **デフォルト**: `2000`
+* **タイプ**: int
+* **導入バージョン**: v3.5.3
+
+### cbo_cte_reuse
+
+* **説明**: オプティマイザが共通テーブル式（CTE）を再利用して multi-distinct 集計クエリを書き換えることを許可するかを制御します（CBO の CTE 再利用リライト）。有効にすると、プランナー（RewriteMultiDistinctRule）はマルチカラム DISTINCT、スキューした集計、または統計により CTE リライトの方が効率的であると示される場合に CTE ベースのリライトを選択することがあり、`prefer_cte_rewrite` ヒントを尊重します。無効にすると CTE ベースのリライトは許可されず、プランナーは multi-function リライトを試みます。クエリが CTE を必要とする場合（例：マルチカラム DISTINCT や multi-function リライトで扱えない関数など）は、プランナーはユーザーエラーを発生させます。注意：オプティマイザが参照する実際の設定はこのフラグとパイプラインエンジンフラグの論理 AND です — すなわち `isCboCteReuse()` はこの変数と `enablePipelineEngine` の両方を返す必要があるため、`enablePipelineEngine` がオンのときのみ CTE 再利用が有効になります。
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **導入バージョン**: `v3.2.0`
+
+### cbo_disabled_rules
+
+* **説明**: 現在のセッションで無効にするオプティマイザルール名のカンマ区切りリスト。各名前は `RuleType` 列挙値に一致する必要があり、無効化できるのは名前が `TF_`（変換ルール）または `GP_`（グループ結合ルール）で始まるルールのみです。セッション変数は `SessionVariable` に格納され（`getCboDisabledRules` / `setCboDisabledRules`）、オプティマイザは `OptimizerOptions.applyDisableRuleFromSessionVariable()` を通じて適用します。同関数はリストを解析し、対応するルールスイッチをクリアしてプランニング時にそれらのルールをスキップします。SET ステートメントを通じて設定された場合、値は検証され、サーバは不明な名前や `TF_`/`GP_` で始まらない名前を明確なエラーメッセージ（例: "Unknown rule name(s): ..." や "Only TF_ ... and GP_ ... can be disabled"）で拒否します。プランナ実行時には不明なルール名は警告とともに無視されます（"Ignoring unknown rule name: ... (may be from different version)" とログに残る）。名前は列挙子識別子と正確に一致する必要があります（大文字小文字を区別）。名前の前後の空白はトリムされ、空のエントリは無視されます。
+* **スコープ**: Session
+* **デフォルト**: `""` (無効化されたルールなし)
+* **データ型**: String
+* **導入バージョン**: -
 
 ### cbo_enable_low_cardinality_optimize
 
@@ -244,18 +258,37 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **データ型**: Boolean
 
-### cbo_materialized_view_rewrite_related_mvs_limit
+### cbo_max_reorder_node_use_dp
 
-* **説明**: クエリプランニング中に許可される候補マテリアライズドビューの最大数を指定します。
-* **デフォルト**: 16
-* **導入バージョン**: v3.1.9, v3.2.5
+* **説明**: コストベースオプティマイザ（CBO）が DP（動的計画法）join-reorder アルゴリズムを含めるかを制御するセッションスコープの上限です。オプティマイザは join 入力数（MultiJoinNode.atoms.size()）をこの値と比較し、`multiJoinNode.getAtoms().size() <= cbo_max_reorder_node_use_dp` かつ `cbo_enable_dp_join_reorder` が有効な場合にのみ DP reorder を実行または追加します。JoinReorderFactory.createJoinReorderAdaptive（候補アルゴリズムに JoinReorderDP を追加するため）および ReorderJoinRule.transform/rewrite（メモにプランをコピーするときに JoinReorderDP を実行するか決定するため）で使用されます。デフォルト値の 10 は実用的な性能のカットオフを反映しています（コード内コメント: "10 table join reorder takes more than 100ms"）。この設定はオプティマイザの実行時間（DP は高コスト）と大規模な multi-join クエリに対するプラン品質のトレードオフを調整するためにチューニングしてください。`cbo_enable_dp_join_reorder` および 貪欲法の閾値 `cbo_max_reorder_node_use_greedy` と相互作用します。比較は包含比較（`<=`）です。
+* **スコープ**: セッション
+* **デフォルト**: `10`
+* **データタイプ**: long
+* **導入バージョン**: `v3.2.0`
 
-### cbo_prune_subfield
+### cbo_max_reorder_node_use_exhaustive
 
-* **説明**: JSON サブフィールドプルーニングを有効にするかどうか。この変数は、BE 動的パラメータ `enable_json_flat` と一緒に使用する必要があります。そうでない場合、JSON データクエリのパフォーマンスが低下する可能性があります。
-* **デフォルト**: false
-* **データ型**: Int
-* **導入バージョン**: v3.3.0
+* **スコープ**: セッション
+* **説明**: CBO における join-reorder アルゴリズム選択の閾値を制御します。オプティマイザはクエリ内の inner/cross join ノードをカウントし、その数がこの値より大きい場合、プランナは transform ベースの（より積極的な）reorder パスを取ります：CTE 統計の収集を強制し、ReorderJoinRule.transform および関連する可換性ルールを呼び出します。カウントがこの値以下の場合、プランナはより安価な join-transformation ルールを適用します（特定の semi/anti-join ケースでは INNER_JOIN_LEFT_ASSCOM_RULE を追加することがあります）。このセッション変数はオプティマイザ（`SPMOptimizer`, `QueryOptimizer`）で参照され、セッションレベルでは `setMaxTransformReorderJoins` を介して設定できます。
+* **デフォルト**: `4`
+* **データタイプ**: int
+* **導入バージョン**: v3.2.0
+
+### cbo_max_reorder_node_use_greedy
+
+* **説明**: コストベースオプティマイザが greedy join-reorder アルゴリズムを検討するマルチジョイン内の結合入力（アトム）の最大数。オプティマイザは候補となるリオーダーアルゴリズムのリストを構築する際にこの制限（`cbo_enable_greedy_join_reorder` と併せて）をチェックします：もし `multiJoinNode.getAtoms().size()` がこの値以下であれば、`JoinReorderGreedy` のインスタンスが追加され実行されます。この変数は `JoinReorderFactory.createJoinReorderAdaptive()` と `ReorderJoinRule` によって、ジョインリオーダー段階での greedy リオーダリングの適用可否を制御するために使用されます。セッションごとに適用され、統計情報が利用可能でかつ greedy が有効な場合に greedy リオーダリングが試行されるかに影響します。多数の結合されたリレーションを含むクエリに対するオプティマイザの時間/複雑度のトレードオフを制御するために調整してください。
+* **スコープ**: Session (セッションごとに変更可能)
+* **デフォルト**: `16`
+* **データタイプ**: long
+* **導入バージョン**: v3.4.0, v3.5.0
+
+### cbo_use_correlated_predicate_estimate
+
+* **説明**: セッションフラグ。オプティマイザが、複数列にまたがる結合された等価述語の選択率を推定する際に相関を考慮したヒューリスティックを適用するかを制御します。有効（デフォルト）の場合、推定器はプライマリのマルチカラム統計や最も選択的な述語を除く追加列に対して指数減衰重みを適用し、追加述語の乗算的影響を軽減します（重み：追加最大3列に対して 0.5、0.25、0.125）。無効の場合、減衰は適用されず（減衰係数 = 1）、これらの列の完全な選択率を乗算します（より強い独立仮定）。このフラグは StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity により確認され、マルチカラム統計経路とフォールバック経路の両方で減衰係数を選択するため、CBO が使用するカーディナリティ推定に影響します。
+* **スコープ**: Session
+* **デフォルト**: `true`
+* **タイプ**: boolean
+* **導入バージョン**: v3.5.0
 
 ### character_set_database (global)
 
@@ -263,10 +296,24 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: utf8
 * **データ型**: 文字列
 
-### chunk_size
+### collation_server
 
-* **説明**: クエリ実行中に各ノードが送信する単一パケットの行数を指定するために使用されます。デフォルトは 4096 で、ソースノードが生成したデータの 4096 行ごとにパッケージ化され、宛先ノードに送信されます。行数が多いほど、大量データシナリオでのクエリスループットが向上しますが、小量データシナリオでのクエリ遅延が増加する可能性があります。また、クエリのメモリオーバーヘッドが増加する可能性があります。`batch_size` を 1024 から 4096 の間に設定することをお勧めします。
-* **デフォルト**: 4096
+* **スコープ**: Session
+* **説明**: FE がこのセッションに対して MySQL 互換の照合順序動作を提示するために使用するセッションレベルのサーバ照合名。この変数は、FE がクライアントに報告し、`character_set_server` / `collation_connection` / `collation_database` に関連付けられるデフォルトの照合識別子（例: `utf8_general_ci`）を設定します。セッション変数 JSON に永続化されます（SessionVariable#getJsonString / replayFromJson を参照）および変数マネージャーを通じて公開されます（`@VarAttr(name = COLLATION_SERVER)`）、したがって SHOW VARIABLES に表示されセッションごとに変更可能です。値は SessionVariable にプレーンな String として保存され、通常は標準的な MySQL の照合名（例: `utf8_general_ci`, `utf8mb4_unicode_ci`）を保持します。ここでコードは固定列挙型を強制したり追加の検証を行ったりしないため、比較やソートなど照合に敏感な操作の実際の動作は照合名を解釈する下流コンポーネントに依存します。
+* **デフォルト**: `utf8_general_ci`
+* **データ型**: String
+* **導入バージョン**: `v3.2.0`
+
+### computation_fragment_scheduling_policy
+
+* **スコープ**: セッション
+* **説明**: 計算フラグメントの実行インスタンスを選択するために使用されるスケジューラポリシーを制御します。有効な値（大文字小文字を区別しない）は次のとおりです:
+  * `compute_nodes_only` — フラグメントを compute ノードのみにスケジュールします（デフォルト）。
+  * `all_nodes` — compute ノードと従来のバックエンドノードの両方でのスケジューリングを許可します。
+  この変数は enum `SessionVariableConstants.ComputationFragmentSchedulingPolicy` によってバックされます。設定されると値は enum に対して検証（大文字化して比較）され、無効な値はエラーを引き起こします（API 経由で設定した場合は `IllegalArgumentException`、SET 文で使用した場合は `SemanticException`）。ゲッターは対応する enum 値を返し、未設定または認識できない場合は `COMPUTE_NODES_ONLY` にフォールバックします。この設定はプラン作成／デプロイ時に FE がフラグメント配置先ノードを選択する方法に影響します。
+* **デフォルト**: `COMPUTE_NODES_ONLY`
+* **タイプ**: String
+* **導入バージョン**: v3.2.7
 
 ### connector_io_tasks_per_scan_operator
 
@@ -277,7 +324,10 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### connector_sink_compression_codec
 
-* **説明**: Hive テーブルまたは Iceberg テーブルにデータを書き込む際、または Files() でデータをエクスポートする際に使用される圧縮アルゴリズムを指定します。
+* **説明**: Hive テーブルまたは Iceberg テーブルにデータを書き込む際、または Files() でデータをエクスポートする際に使用される圧縮アルゴリズムを指定します。このパラメータは、以下の状況でのみ有効になります：
+  * Hive テーブルに `compression_codec` プロパティが存在しない場合。
+  * Iceberg テーブルに `write.parquet.compression-codec` プロパティが存在しない場合。
+  * `INSERT INTO FILES` に対して `compression` プロパティが設定されていない場合。
 * **有効な値**: `uncompressed`, `snappy`, `lz4`, `zstd`, および `gzip`。
 * **デフォルト**: uncompressed
 * **データ型**: 文字列
@@ -297,12 +347,27 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1024
 * **導入バージョン**: v2.5
 
+### custom_query_id (session)
+
+* **説明**: 現在のクエリに外部識別子をバインドするために使用されます。クエリ実行前に `SET SESSION custom_query_id = 'my-query-id';` のように設定できます。クエリ終了後に値はリセットされます。この値は `KILL QUERY 'my-query-id'` に渡すことができます。値は監査ログの `customQueryId` フィールドで確認できます。
+* **デフォルト**: ""
+* **データタイプ**: String
+* **導入バージョン**: v3.4.0
+
 ### datacache_sharing_work_period
 
 * **説明**: キャッシュ共有が有効になる期間。各クラスタースケーリング操作の後、キャッシュ共有機能が有効になっている場合、この期間内のリクエストのみが他のノードからキャッシュデータにアクセスしようとします。
 * **デフォルト**: 600
 * **単位**: Seconds
 * **導入バージョン**: v3.5.1
+
+### default_authentication_plugin
+
+* **スコープ**: Session
+* **説明**: このセッションのデフォルトの MySQL 認証プラグイン名を指定するセッションスコープの変数です。SessionVariable.defaultAuthenticationPlugin として格納され、サーバーがデフォルトの認証プラグインを告知または使用する必要がある場合（ハンドシェイク時やプラグインが指定されていない場合など）に、StarRocks の MySQL プロトコル互換レイヤーで使用されます。サーバーがサポートする標準的な MySQL 認証プラグイン識別子（例: `mysql_native_password`, `caching_sha2_password`）を受け付けます。この変数はセッション動作にのみ影響し、永続的なユーザーアカウントの認証構成は別途管理されます。関連するセッション変数 `authentication_policy` を参照してください。
+* **デフォルト**: `mysql_native_password`
+* **データタイプ**: String
+* **導入バージョン**: -
 
 ### default_rowset_type (global)
 
@@ -317,10 +382,34 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: lz4_frame
 * **導入バージョン**: v3.0
 
+### default_tmp_storage_engine
+
+* **説明**: セッション変数で、テンポラリテーブル（明示的な `CREATE TEMPORARY TABLE` およびエンジンによって作成される内部/暗黙のテンポラリテーブル）のデフォルトのストレージエンジンを制御します。`SessionVariable.java` に `@VariableMgr.VarAttr` アノテーションで宣言されており、主に MySQL 8.0 互換性のために存在し、MySQL ライクな動作を期待するクライアントやツールがセッションごとに一時テーブルのエンジンを確認または変更できるようにします。この値を変更すると、メモリバックエンドとディスクバックエンドなど、異なるエンジンを尊重するストレージ層でのテンポラリテーブルデータの保存/管理方法に影響します。
+* **スコープ**: Session
+* **デフォルト**: `InnoDB`
+* **データタイプ**: String
+* **導入バージョン**: v3.4.2, v3.5.0
+
 ### disable_colocate_join
 
 * **説明**: Colocation Join を有効にするかどうかを制御するために使用されます。デフォルト値は `false` で、機能が有効です。この機能が無効になっている場合、クエリプランニングは Colocation Join を実行しようとしません。
 * **デフォルト**: false
+
+### disable_join_reorder
+
+* **スコープ**: Session
+* **説明**: コストベースオプティマイザが結合の並べ替え（join reordering）を行うかどうかを制御します。`false`（デフォルト）では、オプティマイザは新しいプランナ経路（`SPMOptimizer` や `QueryOptimizer` に見られる）における論理最適化中に結合並べ替え変換（例：`ReorderJoinRule`、join transformation や outer-join transformation ルール）を適用する場合があります。`true` の場合、結合の並べ替えおよび関連する outer-join reorder ルールはスキップされ、オプティマイザが結合順序を変更することを防ぎます。これは最適化時間を短縮したり、安定／再現可能な結合順序を得たり、CBO の並べ替えが非最適なプランを生成するケースを回避するのに有用です。この設定は `cbo_max_reorder_node`、`cbo_max_reorder_node_use_exhaustive`、`enable_outer_join_reorder` のような他の CBO／セッション制御と相互作用します。
+* **デフォルト**: `false`
+* **データタイプ**: boolean
+* **導入バージョン**: v3.2.0
+
+### disable_spill_to_local_disk
+
+* **説明**: セッションで `true` に設定すると、FE は BE に対してローカルディスクへのスピルを無効にし、代わりにリモートストレージへのスピルに依存するよう指示します（リモートスピルが構成されている場合）。このフラグは `enable_spill` = `true`、`enable_spill_to_remote_storage` = `true`、かつ有効な `spill_storage_volume` が FE によって検出されている場合にのみ意味を持ちます。値は TSpillToRemoteStorageOptions（BE に送信）に `disable_spill_to_local_disk` としてシリアライズされます。リモートスピルが構成されていないか、指定されたストレージボリュームが解決できない場合、この設定は効果を持ちません。注意して使用してください：ローカルディスクへのスピルを無効化するとネットワーク I/O とレイテンシが増加し、信頼性・高性能なリモートストレージを必要とします。
+* **スコープ**: Session
+* **デフォルト**: false
+* **データ型**: boolean
+* **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
 
 ### div_precision_increment
 
@@ -352,6 +441,22 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **導入バージョン**: v3.5.5, v4.0.1
 
+### enable_cbo_table_prune
+
+* **説明**: 有効にすると、オプティマイザはメモ最適化中に CBO テーブルプルーニングルール（CboTablePruneRule）を追加して、カーディナリティを保持する結合に対するコストベースのテーブルプルーニングを行います。ルールはオプティマイザ内で条件付きに追加されます（QueryOptimizer.memoOptimize および SPMOptimizer.memoOptimize を参照）— 結合ツリー内の結合ノード数が小さい場合（10 未満の結合ノード）にのみ追加されます。このオプションはルールベースのプルーニング切替 `enable_rbo_table_prune` を補完し、Cost-Based Optimizer が結合処理から不要なテーブルや入力を取り除いてプランと実行の複雑さを軽減できるようにします。プルーニングはプラン形状を変更する可能性があるためデフォルトはオフです。代表的なワークロードで検証してから有効化してください。
+* **スコープ**: Session
+* **デフォルト**: `false`
+* **タイプ**: boolean
+* **導入バージョン**: v3.2.0
+
+### enable_color_explain_output
+
+* **スコープ**: Session
+* **説明**: テキスト形式の EXPLAIN / PROFILE 出力に ANSI カラーエスケープシーケンスを含めるかどうかを制御します。有効（`true`）のとき、StmtExecutor はセッション設定を explain/profile パイプライン（ExplainAnalyzer への呼び出しを通じて）に渡すため、explain、EXPLAIN ANALYZE、analyze-profile 出力に ANSI 対応端末での可読性を高めるカラー強調表示が含まれます。無効（`false`）のときは ANSI シーケンスなし（プレーンテキスト）で出力され、ログや ANSI をサポートしないクライアント、または出力をファイルにパイプする場合に適しています。これはセッション単位のトグルであり、実行のセマンティクスを変更するものではなく、explain/profile テキストの表示方法のみを変更します。
+* **デフォルト**: `true`
+* **データタイプ**: boolean
+* **導入バージョン**: v3.5.0
+
 ### enable_connector_adaptive_io_tasks
 
 * **説明**: 外部テーブルをクエリする際に同時 I/O タスクの数を適応的に調整するかどうか。デフォルト値は `true` です。この機能が有効でない場合、変数 `connector_io_tasks_per_scan_operator` を使用して同時 I/O タスクの数を手動で設定できます。
@@ -376,6 +481,18 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **導入バージョン**: v3.5.1
 
+### enable_distinct_agg_over_window
+
+* **説明**: WINDOW句上の DISTINCT 集約呼び出しを等価な join ベースのプランに変換するオプティマイザのリライトを制御します。有効（`true`、デフォルト）の場合、QueryOptimizer.invoke convertDistinctAggOverWindowToNullSafeEqualJoin は以下を行います:
+  * LogicalWindowOperator を含むクエリを検出、
+  * project-merge リライトを実行し、論理プロパティを導出、
+  * DistinctAggregationOverWindowRule を適用して DISTINCT-OVER-WINDOW パターンを null-safe equality join に変換（プラン形状を変更してさらに push-down や集約最適化を有効にする）、
+  * その後 SeparateProjectRule を実行してプロパティを再導出。
+  無効（`false`）の場合、オプティマイザはこの変換をスキップし、ウィンドウ上の DISTINCT 集約を変更せずに残します。この設定はセッションスコープで、オプティマイザのリライトフェーズ（QueryOptimizer.convertDistinctAggOverWindowToNullSafeEqualJoin を参照）にのみ影響します。
+* **デフォルト**: `true`
+* **データタイプ**: boolean
+* **導入バージョン**: -
+
 ### enable_distinct_column_bucketization
 
 * **説明**: グループバイカウントディスティンクトクエリで COUNT DISTINCT 列のバケット化を有効にするかどうか。クエリ `select a, count(distinct b) from t group by a;` を例にとります。GROUP BY 列 `a` が低基数列で、COUNT DISTINCT 列 `b` が高基数列でデータスキューが激しい場合、パフォーマンスボトルネックが発生します。この状況では、COUNT DISTINCT 列のデータを複数のバケットに分割してデータをバランスさせ、データスキューを防ぐことができます。この変数は、変数 `count_distinct_column_buckets` と一緒に使用する必要があります。
@@ -384,18 +501,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v2.5
-
-### enable_file_metacache
-
-* **説明**: リモートストレージ内のファイルのメタデータキャッシュ（フッターキャッシュ）を有効にするかどうか。この機能を有効にすると、フッターキャッシュは解析されたフッターオブジェクトをメモリに直接キャッシュします。同じファイルのフッターが後続のクエリでアクセスされると、オブジェクト記述子をキャッシュから直接取得でき、繰り返しの解析を回避できます。この機能は、データキャッシュのメモリモジュールを使用してデータをキャッシュします。したがって、BE パラメータ `datacache_enable` が `true` に設定され、`datacache_mem_size` に適切な値が設定されていることを確認する必要があります。
-* **デフォルト**: true
-* **導入バージョン**: v3.3.0
-
-### enable_file_pagecache
-
-* **説明**: リモートストレージ内のファイルに対して Page Cache を有効化するかどうか。この設定を `true` に設定すると、機能が有効化されます。Page Cache は、圧縮解除された Parquet ページデータをメモリに格納します。後続のクエリで同じページにアクセスする場合、データはキャッシュから直接取得され、繰り返し I/O 操作や圧縮解除を回避できます。この機能は Data Cache と連動し、同じメモリモジュールを使用します。有効にすると、繰り返しページアクセスパターンを持つワークロードのクエリ性能を大幅に向上させることができます。
-* **デフォルト**: true
-* **導入バージョン**: v4.0
 
 ### enable_force_rule_based_mv_rewrite
 
@@ -423,11 +528,25 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v4.0
 
+### enable_group_execution
+
+* **説明**: Colocate Group Executionを有効化するかどうか。Colocate Group Executionは物理的なデータ分割を活用する実行パターンであり、固定数のスレッドがそれぞれのデータ範囲を順次処理することで局所性とスループットを向上させます。この機能を有効化するとメモリ使用量を削減できます。
+* **デフォルト**: true
+* **導入バージョン**: v3.3
+
 ### enable_group_level_query_queue (global)
 
 * **説明**: リソースグループレベルの[クエリキュー](../administration/management/resource_management/query_queues.md)を有効にするかどうか。
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
+
+### enable_incremental_mv
+
+* **説明**: セッションフラグで、サーバーが増分リフレッシュを使用するマテリアライズドビューに対してプランを生成し、インメモリのプランを保持するかを制御します。有効にすると、`MaterializedViewAnalyzer.planMVQuery` はリフレッシュスキームが `IncrementalRefreshSchemeDesc` である create-MV ステートメントに対して処理を行います：ビュークエリの論理・物理プランを構築し、セッションの `enableMVPlanner` フラグを設定します（`setMVPlanner(true)`）。無効にすると、増分リフレッシュ MV のプラン作成はスキップされます。`SessionVariable` の `isEnableIncrementalRefreshMV()` および `setEnableIncrementalRefreshMv(boolean)` からアクセス可能です。
+* **スコープ**: セッション（接続ごと）
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
 
 ### enable_insert_partial_update
 
@@ -447,6 +566,25 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: Boolean
 * **導入バージョン**: v3.3.0
 
+### enable_load_profile
+
+* **スコープ**: Session
+* **説明**: 有効にすると、FE はロードジョブのランタイムプロファイルの収集を要求し、ロード完了後にロードコーディネータがプロファイルを収集/エクスポートします。ストリームロードの場合、FE は `TQueryOptions.enable_profile = true` を設定し、`stream_load_profile_collect_threshold_second` からの `load_profile_collect_second` をバックエンドに渡します。コーディネータは条件に応じてプロファイル収集を呼び出します（StreamLoadTask.collectProfile() を参照）。実際の振る舞いは、このセッション変数と宛先テーブルのテーブルレベルプロパティ `enable_load_profile` の論理 OR です。収集はさらに `load_profile_collect_interval_second`（FE 側のサンプリング間隔）によって制御され、頻繁な収集を回避します。セッションフラグは `SessionVariable.isEnableLoadProfile()` を介して読み取られ、`setEnableLoadProfile(...)` で接続ごとに設定できます。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
+### enable_local_shuffle_agg
+
+* **説明**: プランナーとコストモデルが、二相／グローバルシャッフル集約の代わりにローカルシャッフルを用いた単一フェーズのローカル集約プラン（Scan -> LocalShuffle -> OnePhaseAgg）を生成することを許可するかを制御します。有効（デフォルト）の場合、オプティマイザとコストモデルは次を行います：
+  - Scan と Global Agg の間の SHUFFLE 交換を、単一バックエンド兼コンピュートノードのクラスタでローカルシャッフル + ワンフェーズ集約に置き換えることを許可する（`PruneShuffleDistributionNodeRule` と `EnforceAndCostTask` を参照）、
+  - その単一ノードのケースでネットワークコストを無視してワンフェーズプランを優先させる（`CostModel`）。
+  置換は `enable_pipeline_engine` が有効でクラスタが単一のバックエンド＋コンピュートノードである場合にのみ検討されます。プランナーは安全でないケース（例：DISTINCT 集約、検出されたデータスキュー、欠落または不明なカラム統計、結合のような複数入力オペレータ、その他のセマンティック制約）ではローカルシャッフル変換を却下します。いくつかのコードパス（INSERT/UPDATE/DELETE のプランナーや MaterializedViewOptimizer）は、一時的にこのセッションフラグを無効化します。これは非クエリシンクや特定のリライトが driver 単位の scan アサインを要求し、ローカルシャッフルでは利用できないためです。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
 ### enable_materialized_view_agg_pushdown_rewrite
 
 * **説明**: マテリアライズドビュークエリ書き換えのための集計プッシュダウンを有効にするかどうか。`true` に設定されている場合、集計関数はクエリ実行中に Scan Operator にプッシュダウンされ、Join Operator が実行される前にマテリアライズドビューによって書き換えられます。これにより、Join によるデータ拡張が軽減され、クエリパフォーマンスが向上します。この機能のシナリオと制限の詳細については、[Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown) を参照してください。
@@ -458,12 +596,6 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: StarRocks が INSERT INTO SELECT 文でクエリを書き換えることを許可するかどうか。
 * **デフォルト**: false、つまりそのようなシナリオでのクエリ書き換えはデフォルトで無効です。
 * **導入バージョン**: v2.5.18, v3.0.9, v3.1.7, v3.2.2
-
-### enable_materialized_view_plan_cache
-
-* **説明**: マテリアライズドビューのプランキャッシュを有効にするかどうか。これにより、マテリアライズドビューの自動書き換えパフォーマンスが最適化されます。`true` に設定すると、有効になります。
-* **デフォルト**: true
-* **導入バージョン**: v2.5.13, v3.0.7, v3.1.4, v3.2.0, v3.3.0
 
 ### enable_materialized_view_text_match_rewrite
 
@@ -492,6 +624,25 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * この機能が無効な場合、ローカル RF のみが機能します。
 * この機能が有効な場合、マルチカラムグローバル RF が有効になり、パーティション by 句に `multi-column` を含みます。
 
+### enable_mv_planner
+
+* **スコープ**: Session
+* **説明**: 有効にすると、現在のセッションに対して Materialized View (MV) planner モードを有効にします。このモードではオプティマイザは以下のように動作します：
+  - 通常の join 実装ルール（QueryOptimizer）ではなく、`context.getRuleSet().addRealtimeMVRules()` を通じた MV 固有のルールセットを使用します。
+  - stream 実装ルールが適用されることを許可します（`StreamImplementationRule.check` は MV planner がオンのときのみ true を返します）。
+  - 論理プラン変換時の scan/operator 構築を変更します（例：RelationTransformer は MV planner が有効な場合、ネイティブテーブル/マテリアライズドビューに対して `LogicalBinlogScanOperator` を選択します）。
+  - 一部の標準変換を無効化またはバイパスします（例：`SplitMultiPhaseAggRule.check` は MV planner がオンのとき false を返します）。
+  Materialized view のプラン生成コード（MaterializedViewAnalyzer）は MV プランニング作業の前後でこのフラグを設定します（プランニング前に true にし、終了後に false に戻す）ので、主に MV プラン生成とテスト用を意図しています。このセッション変数を設定しても、影響は現在のセッションのオプティマイザ動作にのみ及びます。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
+### enable_parallel_merge
+
+* **説明**: ソートの Parallel Merge を有効にするかどうか。この機能を有効にすると、ソートのマージフェーズでマージ操作に複数のスレッドが使用されます。
+* **デフォルト**: true
+* **導入バージョン**: v3.3
+
 ### enable_parquet_reader_bloom_filter
 
 * **デフォルト**: true
@@ -518,6 +669,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v3.4
 
+### enable_per_bucket_optimize
+
+* **説明**: バケット化計算を有効化するかどうか。この機能を有効にすると、第 1 段階の集計をバケット順に計算でき、メモリ使用量を削減できます。
+* **デフォルト**: true
+* **導入バージョン**: v3.0
+
 ### enable_phased_scheduler
 
 * **説明**: マルチフェーズスケジューリングを有効にするかどうか。マルチフェーズスケジューリングを有効にすると、フラグメントは依存関係に基づいてスケジューリングされます。例えば、システムはまず Shuffle Join の Build side のフラグメントをスケジュールし、次に Probe side のフラグメントをスケジュールします（注：ステージごとのスケジュールとは異なり、フェーズごとのスケジュールは依然として MPP 実行モード下で実行されます）。マルチフェーズスケジューリングを有効にすると、多数のUNION ALLクエリにおけるメモリ使用量を大幅に削減できます。
@@ -535,11 +692,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v3.4.0
 
-### enable_plan_analyzer
+### enable_predicate_reorder
 
-* **説明**: すべてのクエリに対するクエリフィードバック機能を有効にするかどうか。この変数は `enable_plan_advisor` が `true` に設定されている場合にのみ有効です。
+* **スコープ**: Session
+* **説明**: 有効にすると、オプティマイザは論理／物理プランの書き換え時に AND（連言）述語に対して Predicate Reorder ルールを適用します。ルールは `Utils.extractConjuncts` を使って連言の各項を抽出し、`DefaultPredicateSelectivityEstimator` で各項の選択性を推定し、推定選択性の昇順（制約の緩いものを先）で項を並べ替えて新しい `CompoundPredicateOperator`（AND）を構成します。オペレータが複数の項を持つ `CompoundPredicateOperator` の場合にのみルールは実行されます。統計は子の `OptExpression` の統計から取得され、`PhysicalOlapScanOperator` の場合は `GlobalStateMgr.getCurrentState().getStatisticStorage()` からカラム統計を取得します。子の統計が欠けておりスキャンが OLAP スキャンでない場合、ルールは並べ替えをスキップします。セッション変数は `SessionVariable.isEnablePredicateReorder()` を通じて公開され、`enablePredicateReorder()` および `disablePredicateReorder()` のヘルパーメソッドがあります。
 * **デフォルト**: false
-* **導入バージョン**: v3.4.0
+* **データタイプ**: boolean
+* **導入バージョン**: v3.2.0
 
 ### enable_profile
 
@@ -590,6 +749,22 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: 外部テーブルに対してクエリトリガー ANALYZE タスクを有効化するかどうか。
 * **導入バージョン**: v3.4.0
 
+### enable_rbo_table_prune
+
+* **説明**: セッションで有効にすると、オプティマイザは現在のセッションでカーディナリティを保持する結合に対してルールベース（RBO）によるテーブルプルーニングを適用します。オプティマイザは一連のリライトおよびプルーニングステップ（パーティションプルーニング、project のマージ/分離、`UniquenessBasedTablePruneRule`、結合順序入れ替え、`RboTablePruneRule`）を実行して不要なテーブルスキャンの候補を除去し、結合における走査パーティション/行数を削減します。このオプションを有効にすると、論理ルールのリライト実行中に競合する変換を避けるために結合同値性導出（`context.setEnableJoinEquivalenceDerive(false)`）が無効化されます。プルーニングフローは、`enable_table_prune_on_update` が設定されている場合に UPDATE 文に対して `PrimaryKeyUpdateTableRule` を追加で実行することがあります。ルールは、クエリがプルーニング可能な結合を含む場合にのみ実行されます（`Utils.hasPrunableJoin(tree)` でチェックされます）。
+* **スコープ**: Session
+* **デフォルト**: `false`
+* **タイプ**: boolean
+* **導入バージョン**: v3.2.0
+
+### enable_runtime_adaptive_dop
+
+* **スコープ**: Session
+* **説明**: セッションで有効にすると、planner と fragment builder はランタイムの adaptive DOP をサポートするパイプライン対応フラグメントに対して、実行時に adaptive degree-of-parallelism を使用するようマークします。このオプションは `enable_pipeline_engine` が true のときのみ有効になります。有効にするとフラグメントはプラン構築中に `enableAdaptiveDop()` を呼び出すようになり、ランタイム上の影響があります：join の probe はすべての build フェーズが完了するのを待つ可能性があり（これは `group_execution` の動作と衝突します）、ランタイム adaptive DOP を有効にするとパイプラインレベルの multi-partitioned runtime filters が無効になります（setter は `enablePipelineLevelMultiPartitionedRf` をクリアします）。このフラグはクエリプロファイルに記録され、セッション単位で切り替えることができます。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
 ### enable_scan_datacache
 
 * **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
@@ -631,17 +806,18 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v2.5.18 および v3.1.7
 
-### enable_strict_type
-
-* **説明**: すべての複合述語および WHERE 句内のすべての式に対して暗黙の型変換を許可するかどうか。
-* **デフォルト**: false
-* **導入バージョン**: v3.1
-
 ### enable_sync_materialized_view_rewrite
 
 * **説明**: 同期マテリアライズドビューに基づくクエリの書き換えを有効にするかどうか。
 * **デフォルト**: true
 * **導入バージョン**: v3.1.11, v3.2.5
+
+### enable_table_prune_on_update
+
+* **説明**: セッションレベルのブールで、オプティマイザが UPDATE 文に対して主キー固有のテーブルプルーニング規則を適用するかどうかを制御します。有効にすると、QueryOptimizer（pruneTables ステージ中）が `PrimaryKeyUpdateTableRule` を呼び出して更新プランを書き換え／プルーニングし、主キー更新パターンに対するプルーニングを改善する可能性があります。このフラグは rule-based/CBO によるテーブルプルーニングが有効な場合にのみ効果があります（`enable_rbo_table_prune` を参照）。デフォルトで無効になっているのは、この変換がデータレイアウトやプランの形状（例：OlapTableSink のバケットシャッフルレイアウト）を変える可能性があり、同時更新時に正確性や性能の後退を引き起こす恐れがあるためです。
+* **デフォルト**: `false`
+* **データタイプ**: boolean
+* **導入バージョン**: v3.2.4
 
 ### enable_tablet_internal_parallel
 
@@ -654,6 +830,14 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: TopN Runtime Filter を有効にするかどうか。この機能を有効にすると、ORDER BY LIMIT クエリに対して動的に Runtime Filter が構築され、Scan 段階にプッシュダウンされてフィルタリングに利用されます。
 * **デフォルト**: true
 * **導入バージョン**: v3.3
+
+### enable_ukfk_opt
+
+* **説明**: Unique-Key / Foreign-Key (UK/FK) に基づく変換と統計の拡張に対するオプティマイザのサポートを有効にします。有効にすると、オプティマイザは `UKFKConstraintsCollector` を実行して一番下から（bottom‑up に）ユニークキーおよび外部キー制約を収集し、それらを計画ノード（OptExpressions）に付加します。収集された制約は `PruneUKFKJoinRule`（結合の UK 側をプルーニングしたり、述語を UK から FK 列へ書き換え、外部結合の場合に IS NULL チェックを追加する）や `PruneUKFKGroupByKeysRule`（UK/FK 関係から導出される冗長な GROUP BY キーを削除する）などの変換ルールで利用されます。収集された UK/FK 情報は `StatisticsCalculator` において UK‑FK ジョインの結合基数推定をより厳密にするためにも使われ、より精密な場合はデフォルトの推定を置き換えることがあります。これらの最適化は宣言されたスキーマ制約に依存し、プランの形状や述語の配置を変更する可能性があるため、デフォルトは保守的に `false` です。
+* **デフォルト**: `false`
+* **スコープ**: セッション
+* **データタイプ**: boolean
+* **導入バージョン**: v3.2.4
 
 ### enable_view_based_mv_rewrite
 
@@ -676,20 +860,6 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 ### event_scheduler
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
-
-### follower_query_forward_mode
-
-* **説明**: クエリ文がどの FE ノードにルーティングされるかを指定します。
-
-  * 有効な値:
-
-    * `default`: クエリ文を Leader FE または Follower FEs にルーティングします。Follower の再生進行状況に応じて、Follower FE ノードが再生進行を完了していない場合、クエリは Leader FE ノードにルーティングされます。再生進行が完了している場合、クエリは優先的に Follower FE ノードにルーティングされます。
-    * `leader`: クエリ文を Leader FE にルーティングします。
-    * `follower`: クエリ文を Follower FE にルーティングします。
-
-* **デフォルト**: default
-* **データ型**: 文字列
-* **導入バージョン**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
 
 ### forward_to_leader
 
@@ -721,6 +891,18 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: 文字
 * **データ型**: Long
 
+### group_execution_max_groups
+
+* **説明**: Group Execution で許可されるグループの最大数。分割の粒度を制限し、過剰なグループ数によるスケジューリングのオーバーヘッドを防ぐために使用されます。
+* **デフォルト**: 128
+* **導入バージョン**: v3.3
+
+### group_execution_min_scan_rows
+
+* **説明**: Group Execution におけるグループごとの最小処理行数。
+* **デフォルト**: 5000000
+* **導入バージョン**: v3.3
+
 ### hash_join_push_down_right_table
 
 * **説明**: ジョインクエリで右テーブルに対するフィルタ条件を使用して左テーブルのデータをフィルタリングできるかどうかを制御するために使用されます。これにより、クエリ中に処理する必要のあるデータ量を削減できます。
@@ -736,6 +918,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 ### init_connect (global)
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
+
+### innodb_read_only
+
+* **説明**: セッションレベルのフラグ（MySQL 互換）で、セッションの InnoDB 読み取り専用モードを示します。この変数は `SessionVariable.java` の Java フィールド `innodbReadOnly` として宣言およびセッションに保存され、`isInnodbReadOnly()` および `setInnodbReadOnly(boolean)` を介してアクセス可能です。SessionVariable クラスはフラグを保持するだけであり、実際の強制（InnoDB テーブルへの書き込み/DDL の防止やトランザクション動作の変更など）は、このセッションフラグを参照すべきトランザクション／ストレージ／認可レイヤー側で実装する必要があります。現在のセッション内で読み取り専用の意図を伝えるために、この変数を使用してください。
+* **スコープ**: Session
+* **デフォルト**: `true`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
 
 ### insert_max_filter_ratio
 
@@ -814,19 +1004,17 @@ MySQL クライアント互換性のために使用されます。実際の用�
   * `false`：データレイクのクエリで低基数最適化を無効にします。
 * **導入バージョン**: v3.5.0
 
+### low_cardinality_optimize_v2
+
+* **スコープ**: Session
+* **説明**: オプティマイザが適用する low-cardinality 最適化のどのリライトを選択するかを制御するセッションレベルの boolean。`true` の場合、オプティマイザは `LowCardinalityRewriteRule` によって実装された新しい V2 リライト（`DecodeCollector` / `DecodeRewriter` を使用して low-cardinality な VARCHAR カラムをエンコード/デコード）を試行します。`false` の場合、オプティマイザは `AddDecodeNodeForDictStringRule` によって実装されたレガシーなリライトにフォールバックします。どちらのリライトを実行する場合でも `enableLowCardinalityOptimize` が有効である必要があり、`enableLowCardinalityOptimize` が無効な場合は low-cardinality のリライトは実行されません。この変数は適切な変換を選択するためにオプティマイザのツリー書き換え経路でチェックされます。
+* **デフォルト**: `true`
+* **タイプ**: boolean
+* **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
+
 ### lower_case_table_names (global)
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。StarRocks のテーブル名は大文字小文字を区別します。
-
-### lower_upper_support_utf8
-
-* **デフォルト**: false
-* **データ型**: Boolean
-* **単位**: -
-* **説明**: `lower` と `upper` 関数で UTF-8 文字の大文字小文字変換をサポートするかどうか。有効な値：
-  * `true`： UTF-8 文字の大文字小文字変換をサポートする。
-  * `false` (デフォルト)： UTF-8 文字の大文字小文字変換をサポートしない。
-* **導入バージョン**: v3.5.0
 
 ### materialized_view_rewrite_mode (v3.2 以降)
 
@@ -838,7 +1026,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * `force`: 非同期マテリアライズドビューの自動クエリ書き換えを有効にし、オプティマイザがマテリアライズドビューを使用してクエリを書き換えることを優先します。クエリが書き換えられない場合、ベーステーブルのデータを直接スキャンします。
 * `force_or_error`: 非同期マテリアライズドビューの自動クエリ書き換えを有効にし、オプティマイザがマテリアライズドビューを使用してクエリを書き換えることを優先します。クエリが書き換えられない場合、エラーが返されます。
 
-### materialized_view_subuqery_text_match_max_count
+### materialized_view_subquery_text_match_max_count
 
 * **説明**: クエリのサブクエリがマテリアライズドビューの定義と一致するかどうかをシステムがチェックする最大回数を指定します。
 * **デフォルト**: 4
@@ -850,6 +1038,18 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 33554432 (32 MB)。クライアントが "PacketTooBigException" を報告する場合、この値を増やすことができます。
 * **単位**: バイト
 * **データ型**: Int
+
+### max_pipeline_dop
+
+* **スコープ**: Session
+* **説明**: パイプラインエンジンの degree-of-parallelism (DOP) に対するセッションごとの上限。動作:
+  * `enable_pipeline_engine` が有効で `pipeline_dop` が明示的に設定されていない（0 以下ではない）場合にのみ適用されます。`pipeline_dop` が 0 より大きい場合、この変数は無視され `pipeline_dop` が直接使用されます。
+  * `pipeline_dop` が 0 以下（アダプティブ/デフォルトモード）のとき、実際の実行 DOP は min(`max_pipeline_dop`, BackendResourceStat が返すバックエンドのデフォルト DOP) として計算されます。パイプラインの sink に対しては同じロジックで sink のデフォルト DOP が使用されます。
+  * `max_pipeline_dop` が 0 以下の場合、追加の上限は適用されずバックエンドのデフォルト DOP が使用されます。
+  * 目的: コア数が非常に多いマシンでスケジューリングによる負荷増を回避するため、自動計算された並列度に上限をかけること。
+* **デフォルト**: `64`
+* **データ型**: int
+* **導入バージョン**: v3.2.0
 
 ### max_pushdown_conditions_per_column
 
@@ -922,6 +1122,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 クエリプランは通常、一連のスキャン範囲を生成します。このデータは複数の BE ノードに分散されています。BE ノードには 1 つ以上のスキャン範囲があり、デフォルトでは各 BE ノードのスキャン範囲セットは 1 つの実行インスタンスによって処理されます。マシンリソースが十分な場合、この変数を増やして、より多くの実行インスタンスがスキャン範囲を同時に処理できるようにすることで効率を向上させることができます。
 
 スキャンインスタンスの数は、上位レベルの他の実行ノード（集計ノードやジョインノードなど）の数を決定します。したがって、クエリプラン実行全体の並行性を高めます。この変数を変更することで効率を向上させることができますが、値が大きいとマシンリソース（CPU、メモリ、ディスク IO など）が多く消費されます。
+
+### parallel_merge_late_materialization_mode
+
+* **説明**: ソートの Parallel Merge の遅延マテリアライゼーションモード。有効な値：
+  * `AUTO`
+  * `ALWAYS`
+  * `NEVER`
+* **デフォルト**: `AUTO`
+* **導入バージョン**: v3.3
 
 ### partial_update_mode
 
@@ -1023,20 +1232,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 JDBC 接続プール C3P0 との互換性のために使用されます。実際の用途はありません。
 
-### query_excluding_mv_names
-
-* **説明**: クエリ実行から除外する非同期マテリアライズドビューの名前を指定します。この変数を使用して、候補マテリアライズドビューの数を制限し、オプティマイザでのクエリ書き換え時間を短縮することができます。`query_including_mv_names` はこの項目より優先されます。
-* **デフォルト**: 空
-* **データ型**: 文字列
-* **導入バージョン**: v3.1.11, v3.2.5
-
-### query_including_mv_names
-
-* **説明**: クエリ実行に含める非同期マテリアライズドビューの名前を指定します。この変数を使用して、候補マテリアライズドビューの数を制限し、オプティマイザでのクエリ書き換えパフォーマンスを向上させることができます。この項目は `query_excluding_mv_names` より優先されます。
-* **デフォルト**: 空
-* **データ型**: 文字列
-* **導入バージョン**: v3.1.11, v3.2.5
-
 ### query_mem_limit
 
 * **説明**: 各 BE ノードでのクエリのメモリ制限を設定するために使用されます。デフォルト値は 0 で、制限がないことを意味します。この項目はパイプラインエンジンが有効になった後にのみ有効です。`Memory Exceed Limit` エラーが発生した場合、この変数を増やすことができます。`0` に設定すると、制限が課されないことを示します。
@@ -1086,6 +1281,13 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **デフォルト**: 100
 * **導入バージョン**: v3.0
 
+### resource_group 
+
+* **説明**: このセッションの指定されたリソースグループ
+* **デフォルト**: ""
+* **データタイプ**: String
+* **導入バージョン**: 3.2.0
+
 ### runtime_filter_on_exchange_node
 
 * **説明**: GRF が Exchange オペレーターを越えて下位レベルのオペレーターにプッシュダウンされた後、Exchange ノードに配置されるかどうか。デフォルト値は `false` で、GRF は Exchange オペレーターを越えて下位レベルのオペレーターにプッシュダウンされた後、Exchange ノードに配置されません。これにより、GRF の繰り返し使用が防止され、計算時間が短縮されます。
@@ -1114,17 +1316,26 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **デフォルト**: 0（制限なし）
 * **導入バージョン**: v3.3.9
 
-### spill_enable_compaction
+### skip_local_disk_cache
 
-* **説明**: Spilling から小さなファイルに対する Compaction を有効にするかどうか。この機能を有効にすると、集約と並べ替え時のメモリ使用量を削減します。
-* **デフォルト**: true
-* **導入バージョン**: v3.4
+* **説明**: FE がスキャンレンジを構築するときに、各タブレットの内部スキャンレンジに `skip_disk_cache` をマークするよう指示するセッションフラグです。`true` に設定すると、`OlapScanNode.addScanRangeLocations()` は作成された `TInternalScanRange` オブジェクトに対して `internalRange.setSkip_disk_cache(true)` を設定するため、下流の BE スキャンノードはそのスキャンでローカルディスクキャッシュをバイパスするよう指示されます。この設定はセッション単位で適用され、プラン／スキャンレンジ構築時に評価されます。ページキャッシュスキップの制御には `skip_page_cache` と組み合わせて使用し、データキャッシュ関連の変数（`enable_scan_datacache` / `enable_populate_datacache`）と併せて適切に利用してください。
+* **スコープ**: セッション
+* **デフォルト**: `false`
+* **タイプ**: boolean
+* **導入バージョン**: v3.3.9, v3.4.0, v3.5.0
 
-### spill_enable_direct_io
+### spill_encode_level
 
-* **説明**: Spilling 機能を使用する際、ファイルの読み書き時に Page Cache をスキップするかどうか。この機能が有効になっている場合、Spilling は直接 I/O モードを使用してファイルを直接読み書きします。直接 I/O モードは OS の Page Cache への影響を軽減できますが、ディスクの読み書き時間が延長される可能性があります。
-* **デフォルト**: false
-* **導入バージョン**: v3.4
+* **スコープ**: セッション
+* **説明**: オペレータのスピルファイルに適用されるエンコード／圧縮の振る舞いを制御します。整数はビットフラグレベルで、意味は `transmission_encode_level` と同様です:
+  * bit 1 (値 `1`) — 適応エンコーディングを有効にする;
+  * bit 2 (値 `2`) — 整数のような列を streamvbyte でエンコードする;
+  * bit 4 (値 `4`) — バイナリ／文字列列を LZ4 で圧縮する。
+  関連する `transmission_encode_level` のコメントからの例の意味: `7` は数値と文字列の適応エンコーディングを有効にし、`6` は数値と文字列のエンコードを強制します。この値を変更するとスピル時の CPU とディスク I/O のトレードオフが調整されます（エンコードレベルが高いほど CPU 負荷は増えるがスピルサイズ／I/O は減少します）。
+  `SessionVariable.java` のセッション変数として注釈された `SPILL_ENCODE_LEVEL`（getter `getSpillEncodeLevel()`）として実装されており、`spill_mem_table_size` のような他のスピル調整可能項目の近くに文書化されています。
+* **デフォルト**: `7`
+* **タイプ**: int
+* **導入バージョン**: v3.2.0
 
 ### spill_mode (3.0 以降)
 
@@ -1187,12 +1398,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 無制限
 * **データ型**: Long
 
-### statistic_collect_parallel
-
-* **説明**: BEs で実行できる統計収集タスクの並行性を調整するために使用されます。デフォルト値: 1。この値を増やすことで収集タスクを高速化できます。
-* **デフォルト**: 1
-* **データ型**: Int
-
 ### storage_engine
 
 StarRocks がサポートするエンジンの種類：
@@ -1218,28 +1423,9 @@ GROUP BY の最初のフェーズの事前集計モードを指定するため�
 
 現在のシステムのタイムゾーンを表示するために使用されます。変更できません。
 
-### tablet_internal_parallel_mode
-
-* **説明**: タブレットの内部並列スキャン戦略。有効な値:
-  * `auto`: BE または CN ノードでスキャンされるタブレットの数が並行性（DOP）より少ない場合、システムはタブレットの推定サイズに基づいて並列スキャンが必要かどうかを自動的に判断します。
-  * `force_split`: タブレットを強制的に分割し、並列スキャンを実行します。
-* **デフォルト**: auto
-* **データ型**: 文字列
-* **導入バージョン**: v2.5.0
-
 ### time_zone
 
 現在のセッションのタイムゾーンを設定するために使用されます。タイムゾーンは、特定の時間関数の結果に影響を与える可能性があります。
-
-### trace_log_mode
-
-* **説明**: クエリトレースプロファイルのログを出力する場所を制御するために使用されます。有効な値:
-  * `command`: TRACE LOGS を実行した後、**Explain String** としてクエリトレースプロファイルログを返します。
-  * `file`: クラス名が `FileLogTracer` である **fe.log** の FE ログファイルにクエリトレースプロファイルログを返します。
-
-* **デフォルト**: `command`
-* **データ型**: 文字列
-* **導入バージョン**: v3.2.0
 
 ### transaction_read_only
 
@@ -1250,6 +1436,14 @@ GROUP BY の最初のフェーズの事前集計モードを指定するため�
 ### tx_isolation
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。エイリアスは `transaction_isolation` です。
+
+### tx_visible_wait_timeout
+
+* **説明**: コミット済みトランザクションが可視（公開）になるまでサーバが待機する時間（秒単位）を制御するセッションスコープのタイムアウトです。`StmtExecutor` および `TransactionStmtExecutor` のコミットフローで使用されるミリ秒単位の publish 待機時間はこの値に1000を掛けて算出されます。可視待機が期限切れになると、トランザクションは COMMITTED と扱われますがまだ VISIBLE ではないと見なされます。マテリアライズドビューのリフレッシュロジック（`MVTaskRunProcessor`）は、可視性を事実上無期限に待つために一時的にこの変数を `Long.MAX_VALUE / 1000` に設定し、リフレッシュ後に元の値を復元します。`enable_sync_publish` が有効な場合、この変数は無視され、publish 待機はジョブのデッドラインから派生されます。
+* **スコープ**: Session
+* **デフォルト**: `10`
+* **データ型**: long
+* **導入バージョン**: v3.2.0
 
 ### use_compute_nodes
 

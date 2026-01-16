@@ -22,6 +22,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
+#include "util/starrocks_metrics.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -30,11 +31,11 @@ static int calc_max_merge_blocks_thread() {
 #ifndef BE_TEST
     // The starting point for setting the maximum number of threads for load spill:
     // 1. Meet the memory limit requirements (by config::load_spill_merge_memory_limit_percent) for load spill.
-    // 2. Each thread can use 1GB(by config::load_spill_max_merge_bytes) of memory.
+    // 2. Each thread can use 1GB(by config::load_spill_memory_usage_per_merge) of memory.
     // 3. The maximum number of threads is limited by config::load_spill_merge_max_thread.
     int64_t load_spill_merge_memory_limit_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->limit() *
                                                   config::load_spill_merge_memory_limit_percent / (int64_t)100;
-    int max_merge_blocks_thread = load_spill_merge_memory_limit_bytes / config::load_spill_max_merge_bytes;
+    int max_merge_blocks_thread = load_spill_merge_memory_limit_bytes / config::load_spill_memory_usage_per_merge;
 #else
     int max_merge_blocks_thread = 1;
 #endif
@@ -49,12 +50,22 @@ Status LoadSpillBlockMergeExecutor::init() {
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
                             .build(&_merge_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("tablet_internal_parallel_merge")
+                            .set_min_threads(1)
+                            .set_max_threads(calc_max_merge_blocks_thread())
+                            .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
+                            .build(&_tablet_internal_parallel_merge_pool));
+    REGISTER_THREAD_POOL_METRICS(tablet_internal_parallel_merge, _tablet_internal_parallel_merge_pool);
     return Status::OK();
 }
 
 Status LoadSpillBlockMergeExecutor::refresh_max_thread_num() {
     if (_merge_pool != nullptr) {
-        return _merge_pool->update_max_threads(calc_max_merge_blocks_thread());
+        RETURN_IF_ERROR(_merge_pool->update_max_threads(calc_max_merge_blocks_thread()));
+    }
+    if (_tablet_internal_parallel_merge_pool != nullptr) {
+        RETURN_IF_ERROR(_tablet_internal_parallel_merge_pool->update_max_threads(calc_max_merge_blocks_thread()));
     }
     return Status::OK();
 }
@@ -63,15 +74,24 @@ std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_token() {
     return _merge_pool->new_token(ThreadPool::ExecutionMode::SERIAL);
 }
 
-void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {
+std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_tablet_internal_parallel_merge_token() {
+    return _tablet_internal_parallel_merge_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+}
+
+void LoadSpillBlockContainer::append_block(spill::BlockGroup* block_group, const spill::BlockPtr& block) {
+    // Move append outside the lock to reduce lock contention
+    block_group->append(block);
     std::lock_guard guard(_mutex);
-    _block_groups.back().append(block);
     _total_bytes += block->size();
 }
 
-void LoadSpillBlockContainer::create_block_group() {
+// Create a new block group tagged with the given slot_idx
+// @param slot_idx: slot index from flush token, used to track submission order
+// @return: pointer to the newly created block group
+spill::BlockGroup* LoadSpillBlockContainer::create_block_group(int64_t slot_idx) {
     std::lock_guard guard(_mutex);
-    _block_groups.emplace_back(spill::BlockGroup());
+    _block_groups.emplace_back(BlockGroupPtrWithSlot{std::make_shared<spill::BlockGroup>(), slot_idx});
+    return _block_groups.back().block_group.get();
 }
 
 bool LoadSpillBlockContainer::empty() {
@@ -80,7 +100,7 @@ bool LoadSpillBlockContainer::empty() {
 }
 
 spill::BlockPtr LoadSpillBlockContainer::get_block(size_t gid, size_t bid) {
-    return _block_groups[gid].blocks()[bid];
+    return _block_groups[gid].block_group->blocks()[bid];
 }
 
 LoadSpillBlockManager::~LoadSpillBlockManager() {

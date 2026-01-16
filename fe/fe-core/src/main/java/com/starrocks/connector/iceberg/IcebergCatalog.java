@@ -210,7 +210,7 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     /**
      * Register an existing table in the catalog using the given metadata file location.
-     * 
+     *
      * @param context The connect context
      * @param dbName The database name
      * @param tableName The table name
@@ -227,6 +227,9 @@ public interface IcebergCatalog extends MemoryTrackable {
     default void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService refreshExecutor) {
     }
 
+    default void invalidateTableCache(String dbName, String tableName) {
+    }
+
     default void invalidatePartitionCache(String dbName, String tableName) {
     }
 
@@ -237,8 +240,12 @@ public interface IcebergCatalog extends MemoryTrackable {
         return new StarRocksIcebergTableScan(
                 table,
                 table.schema(),
-                newTableScanContext(table),
+                newTableScanContext(table, srScanContext),
                 srScanContext);
+    }
+
+    default Map<String, String> getCatalogProperties() {
+        return new HashMap<>();
     }
 
     default String defaultTableLocation(ConnectContext context, Namespace ns, String tableName) {
@@ -296,15 +303,16 @@ public interface IcebergCatalog extends MemoryTrackable {
                     // equality_delete_file_count,
                     // last_updated_at,
                     // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the last updated time of the table according to the table schema
-                        // last_updated_at can be null if the referenced snapshot has been expired.
-                        // Use Long wrapper to avoid NPE during auto-unboxing.
-                        long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row, 7,
-                                EMPTY_PARTITION_NAME, snapshotId);
-                        partition = new Partition(lastUpdated);
-                        break;
+                    try (CloseableIterable<StructLike> rows = task.asDataTask().rows()) {
+                        for (StructLike row : rows) {
+                            // Get the last updated time of the table according to the table schema
+                            // last_updated_at can be null if the referenced snapshot has been expired.
+                            // Use Long wrapper to avoid NPE during auto-unboxing.
+                            long lastUpdated = getPartitionLastUpdatedTime(icebergTable, row, 7,
+                                    EMPTY_PARTITION_NAME, snapshotId);
+                            partition = new Partition(lastUpdated);
+                            break;
+                        }
                     }
                 }
                 if (partition == null) {
@@ -333,19 +341,20 @@ public interface IcebergCatalog extends MemoryTrackable {
                     // equality_delete_file_count,
                     // last_updated_at,
                     // last_updated_snapshot_id
-                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
-                    for (StructLike row : rows) {
-                        // Get the partition data/spec id/last updated time according to the table schema
-                        StructProjection partitionData = row.get(0, StructProjection.class);
-                        int specId = row.get(1, Integer.class);
-                        PartitionSpec spec = nativeTable.specs().get(specId);
+                    try (CloseableIterable<StructLike> rows = task.asDataTask().rows()) {
+                        for (StructLike row : rows) {
+                            // Get the partition data/spec id/last updated time according to the table schema
+                            StructProjection partitionData = row.get(0, StructProjection.class);
+                            int specId = row.get(1, Integer.class);
+                            PartitionSpec spec = nativeTable.specs().get(specId);
 
-                        String partitionName =
-                                PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
-                        long lastUpdated =
-                                getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
-                        Partition partition = new Partition(lastUpdated, specId);
-                        partitionMap.put(partitionName, partition);
+                            String partitionName =
+                                    PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
+                            long lastUpdated =
+                                    getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
+                            Partition partition = new Partition(lastUpdated, specId);
+                            partitionMap.put(partitionName, partition);
+                        }
                     }
                 }
             } catch (IOException e) {
@@ -397,11 +406,11 @@ public interface IcebergCatalog extends MemoryTrackable {
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 
-        // Call public method so subclasses can override and optimize this method.
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
         if (nativeTable.spec().isUnpartitioned()) {
             return List.of();
         } else {
+            // Call public method so subclasses can override and optimize this method.
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, requestContext.getSnapshotId(), executorService);
             return new ArrayList<>(partitionMap.keySet());
         }
     }

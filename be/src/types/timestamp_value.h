@@ -124,6 +124,7 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+    int64_t to_unix_microsecond() const;
     int64_t to_unixtime() const;
     int64_t to_unixtime(const cctz::time_zone& ctz) const;
 

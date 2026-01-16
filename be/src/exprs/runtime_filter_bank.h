@@ -114,6 +114,9 @@ public:
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
 
     TRuntimeFilterBuildType::type type() const { return _runtime_filter_type; }
+    bool is_asc() const { return _is_asc; }
+    bool is_nulls_first() const { return _is_nulls_first; }
+    size_t limit() const { return _limit; }
 
     void set_runtime_filter(RuntimeFilter* rf) { _runtime_filter = rf; }
     // used in TopN filter to intersect with other runtime filters.
@@ -163,6 +166,10 @@ private:
     RuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
     size_t _num_colocate_partition = 0;
+    // field used in top-n runtime filter
+    bool _is_asc{};
+    bool _is_nulls_first{};
+    size_t _limit{};
 
     bool _is_broad_cast_in_skew = false;
     int32_t _skew_shuffle_filter_id = -1;
@@ -231,6 +238,7 @@ public:
 
     void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
     bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
+    int32_t exchange_hash_function_version() const { return _exchange_hash_function_version; }
 
 #ifdef FIU_ENABLE
     failpoint::OneToAnyBarrier barrier;
@@ -262,6 +270,8 @@ private:
     RuntimeState* _runtime_state = nullptr;
     pipeline::Observable _observable;
     bool _has_push_down_to_storage = false;
+    // Exchange hash function version: 0 for FNV (for backward compatibility), 1 for XXH3
+    int32_t _exchange_hash_function_version = 0;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
@@ -299,7 +309,7 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
 
-    void compute_hash_values(Chunk* chunk, Column* column, RuntimeFilterProbeDescriptor* rf_desc,
+    void compute_hash_values(Chunk* chunk, const Column* column, RuntimeFilterProbeDescriptor* rf_desc,
                              RuntimeMembershipFilterEvalContext& eval_context);
     // only used in no-pipeline mode (deprecated)
     void evaluate(Chunk* chunk);

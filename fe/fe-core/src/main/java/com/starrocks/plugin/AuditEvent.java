@@ -133,6 +133,8 @@ public class AuditEvent {
     public long bigQueryLogScanRowsThreshold = -1;
     @AuditField(value = "SpilledBytes", ignore_zero = true)
     public long spilledBytes = -1;
+    @AuditField(value = "writeClientTimeMs", ignore_zero = true)
+    public long writeClientTimeMs = -1;
     @AuditField(value = "Warehouse")
     public String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     @AuditField(value = "CNGroup")
@@ -331,6 +333,11 @@ public class AuditEvent {
             } else {
                 auditEvent.spilledBytes += spilledBytes;
             }
+            return this;
+        }
+
+        public AuditEventBuilder setWriteClientTimeMs(long writeClientTimeMs) {
+            auditEvent.writeClientTimeMs = writeClientTimeMs;
             return this;
         }
 

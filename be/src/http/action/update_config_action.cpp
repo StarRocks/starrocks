@@ -58,6 +58,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
@@ -278,6 +279,27 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
             return Status::OK();
         });
+        _config_callback.emplace("pk_index_parallel_execution_threadpool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->pk_index_execution_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("pk_index_memtable_flush_threadpool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->pk_index_memtable_flush_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::pk_index_memtable_flush_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
+        _config_callback.emplace("pk_index_parallel_compaction_threadpool_max_threads", [&]() -> Status {
+            auto mgr = _exec_env->parallel_compact_mgr();
+            if (mgr != nullptr) {
+                return mgr->update_max_threads(config::pk_index_parallel_compaction_threadpool_max_threads);
+            }
+            return Status::OK();
+        });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_use_star_cache", [&]() -> Status {
             update_staros_starcache();
@@ -377,7 +399,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("load_spill_merge_max_thread", [&]() -> Status {
             return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
         });
-        _config_callback.emplace("load_spill_max_merge_bytes", [&]() -> Status {
+        _config_callback.emplace("load_spill_memory_usage_per_merge", [&]() -> Status {
             return StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
         });
         _config_callback.emplace("merge_commit_txn_state_cache_capacity", [&]() -> Status {

@@ -62,7 +62,7 @@ public class MVPartitionExpr {
             return false;
         }
         FunctionCallExpr funcExpr = (FunctionCallExpr) expr;
-        String fnName = funcExpr.getFnName().getFunction();
+        String fnName = funcExpr.getFunctionName();
         if (!FN_NAME_TO_PARTITION.contains(fnName)) {
             return false;
         }

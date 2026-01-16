@@ -24,6 +24,7 @@
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
+#include "storage/rowset/segment_file_info.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -54,6 +55,8 @@ struct DeltaWriterStat {
     std::atomic_int32_t write_count = 0;
     // The number of rows to write
     std::atomic_int32_t row_count = 0;
+    // The number of bytes to write (approximate)
+    std::atomic_int64_t input_bytes = 0;
     // Accumulated time for write()
     std::atomic_int64_t write_time_ns = 0;
     // The number that memtable is full
@@ -136,7 +139,9 @@ public:
 
     // Return the list of file infos created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
-    std::vector<FileInfo> files() const;
+    const std::vector<SegmentFileInfo>& segments() const;
+
+    const std::vector<FileInfo>& dels() const;
 
     // The sum of all segment file sizes, in bytes.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
@@ -163,6 +168,12 @@ public:
     const DictColumnsValidMap* global_dict_columns_valid_info() const;
     const GlobalDictByNameMaps* global_dict_map() const;
 
+    // Set the finished state. Called after finish task completes to prevent subsequent write/flush tasks.
+    void set_already_finished(bool val);
+
+    // Check if finish() has been called. Used to guard against write/flush tasks after finish.
+    bool already_finished() const;
+
 private:
     DeltaWriterImpl* _impl;
 };
@@ -183,6 +194,11 @@ public:
 
     DeltaWriterBuilder& set_txn_id(int64_t txn_id) {
         _txn_id = txn_id;
+        return *this;
+    }
+
+    DeltaWriterBuilder& set_db_id(int64_t db_id) {
+        _db_id = db_id;
         return *this;
     }
 
@@ -276,6 +292,7 @@ public:
 private:
     TabletManager* _tablet_mgr{nullptr};
     int64_t _txn_id{0};
+    int64_t _db_id{0};
     int64_t _table_id{0};
     int64_t _partition_id{0};
     int64_t _schema_id{0};

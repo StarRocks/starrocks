@@ -18,14 +18,29 @@
 #include "formats/csv/output_stream.h"
 #include "formats/file_writer.h"
 
+namespace starrocks {
+class ColumnEvaluator;
+class FileSystem;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
+
 namespace starrocks::formats {
 
 struct CSVWriterOptions : FileWriterOptions {
     std::string column_terminated_by = ",";
     std::string line_terminated_by = "\n";
+    std::string collection_delim = ",";
+    std::string mapkey_delim = ",";
+    bool is_hive = false;
+    bool include_header = false;
 
     inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
     inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
+    inline static std::string COLLECTION_DELIM = "collection_delim";
+    inline static std::string MAPKEY_DELIM = "mapkey_delim";
+    inline static std::string IS_HIVE = "is_hive";
+    inline static std::string INCLUDE_HEADER = "include_header";
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.
@@ -61,10 +76,14 @@ private:
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
+    std::shared_ptr<csv::Converter::Options> _converter_options;
 
     int64_t _num_rows = 0;
+    bool _header_written = false;
     // (nullable converter, not-null converter)
     std::vector<std::pair<std::unique_ptr<csv::Converter>, std::unique_ptr<csv::Converter>>> _column_converters;
+
+    Status _write_header();
 };
 
 class CSVFileWriterFactory : public FileWriterFactory {

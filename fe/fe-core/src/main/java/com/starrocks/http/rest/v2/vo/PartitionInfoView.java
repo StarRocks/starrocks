@@ -19,6 +19,7 @@ import com.staros.client.StarClientException;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
@@ -184,7 +185,7 @@ public class PartitionInfoView {
                     // TODO add more type support in the future
             }
 
-            List<MaterializedIndex> allIndices = physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            List<MaterializedIndex> allIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
             if (CollectionUtils.isNotEmpty(allIndices)) {
                 MaterializedIndex materializedIndex = allIndices.get(0);
                 List<Tablet> tablets = materializedIndex.getTablets();

@@ -21,9 +21,11 @@
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
+#include "storage/storage_engine.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::lake {
@@ -39,14 +41,16 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
 }
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
-                                      int64_t* flush_data_size) {
-    if (eos && _load_chunk_spiller->empty()) {
-        // If there is only one flush, flush it to segment directly
+                                      int64_t* flush_data_size, int64_t slot_idx) {
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
+        // Optimization: If there is only one flush, write directly to segment without spilling
+        // This avoids the overhead of spill/merge for single-chunk loads
         RETURN_IF_ERROR(_writer->write(chunk, segment, eos));
         return _writer->flush(segment);
     }
 
-    auto res = _load_chunk_spiller->spill(chunk);
+    // Spill chunk to temporary storage with slot_idx for ordering
+    auto res = _load_chunk_spiller->spill(chunk, slot_idx);
     RETURN_IF_ERROR(res.status());
     // record append bytes to `flush_data_size`
     if (flush_data_size != nullptr) {
@@ -56,18 +60,88 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
 }
 
 Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size) {
-    if (eos && _load_chunk_spiller->empty()) {
+                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size,
+                                                   int64_t slot_idx) {
+    if (eos && _load_chunk_spiller->empty() && slot_idx == 0) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
         RETURN_IF_ERROR(_writer->write(upserts, segment, eos));
         return _writer->flush(segment);
     }
     // 1. flush upsert
-    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size));
+    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size, slot_idx));
     // 2. flush deletes
     RETURN_IF_ERROR(_writer->flush_del_file(deletes));
     return Status::OK();
+}
+
+Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const SchemaPtr& schema) {
+    auto token =
+            StorageEngine::instance()->load_spill_block_merge_executor()->create_tablet_internal_parallel_merge_token();
+    // 1. Get all spill block iterators
+    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
+                     _load_chunk_spiller->generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
+                                                                           config::load_spill_memory_usage_per_merge,
+                                                                           true /* do_sort */, do_agg));
+    // 2. Prepare all tablet writers
+    std::vector<std::unique_ptr<TabletWriter>> writers;
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        ASSIGN_OR_RETURN(auto writer, _writer->clone());
+        writers.push_back(std::move(writer));
+    }
+    // 3. Prepare all parallel merge tasks
+    QuitFlag quit_flag;
+    std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
+                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), schema.get(), i, &quit_flag,
+                get_spiller()->metrics().write_io_timer));
+    }
+    // 4. Submit all tasks to thread pool
+    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
+        auto submit_st = token->submit(tasks[i]);
+        if (!submit_st.ok()) {
+            tasks[i]->update_status(submit_st);
+            break;
+        }
+    }
+    token->wait();
+    // 5. check all task status
+    for (const auto& task : tasks) {
+        RETURN_IF_ERROR(task->status());
+    }
+    // 6. merge all writers' result
+    RETURN_IF_ERROR(_writer->merge_other_writers(writers));
+
+    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeInputGroups", TUnit::UNIT),
+                   spill_block_iterator_tasks.group_count);
+    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeInputBytes", TUnit::BYTES),
+                   spill_block_iterator_tasks.total_block_bytes);
+    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeCount", TUnit::UNIT),
+                   spill_block_iterator_tasks.iterators.size());
+    return Status::OK();
+}
+
+Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema) {
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
+    auto* spiller = get_spiller();
+    auto write_func = [&char_field_indexes, schema, spiller, this](Chunk* chunk) {
+        SCOPED_TIMER(spiller->metrics().write_io_timer);
+        ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
+        return _writer->write(*chunk, nullptr);
+    };
+    auto flush_func = [spiller, this]() {
+        SCOPED_TIMER(spiller->metrics().write_io_timer);
+        return _writer->flush();
+    };
+
+    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes,
+                                                 config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg,
+                                                 write_func, flush_func);
+    LOG_IF(WARNING, !st.ok()) << fmt::format(
+            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
+            _writer->tablet_id(), st.message());
+    return st;
 }
 
 Status SpillMemTableSink::merge_blocks_to_segments() {
@@ -80,30 +154,23 @@ Status SpillMemTableSink::merge_blocks_to_segments() {
     SchemaPtr schema = _load_chunk_spiller->schema();
     bool do_agg = schema->keys_type() == KeysType::AGG_KEYS || schema->keys_type() == KeysType::UNIQUE_KEYS;
 
-    if (_load_chunk_spiller->total_bytes() >= config::pk_parallel_execution_threshold_bytes) {
-        // When bulk load happens, try to enable pk parallel execution
-        _writer->try_enable_pk_parallel_execution();
-        // When enable pk parallel execution, that means it will generate sst files when data loading,
-        // so we need to make sure not duplicate keys exist in segment files and sst files.
+    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
+        // When bulk load happens, try to enable eager PK index build
+        _writer->try_enable_pk_index_eager_build();
+        // When eager PK index build is enabled, it will generate sst files when data loading,
+        // so we need to make sure no duplicate keys exist in segment files and sst files.
         // That means we need to do aggregation when spill merge.
-        if (_writer->enable_pk_parallel_execution()) {
+        if (_writer->enable_pk_index_eager_build()) {
             do_agg = true;
         }
     }
 
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
-    auto write_func = [&char_field_indexes, schema, this](Chunk* chunk) {
-        ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
-        return _writer->write(*chunk, nullptr);
-    };
-    auto flush_func = [this]() { return _writer->flush(); };
-
-    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes, true /* do_sort */, do_agg,
-                                                 write_func, flush_func);
-    LOG_IF(WARNING, !st.ok()) << fmt::format(
-            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
-            _writer->tablet_id(), st.message());
-    return st;
+    SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
+    if (config::enable_load_spill_parallel_merge) {
+        return merge_blocks_to_segments_parallel(do_agg, schema);
+    } else {
+        return merge_blocks_to_segments_serial(do_agg, schema);
+    }
 }
 
 int64_t SpillMemTableSink::txn_id() {

@@ -10,54 +10,19 @@ Java Extensions provide connectivity to external data sources and extend StarRoc
 
 ### External Data Connectors
 
-#### Hadoop Ecosystem
-- `hadoop-ext/` - Hadoop ecosystem integration
-  - Core Hadoop file system support
-  - Hadoop configuration management
-  - Security integration (Kerberos)
-
-#### Data Lake Formats
+#### Data Lake & NoSQL Formats
 - `hive-reader/` - Apache Hive data reader
-  - Hive metastore integration
-  - Hive table format support
-  - Partition handling
-
-- `hudi-reader/` - Apache Hudi integration
-  - Copy-on-write and merge-on-read tables
-  - Timeline and metadata handling
-  - Incremental query support
-
+- `hudi-reader/` - Apache Hudi integration (COW/MOR)
 - `iceberg-metadata-reader/` - Apache Iceberg metadata reader
-  - Iceberg table format support
-  - Snapshot and schema evolution
-  - Partition and file pruning
-
 - `paimon-reader/` - Apache Paimon reader
-  - Paimon table format support
-  - Real-time and batch data access
-  - Schema evolution handling
-
-#### NoSQL and Analytics
 - `kudu-reader/` - Apache Kudu connector
-  - Kudu table scanning
-  - Predicate pushdown
-  - Column pruning
-
 - `odps-reader/` - ODPS (MaxCompute) reader
-  - Alibaba Cloud MaxCompute integration
-  - Table and partition access
-  - Data type mapping
 
-#### Connectivity
+#### Connectivity & JNI
 - `jdbc-bridge/` - JDBC connectivity bridge
-  - Generic JDBC data source support
-  - Connection pooling
-  - Query pushdown capabilities
-
-- `jni-connector/` - JNI connectors for C++ integration
-  - Bridge between Java extensions and C++ backend
-  - Memory management for cross-language calls
-  - Type conversion utilities
+- `jni-connector/` - JNI connectors for C++ backend integration
+- `hadoop-ext/` - Hadoop ecosystem integration (HDFS, Kerberos)
+- `hadoop-lib/` - Hadoop library dependencies
 
 ### Runtime and Utilities
 

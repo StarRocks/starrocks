@@ -426,6 +426,10 @@ public class ExprUtils {
         return GlobalStateMgr.getCurrentState().getFunction(searchDesc, mode);
     }
 
+    public static boolean isAggregateFunction(String name) {
+        return GlobalStateMgr.getCurrentState().isAggregateFunction(name);
+    }
+
     public static boolean requiresTimestampDiffCast(String funcName) {
         if (funcName == null) {
             return false;
@@ -559,7 +563,7 @@ public class ExprUtils {
                             "like (x,y)->x+y");
         } else if (num == 0) {
             if (expression instanceof FunctionCallExpr) {
-                String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
+                String funcName = ((FunctionCallExpr) expression).getFunctionName();
                 if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM) ||
                         funcName.equals(FunctionSet.MAP_APPLY)) {
                     throw new SemanticException("There are no lambda functions in high-order function " + funcName);

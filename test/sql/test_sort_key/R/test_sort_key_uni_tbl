@@ -1,4 +1,4 @@
--- name: test_sort_key_uni_tbl;
+-- name: test_sort_key_uni_tbl; @native
 show backends;
 create database sort_key_test_uni;
 -- result:
@@ -242,7 +242,7 @@ drop table uni_test;
 drop database sort_key_test_uni;
 -- result:
 -- !result
--- name: test_sort_key_uni_tbl_duplicate_row
+-- name: test_sort_key_uni_tbl_duplicate_row @native
 create database test_sort_key_uni_tbl_duplicate_row;
 -- result:
 -- !result
@@ -318,7 +318,7 @@ select * from uni_test;
 1	2	3	4	1	2
 1	2	3	3	2	1
 -- !result
--- name: test_sort_key_uni_tbl_with_rollup;
+-- name: test_sort_key_uni_tbl_with_rollup; @native
 create database sort_key_uni_tbl_with_rollup;
 -- result:
 -- !result

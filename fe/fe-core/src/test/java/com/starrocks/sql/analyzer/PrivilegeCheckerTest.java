@@ -88,8 +88,6 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
-import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
-import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
@@ -138,6 +136,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.mockito.ArgumentMatchers.eq;
 
@@ -895,7 +894,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db1.getId(), tbl1.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        showResult = ShowExecutor.showBasicStatsMeta(ctx, basicStatsMeta);
         logSysInfo(showResult);
         // can show result for stats on table that user has any privilege on
         Assertions.assertNotNull(showResult);
@@ -904,7 +903,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 StatsConstants.AnalyzeType.HISTOGRAM,
                 LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
-        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        showResult = ShowExecutor.showHistogramStatsMeta(ctx, histogramStatsMeta);
         logSysInfo(showResult);
         // can show result for stats on table that user has any privilege on
         Assertions.assertNotNull(showResult);
@@ -923,7 +922,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
         basicStatsMeta = new BasicStatsMeta(db2.getId(), tbl1.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        showResult = ShowExecutor.showBasicStatsMeta(ctx, basicStatsMeta);
         logSysInfo(showResult);
         // cannot show result for stats on table that user doesn't have any privilege on
         Assertions.assertNull(showResult);
@@ -932,7 +931,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 StatsConstants.AnalyzeType.HISTOGRAM,
                 LocalDateTime.of(2020, 1, 1, 1, 1),
                 Maps.newHashMap());
-        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        showResult = ShowExecutor.showHistogramStatsMeta(ctx, histogramStatsMeta);
         logSysInfo(showResult);
         // cannot show result for stats on table that user doesn't have any privilege on
         Assertions.assertNull(showResult);
@@ -1558,6 +1557,23 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testDigestBlackListStmts() throws Exception {
+        String grantSql = "grant blacklist on system to test";
+        String revokeSql = "revoke blacklist on system from test";
+        String err =
+                "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
+
+        String sql = "ADD SQL DIGEST BLACKLIST abcd";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "DELETE SQL DIGEST BLACKLIST abcd";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "SHOW SQL DIGEST BLACKLIST";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+    }
+
+    @Test
     public void testRoleUserStmts() throws Exception {
         String grantSql = "grant user_admin to test";
         String revokeSql = "revoke user_admin from test";
@@ -1629,7 +1645,7 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     public void testSetGlobalVar() throws Exception {
         ctxToRoot();
         verifyGrantRevoke(
-                "SET global enable_cbo = true",
+                "SET global enable_cross_join = true",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE privilege(s) on SYSTEM for this operation");
@@ -3994,5 +4010,69 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "Access denied; you need (at least one of) the ALTER privilege(s) on WAREHOUSE"
                         + " default_warehouse for this operation."
         );
+    }
+
+    @Test
+    public void testAlterDatabaseSetStmtPrivilege() {
+        // Alter Database set storage volume privilege check
+        // * Need both `ALTER DATABASE` and `STORAGE VOLUME USAGE` privilege to set storage volume
+        String svName = String.format("hdfs%d", ThreadLocalRandom.current().nextInt(1000, 10000));
+        String createSvSql = String.format(
+                "CREATE STORAGE VOLUME %s type = HDFS LOCATIONS = ('hdfs://127.0.0.1:8020/usr/starrocks/hdfssv/');",
+                svName);
+        String grantAlterSql = "grant ALTER on DATABASE db_for_alter_test to test";
+        String revokeAlterSql = "revoke ALTER on DATABASE db_for_alter_test from test";
+        String grantUsageSql = "grant USAGE on STORAGE VOLUME " + svName + " to test";
+        String revokeUsageSql = "revoke USAGE on STORAGE VOLUME " + svName + " from test";
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Assertions.assertDoesNotThrow(() -> {
+                    // create test database and storage volume
+                    ctxToRoot();
+                    DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSvSql, ctx), ctx);
+                    starRocksAssert.withDatabase("db_for_alter_test");
+                }
+        );
+
+        // grant storage volume usage to test user
+        Assertions.assertDoesNotThrow(
+                () -> DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantUsageSql, ctx), ctx));
+
+        // switch to test user
+        Assertions.assertDoesNotThrow(PrivilegeCheckerTest::ctxToTestUser);
+        starRocksAssert.getCtx().setDatabase("db_for_alter_test");
+        // alter database set statement
+        Assertions.assertDoesNotThrow(() ->
+                verifyGrantRevoke(
+                        "ALTER DATABASE db_for_alter_test SET ('storage_volume' = '" + svName + "')",
+                        grantAlterSql, revokeAlterSql,
+                        "Access denied; you need (at least one of) the ALTER privilege(s) on DATABASE"
+                                + " db_for_alter_test for this operation.")
+        );
+
+        // Switch to root user
+        // Now revoke storage volume usage from test user and grant alter database privilege
+        Assertions.assertDoesNotThrow(() -> {
+                    ctxToRoot();
+                    DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeUsageSql, ctx), ctx);
+                    // grant alter database to test user
+                    DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantAlterSql, ctx), ctx);
+                }
+        );
+
+        // switch back to test user
+        Assertions.assertDoesNotThrow(PrivilegeCheckerTest::ctxToTestUser);
+        starRocksAssert.getCtx().setDatabase("db_for_alter_test");
+        // alter database set statement
+        Assertions.assertDoesNotThrow(() ->
+                verifyGrantRevoke(
+                        "ALTER DATABASE db_for_alter_test SET ('storage_volume' = '" + svName + "')",
+                        grantUsageSql,
+                        revokeUsageSql,
+                        "Access denied; you need (at least one of) the USAGE privilege(s) on STORAGE VOLUME "
+                                + svName + " for this operation.")
+        );
+        Assertions.assertDoesNotThrow(PrivilegeCheckerTest::ctxToRoot);
+        Assertions.assertDoesNotThrow(() -> starRocksAssert.dropDatabase("db_for_alter_test"));
     }
 }

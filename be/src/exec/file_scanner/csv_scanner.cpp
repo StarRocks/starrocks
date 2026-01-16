@@ -233,7 +233,7 @@ void CSVScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
-                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
         chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                              adaptive_column->materialized_raw_null_column()),
                                       i);
@@ -346,7 +346,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get_column_raw_ptr_by_index(i);
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
@@ -467,7 +467,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
     for (int i = 0; i < num_columns; i++) {
-        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+        _column_raw_ptrs[i] = chunk->get_column_raw_ptr_by_index(i);
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
@@ -590,7 +590,10 @@ void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const 
     _state->append_rejected_record_to_file(record.to_string(), err_msg, _curr_reader->filename());
 }
 
-static TypeDescriptor get_type_desc(const Slice& field) {
+static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes) {
+    if (!sampleTypes) {
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
     StringParser::ParseResult result;
 
     StringParser::string_to_int<int64_t>(field.get_data(), field.get_size(), &result);
@@ -642,7 +645,8 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
         _curr_reader->split_record(record, &fields);
         for (size_t i = 0; i < fields.size(); i++) {
             // column name: $1, $2, $3...
-            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(fields[i]));
+            schema.emplace_back(i, fmt::format("${}", i + 1),
+                                get_type_desc(fields[i], _scan_range.params.schema_sample_types));
         }
         schemas.emplace_back(schema);
         i++;
@@ -679,7 +683,8 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
             const Slice field(basePtr + column.start_pos, column.length);
 
             // column name: $1, $2, $3...
-            schema.emplace_back(i, fmt::format("${}", i + 1), get_type_desc(field));
+            schema.emplace_back(i, fmt::format("${}", i + 1),
+                                get_type_desc(field, _scan_range.params.schema_sample_types));
         }
         schemas.emplace_back(schema);
         i++;
