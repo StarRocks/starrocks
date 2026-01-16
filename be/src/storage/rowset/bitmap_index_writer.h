@@ -50,7 +50,7 @@ class WritableFile;
 
 class BitmapIndexWriter {
 public:
-    static Status create(const TypeInfoPtr& type_info, std::unique_ptr<BitmapIndexWriter>* res);
+    static Status create(const TypeInfoPtr& type_info, std::unique_ptr<BitmapIndexWriter>* res, int32_t gram_num = -1);
 
     BitmapIndexWriter() = default;
     virtual ~BitmapIndexWriter() = default;
