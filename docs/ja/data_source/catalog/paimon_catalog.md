@@ -141,7 +141,7 @@ StarRocks が Paimon クラスターのメタデータにアクセスする方�
 | ------------------------ | ---- | ---------------------------------------------------- |
 | paimon.catalog.type      | はい | Paimon クラスターで使用するメタストアのタイプ。このパラメータを `filesystem` または `hive` に設定します。 |
 | paimon.catalog.warehouse | はい | Paimon データのウェアハウスストレージパス。 |
-| hive.metastore.uris      | いいえ | Hive メタストアの URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
+| hive.metastore.uris      | いいえ | Hive メタストアの URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 
 > **注意**
 >
