@@ -869,7 +869,7 @@ public class ExpressionTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
                 "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
-                "5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
+                "CAST(5: c4 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-01-01 00:00:00', '1970-02-01 00:00:00')");
 
         // common expression
         testPlanContains("SELECT " +
