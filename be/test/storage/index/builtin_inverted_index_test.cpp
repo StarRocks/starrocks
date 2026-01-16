@@ -97,6 +97,7 @@ TEST_F(BuiltinInvertedIndexTest, test_parser_none_equal_query) {
     // Load builtin inverted index via BuiltinInvertedReader.
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
 
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
@@ -161,6 +162,7 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_queries) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
 
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
@@ -236,6 +238,7 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
 
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
@@ -348,6 +351,7 @@ TEST_F(BuiltinInvertedIndexTest, test_prefix_overflow_query) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
@@ -453,6 +457,7 @@ TEST_F(BuiltinInvertedIndexTest, test_wildcard_query_with_nulls) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
@@ -530,6 +535,7 @@ TEST_F(BuiltinInvertedIndexTest, test_prefix_overflow_query_with_nulls) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
@@ -589,6 +595,7 @@ TEST_F(BuiltinInvertedIndexTest, test_iterator_unsupported_ops) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = 1;
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
@@ -666,6 +673,7 @@ TEST_F(BuiltinInvertedIndexTest, test_mixed_token_queries) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
@@ -714,6 +722,7 @@ TEST_F(BuiltinInvertedIndexTest, test_invalid_wildcard) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = 1;
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
@@ -757,6 +766,7 @@ TEST_F(BuiltinInvertedIndexTest, test_complex_wildcard_query) {
 
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
     auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
     std::unique_ptr<InvertedReader> reader;
     ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
