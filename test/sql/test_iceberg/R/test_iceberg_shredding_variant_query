@@ -1,0 +1,186 @@
+-- name: test_iceberg_shredding_variant_query
+create external catalog iceberg_shredding_test_${uuid0}
+PROPERTIES (
+    "type"="iceberg", 
+    "iceberg.catalog.type"="hadoop", 
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/warehouse/"
+);
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/warehouse/zya > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_shredding_test_${uuid0}.zya;
+-- result:
+-- !result
+CREATE TABLE test_shredding_variant (
+    data VARIANT
+) properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding.parquet oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/shredding.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table test_shredding_variant execute add_files(location='oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/shredding.parquet', file_format='parquet');
+-- result:
+-- !result
+CREATE TABLE test_noshredding_variant (
+    data VARIANT
+) properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_noshredding.parquet oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/noshredding.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table test_noshredding_variant execute add_files(location='oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/noshredding.parquet', file_format='parquet');
+-- result:
+-- !result
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.age') as age,
+    get_variant_string(data, '$.city') as city,
+    variant_typeof(variant_query(data, '$.score')) as score_type,
+    cast(variant_query(data, '$.score') as string) as score_val
+FROM test_shredding_variant
+ORDER BY id;
+-- result:
+1000	20	city_0	Int32	80
+1001	21	city_1	String	S81
+1002	22	city_2	Int32	82
+1003	23	city_3	String	S83
+1004	24	city_4	Int32	84
+-- !result
+SELECT 'Check Shredding Consistency' as task;
+-- result:
+Check Shredding Consistency
+-- !result
+(SELECT 'shredded' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_shredding_variant WHERE get_variant_int(data, '$.id') = 1000)
+UNION ALL
+(SELECT 'noshred' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_noshredding_variant WHERE get_variant_int(data, '$.id') = 1000);
+-- result:
+noshred	50000.0	dept_0
+shredded	50000.0	dept_0
+-- !result
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.profile.metrics.views') as views,
+    variant_typeof(variant_query(data, '$.profile.rank')) as rank_type,
+    cast(variant_query(data, '$.profile.rank') as string) as rank_val
+FROM test_shredding_variant
+ORDER BY id;
+-- result:
+1000	100	Int32	1
+1001	110	String	L2
+1002	120	Int32	3
+1003	130	String	L4
+1004	140	Int32	5
+-- !result
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.events[0].type') as event0_type,
+    get_variant_int(data, '$.events[0].count') as event0_count,
+    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+FROM test_shredding_variant
+ORDER BY id;
+-- result:
+1000	view	1	code_0_0
+1001	view	2	code_0_0
+1002	view	3	code_0_0
+1003	view	4	code_0_0
+1004	view	5	code_0_0
+-- !result
+SELECT '--- Shredded Data ---' as label;
+-- result:
+--- Shredded Data ---
+-- !result
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.age') as age,
+    get_variant_string(data, '$.city') as city,
+    cast(variant_query(data, '$.score') as string) as score,
+    get_variant_double(data, '$.profile.salary') as salary,
+    get_variant_string(data, '$.profile.department') as dept,
+    get_variant_int(data, '$.profile.metrics.views') as views,
+    get_variant_string(data, '$.profile.rank') as rank,
+    get_variant_string(data, '$.events[0].type') as event0_type,
+    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+FROM test_shredding_variant
+ORDER BY id;
+-- result:
+1000	20	city_0	80	50000.0	dept_0	100	1	view	code_0_0
+1001	21	city_1	S81	51000.0	dept_1	110	L2	view	code_0_0
+1002	22	city_2	82	52000.0	dept_2	120	3	view	code_0_0
+1003	23	city_3	S83	53000.0	dept_3	130	L4	view	code_0_0
+1004	24	city_4	84	54000.0	dept_4	140	5	view	code_0_0
+-- !result
+SELECT '--- No-Shredded Data ---' as label;
+-- result:
+--- No-Shredded Data ---
+-- !result
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.age') as age,
+    get_variant_string(data, '$.city') as city,
+    cast(variant_query(data, '$.score') as string) as score,
+    get_variant_double(data, '$.profile.salary') as salary,
+    get_variant_string(data, '$.profile.department') as dept,
+    get_variant_int(data, '$.profile.metrics.views') as views,
+    get_variant_string(data, '$.profile.rank') as rank,
+    get_variant_string(data, '$.events[0].type') as event0_type,
+    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+FROM test_noshredding_variant
+ORDER BY id;
+-- result:
+1000	20	city_0	80	50000.0	dept_0	100	1	view	code_0_0
+1001	21	city_1	S81	51000.0	dept_1	110	L2	view	code_0_0
+1002	22	city_2	82	52000.0	dept_2	120	3	view	code_0_0
+1003	23	city_3	S83	53000.0	dept_3	130	L4	view	code_0_0
+1004	24	city_4	84	54000.0	dept_4	140	5	view	code_0_0
+-- !result
+SELECT '--- Full Variant Comparison ---' as label;
+-- result:
+--- Full Variant Comparison ---
+-- !result
+(SELECT get_variant_int(data, '$.id') as id, 'shredded' as label, data FROM test_shredding_variant)
+UNION ALL
+(SELECT get_variant_int(data, '$.id') as id, 'noshred' as label, data FROM test_noshredding_variant)
+ORDER BY id, label;
+-- result:
+1000	noshred	{"age":20,"city":"city_0","deep_items":[{"children":[{"code":"code_0_0","weight":0},{"code":"code_0_1","weight":1}]},{"children":[{"code":"code_1_0","weight":1},{"code":"code_1_1","weight":2}]}],"email":"user0@example.com","events":[{"count":1,"type":"view"},{"count":2,"type":"click"}],"id":1000,"name":"name_0","profile":{"department":"dept_0","metrics":{"ratio":0.10000000000000001,"views":100},"rank":1,"salary":50000.0},"score":80,"status":"active"}
+1000	shredded	{"age":20,"city":"city_0","deep_items":[{"children":[{"code":"code_0_0","weight":0},{"code":"code_0_1","weight":1}]},{"children":[{"code":"code_1_0","weight":1},{"code":"code_1_1","weight":2}]}],"email":"user0@example.com","events":[{"count":1,"type":"view"},{"count":2,"type":"click"}],"id":1000,"name":"name_0","profile":{"department":"dept_0","metrics":{"ratio":0.10000000000000001,"views":100},"rank":1,"salary":50000.0},"score":80,"status":"active"}
+1001	noshred	{"age":21,"city":"city_1","deep_items":[{"children":[{"code":"code_0_0","weight":1},{"code":"code_0_1","weight":2}]},{"children":[{"code":"code_1_0","weight":2},{"code":"code_1_1","weight":3}]}],"email":"user1@example.com","events":[{"count":2,"type":"view"},{"count":4,"type":"click"}],"id":1001,"name":"name_1","profile":{"department":"dept_1","metrics":{"ratio":0.15000000000000002,"views":110},"rank":"L2","salary":51000.0},"score":"S81","status":"inactive"}
+1001	shredded	{"age":21,"city":"city_1","deep_items":[{"children":[{"code":"code_0_0","weight":1},{"code":"code_0_1","weight":2}]},{"children":[{"code":"code_1_0","weight":2},{"code":"code_1_1","weight":3}]}],"email":"user1@example.com","events":[{"count":2,"type":"view"},{"count":4,"type":"click"}],"id":1001,"name":"name_1","profile":{"department":"dept_1","metrics":{"ratio":0.15000000000000002,"views":110},"rank":"L2","salary":51000.0},"score":"S81","status":"inactive"}
+1002	noshred	{"age":22,"city":"city_2","deep_items":[{"children":[{"code":"code_0_0","weight":2},{"code":"code_0_1","weight":3}]},{"children":[{"code":"code_1_0","weight":3},{"code":"code_1_1","weight":4}]}],"email":"user2@example.com","events":[{"count":3,"type":"view"},{"count":6,"type":"click"}],"id":1002,"name":"name_2","profile":{"department":"dept_2","metrics":{"ratio":0.20000000000000001,"views":120},"rank":3,"salary":52000.0},"score":82,"status":"active"}
+1002	shredded	{"age":22,"city":"city_2","deep_items":[{"children":[{"code":"code_0_0","weight":2},{"code":"code_0_1","weight":3}]},{"children":[{"code":"code_1_0","weight":3},{"code":"code_1_1","weight":4}]}],"email":"user2@example.com","events":[{"count":3,"type":"view"},{"count":6,"type":"click"}],"id":1002,"name":"name_2","profile":{"department":"dept_2","metrics":{"ratio":0.20000000000000001,"views":120},"rank":3,"salary":52000.0},"score":82,"status":"active"}
+1003	noshred	{"age":23,"city":"city_3","deep_items":[{"children":[{"code":"code_0_0","weight":3},{"code":"code_0_1","weight":4}]},{"children":[{"code":"code_1_0","weight":4},{"code":"code_1_1","weight":5}]}],"email":"user3@example.com","events":[{"count":4,"type":"view"},{"count":8,"type":"click"}],"id":1003,"name":"name_3","profile":{"department":"dept_3","metrics":{"ratio":0.25,"views":130},"rank":"L4","salary":53000.0},"score":"S83","status":"inactive"}
+1003	shredded	{"age":23,"city":"city_3","deep_items":[{"children":[{"code":"code_0_0","weight":3},{"code":"code_0_1","weight":4}]},{"children":[{"code":"code_1_0","weight":4},{"code":"code_1_1","weight":5}]}],"email":"user3@example.com","events":[{"count":4,"type":"view"},{"count":8,"type":"click"}],"id":1003,"name":"name_3","profile":{"department":"dept_3","metrics":{"ratio":0.25,"views":130},"rank":"L4","salary":53000.0},"score":"S83","status":"inactive"}
+1004	noshred	{"age":24,"city":"city_4","deep_items":[{"children":[{"code":"code_0_0","weight":4},{"code":"code_0_1","weight":5}]},{"children":[{"code":"code_1_0","weight":5},{"code":"code_1_1","weight":6}]}],"email":"user4@example.com","events":[{"count":5,"type":"view"},{"count":10,"type":"click"}],"id":1004,"name":"name_4","profile":{"department":"dept_4","metrics":{"ratio":0.30000000000000004,"views":140},"rank":5,"salary":54000.0},"score":84,"status":"active"}
+1004	shredded	{"age":24,"city":"city_4","deep_items":[{"children":[{"code":"code_0_0","weight":4},{"code":"code_0_1","weight":5}]},{"children":[{"code":"code_1_0","weight":5},{"code":"code_1_1","weight":6}]}],"email":"user4@example.com","events":[{"count":5,"type":"view"},{"count":10,"type":"click"}],"id":1004,"name":"name_4","profile":{"department":"dept_4","metrics":{"ratio":0.30000000000000004,"views":140},"rank":5,"salary":54000.0},"score":84,"status":"active"}
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
+drop table test_shredding_variant force;
+-- result:
+-- !result
+drop table test_noshredding_variant force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_shredding_test_${uuid0};
+-- result:
+-- !result
