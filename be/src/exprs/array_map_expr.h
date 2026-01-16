@@ -45,6 +45,8 @@ public:
     std::string debug_string() const override;
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
 
+    Status do_for_each_child(const std::function<Status(Expr*)>& callback) override;
+
 private:
     template <bool all_const_input, bool independent_lambda_expr>
     StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk, const Columns& arguments,

@@ -19,7 +19,7 @@ SELECT SLEEP(3);
 -- !result
 [UC] ANALYZE FULL TABLE t1;
 -- result:
-test_db_bf1e812a1ddf43f49bddea55b1ae64eb.t1	analyze	status	OK
+test_db_e70dbc89852c4b2a9ab87cb70dced610.t1	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c', 't1')
 -- result:
@@ -39,6 +39,15 @@ WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_lengt
 1
 -- !result
 WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+-- result:
+-- !result
+WITH T2 AS (SELECT c IS NULL AS dict, ["A"] AS arr1, ["a"] AS arr2 FROM t1), T3 AS (SELECT ARRAY_LENGTH(ARRAY_MAP((arg1)->ARRAY_SUM(ARRAY_MAP((arg2)->dict, arr2)), arr1)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+-- result:
+-- !result
+WITH T2 AS (SELECT c IS NULL AS dict, ["A"] AS arr1, ["a"] AS arr2 FROM t1), T3 AS (SELECT ARRAY_LENGTH(ARRAY_SORTBY((arg1)->ARRAY_SUM(ARRAY_MAP((arg2)->dict, arr2)), arr1)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+-- result:
+-- !result
+WITH T2 AS (SELECT c IS NULL AS dict, ["A"] AS arr1, ["a"] AS arr2 FROM t1), T3 AS (SELECT ARRAY_LENGTH(ARRAY_SORTBY((arg1)->ARRAY_SUM(ARRAY_MAP((arg2)->dict, arr2)), arr1)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
 -- result:
 -- !result
 drop table t1;
