@@ -627,10 +627,10 @@ private:
             }
             // Clear dcg_meta and add to orphan files.
             for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
-                for (size_t i = 0; i < dcg_ver.column_files_size(); ++i) {
+                for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
                     FileMetaPB file_meta;
                     file_meta.set_name(dcg_ver.column_files(i));
-                    if (dcg_ver.shared_files_size() > 0) {
+                    if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                         file_meta.set_shared(dcg_ver.shared_files(i));
                     }
                     _metadata->mutable_orphan_files()->Add(std::move(file_meta));
