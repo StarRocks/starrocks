@@ -1905,7 +1905,6 @@ public class TabletScheduler extends FrontendDaemon {
         }
 
         // write edit log
-        replica.setState(ReplicaState.NORMAL);
         TabletMeta meta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
         ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(meta.getDbId(),
                 meta.getTableId(), meta.getPhysicalPartitionId(), meta.getIndexId(),
@@ -1913,7 +1912,9 @@ public class TabletScheduler extends FrontendDaemon {
                 replica.getSchemaHash(), replica.getDataSize(), replica.getRowCount(),
                 replica.getLastFailedVersion(), replica.getLastSuccessVersion(),
                 replica.getMinReadableVersion());
-        GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info, wal -> {
+            replica.setState(ReplicaState.NORMAL);
+        });
         finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.FINISHED, "create replica finished");
         LOG.info("create replica for recovery successfully, tablet:{} backend:{}", tabletId, task.getBackendId());
     }

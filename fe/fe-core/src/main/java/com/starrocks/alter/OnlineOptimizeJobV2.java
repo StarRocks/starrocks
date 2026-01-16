@@ -481,20 +481,25 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             }
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
+            List<String> sourcePartitions = Arrays.asList(sourcePartitionName);
+            List<String> tempPartitions = Arrays.asList(tmpPartitionName);
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(
-                        db.getId(), Arrays.asList(sourcePartitionName), Arrays.asList(tmpPartitionName), true, false);
-            } else if (partitionInfo instanceof SinglePartitionInfo) {
-                targetTable.replacePartition(db.getId(), sourcePartitionName, tmpPartitionName);
-            } else {
+                targetTable.checkReplaceTempPartitions(sourcePartitions, tempPartitions, true);
+            } else if (!(partitionInfo instanceof SinglePartitionInfo)) {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }
 
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), targetTable.getId(),
-                        Arrays.asList(sourcePartitionName), Arrays.asList(tmpPartitionName),
+                        sourcePartitions, tempPartitions,
                         true, false, partitionInfo instanceof SinglePartitionInfo);
-            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info, wal -> {
+                if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+                    targetTable.replaceTempPartitionsWithoutCheck(db.getId(), sourcePartitions, tempPartitions, false);
+                } else {
+                    targetTable.replacePartition(db.getId(), sourcePartitionName, tmpPartitionName);
+                }
+            });
 
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash

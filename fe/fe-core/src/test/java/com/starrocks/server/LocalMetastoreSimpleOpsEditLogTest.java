@@ -13,12 +13,14 @@
 // limitations under the License.
 package com.starrocks.server;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Range;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
@@ -29,27 +31,42 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.load.PartitionUtils;
+import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.ColumnRenameInfo;
+import com.starrocks.persist.CreateDbInfo;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DropDbInfo;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
+import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
+import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.analyzer.AlterDatabaseAnalyzer;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
@@ -58,12 +75,18 @@ import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.parser.NodePosition;
@@ -73,6 +96,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -125,11 +149,23 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         // Add backend for replica tests
         Backend backend = new Backend(BACKEND_ID, "127.0.0.1", 9050);
         backend.setAlive(true);
+        backend.setBePort(9060);
+        backend.setHttpPort(8040);
+        backend.setBrpcPort(8060);
+        DiskInfo diskInfo = new DiskInfo("/path1");
+        diskInfo.setTotalCapacityB(1000000L);
+        diskInfo.setAvailableCapacityB(900000L);
+        diskInfo.setDataUsedCapacityB(1000L);
+        backend.setDisks(ImmutableMap.of(diskInfo.getRootPath(), diskInfo));
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend);
     }
 
     @AfterEach
     public void tearDown() {
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        if (recycleBin != null) {
+            recycleBin.removePartitionFromRecycleBin(PARTITION_ID);
+        }
         UtFrameUtils.tearDownForPersisTest();
     }
 
@@ -209,6 +245,643 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         olapTable.addPartition(partition);
         olapTable.setTableProperty(new com.starrocks.catalog.TableProperty(new HashMap<>()));
         return olapTable;
+    }
+
+    private static OlapTable createRandomDistributionOlapTable(long tableId, String tableName) {
+        List<Column> columns = new ArrayList<>();
+        Column col1 = new Column("v1", IntegerType.BIGINT);
+        col1.setIsKey(true);
+        columns.add(col1);
+        columns.add(new Column("v2", IntegerType.BIGINT));
+
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(PARTITION_ID, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(PARTITION_ID, (short) 1);
+
+        DistributionInfo distributionInfo = new RandomDistributionInfo(3);
+
+        MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
+        LocalTablet tablet = new LocalTablet(TABLET_ID);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, tableId, PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
+        baseIndex.addTablet(tablet, tabletMeta);
+
+        Replica replica = new Replica(REPLICA_ID, BACKEND_ID, 0, Replica.ReplicaState.NORMAL);
+        replica.updateVersionInfo(2, 2, 2);
+        tablet.addReplica(replica);
+
+        Partition partition = new Partition(PARTITION_ID, PHYSICAL_PARTITION_ID, "p1", baseIndex, distributionInfo);
+
+        OlapTable olapTable = new OlapTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
+        olapTable.setIndexMeta(INDEX_ID, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+        olapTable.setBaseIndexMetaId(INDEX_ID);
+        olapTable.addPartition(partition);
+        olapTable.setTableProperty(new com.starrocks.catalog.TableProperty(new HashMap<>()));
+        return olapTable;
+    }
+
+    private MockUp<LocalMetastore> mockBuildPartitionsNoOp() {
+        return new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions,
+                                 ComputeResource computeResource) {
+            }
+        };
+    }
+
+    @Test
+    public void testCreateDbNormalCase() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_create_db_editlog";
+        Assertions.assertNull(metastore.getDb(dbName));
+
+        metastore.createDb(dbName);
+        Database createdDb = metastore.getDb(dbName);
+        Assertions.assertNotNull(createdDb);
+
+        CreateDbInfo replayInfo = (CreateDbInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_DB_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(dbName, replayInfo.getDbName());
+        Assertions.assertEquals(createdDb.getId(), replayInfo.getId());
+
+        CatalogRecycleBin followerRecycleBin = new CatalogRecycleBin();
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), followerRecycleBin, null);
+        followerMetastore.replayCreateDb(replayInfo);
+        Database replayedDb = followerMetastore.getDb(dbName);
+        Assertions.assertNotNull(replayedDb);
+        Assertions.assertEquals(createdDb.getId(), replayedDb.getId());
+    }
+
+    @Test
+    public void testCreateDbEditLogException() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_create_db_editlog_error";
+        Assertions.assertNull(metastore.getDb(dbName));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logCreateDb(any(CreateDbInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () -> metastore.createDb(dbName));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertNull(metastore.getDb(dbName));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testDropDbNormalCase() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_drop_db_editlog";
+        Database db = new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
+        metastore.unprotectCreateDb(db);
+        Assertions.assertNotNull(metastore.getDb(dbName));
+
+        metastore.dropDb(UtFrameUtils.createDefaultCtx(), dbName, true);
+        Assertions.assertNull(metastore.getDb(dbName));
+
+        DropDbInfo replayInfo = (DropDbInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_DB);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(dbName, replayInfo.getDbName());
+        Assertions.assertTrue(replayInfo.isForceDrop());
+
+        CatalogRecycleBin followerRecycleBin = new CatalogRecycleBin();
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), followerRecycleBin, null);
+        followerMetastore.unprotectCreateDb(new Database(db.getId(), dbName));
+        followerMetastore.replayDropDb(replayInfo.getDbName(), replayInfo.isForceDrop());
+        Assertions.assertNull(followerMetastore.getDb(dbName));
+    }
+
+    @Test
+    public void testDropDbEditLogException() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_drop_db_editlog_error";
+        Database db = new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
+        metastore.unprotectCreateDb(db);
+        Assertions.assertNotNull(metastore.getDb(dbName));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logDropDb(any(DropDbInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> metastore.dropDb(UtFrameUtils.createDefaultCtx(), dbName, true));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertNotNull(metastore.getDb(dbName));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testCreateTableNormalCase() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        String tableName = "test_create_table_editlog";
+        Assertions.assertNotNull(db);
+        Assertions.assertNull(db.getTable(tableName));
+
+        Table table = createOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, null);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo,
+                wal -> db.registerTableUnlocked(table));
+        Assertions.assertNotNull(db.getTable(tableName));
+
+        CreateTableInfo replayInfo = (CreateTableInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(DB_NAME, replayInfo.getDbName());
+        Assertions.assertEquals(tableName, replayInfo.getTable().getName());
+        Assertions.assertEquals(table.getId(), replayInfo.getTable().getId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(),
+                new com.starrocks.catalog.ColocateTableIndex());
+        followerMetastore.unprotectCreateDb(new Database(db.getId(), db.getFullName()));
+        followerMetastore.replayCreateTable(replayInfo);
+        Table replayedTable = followerMetastore.getDb(DB_NAME).getTable(tableName);
+        Assertions.assertNotNull(replayedTable);
+        Assertions.assertEquals(table.getId(), replayedTable.getId());
+    }
+
+    @Test
+    public void testCreateTableEditLogException() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        String tableName = "test_create_table_editlog_error";
+        Assertions.assertNotNull(db);
+        Assertions.assertNull(db.getTable(tableName));
+
+        Table table = createOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, null);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logCreateTable(any(CreateTableInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo,
+                            wal -> db.registerTableUnlocked(table)));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertNull(db.getTable(tableName));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testDropTableNormalCase() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_drop_table_editlog";
+        Assertions.assertNotNull(db);
+
+        Table table = createOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Assertions.assertNotNull(db.getTable(tableName));
+
+        db.dropTable(tableName, false, true);
+        Assertions.assertNull(db.getTable(tableName));
+
+        DropInfo replayInfo = (DropInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_DROP_TABLE_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertTrue(replayInfo.isForceDrop());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(),
+                new com.starrocks.catalog.ColocateTableIndex());
+        Database followerDb = new Database(db.getId(), db.getFullName());
+        followerMetastore.unprotectCreateDb(followerDb);
+        Table followerTable = createOlapTable(table.getId(), tableName);
+        followerDb.registerTableUnlocked(followerTable);
+        followerMetastore.replayDropTable(followerDb, replayInfo.getTableId(), replayInfo.isForceDrop());
+        Assertions.assertNull(followerDb.getTable(tableName));
+    }
+
+    @Test
+    public void testDropTableEditLogException() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_drop_table_editlog_error";
+        Assertions.assertNotNull(db);
+
+        Table table = createOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Assertions.assertNotNull(db.getTable(tableName));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logDropTable(any(DropInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> db.dropTable(tableName, false, true));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertNotNull(db.getTable(tableName));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testRecoverDbNormalCase() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_recover_db_editlog";
+        Database db = new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
+        metastore.unprotectCreateDb(db);
+        Assertions.assertNotNull(metastore.getDb(dbName));
+
+        metastore.dropDb(UtFrameUtils.createDefaultCtx(), dbName, false);
+        Assertions.assertNull(metastore.getDb(dbName));
+
+        RecoverDbStmt recoverDbStmt = new RecoverDbStmt(dbName);
+        metastore.recoverDatabase(recoverDbStmt);
+        Database recoveredDb = metastore.getDb(dbName);
+        Assertions.assertNotNull(recoveredDb);
+        Assertions.assertEquals(db.getId(), recoveredDb.getId());
+
+        RecoverInfo replayInfo = (RecoverInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_RECOVER_DB_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(), null);
+        followerMetastore.unprotectCreateDb(new Database(db.getId(), dbName));
+        followerMetastore.replayDropDb(dbName, false);
+        Assertions.assertNull(followerMetastore.getDb(dbName));
+        followerMetastore.replayRecoverDatabase(replayInfo);
+        Database followerRecoveredDb = followerMetastore.getDb(dbName);
+        Assertions.assertNotNull(followerRecoveredDb);
+        Assertions.assertEquals(db.getId(), followerRecoveredDb.getId());
+    }
+
+    @Test
+    public void testRecoverDbEditLogException() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_recover_db_editlog_error";
+        Database db = new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
+        metastore.unprotectCreateDb(db);
+        Assertions.assertNotNull(metastore.getDb(dbName));
+
+        metastore.dropDb(UtFrameUtils.createDefaultCtx(), dbName, false);
+        Assertions.assertNull(metastore.getDb(dbName));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logRecoverDb(any(RecoverInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RecoverDbStmt recoverDbStmt = new RecoverDbStmt(dbName);
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> metastore.recoverDatabase(recoverDbStmt));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertNull(metastore.getDb(dbName));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testAddPartitionsNormalCase() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_add_partitions_editlog";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRangePartitionedOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Assertions.assertNull(table.getPartition("p2"));
+
+        PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(List.of(new PartitionValue("2024-03-01")));
+        HashMap<String, String> partitionProperties = new HashMap<>();
+        partitionProperties.put("replication_num", "1");
+        SingleRangePartitionDesc partitionDesc =
+                new SingleRangePartitionDesc(false, "p2", partitionKeyDesc, partitionProperties);
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setDatabase(DB_NAME);
+        if (ctx.getCurrentCatalog() == null) {
+            ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+        new AlterTableClauseAnalyzer(table).analyze(ctx, addPartitionClause);
+
+        metastore.addPartitions(ctx, db, tableName, addPartitionClause);
+        Assertions.assertNotNull(table.getPartition("p2"));
+
+        AddPartitionsInfoV2 replayInfo = (AddPartitionsInfoV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ADD_PARTITIONS_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(1, replayInfo.getAddPartitionInfos().size());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), db.getFullName());
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createRangePartitionedOlapTable(table.getId(), tableName);
+        followerDb.registerTableUnlocked(followerTable);
+
+        for (PartitionPersistInfoV2 info : replayInfo.getAddPartitionInfos()) {
+            followerMetastore.replayAddPartition(info);
+        }
+        Assertions.assertNotNull(followerTable.getPartition("p2"));
+    }
+
+    @Test
+    public void testAddPartitionsEditLogException() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_add_partitions_editlog_error";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRangePartitionedOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Assertions.assertNull(table.getPartition("p2"));
+
+        PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(List.of(new PartitionValue("2024-03-01")));
+        HashMap<String, String> partitionProperties = new HashMap<>();
+        partitionProperties.put("replication_num", "1");
+        SingleRangePartitionDesc partitionDesc =
+                new SingleRangePartitionDesc(false, "p2", partitionKeyDesc, partitionProperties);
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setDatabase(DB_NAME);
+        if (ctx.getCurrentCatalog() == null) {
+            ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        }
+        new AlterTableClauseAnalyzer(table).analyze(ctx, addPartitionClause);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAddPartitions(any(AddPartitionsInfoV2.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> metastore.addPartitions(ctx, db, tableName, addPartitionClause));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertNull(table.getPartition("p2"));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testCreateAndAddTempPartitionsForTableNormalCase() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_partition_utils_add_temp_partition_editlog";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRangePartitionedOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Partition sourcePartition = table.getPartition("p1");
+        Assertions.assertNotNull(sourcePartition);
+        Assertions.assertFalse(table.checkPartitionNameExist("p1_tmp", true));
+
+        long tempPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        PartitionUtils.createAndAddTempPartitionsForTable(db, table, "_tmp",
+                List.of(sourcePartition.getId()), List.of(tempPartitionId), null, null);
+        Assertions.assertTrue(table.checkPartitionNameExist("p1_tmp", true));
+
+        AddPartitionsInfoV2 replayInfo = (AddPartitionsInfoV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ADD_PARTITIONS_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(1, replayInfo.getAddPartitionInfos().size());
+        Assertions.assertTrue(replayInfo.getAddPartitionInfos().get(0).isTempPartition());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(), new com.starrocks.catalog.ColocateTableIndex());
+        Database followerDb = new Database(db.getId(), db.getFullName());
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createRangePartitionedOlapTable(table.getId(), tableName);
+        followerDb.registerTableUnlocked(followerTable);
+
+        for (PartitionPersistInfoV2 info : replayInfo.getAddPartitionInfos()) {
+            followerMetastore.replayAddPartition(info);
+        }
+        Assertions.assertTrue(followerTable.checkPartitionNameExist("p1_tmp", true));
+    }
+
+    @Test
+    public void testCreateAndAddTempPartitionsForTableEditLogException() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_partition_utils_add_temp_partition_editlog_error";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRangePartitionedOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Partition sourcePartition = table.getPartition("p1");
+        Assertions.assertNotNull(sourcePartition);
+        Assertions.assertFalse(table.checkPartitionNameExist("p1_tmp", true));
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAddPartitions(any(AddPartitionsInfoV2.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () ->
+                    PartitionUtils.createAndAddTempPartitionsForTable(db, table, "_tmp",
+                            List.of(sourcePartition.getId()), List.of(GlobalStateMgr.getCurrentState().getNextId()),
+                            null, null));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertFalse(table.checkPartitionNameExist("p1_tmp", true));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testAddSubPartitionsNormalCase() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_add_sub_partitions_editlog";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRandomDistributionOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Partition partition = table.getPartition("p1");
+        Assertions.assertNotNull(partition);
+        int beforeCount = partition.getSubPartitions().size();
+
+        metastore.addSubPartitions(db, table, partition, 1, null);
+        Assertions.assertEquals(beforeCount + 1, partition.getSubPartitions().size());
+
+        AddSubPartitionsInfoV2 replayInfo = (AddSubPartitionsInfoV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ADD_SUB_PARTITIONS_V2);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(1, replayInfo.getAddSubPartitionInfos().size());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), db.getFullName());
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createRandomDistributionOlapTable(table.getId(), tableName);
+        followerDb.registerTableUnlocked(followerTable);
+        int followerBeforeCount = followerTable.getPartition("p1").getSubPartitions().size();
+
+        for (PhysicalPartitionPersistInfoV2 info : replayInfo.getAddSubPartitionInfos()) {
+            followerMetastore.replayAddSubPartition(info);
+        }
+        Assertions.assertEquals(followerBeforeCount + 1, followerTable.getPartition("p1").getSubPartitions().size());
+    }
+
+    @Test
+    public void testAddSubPartitionsEditLogException() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_add_sub_partitions_editlog_error";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRandomDistributionOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Partition partition = table.getPartition("p1");
+        Assertions.assertNotNull(partition);
+        int beforeCount = partition.getSubPartitions().size();
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAddSubPartitions(any(AddSubPartitionsInfoV2.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> metastore.addSubPartitions(db, table, partition, 1, null));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(beforeCount, partition.getSubPartitions().size());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testReplaceTempPartitionNormalCase() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_replace_temp_partition_editlog";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRangePartitionedOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Partition sourcePartition = table.getPartition("p1");
+        Assertions.assertNotNull(sourcePartition);
+
+        long tempPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        PartitionUtils.createAndAddTempPartitionsForTable(db, table, "_tmp",
+                List.of(sourcePartition.getId()), List.of(tempPartitionId), null, null);
+        Assertions.assertTrue(table.checkPartitionNameExist("p1_tmp", true));
+
+        ReplacePartitionClause clause = new ReplacePartitionClause(
+                new PartitionRef(List.of("p1"), false, NodePosition.ZERO),
+                new PartitionRef(List.of("p1_tmp"), true, NodePosition.ZERO),
+                new HashMap<>());
+        clause.setStrictRange(true);
+        clause.setUseTempPartitionName(false);
+
+        metastore.replaceTempPartition(db, tableName, clause);
+        Assertions.assertFalse(table.checkPartitionNameExist("p1_tmp", true));
+        Assertions.assertTrue(table.checkPartitionNameExist("p1", false));
+        GlobalStateMgr.getCurrentState().getRecycleBin().removePartitionFromRecycleBin(sourcePartition.getId());
+
+        ReplacePartitionOperationLog replayInfo = (ReplacePartitionOperationLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_REPLACE_TEMP_PARTITION);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTblId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(),
+                new com.starrocks.catalog.ColocateTableIndex());
+        Database followerDb = new Database(db.getId(), db.getFullName());
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createRangePartitionedOlapTable(table.getId(), tableName);
+        followerDb.registerTableUnlocked(followerTable);
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            PartitionUtils.createAndAddTempPartitionsForTable(followerDb, followerTable, "_tmp",
+                    List.of(followerTable.getPartition("p1").getId()),
+                    List.of(GlobalStateMgr.getCurrentState().getNextId()), null, null);
+            Assertions.assertTrue(followerTable.checkPartitionNameExist("p1_tmp", true));
+            followerMetastore.replayReplaceTempPartition(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+        Assertions.assertFalse(followerTable.checkPartitionNameExist("p1_tmp", true));
+        Assertions.assertTrue(followerTable.checkPartitionNameExist("p1", false));
+    }
+
+    @Test
+    public void testReplaceTempPartitionEditLogException() throws Exception {
+        mockBuildPartitionsNoOp();
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB_NAME);
+        String tableName = "test_replace_temp_partition_editlog_error";
+        Assertions.assertNotNull(db);
+
+        OlapTable table = createRangePartitionedOlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName);
+        db.registerTableUnlocked(table);
+        Partition sourcePartition = table.getPartition("p1");
+        Assertions.assertNotNull(sourcePartition);
+
+        long tempPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        PartitionUtils.createAndAddTempPartitionsForTable(db, table, "_tmp",
+                List.of(sourcePartition.getId()), List.of(tempPartitionId), null, null);
+        Assertions.assertTrue(table.checkPartitionNameExist("p1_tmp", true));
+
+        ReplacePartitionClause clause = new ReplacePartitionClause(
+                new PartitionRef(List.of("p1"), false, NodePosition.ZERO),
+                new PartitionRef(List.of("p1_tmp"), true, NodePosition.ZERO),
+                new HashMap<>());
+        clause.setStrictRange(true);
+        clause.setUseTempPartitionName(false);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logReplaceTempPartition(any(ReplacePartitionOperationLog.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> metastore.replaceTempPartition(db, tableName, clause));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertTrue(table.checkPartitionNameExist("p1_tmp", true));
+            Assertions.assertTrue(table.checkPartitionNameExist("p1", false));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
     }
 
     // Test alterDatabaseQuota

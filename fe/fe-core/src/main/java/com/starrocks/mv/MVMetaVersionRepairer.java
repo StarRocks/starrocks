@@ -26,7 +26,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.scheduler.mv.MVVersionManager;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -87,8 +87,9 @@ public class MVMetaVersionRepairer {
     private static void repairBaseTableTableVersionChange(MaterializedView mv,
                                                           Table table,
                                                           List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
         // check table existed in mv's version map
-        MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVersionMap =
                 asyncRefreshContext.getBaseTableVisibleVersionMap();
         List<MVRepairHandler.PartitionRepairInfo> needToUpdatePartitionInfos =
@@ -104,7 +105,11 @@ public class MVMetaVersionRepairer {
                 table.getName(), mv.getName(), changedVersions);
         // update edit log
         long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(changedVersions);
-        MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(copiedScheme));
         LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
                 mv.getName(), maxChangedTableRefreshTime);
     }

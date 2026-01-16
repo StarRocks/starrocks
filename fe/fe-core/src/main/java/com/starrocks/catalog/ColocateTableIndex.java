@@ -281,12 +281,16 @@ public class ColocateTableIndex implements Writable {
             if (!group2Tables.containsKey(groupId)) {
                 return;
             }
-            if (unstableGroups.add(groupId)) {
-                if (needEditLog) {
-                    ColocatePersistInfo info = ColocatePersistInfo.createForMarkUnstable(groupId);
-                    GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkUnstable(info);
-                }
-                LOG.info("mark group {} as unstable", groupId);
+            if (unstableGroups.contains(groupId)) {
+                return;
+            }
+            if (needEditLog) {
+                ColocatePersistInfo info = ColocatePersistInfo.createForMarkUnstable(groupId);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkUnstable(info, wal -> {
+                    markGroupUnstableInternal(groupId);
+                });
+            } else {
+                markGroupUnstableInternal(groupId);
             }
         } finally {
             writeUnlock();
@@ -299,15 +303,31 @@ public class ColocateTableIndex implements Writable {
             if (!group2Tables.containsKey(groupId)) {
                 return;
             }
-            if (unstableGroups.remove(groupId)) {
-                if (needEditLog) {
-                    ColocatePersistInfo info = ColocatePersistInfo.createForMarkStable(groupId);
-                    GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkStable(info);
-                }
-                LOG.info("mark group {} as stable", groupId);
+            if (!unstableGroups.contains(groupId)) {
+                return;
+            }
+            if (needEditLog) {
+                ColocatePersistInfo info = ColocatePersistInfo.createForMarkStable(groupId);
+                GlobalStateMgr.getCurrentState().getEditLog().logColocateMarkStable(info, wal -> {
+                    markGroupStableInternal(groupId);
+                });
+            } else {
+                markGroupStableInternal(groupId);
             }
         } finally {
             writeUnlock();
+        }
+    }
+
+    private void markGroupUnstableInternal(GroupId groupId) {
+        if (unstableGroups.add(groupId)) {
+            LOG.info("mark group {} as unstable", groupId);
+        }
+    }
+
+    private void markGroupStableInternal(GroupId groupId) {
+        if (unstableGroups.remove(groupId)) {
+            LOG.info("mark group {} as stable", groupId);
         }
     }
 
@@ -699,9 +719,6 @@ public class ColocateTableIndex implements Writable {
         return infos;
     }
 
-
-
-
     public void setBackendsSetByIdxForGroup(GroupId groupId, int tabletOrderIdx, Set<Long> newBackends) {
         writeLock();
         try {
@@ -710,9 +727,19 @@ public class ColocateTableIndex implements Writable {
                 return;
             }
             Preconditions.checkState(tabletOrderIdx < backends.size(), tabletOrderIdx + " vs. " + backends.size());
-            backends.set(tabletOrderIdx, Lists.newArrayList(newBackends));
-            ColocatePersistInfo info = ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backends);
-            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info);
+            List<List<Long>> updatedBackendsPerBucketSeq = Lists.newArrayListWithCapacity(backends.size());
+            for (int i = 0; i < backends.size(); i++) {
+                if (i == tabletOrderIdx) {
+                    updatedBackendsPerBucketSeq.add(Lists.newArrayList(newBackends));
+                } else {
+                    updatedBackendsPerBucketSeq.add(Lists.newArrayList(backends.get(i)));
+                }
+            }
+            ColocatePersistInfo info =
+                    ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, updatedBackendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateBackendsPerBucketSeq(info, wal -> {
+                addBackendsPerBucketSeq(groupId, updatedBackendsPerBucketSeq);
+            });
         } finally {
             writeUnlock();
         }
@@ -810,58 +837,98 @@ public class ColocateTableIndex implements Writable {
     public void modifyTableColocate(Database db, OlapTable table, String colocateGroup, boolean isReplay,
                                     GroupId assignedGroupId)
             throws DdlException {
+        if (!isReplay) {
+            GroupId groupId = prepareModifyTableColocate(db, table, colocateGroup, assignedGroupId);
+            if (groupId == null) {
+                return;
+            }
+            Map<String, String> properties = Maps.newHashMapWithExpectedSize(1);
+            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+            TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
+            applyModifyTableColocate(db, table, colocateGroup, false, groupId);
+            return;
+        }
+
+        applyModifyTableColocate(db, table, colocateGroup, isReplay, assignedGroupId);
+    }
+
+    private GroupId prepareModifyTableColocate(Database db, OlapTable table, String colocateGroup,
+                                               GroupId assignedGroupId) throws DdlException {
+        if (!table.getDefaultDistributionInfo().supportColocate()) {
+            throw new DdlException("Table " + table.getName() + " does not support colocation");
+        }
+
+        String oldGroup = table.getColocateGroup();
+        if (Strings.isNullOrEmpty(colocateGroup)) {
+            if (Strings.isNullOrEmpty(oldGroup)) {
+                return null;
+            }
+            String fullGroupName = db.getId() + "_" + oldGroup;
+            return getGroupSchema(fullGroupName).getGroupId();
+        }
+
+        GroupId colocateGrpIdInOtherDb;
+        String fullGroupName = db.getId() + "_" + colocateGroup;
+        ColocateGroupSchema groupSchema = getGroupSchema(fullGroupName);
+        if (groupSchema == null) {
+            // user set a new colocate group,
+            // check if all partitions all this table has same buckets num and same replication number
+            PartitionInfo partitionInfo = table.getPartitionInfo();
+            if (partitionInfo.isRangePartition()) {
+                int bucketsNum = -1;
+                short replicationNum = -1;
+                for (Partition partition : table.getPartitions()) {
+                    if (bucketsNum == -1) {
+                        bucketsNum = partition.getDistributionInfo().getBucketNum();
+                    } else if (bucketsNum != partition.getDistributionInfo().getBucketNum()) {
+                        throw new DdlException(
+                                "Partitions in table " + table.getName() + " have different buckets number");
+                    }
+
+                    if (replicationNum == -1) {
+                        replicationNum = partitionInfo.getReplicationNum(partition.getId());
+                    } else if (replicationNum != partitionInfo.getReplicationNum(partition.getId())) {
+                        throw new DdlException(
+                                "Partitions in table " + table.getName() + " have different replication number");
+                    }
+                }
+            }
+            // we also need to check the schema consistency with colocate group in other database
+            colocateGrpIdInOtherDb = checkColocateSchemaWithGroupInOtherDb(
+                    colocateGroup, db.getId(), table);
+            // `assignedGroupId == null` means that this is not a replay, but a user issued group creation
+            if (assignedGroupId == null && colocateGrpIdInOtherDb != null) {
+                assignedGroupId = new GroupId(db.getId(), colocateGrpIdInOtherDb.grpId);
+            }
+            if (assignedGroupId == null) {
+                assignedGroupId = new GroupId(db.getId(), GlobalStateMgr.getCurrentState().getNextId());
+            }
+        } else {
+            // set to an already exist colocate group, check if this table can be added to this group.
+            groupSchema.checkColocateSchema(table);
+        }
+
+        return groupSchema == null ? assignedGroupId : groupSchema.getGroupId();
+    }
+
+    private void applyModifyTableColocate(Database db, OlapTable table, String colocateGroup, boolean isReplay,
+                                          GroupId assignedGroupId)
+            throws DdlException {
 
         String oldGroup = table.getColocateGroup();
         GroupId groupId;
         if (!Strings.isNullOrEmpty(colocateGroup)) {
-            GroupId colocateGrpIdInOtherDb = null;
             String fullGroupName = db.getId() + "_" + colocateGroup;
             ColocateGroupSchema groupSchema = getGroupSchema(fullGroupName);
-            if (groupSchema == null) {
-                // user set a new colocate group,
-                // check if all partitions all this table has same buckets num and same replication number
-                PartitionInfo partitionInfo = table.getPartitionInfo();
-                if (partitionInfo.isRangePartition()) {
-                    int bucketsNum = -1;
-                    short replicationNum = -1;
-                    for (Partition partition : table.getPartitions()) {
-                        if (bucketsNum == -1) {
-                            bucketsNum = partition.getDistributionInfo().getBucketNum();
-                        } else if (bucketsNum != partition.getDistributionInfo().getBucketNum()) {
-                            throw new DdlException(
-                                    "Partitions in table " + table.getName() + " have different buckets number");
-                        }
-
-                        if (replicationNum == -1) {
-                            replicationNum = partitionInfo.getReplicationNum(partition.getId());
-                        } else if (replicationNum != partitionInfo.getReplicationNum(partition.getId())) {
-                            throw new DdlException(
-                                    "Partitions in table " + table.getName() + " have different replication number");
-                        }
-                    }
-                }
-                // we also need to check the schema consistency with colocate group in other database
-                colocateGrpIdInOtherDb = checkColocateSchemaWithGroupInOtherDb(
-                        colocateGroup, db.getId(), table);
-                // `assignedGroupId == null` means that this is not a replay, but a user issued group creation
-                if (assignedGroupId == null && colocateGrpIdInOtherDb != null) {
-                    assignedGroupId = new GroupId(db.getId(), colocateGrpIdInOtherDb.grpId);
-                }
-            } else {
-                // set to an already exist colocate group, check if this table can be added to this group.
-                groupSchema.checkColocateSchema(table);
-            }
 
             List<List<Long>> backendsPerBucketSeq = null;
             if (groupSchema == null) {
-                if (colocateGrpIdInOtherDb == null) {
-                    // assign to a newly created group, set backends sequence.
-                    // we arbitrarily choose a tablet backends sequence from this table,
-                    // let the colocation balancer do the work.
-                    backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
+                List<GroupId> colocateWithGroupsInOtherDb = getColocateWithGroupsInOtherDb(assignedGroupId);
+                if (!colocateWithGroupsInOtherDb.isEmpty()) {
+                    backendsPerBucketSeq = getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
                 } else {
-                    // colocate with group in other database, reuse the bucket seq.
-                    backendsPerBucketSeq = getBackendsPerBucketSeq(colocateGrpIdInOtherDb);
+                    backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
                 }
             }
             // change group after getting backends sequence(if it has), in case 'getArbitraryTabletBucketsSeq' failed
@@ -881,17 +948,8 @@ public class ColocateTableIndex implements Writable {
                 return;
             }
             // when replayModifyTableColocate, we need the groupId info
-            String fullGroupName = db.getId() + "_" + oldGroup;
-            groupId = getGroupSchema(fullGroupName).getGroupId();
             removeTable(table.getId(), table, isReplay);
             table.setColocateGroup(null);
-        }
-
-        if (!isReplay) {
-            Map<String, String> properties = Maps.newHashMapWithExpectedSize(1);
-            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
-            TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
         }
         table.lastSchemaUpdateTime.set(System.nanoTime());
         LOG.info("finished modify table's colocation property. table: {}, is replay: {}",

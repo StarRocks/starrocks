@@ -537,6 +537,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
+            res.moment = this.moment;
             res.type = this.type;
             res.lastRefreshTime = this.lastRefreshTime;
             if (this.asyncRefreshContext != null) {
