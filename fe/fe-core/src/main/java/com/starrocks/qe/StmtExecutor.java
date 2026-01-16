@@ -78,6 +78,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.Version;
+import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.CompressionUtils;
@@ -1451,8 +1452,9 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (isExplainQuery) {
-            String explainString = buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.SELECT,
-                    parsedStmt.getExplainLevel());
+            String explainString =
+                    buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.SELECT,
+                            parsedStmt.getExplainLevel());
             if (executeInFe) {
                 explainString = "EXECUTE IN FE\n" + explainString;
             }
@@ -1527,6 +1529,7 @@ public class StmtExecutor {
             // 2. If this is a query, send the result expr fields first, and send result data back to client.
             MysqlChannel channel = context.getMysqlChannel();
             boolean isSendFields = false;
+            final RawScopedTimer rawScopedTimer = new RawScopedTimer();
             do {
                 batch = coord.getNext();
                 // for outfile query, there will be only one empty batch send back with eos flag
@@ -1534,7 +1537,7 @@ public class StmtExecutor {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
                     // so We need to send fields after first batch arrived
                     if (!isSendFields) {
-                        responseFields(colNames, outputExprs);
+                        responseFields(rawScopedTimer, colNames, outputExprs);
                         isSendFields = true;
                     }
                     if (!isProxy && channel.isSendBufferNull()) {
@@ -1546,7 +1549,7 @@ public class StmtExecutor {
                         channel.initBuffer(bufferSize + 8);
                     }
 
-                    responseRowBatch(batch, channel);
+                    responseRowBatch(rawScopedTimer, batch, channel);
                 }
                 if (batch.getBatch() != null) {
                     context.updateReturnRows(batch.getBatch().getRows().size());
@@ -1554,17 +1557,18 @@ public class StmtExecutor {
             } while (!batch.isEos());
 
             if (!isSendFields && !isOutfileQuery && !isExplainAnalyze && !isPlanAdvisorAnalyze && !isArrowFlight) {
-                responseFields(colNames, outputExprs);
+                responseFields(rawScopedTimer, colNames, outputExprs);
             }
-            final Long res = Tracers.getSpecifiedTimer("clientResponse").map(Timer::getTotalTime).orElse(0L);
-            context.getAuditEventBuilder().setWriteClientTimeMs(res);
+            
+            context.getAuditEventBuilder().setWriteClientTimeMs(rawScopedTimer.getTotalTime());
         }
 
         processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
         GlobalStateMgr.getCurrentState().getQueryHistoryMgr().addQueryHistory(context, execPlan);
     }
-    private void responseRowBatch(RowBatch batch, MysqlChannel channel) throws IOException {
-        try (final Timer ignore = Tracers.watchScope(Tracers.Module.CLIENT, "clientResponse")) {
+
+    private void responseRowBatch(RawScopedTimer timer, RowBatch batch, MysqlChannel channel) throws IOException {
+        try (final RawScopedTimer.Guard ignore = timer.start()) {
             for (ByteBuffer row : batch.getBatch().getRows()) {
                 if (isProxy) {
                     proxyResultBuffer.add(row);
@@ -1575,8 +1579,8 @@ public class StmtExecutor {
         }
     }
 
-    private void responseFields(List<String> colNames, List<Expr> exprs) throws IOException {
-        try (final Timer ignore = Tracers.watchScope(Tracers.Module.CLIENT, "clientResponse")) {
+    private void responseFields(RawScopedTimer timer, List<String> colNames, List<Expr> exprs) throws IOException {
+        try (final RawScopedTimer.Guard ignore = timer.start()) {
             sendFields(colNames, exprs);
         }
     }
