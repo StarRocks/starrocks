@@ -15,7 +15,9 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardGroupInfo;
+import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -29,18 +31,25 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -54,6 +63,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -271,5 +282,309 @@ public class LakeTableHelperTest {
                     TransactionState.LoadJobSourceType.DELETE));
         Assertions.assertFalse(LakeTableHelper.isTransactionSupportCombinedTxnLog(
                     TransactionState.LoadJobSourceType.MV_REFRESH));
+    }
+
+    /**
+     * Test cleanSharedDataPartitionAndDeleteShardGroupMeta() method:
+     * Success case - all directories are removed, shard group meta should be deleted.
+     */
+    @Test
+    public void testCleanSharedDataPartitionAndDeleteShardGroupMeta_Success(
+            @Mocked StarOSAgent starOSAgent,
+            @Mocked LakeService lakeService,
+            @Mocked ComputeResource computeResource) throws Exception {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long partitionId = 3001L;
+        long physicalPartitionId = 4001L;
+        long groupId = 6001L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", new MaterializedIndex(), distributionInfo);
+
+        // Set shard group id for the partition's index
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId);
+            // Add a tablet to trigger shard info lookup
+            LakeTablet tablet = new LakeTablet(1000L);
+            TabletMeta tabletMeta = new TabletMeta(1L, 2L, partitionId, materializedIndex.getId(), TStorageMedium.HDD, true);
+            materializedIndex.addTablet(tablet, tabletMeta);
+        });
+
+        // Build shardGroupInfos to track if shard group is deleted
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder()
+                .setGroupId(groupId)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .build());
+        Assertions.assertEquals(1, shardGroupInfos.size());
+
+        // Mock StarOSAgent to return shard info with path ending with partition id
+        String shardPath = "s3://bucket/data/" + physicalPartitionId;
+        ShardInfo shardInfo = ShardInfo.newBuilder()
+                .setShardId(1000L)
+                .setFilePath(FilePathInfo.newBuilder().setFullPath(shardPath).build())
+                .build();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) {
+                return shardInfo;
+            }
+
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                for (long gId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == gId);
+                }
+            }
+        };
+
+        new MockUp<Utils>() {
+            @Mock
+            public ComputeNode chooseNode(ShardInfo info) {
+                return new ComputeNode();
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress address) {
+                return lakeService;
+            }
+        };
+
+        new MockUp<LakeService>() {
+            @Mock
+            public CompletableFuture<DropTableResponse> dropTable(DropTableRequest request) {
+                return CompletableFuture.completedFuture(new DropTableResponse());
+            }
+        };
+
+        // Execute the method
+        boolean result = LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta(
+                partition, computeResource, true);
+
+        // Verify result
+        Assertions.assertTrue(result);
+        // Verify shard group meta was deleted
+        Assertions.assertEquals(0, shardGroupInfos.size());
+    }
+
+    /**
+     * Test cleanSharedDataPartitionAndDeleteShardGroupMeta() method:
+     * Failure case - directory removal fails, shard group meta should NOT be deleted.
+     */
+    @Test
+    public void testCleanSharedDataPartitionAndDeleteShardGroupMeta_FailureNoShardGroupDeletion(
+            @Mocked StarOSAgent starOSAgent,
+            @Mocked ComputeResource computeResource) throws Exception {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long partitionId = 3002L;
+        long physicalPartitionId = 4002L;
+        long groupId = 6002L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p2", new MaterializedIndex(), distributionInfo);
+
+        // Set shard group id
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId);
+            LakeTablet tablet = new LakeTablet(2000L);
+            TabletMeta tabletMeta = new TabletMeta(1L, 2L, partitionId, materializedIndex.getId(), TStorageMedium.HDD, true);
+            materializedIndex.addTablet(tablet, tabletMeta);
+        });
+
+        // Track if deleteShardGroup is called
+        AtomicBoolean deleteShardGroupCalled = new AtomicBoolean(false);
+
+        // Mock StarOSAgent
+        String shardPath = "s3://bucket/data/" + physicalPartitionId;
+        ShardInfo shardInfo = ShardInfo.newBuilder()
+                .setShardId(2000L)
+                .setFilePath(FilePathInfo.newBuilder().setFullPath(shardPath).build())
+                .build();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) {
+                return shardInfo;
+            }
+
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                deleteShardGroupCalled.set(true);
+            }
+        };
+
+        // Mock Utils.chooseNode to return null (simulate no available node)
+        new MockUp<Utils>() {
+            @Mock
+            public ComputeNode chooseNode(ShardInfo info) {
+                return null;  // No node available, will cause removal to fail
+            }
+        };
+
+        // Execute the method
+        boolean result = LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta(
+                partition, computeResource, true);
+
+        // Verify result
+        Assertions.assertFalse(result);
+        // Verify shard group meta was NOT deleted
+        Assertions.assertFalse(deleteShardGroupCalled.get());
+    }
+
+    /**
+     * Test cleanSharedDataPartitionAndDeleteShardGroupMeta() method:
+     * Skip shared directory case - shared directories should be skipped and return true.
+     */
+    @Test
+    public void testCleanSharedDataPartitionAndDeleteShardGroupMeta_SkipSharedDirectory(
+            @Mocked StarOSAgent starOSAgent,
+            @Mocked ComputeResource computeResource) throws Exception {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long partitionId = 3003L;
+        long physicalPartitionId = 4003L;
+        long groupId = 6003L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p3", new MaterializedIndex(), distributionInfo);
+
+        // Set shard group id
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId);
+            LakeTablet tablet = new LakeTablet(3000L);
+            TabletMeta tabletMeta = new TabletMeta(1L, 2L, partitionId, materializedIndex.getId(), TStorageMedium.HDD, true);
+            materializedIndex.addTablet(tablet, tabletMeta);
+        });
+
+        // Track if removeShardRootDirectory is called
+        AtomicBoolean removeDirectoryCalled = new AtomicBoolean(false);
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder().setGroupId(groupId).build());
+
+        // Mock shard info with a shared directory path (not ending with partition id)
+        String sharedPath = "s3://bucket/shared/data";  // Not ending with physicalPartitionId
+        ShardInfo shardInfo = ShardInfo.newBuilder()
+                .setShardId(3000L)
+                .setFilePath(FilePathInfo.newBuilder().setFullPath(sharedPath).build())
+                .build();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) {
+                return shardInfo;
+            }
+
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                for (long gId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == gId);
+                }
+            }
+        };
+
+        new MockUp<LakeTableHelper>() {
+            @Mock
+            boolean removeShardRootDirectory(ShardInfo info) {
+                removeDirectoryCalled.set(true);
+                return true;
+            }
+        };
+
+        // Execute the method
+        boolean result = LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta(
+                partition, computeResource, true);
+
+        // Verify result - should return true (shared directory is skipped)
+        Assertions.assertTrue(result);
+        // Verify removeShardRootDirectory was NOT called (shared directory skipped)
+        Assertions.assertFalse(removeDirectoryCalled.get());
+        // Verify shard group meta was deleted (because allRemoved is still true)
+        Assertions.assertEquals(0, shardGroupInfos.size());
+    }
+
+    /**
+     * Test cleanSharedDataPartitionAndDeleteShardGroupMeta() method:
+     * No shard info case - should skip and return true.
+     */
+    @Test
+    public void testCleanSharedDataPartitionAndDeleteShardGroupMeta_NoShardInfo(
+            @Mocked StarOSAgent starOSAgent,
+            @Mocked ComputeResource computeResource) throws Exception {
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long partitionId = 3004L;
+        long physicalPartitionId = 4004L;
+        long groupId = 6004L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p4", new MaterializedIndex(), distributionInfo);
+
+        // Set shard group id
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId);
+            // No tablets added - will result in no shard info
+        });
+
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder().setGroupId(groupId).build());
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                for (long gId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == gId);
+                }
+            }
+        };
+
+        // Execute the method
+        boolean result = LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta(
+                partition, computeResource, true);
+
+        // Verify result - should return true (no shard info means nothing to delete)
+        Assertions.assertTrue(result);
+        // Verify shard group meta was deleted
+        Assertions.assertEquals(0, shardGroupInfos.size());
     }
 }

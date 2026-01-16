@@ -37,9 +37,8 @@ public class RecycleLakeListPartitionInfo extends RecycleListPartitionInfo {
         try {
             ComputeResource computeResource =
                     GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(tableId);
-            if (LakeTableHelper.removePartitionDirectory(partition, computeResource)) {
+            if (LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta(partition, computeResource, true)) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
-                LakeTableHelper.deleteShardGroupMeta(partition);
                 return true;
             } else {
                 return false;

@@ -145,24 +145,39 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) throws StarClientException {
-        boolean ret = true;
+    /**
+     * Delete all shard group meta (shards meta included) for the given table from StarManager.
+     * This method should be called after the table's remote data has been cleaned up successfully.
+     */
+    public static boolean cleanSharedDataPartitionAndDeleteShardGroupMeta(Partition partition,
+                                                                          ComputeResource computeResource,
+                                                                          boolean keepSharedDirectory)
+            throws StarClientException {
+        boolean allRemoved = true;
+        Set<String> removedPaths = new HashSet<>();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             ShardInfo shardInfo = getAssociatedShardInfo(subPartition, computeResource).orElse(null);
-            if (shardInfo == null) {
+            if (shardInfo == null || removedPaths.contains(shardInfo.getFilePath().getFullPath())) {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
             }
-            if (isSharedDirectory(shardInfo.getFilePath().getFullPath(), subPartition.getId())) {
+            if (keepSharedDirectory && isSharedDirectory(shardInfo.getFilePath().getFullPath(), subPartition.getId())) {
                 LOG.info("Skipped remove possible directory shared by multiple partitions: {}",
                         shardInfo.getFilePath().getFullPath());
                 continue;
             }
+            removedPaths.add(shardInfo.getFilePath().getFullPath());
             if (!removeShardRootDirectory(shardInfo)) {
-                ret = false;
+                allRemoved = false;
             }
         }
-        return ret;
+        if (allRemoved) {
+            // Delete shard group meta from StarManager after successfully cleaning table data.
+            // Without this step, orphan shard groups would accumulate in StarManager until
+            // cleaned up by the background StarMgrMetaSyncer.
+            deleteShardGroupMeta(partition);
+        }
+        return allRemoved;
     }
 
     /**
@@ -180,8 +195,8 @@ public class LakeTableHelper {
         }
         if (!needRemoveShardGroupIdSet.isEmpty()) {
             starOSAgent.deleteShardGroup(new ArrayList<>(needRemoveShardGroupIdSet));
-            LOG.debug("Deleted shard group related to partition {}, group ids: {}", partition.getId(),
-                    needRemoveShardGroupIdSet);
+            LOG.info("Deleted shard group meta, partition: {}, group ids: {}",
+                    partition.getId(), needRemoveShardGroupIdSet);
         }
     }
 

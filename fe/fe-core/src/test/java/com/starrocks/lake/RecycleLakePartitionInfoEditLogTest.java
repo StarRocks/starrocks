@@ -21,7 +21,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -85,12 +84,11 @@ public class RecycleLakePartitionInfoEditLogTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(3, List.of(col1));
 
         MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
-        LocalTablet tablet = new LocalTablet(TABLET_ID);
+        LakeTablet tablet = new LakeTablet(TABLET_ID);
         TabletMeta tabletMeta = new TabletMeta(DB_ID, TABLE_ID, partitionId, INDEX_ID, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
-        Partition partition = new Partition(partitionId, physicalPartitionId, partitionName, baseIndex, distributionInfo);
-        return partition;
+        return new Partition(partitionId, physicalPartitionId, partitionName, baseIndex, distributionInfo);
     }
 
     @Test
@@ -107,17 +105,14 @@ public class RecycleLakePartitionInfoEditLogTest {
         // Verify initial state
         Assertions.assertTrue(partitionInfo.isRecoverable());
 
-        // 3. Mock LakeTableHelper.removePartitionDirectory to return true
+        // 3. Mock LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta to return true
         // Mock LakeTableHelper using MockUp
         new MockUp<LakeTableHelper>() {
             @Mock
-            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) {
+            public boolean cleanSharedDataPartitionAndDeleteShardGroupMeta(Partition partition,
+                                                                           ComputeResource computeResource,
+                                                                           boolean keepSharedDirectory) {
                 return true;
-            }
-            
-            @Mock
-            public void deleteShardGroupMeta(Partition partition) {
-                // Do nothing
             }
         };
 
@@ -162,16 +157,13 @@ public class RecycleLakePartitionInfoEditLogTest {
         // Verify initial state
         Assertions.assertTrue(partitionInfo.isRecoverable());
 
-        // 3. Mock LakeTableHelper.removePartitionDirectory to return true
+        // 3. Mock LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta to return true
         new MockUp<LakeTableHelper>() {
             @Mock
-            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) {
+            public boolean cleanSharedDataPartitionAndDeleteShardGroupMeta(Partition partition,
+                                                                           ComputeResource computeResource,
+                                                                           boolean keepSharedDirectory) {
                 return true;
-            }
-            
-            @Mock
-            public void deleteShardGroupMeta(Partition partition) {
-                // Do nothing
             }
         };
 
@@ -215,16 +207,13 @@ public class RecycleLakePartitionInfoEditLogTest {
         // Verify initial state
         Assertions.assertTrue(partitionInfo.isRecoverable());
 
-        // 3. Mock LakeTableHelper.removePartitionDirectory to return true
+        // 3. Mock LakeTableHelper.cleanSharedDataPartitionAndDeleteShardGroupMeta to return true
         new MockUp<LakeTableHelper>() {
             @Mock
-            public boolean removePartitionDirectory(Partition partition, ComputeResource computeResource) {
+            public boolean cleanSharedDataPartitionAndDeleteShardGroupMeta(Partition partition,
+                                                                           ComputeResource computeResource,
+                                                                           boolean keepSharedDirectory) {
                 return true;
-            }
-            
-            @Mock
-            public void deleteShardGroupMeta(Partition partition) {
-                // Do nothing
             }
         };
 

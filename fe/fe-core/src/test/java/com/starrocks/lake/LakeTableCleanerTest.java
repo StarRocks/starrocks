@@ -19,9 +19,9 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.proto.DropTableRequest;
-import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,8 +36,6 @@ import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.CompletableFuture;
 
 public class LakeTableCleanerTest {
     private final ShardInfo shardInfo;
@@ -70,7 +68,8 @@ public class LakeTableCleanerTest {
 
     @Test
     public void test(@Mocked LakeTable table,
-                     @Mocked PhysicalPartition partition,
+                     @Mocked Partition partition,
+                     @Mocked PhysicalPartition physicalPartition,
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
@@ -92,25 +91,21 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
-                maxTimes = 1;
 
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getSubPartitions();
+                result = Lists.newArrayList(physicalPartition);
+                minTimes = 1;
+
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
-                maxTimes = 1;
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
-                maxTimes = 1;
-
-                lakeService.dropTable((DropTableRequest) any);
-                result = CompletableFuture.completedFuture(new DropTableResponse());
-                minTimes = 1;
-                maxTimes = 1;
             }
         };
 
@@ -119,7 +114,8 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testNoTablet(@Mocked LakeTable table,
-                             @Mocked PhysicalPartition partition,
+                             @Mocked Partition partition,
+                             @Mocked PhysicalPartition physicalPartition,
                              @Mocked MaterializedIndex index,
                              @Mocked LakeTablet tablet,
                              @Mocked LakeService lakeService) {
@@ -127,20 +123,21 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
-                maxTimes = 1;
 
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getSubPartitions();
+                result = Lists.newArrayList(physicalPartition);
+                minTimes = 1;
+
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
-                maxTimes = 1;
 
                 index.getTablets();
                 result = Lists.emptyList();
                 minTimes = 1;
-                maxTimes = 1;
             }
         };
 
@@ -149,7 +146,8 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testNoAliveNode(@Mocked LakeTable table,
-                                @Mocked PhysicalPartition partition,
+                                @Mocked Partition partition,
+                                @Mocked PhysicalPartition physicalPartition,
                                 @Mocked MaterializedIndex index,
                                 @Mocked LakeTablet tablet,
                                 @Mocked LakeService lakeService) throws StarClientException {
@@ -164,20 +162,21 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
-                maxTimes = 1;
 
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getSubPartitions();
+                result = Lists.newArrayList(physicalPartition);
+                minTimes = 1;
+
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
-                maxTimes = 1;
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
-                maxTimes = 1;
             }
         };
 
@@ -186,7 +185,8 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testGetShardInfoFailed(@Mocked LakeTable table,
-                                       @Mocked PhysicalPartition partition,
+                                       @Mocked Partition partition,
+                                       @Mocked PhysicalPartition physicalPartition,
                                        @Mocked MaterializedIndex index,
                                        @Mocked LakeTablet tablet,
                                        @Mocked LakeService lakeService) throws StarClientException {
@@ -194,20 +194,21 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
-                maxTimes = 1;
 
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getSubPartitions();
+                result = Lists.newArrayList(physicalPartition);
+                minTimes = 1;
+
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
-                maxTimes = 1;
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
-                maxTimes = 1;
             }
         };
 
@@ -216,7 +217,8 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testRPCFailed(@Mocked LakeTable table,
-                              @Mocked PhysicalPartition partition,
+                              @Mocked Partition partition,
+                              @Mocked PhysicalPartition physicalPartition,
                               @Mocked MaterializedIndex index,
                               @Mocked LakeTablet tablet,
                               @Mocked LakeService lakeService) throws StarClientException {
@@ -238,25 +240,25 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
-                maxTimes = 1;
 
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getSubPartitions();
+                result = Lists.newArrayList(physicalPartition);
+                minTimes = 1;
+
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
-                maxTimes = 1;
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
-                maxTimes = 1;
 
                 lakeService.dropTable((DropTableRequest) any);
                 result = new RuntimeException("Injected RPC error");
                 minTimes = 1;
-                maxTimes = 1;
             }
         };
 
@@ -265,7 +267,8 @@ public class LakeTableCleanerTest {
 
     @Test
     public void testShardNotFound(@Mocked LakeTable table,
-                                  @Mocked PhysicalPartition partition,
+                                  @Mocked Partition partition,
+                                  @Mocked PhysicalPartition physicalPartition,
                                   @Mocked MaterializedIndex index,
                                   @Mocked LakeTablet tablet,
                                   @Mocked LakeService lakeService) throws StarClientException {
@@ -273,20 +276,21 @@ public class LakeTableCleanerTest {
 
         new Expectations() {
             {
-                table.getAllPhysicalPartitions();
+                table.getAllPartitions();
                 result = Lists.newArrayList(partition);
                 minTimes = 1;
-                maxTimes = 1;
 
-                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                partition.getSubPartitions();
+                result = Lists.newArrayList(physicalPartition);
+                minTimes = 1;
+
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
                 minTimes = 1;
-                maxTimes = 1;
 
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
                 minTimes = 1;
-                maxTimes = 1;
             }
         };
 

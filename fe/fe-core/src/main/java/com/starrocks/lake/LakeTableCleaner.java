@@ -15,16 +15,12 @@
 package com.starrocks.lake;
 
 import com.staros.client.StarClientException;
-import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Partition;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.util.HashSet;
-import java.util.Set;
 
 class LakeTableCleaner {
     private static final Logger LOG = LogManager.getLogger(LakeTableCleaner.class);
@@ -40,19 +36,13 @@ class LakeTableCleaner {
     // If failed, manual removal of directories may be required by user.
     public boolean cleanTable() {
         boolean allRemoved = true;
-        Set<String> removedPaths = new HashSet<>();
         ComputeResource computeResource =
                 GlobalStateMgr.getCurrentState().getWarehouseMgr().getBackgroundComputeResource(table.getId());
-        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+        for (Partition partition : table.getAllPartitions()) {
             try {
-                ShardInfo shardInfo = LakeTableHelper.getAssociatedShardInfo(partition, computeResource).orElse(null);
-                if (shardInfo == null || removedPaths.contains(shardInfo.getFilePath().getFullPath())) {
-                    continue;
-                }
-                removedPaths.add(shardInfo.getFilePath().getFullPath());
-                if (!LakeTableHelper.removeShardRootDirectory(shardInfo)) {
-                    allRemoved = false;
-                }
+                boolean partitionResult = LakeTableHelper
+                        .cleanSharedDataPartitionAndDeleteShardGroupMeta(partition, computeResource, false);
+                allRemoved = allRemoved && partitionResult;
             } catch (StarClientException e) {
                 LOG.warn("Fail to get shard info of partition {}: {}", partition.getId(), e.getMessage());
                 allRemoved = false;

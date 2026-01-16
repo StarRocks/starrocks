@@ -219,7 +219,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<PhysicalPartition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
@@ -233,7 +233,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<PhysicalPartition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
@@ -247,7 +247,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<PhysicalPartition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
