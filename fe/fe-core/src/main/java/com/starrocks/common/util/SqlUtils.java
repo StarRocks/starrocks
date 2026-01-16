@@ -19,6 +19,7 @@ package com.starrocks.common.util;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryStatement;
@@ -28,6 +29,8 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.StringUtils;
 
 public class SqlUtils {
@@ -96,6 +99,23 @@ public class SqlUtils {
                             || item instanceof SystemVariable));
         }
 
+        return false;
+    }
+
+    /**
+     * Return true if the SQL queries any table under information_schema.
+     */
+    public static boolean isInformationQuery(StatementBase parsedStmt) {
+        if (parsedStmt instanceof QueryStatement queryStatement) {
+            if (queryStatement.getQueryRelation() != null &&
+                    queryStatement.getQueryRelation() instanceof SelectRelation selectRelation) {
+                if (selectRelation.getRelation() instanceof TableRelation tableRelation) {
+                    TableName tableName = tableRelation.getName();
+                    return tableName != null
+                            && StatsConstants.INFORMATION_SCHEMA.equalsIgnoreCase(tableName.getDb());
+                }
+            }
+        }
         return false;
     }
 }

@@ -963,7 +963,8 @@ public class StmtExecutor {
             context.setSessionVariable(sessionVariableBackup);
 
             if (shouldMarkIdleCheck && originWarehouseId != null) {
-                WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
+                WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId,
+                        originStmt == null ? "" : originStmt.originStmt);
             }
 
             recordExecStatsIntoContext();
@@ -3297,13 +3298,17 @@ public class StmtExecutor {
 
     protected boolean shouldMarkIdleCheck(StatementBase parsedStmt) {
         boolean isPreQuerySQL = false;
+        boolean isInformationQuery = false;
         try {
             isPreQuerySQL = SqlUtils.isPreQuerySQL(parsedStmt);
+            isInformationQuery = StatsConstants.INFORMATION_SCHEMA.equalsIgnoreCase(context.currentDb)
+                    || SqlUtils.isInformationQuery(parsedStmt);
         } catch (Exception e) {
             LOG.warn("check isPreQuerySQL failed", e);
         }
         return !isInternalStmt
                 && !isPreQuerySQL
+                && !isInformationQuery
                 && !(parsedStmt instanceof ShowStmt)
                 && !(parsedStmt instanceof AdminSetConfigStmt);
     }
