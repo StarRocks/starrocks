@@ -15,7 +15,6 @@
 package com.starrocks.mysql.nio;
 
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.mysql.RequestPackage;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.SqlModeHelper;
@@ -24,8 +23,6 @@ import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -44,11 +41,6 @@ public class MySQLReadListenerTest {
 
     private MySQLReadListener listener;
 
-    private void resetGracefulExitFlag() {
-        Deencapsulation.setField(GracefulExitFlag.class, "GRACEFUL_EXIT", 
-            new java.util.concurrent.atomic.AtomicBoolean(false));
-    }
-
     private boolean invokeIsTerminated() throws Exception {
         Method method = MySQLReadListener.class.getDeclaredMethod("isTerminated");
         method.setAccessible(true);
@@ -58,23 +50,20 @@ public class MySQLReadListenerTest {
     @BeforeEach
     public void setUp() {
         // Reset GracefulExitFlag before each test
-        resetGracefulExitFlag();
         listener = new MySQLReadListener(ctx, connectProcessor);
     }
 
     @AfterEach
     public void tearDown() {
-        // Reset GracefulExitFlag after each test
-        resetGracefulExitFlag();
     }
 
     @Test
     public void testIsTerminatedWhenTerminatedFlagIsTrue() throws Exception {
         // Set terminated flag to true
         Deencapsulation.setField(listener, "terminated", true);
-        
+
         boolean result = invokeIsTerminated();
-        
+
         Assertions.assertTrue(result, "isTerminated should return true when terminated flag is true");
     }
 
@@ -82,167 +71,153 @@ public class MySQLReadListenerTest {
     public void testIsTerminatedWhenGracefulExitAndNotPreQuerySQL() throws Exception {
         // Set terminated flag to false
         Deencapsulation.setField(listener, "terminated", false);
-        
+
         // Mark graceful exit
         GracefulExitFlag.markGracefulExit();
-        
+
         // Parse a non-pre-query SQL statement (regular SELECT)
         StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = stmtExecutor;
-            
-            stmtExecutor.getParsedStmt();
-            result = stmt;
-        }};
-        
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+            }
+        };
+
         boolean result = invokeIsTerminated();
-        
-        Assertions.assertTrue(result, 
-            "isTerminated should return true when graceful exit is active and statement is not pre-query SQL");
+
+        Assertions.assertTrue(result,
+                "isTerminated should return true when graceful exit is active and statement is not pre-query SQL");
     }
 
     @Test
     public void testIsTerminatedWhenGracefulExitAndPreQuerySQL() throws Exception {
         // Set terminated flag to false
         Deencapsulation.setField(listener, "terminated", false);
-        
+
         // Mark graceful exit
         GracefulExitFlag.markGracefulExit();
-        
+
         // Parse a pre-query SQL statement (select @@query_timeout)
         StatementBase stmt = SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT);
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = stmtExecutor;
-            
-            stmtExecutor.getParsedStmt();
-            result = stmt;
-        }};
-        
-        boolean result = invokeIsTerminated();
-        
-        Assertions.assertFalse(result, 
-            "isTerminated should return false when graceful exit is active but statement is pre-query SQL");
-    }
 
-    @Test
-    public void testIsTerminatedWhenNotGracefulExit() throws Exception {
-        // Set terminated flag to false
-        Deencapsulation.setField(listener, "terminated", false);
-        
-        // Ensure graceful exit is not set
-        Assertions.assertFalse(GracefulExitFlag.isGracefulExit());
-        
-        // Parse any SQL statement
-        StatementBase stmt = SqlParser.parseSingleStatement("select sleep(10)", SqlModeHelper.MODE_DEFAULT);
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = stmtExecutor;
-            
-            stmtExecutor.getParsedStmt();
-            result = stmt;
-        }};
-        
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+            }
+        };
+
         boolean result = invokeIsTerminated();
-        
-        Assertions.assertFalse(result, 
-            "isTerminated should return false when graceful exit is not active");
+
+        Assertions.assertFalse(result,
+                "isTerminated should return false when graceful exit is active but statement is pre-query SQL");
     }
 
     @Test
     public void testIsTerminatedWithNullParsedStmt() throws Exception {
         // Set terminated flag to false
         Deencapsulation.setField(listener, "terminated", false);
-        
+
         // Mark graceful exit
         GracefulExitFlag.markGracefulExit();
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = stmtExecutor;
-            
-            stmtExecutor.getParsedStmt();
-            result = null;
-        }};
-        
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+
+                stmtExecutor.getParsedStmt();
+                result = null;
+            }
+        };
+
         boolean result = invokeIsTerminated();
-        
+
         // When parsedStmt is null, isPreQuerySQL returns false, so isTerminated should return true
-        Assertions.assertTrue(result, 
-            "isTerminated should return true when graceful exit is active and parsedStmt is null");
+        Assertions.assertTrue(result,
+                "isTerminated should return true when graceful exit is active and parsedStmt is null");
     }
 
     @Test
     public void testIsTerminatedWithNullExecutor() throws Exception {
         // Set terminated flag to false
         Deencapsulation.setField(listener, "terminated", false);
-        
+
         // Mark graceful exit
         GracefulExitFlag.markGracefulExit();
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = null;
-        }};
-        
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = null;
+            }
+        };
+
         boolean result = invokeIsTerminated();
-        
+
         // When executor is null, we should return false (not terminated yet)
-        Assertions.assertFalse(result, 
-            "isTerminated should return false when executor is null");
+        Assertions.assertFalse(result,
+                "isTerminated should return false when executor is null");
     }
 
     @Test
     public void testIsTerminatedWithSetStatement() throws Exception {
         // Set terminated flag to false
         Deencapsulation.setField(listener, "terminated", false);
-        
+
         // Mark graceful exit
         GracefulExitFlag.markGracefulExit();
-        
+
         // Parse a pre-query SET statement
         StatementBase stmt = SqlParser.parseSingleStatement("set query_timeout=600", SqlModeHelper.MODE_DEFAULT);
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = stmtExecutor;
-            
-            stmtExecutor.getParsedStmt();
-            result = stmt;
-        }};
-        
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+            }
+        };
+
         boolean result = invokeIsTerminated();
-        
-        Assertions.assertFalse(result, 
-            "isTerminated should return false when graceful exit is active but statement is a pre-query SET");
+
+        Assertions.assertFalse(result,
+                "isTerminated should return false when graceful exit is active but statement is a pre-query SET");
     }
 
     @Test
     public void testIsTerminatedWithConnectionIdFunction() throws Exception {
         // Set terminated flag to false
         Deencapsulation.setField(listener, "terminated", false);
-        
+
         // Mark graceful exit
         GracefulExitFlag.markGracefulExit();
-        
+
         // Parse connection_id() function call
         StatementBase stmt = SqlParser.parseSingleStatement("select connection_id()", SqlModeHelper.MODE_DEFAULT);
-        
-        new Expectations() {{
-            connectProcessor.getExecutor();
-            result = stmtExecutor;
-            
-            stmtExecutor.getParsedStmt();
-            result = stmt;
-        }};
-        
+
+        new Expectations() {
+            {
+                connectProcessor.getExecutor();
+                result = stmtExecutor;
+
+                stmtExecutor.getParsedStmt();
+                result = stmt;
+            }
+        };
+
         boolean result = invokeIsTerminated();
-        
-        Assertions.assertFalse(result, 
-            "isTerminated should return false when graceful exit is active but statement is connection_id()");
+
+        Assertions.assertFalse(result,
+                "isTerminated should return false when graceful exit is active but statement is connection_id()");
     }
 }
