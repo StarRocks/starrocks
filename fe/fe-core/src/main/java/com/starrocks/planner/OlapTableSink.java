@@ -85,6 +85,7 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -317,10 +318,20 @@ public class OlapTableSink extends DataSink {
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
+
+        TransactionState txnState = null;
+        long txnId = tSink.getTxn_id();
+        if (txnId != DmlStmt.INVALID_TXN_ID) {
+            txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(tSink.getDb_id(), txnId);
+            if (txnState == null) {
+                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
+            }
+        }
+
         TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                enableAutomaticPartition, automaticBucketSize, getOpenPartitions());
+                enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState);
         tSink.setPartition(partitionParam);
-        tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource));
+        tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
         tSink.setPartial_update_mode(this.partialUpdateMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
@@ -342,9 +353,9 @@ public class OlapTableSink extends DataSink {
                 tSink2.unsetPartition();
                 tSink2.unsetLocation();
                 TOlapTablePartitionParam partitionParam2 = createPartition(tSink2.getDb_id(), dstTable, tupleDescriptor,
-                        false, automaticBucketSize, doubleWritePartitionIds);
+                        false, automaticBucketSize, doubleWritePartitionIds, txnState);
                 tSink2.setPartition(partitionParam2);
-                tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, computeResource));
+                tSink2.setLocation(createLocation(dstTable, partitionParam2, enableReplicatedStorage, computeResource, txnState));
                 tSink2.setIgnore_out_of_partition(true);
 
                 TDataSink tDataSink2 = new TDataSink();
@@ -536,7 +547,8 @@ public class OlapTableSink extends DataSink {
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
                                                            long automaticBucketSize,
-                                                           List<Long> partitionIds) throws StarRocksException {
+                                                           List<Long> partitionIds,
+                                                           TransactionState txnState) throws StarRocksException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -575,8 +587,13 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
-                        setMaterializedIndexes(physicalPartition, tPartition);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                        setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
+                        if (txnState != null) {
+                            txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                                    indexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList()));
+                        }
                         LOG.debug("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                     }
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
@@ -651,8 +668,13 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
-                        setMaterializedIndexes(physicalPartition, tPartition);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                        setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
+                        if (txnState != null) {
+                            txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                                    indexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList()));
+                        }
                         LOG.debug("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                     }
                     selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
@@ -689,8 +711,13 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
-                    setMaterializedIndexes(physicalPartition, tPartition);
+                    List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                    setMaterializedIndexes(tPartition, indexes);
                     partitionParam.addToPartitions(tPartition);
+                    if (txnState != null) {
+                        txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                                indexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList()));
+                    }
                     LOG.debug("add partition: {} physicalPartition: {}", tPartition, physicalPartition);
                 }
                 partitionParam.setDistributed_columns(
@@ -764,8 +791,8 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private static void setMaterializedIndexes(PhysicalPartition partition, TOlapTablePartition tPartition) {
-        for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+    private static void setMaterializedIndexes(TOlapTablePartition tPartition, List<MaterializedIndex> indexes) {
+        for (MaterializedIndex index : indexes) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
@@ -794,11 +821,6 @@ public class OlapTableSink extends DataSink {
         return selectedDistInfo;
     }
 
-    public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
-                                                         boolean enableReplicatedStorage) throws StarRocksException {
-        return createLocation(table, partitionParam, enableReplicatedStorage, WarehouseManager.DEFAULT_RESOURCE);
-    }
-
     public static SystemInfoService getSystemInfoService(OlapTable table) {
         if (table instanceof ExternalOlapTable) {
             return ((ExternalOlapTable) table).getExternalSystemInfoService();
@@ -809,7 +831,14 @@ public class OlapTableSink extends DataSink {
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
-                                                         ComputeResource computeResource) throws StarRocksException {
+                                                         TransactionState txnState) throws StarRocksException {
+        return createLocation(table, partitionParam, enableReplicatedStorage, WarehouseManager.DEFAULT_RESOURCE, txnState);
+    }
+
+    public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
+                                                         boolean enableReplicatedStorage,
+                                                         ComputeResource computeResource,
+                                                         TransactionState txnState) throws StarRocksException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -826,7 +855,10 @@ public class OlapTableSink extends DataSink {
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
-            for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
+            List<MaterializedIndex> indexes = (txnState != null)
+                    ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
+                    : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+            for (MaterializedIndex index : indexes) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
