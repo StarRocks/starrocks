@@ -16,7 +16,9 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "exprs/literal.h"
@@ -26,6 +28,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
 #include "types/variant_value.h"
+#include "util/variant_encoder.h"
 #include "util/slice.h"
 
 namespace starrocks::parquet {
@@ -679,6 +682,14 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     RETURN_IF_ERROR(_metadata_reader->read_range(range, filter, metadata_col));
     RETURN_IF_ERROR(_value_reader->read_range(range, filter, value_col));
 
+    ColumnPtr typed_value_col;
+    const NullableColumn* typed_value_nullable = nullptr;
+    if (_has_typed_value) {
+        typed_value_col = ColumnHelper::create_column(_typed_value_type, true);
+        RETURN_IF_ERROR(_typed_value_reader->read_range(range, filter, typed_value_col));
+        typed_value_nullable = down_cast<const NullableColumn*>(typed_value_col.get());
+    }
+
     auto* metadata_nullable = down_cast<NullableColumn*>(metadata_col->as_mutable_raw_ptr());
     auto* value_nullable = down_cast<NullableColumn*>(value_col->as_mutable_raw_ptr());
     const auto* metadata_column = down_cast<const BinaryColumn*>(metadata_nullable->data_column().get());
@@ -702,6 +713,9 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     // ScalarColumnReader returns a value for each row (including null values when parent group is null)
     // So metadata_column->size() should equal num_levels
     const size_t num_rows = metadata_column->size();
+    if (typed_value_col != nullptr && typed_value_col->size() != num_rows) {
+        return Status::InternalError("Typed value column size mismatch for variant reader");
+    }
     variant_column->reserve(num_rows);
 
     if (def_levels != nullptr && num_levels > 0) {
@@ -709,8 +723,9 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         DCHECK_EQ(num_levels, num_rows);
 
         for (size_t i = 0; i < num_levels; ++i) {
+            const bool has_typed = typed_value_nullable != nullptr && !typed_value_nullable->is_null(i);
             // Check if metadata or value is null (which indicates variant group is null)
-            if (metadata_nulls[i] || value_nulls[i]) {
+            if (!has_typed && (metadata_nulls[i] || value_nulls[i])) {
                 // Usually when metadata/value are null, def_level should be less than max_def_level
                 // But there may be edge cases in parquet encoding, so just log a warning instead of DCHECK
                 if (def_levels[i] >= level_info.max_def_level) {
@@ -720,7 +735,16 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 }
                 variant_column->append(VariantRowValue::from_null());
             } else if (def_levels[i] >= level_info.max_def_level) {
-                // Variant group exists, read data from metadata/value columns
+                // Variant group exists, prefer typed_value when available
+                if (has_typed) {
+                    auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i);
+                    if (!variant.ok()) {
+                        variant_column->append(VariantRowValue::from_null());
+                        continue;
+                    }
+                    variant_column->append(variant.value());
+                    continue;
+                }
                 const Slice metadata_slice = metadata_column->get_slice(i);
                 const Slice value_slice = value_column->get_slice(i);
 
@@ -756,9 +780,17 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     } else {
         // Variant group is required, so all rows should have valid data (but fields can still be null)
         for (size_t i = 0; i < num_rows; ++i) {
-            if (metadata_nulls[i] || value_nulls[i]) {
+            const bool has_typed = typed_value_nullable != nullptr && !typed_value_nullable->is_null(i);
+            if (!has_typed && (metadata_nulls[i] || value_nulls[i])) {
                 // Even for required variant group, metadata/value fields can be null
                 variant_column->append(VariantRowValue::from_null());
+            } else if (has_typed) {
+                auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i);
+                if (!variant.ok()) {
+                    variant_column->append(VariantRowValue::from_null());
+                    continue;
+                }
+                variant_column->append(variant.value());
             } else {
                 const Slice metadata_slice = metadata_column->get_slice(i);
                 const Slice value_slice = value_column->get_slice(i);
