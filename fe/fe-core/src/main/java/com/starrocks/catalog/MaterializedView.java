@@ -1637,6 +1637,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return tableProperty.getMvTransparentRewriteMode();
     }
 
+    public TableProperty.MVFastSchemaChangeMode getFastSchemaChangeMode() {
+        TableProperty tableProperty = getTableProperty();
+        return tableProperty.getMvFastSchemaChangeMode();
+    }
+
     public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
         if (!isLoadTriggeredRefresh()) {
             return false;

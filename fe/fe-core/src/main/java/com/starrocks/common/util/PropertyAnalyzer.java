@@ -218,6 +218,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
     public static final String PROPERTIES_MV_REFRESH_MODE = "refresh_mode";
+    // mv fast schema change mode: disabled/checked/loose
+    public static final String PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE = "fast_schema_change_mode";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -1886,6 +1888,16 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties().put(
                         PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
                 properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+            }
+
+            // fast_schema_change_mode
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
+                TableProperty.MVFastSchemaChangeMode value = TableProperty.analyzeMVFastSchemaChangeMode(str);
+                materializedView.getTableProperty().setMvFastSchemaChangeMode(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE, str);
+                properties.remove(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
             }
 
             // compression

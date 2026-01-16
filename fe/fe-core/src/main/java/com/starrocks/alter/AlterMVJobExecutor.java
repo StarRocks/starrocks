@@ -26,6 +26,7 @@ import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
@@ -441,6 +442,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         });
     }
 
+    private void alterFastSchemaChangeMode(Map<String, String> properties,
+                                           TableProperty tableProperty,
+                                           List<Runnable> appliers) {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
+        TableProperty.MVFastSchemaChangeMode mode = TableProperty.analyzeMVFastSchemaChangeMode(value);
+        properties.remove(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
+        appliers.add(() -> {
+            tableProperty.modifyTableProperties(
+                    PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE, String.valueOf(mode));
+            tableProperty.setMvFastSchemaChangeMode(mode);
+        });
+    }
+
     private void alterWarehouse(Map<String, String> properties,
                                 MaterializedView materializedView,
                                 List<Runnable> appliers) {
@@ -626,6 +640,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
             alterTransparentMvRewriteMode(properties, tableProperty, appliers);
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE)) {
+            alterFastSchemaChangeMode(properties, tableProperty, appliers);
+        }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             alterWarehouse(properties, materializedView, appliers);
         }
@@ -659,12 +676,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     @Override
     public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
         MaterializedView mv = (MaterializedView) table;
+        TableProperty.MVFastSchemaChangeMode mvFastSchemaChangeMode = mv.getFastSchemaChangeMode();
+        if (mvFastSchemaChangeMode.isDisable()) {
+            throw new SemanticException("Add column to materialized view failed: " +
+                    "Materialized view's fast schema change mode is disabled.");
+        }
         String columnName = clause.getColumnName();
         
         // Check if column already exists
         if (mv.getColumn(columnName) != null) {
             throw new SemanticException("Column '{}' already exists in materialized view", columnName);
         }
+        List<Table> baseTables = mv.getBaseTables();
+        if (baseTables.size() != 1) {
+            throw new SemanticException("Add column to materialized view only supports single base table");
+        }
+        Table baseTable = baseTables.get(0);
         
         // Validate aggregate expression - it should contain aggregate functions
         ParseNode astParseNode = mv.initDefineQueryParseNode();
@@ -679,6 +706,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
+
+
         try {
             // Determine the column type from the aggregate expression
             Expr addColumnExpr = clause.getAggregateExpression();
@@ -689,7 +718,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 isAggregateFunction = ExprUtils.isAggregateFunction(funcName);
             }
             GroupByClause groupByClause = selectRelation.getGroupByClause();
-            if (isAggregateFunction && (groupByClause == null || groupByClause.isEmpty())) {
+            if (isAggregateFunction && groupByClause.isEmpty()) {
                 throw new DdlException("Add new aggregate function column failed: Materialized view must contain group by " +
                         "columns.");
             }
@@ -703,14 +732,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             if (isAggregateFunction) {
                 selectRelation.getAggregate().add((FunctionCallExpr) addColumnExpr);
             } else {
-                if (groupByClause != null && !selectRelation.getAggregate().isEmpty()) {
+                if (!selectRelation.getAggregate().isEmpty()) {
                     groupByClause.getGroupingExprs().add(addColumnExpr);
                     groupByClause.getOriGroupingExprs().add(addColumnExpr);
 
                     List<Expr> groupByExprs = selectRelation.getGroupBy();
-                    if (groupByExprs != null) {
-                        groupByExprs.add(addColumnExpr);
-                    }
+                    groupByExprs.add(addColumnExpr);
                 }
             }
             selectRelation.setOutputExpr(newOutputCols);
@@ -721,6 +748,26 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // analyze this ast
             ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
             Analyzer.analyze(queryStatement, connectContext);
+
+            List<SlotRef> slots = Lists.newArrayList();
+            addColumnExpr.collect(SlotRef.class, slots);
+            if (slots.size() != 1) {
+                throw new DdlException("Materialized view definition is invalid, " +
+                        "the added column expression must be a simple column reference");
+            }
+
+            // find the base column from base table
+            SlotRef slotRef = slots.get(0);
+            String baseColumnName = slotRef.getColumnName();
+            if (baseColumnName == null) {
+                throw new DdlException("Materialized view definition is invalid, " +
+                        "the added column expression must be a simple column reference");
+            }
+            Column baseColumn = baseTable.getColumn(baseColumnName);
+            if (baseColumn == null) {
+                throw new DdlException("Materialized view definition is invalid, " +
+                        "the added column expression must be a simple column reference");
+            }
 
             Column newColumn = createMVColumn(columnName, addColumnExpr, clause.getComment());
             clause.setColumnDef(newColumn.toColumnDef(mv));
@@ -738,10 +785,27 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             mv.resetDefinedQueryParseNode();
             CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
 
-            String exprSql = ExprToSql.toSql(addColumnExpr);
-            // Log the schema change operation for audit purposes
+            // after schema change, refresh to refresh partitions to avoid data inconsistent.
+            MaterializedView.AsyncRefreshContext mvAsyncRefreshContext =
+                    mv.getRefreshScheme().getAsyncRefreshContext();
+            if (mvFastSchemaChangeMode.isChecked()) {
+                mvAsyncRefreshContext.clearVisibleVersionMap();
+                LOG.info("After adding column to materialized view {}, clear all partition infos to trigger full refresh",
+                        mv.getName());
+            } else if (mvFastSchemaChangeMode.isChecked()) {
+                long baseColumnCreatedTime = baseColumn.getCreatedTime();
+                if (baseColumnCreatedTime == -1) {
+                    mvAsyncRefreshContext.clearVisibleVersionMap();
+                    LOG.info("After adding column to materialized view {}, base column {}'s created time is -1, " +
+                                    "clear all partition infos to trigger full refresh",
+                            mv.getName(), baseColumnName);
+                } else {
+                    checkMVVisibleVersionAffectedBySchemaChange(mv, baseTable, mvAsyncRefreshContext, baseColumnCreatedTime);
+                }
+            }
+
             LOG.info("Logged schema change for materialized view '{}': added column '{}' with expression '{}'",
-                    mv.getName(), columnName, exprSql);
+                    mv.getName(), columnName, addColumnExpr.toString());
             return null;
         } catch (StarRocksException e) {
             throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
@@ -749,6 +813,42 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    private void checkMVVisibleVersionAffectedBySchemaChange(MaterializedView mv, Table baseTable,
+                                                             MaterializedView.AsyncRefreshContext mvAsyncRefreshContext,
+                                                             long baseColumnCreatedTime) {
+        if (baseTable.isNativeTable()) {
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapTableVisiblePartitionMap =
+                    mvAsyncRefreshContext.getBaseTableVisibleVersionMap();
+            if (olapTableVisiblePartitionMap.containsKey(baseTable.getId())) {
+                Set<String> removePartitionNames = Sets.newHashSet();
+                OlapTable olapBaseTable = (OlapTable) baseTable;
+                Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                        olapTableVisiblePartitionMap.get(baseTable.getId());
+                for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : basePartitionInfoMap.entrySet()) {
+                    Partition partition = olapBaseTable.getPartition(entry.getKey());
+                    // if the partition's visible version time is greater than base column's created time which means
+                    // the base table has changed after the column is added, so we need to remove this partition info
+                    // to trigger a full refresh for this partition.
+                    if (partition.getLatestPhysicalPartition().getVisibleVersionTime() > baseColumnCreatedTime) {
+                        removePartitionNames.add(entry.getKey());
+                        basePartitionInfoMap.remove(entry.getKey());
+                    }
+                }
+                LOG.info("After adding column to materialized view {}, remove partition infos {} " +
+                                "to trigger full refresh, base column created time: {}, " +
+                                "partition visible version time: {}",
+                        mv.getName(), removePartitionNames, baseColumnCreatedTime,
+                        olapTableVisiblePartitionMap.get(baseTable.getId()));
+            }
+        } else {
+            // for external table, just clear all partition infos to trigger full refresh
+            mvAsyncRefreshContext.clearVisibleVersionMap();
+            LOG.info("After adding column to materialized view {}, clear all partition infos " +
+                            "to trigger full refresh, base column created time: {}",
+                    mv.getName(), baseColumnCreatedTime);
         }
     }
 
@@ -794,21 +894,27 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             List<Expr> newOutputExpr = Lists.newArrayList(outputExpr);
             Expr removedExpr = newOutputExpr.remove(columnIndex);
-            selectRelation.setOutputExpr(newOutputExpr);
-            selectListItems.remove(columnIndex);
-
-            if (removedExpr instanceof FunctionCallExpr && selectRelation.getAggregate() != null) {
-                selectRelation.getAggregate().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
-            }
-
             if (selectRelation.getGroupByClause() != null) {
                 GroupByClause groupByClause = selectRelation.getGroupByClause();
-                groupByClause.getGroupingExprs().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
-                groupByClause.getOriGroupingExprs().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
-
-                if (selectRelation.getGroupBy() != null) {
-                    selectRelation.getGroupBy().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+                if (groupByClause.getGroupingExprs().stream()
+                        .anyMatch(expr -> expr == removedExpr || expr.equals(removedExpr))) {
+                    throw new SemanticException("Cannot drop column '%s' because it is used in GROUP BY clause", columnName);
                 }
+                if (groupByClause.getOriGroupingExprs().stream()
+                        .anyMatch(expr -> expr == removedExpr || expr.equals(removedExpr))) {
+                    throw new SemanticException("Cannot drop column '%s' because it is used in GROUP BY clause", columnName);
+                }
+                if (selectRelation.getGroupBy().stream()
+                        .anyMatch(expr -> expr == removedExpr || expr.equals(removedExpr))) {
+                    throw new SemanticException("Cannot drop column '%s' because it is used in GROUP BY clause", columnName);
+                }
+            }
+
+            selectRelation.setOutputExpr(newOutputExpr);
+            selectListItems.remove(columnIndex);
+            // if the removed expr is an aggregate function, remove it from aggregate list
+            if (removedExpr instanceof FunctionCallExpr && selectRelation.getAggregate() != null) {
+                selectRelation.getAggregate().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
             }
 
             ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
@@ -824,6 +930,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             mv.setOriginalViewDefineSql(newDefinedSql);
             mv.resetDefinedQueryParseNode();
             CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+
+            // inactive related mvs
+            inactiveRelatedMaterializedViewsRecursive(mv, Sets.newHashSet(columnName));
 
             LOG.info("Logged schema change for materialized view '{}': dropped column '{}'",
                     mv.getName(), columnName);
