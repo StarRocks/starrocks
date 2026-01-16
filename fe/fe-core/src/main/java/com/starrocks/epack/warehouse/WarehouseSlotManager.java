@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.epack.warehouse.cngroup.CNGroupMetricEntity;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.epack.warehouse.cngroup.CNGroupUtils;
+import com.starrocks.extension.Inject;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.metric.MetricVisitor;
@@ -56,6 +57,7 @@ public class WarehouseSlotManager extends BaseSlotManager {
     private final Map<Long, WarehouseMetricEntity> warehouseMetrics = Maps.newConcurrentMap();
     private final Map<CNGroupResource, CNGroupMetricEntity> cnGroupMetrics = Maps.newConcurrentMap();
 
+    @Inject
     public WarehouseSlotManager(ResourceUsageMonitor resourceUsageMonitor) {
         super(resourceUsageMonitor);
         this.resourceUsageMonitor = resourceUsageMonitor;
