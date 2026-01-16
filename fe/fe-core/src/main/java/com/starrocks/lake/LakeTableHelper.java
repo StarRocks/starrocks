@@ -207,11 +207,10 @@ public class LakeTableHelper {
         Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
         for (Partition partition : table.getAllPartitions()) {
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                // TODO backport notion:
-                // From v3.4, each MaterializedIndex will have its own shard group id,
-                // so we should gather by calling `index.getShardGroupId()`
-                // Right now (V3.3), it's fine to use subPartition's getShardGroupId()
-                needRemoveShardGroupIdSet.add(subPartition.getShardGroupId());
+                for (MaterializedIndex index
+                        : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    needRemoveShardGroupIdSet.add(index.getShardGroupId());
+                }
             }
         }
         if (!needRemoveShardGroupIdSet.isEmpty()) {

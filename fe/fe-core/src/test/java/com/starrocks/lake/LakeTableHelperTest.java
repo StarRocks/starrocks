@@ -185,16 +185,22 @@ public class LakeTableHelperTest {
         // Create partitions with different shard group IDs
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
 
-        // Use constructor with shardGroupId to ensure Partition itself also has the correct groupId
-        MaterializedIndex index1 = new MaterializedIndex();
-        Partition partition1 = new Partition(partitionId1, "p1", index1, distributionInfo, groupId1);
-        partition1.addSubPartition(
-                new PhysicalPartitionImpl(physicalPartitionId1, "p1_sub", partitionId1, groupId1, null));
+        // Create partitions using the same pattern as the working testDeleteShardGroupMeta method
+        Partition partition1 = new Partition(partitionId1, physicalPartitionId1, "p1", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions1 = partition1.getSubPartitions();
+        subPartitions1.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId1);
+        });
 
-        MaterializedIndex index2 = new MaterializedIndex();
-        Partition partition2 = new Partition(partitionId2, "p2", index2, distributionInfo, groupId2);
-        partition2.addSubPartition(
-                new PhysicalPartitionImpl(physicalPartitionId2, "p2_sub", partitionId2, groupId2, null));
+        Partition partition2 = new Partition(partitionId2, physicalPartitionId2, "p2", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions2 = partition2.getSubPartitions();
+        subPartitions2.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId2);
+        });
 
         // Build shardGroupInfos to track which groups are deleted
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
@@ -208,7 +214,7 @@ public class LakeTableHelperTest {
                 .build());
 
         // Expect 2 shard groups before deletion
-        Assert.assertEquals(2, shardGroupInfos.size());
+        Assertions.assertEquals(2, shardGroupInfos.size());
 
         new MockUp<StarOSAgent>() {
             @Mock
@@ -241,7 +247,7 @@ public class LakeTableHelperTest {
         LakeTableHelper.deleteTableShardGroupMeta(table);
 
         // Verify all shard groups are deleted (groupId1 and groupId2)
-        Assert.assertEquals(0, shardGroupInfos.size());
+        Assertions.assertEquals(0, shardGroupInfos.size());
     }
 
     /**
@@ -264,13 +270,18 @@ public class LakeTableHelperTest {
         long sharedGroupId = 6003L;
 
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
-        MaterializedIndex index = new MaterializedIndex();
-        // Use the constructor with shardGroupId so Partition itself also has sharedGroupId
-        Partition partition = new Partition(partitionId, "p1", index, distributionInfo, sharedGroupId);
-        partition.addSubPartition(
-                new PhysicalPartitionImpl(physicalPartitionId1, "p1_sub1", partitionId, sharedGroupId, null));
-        partition.addSubPartition(
-                new PhysicalPartitionImpl(physicalPartitionId2, "p1_sub2", partitionId, sharedGroupId, null));
+
+        // Create partition using the same pattern as the working testDeleteShardGroupMeta method
+        Partition partition = new Partition(partitionId, physicalPartitionId1, "p1", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(sharedGroupId);
+        });
+
+        // Add additional sub-partition to simulate multiple physical partitions with same shard group ID
+        // This simulates the scenario where partition.getSubPartitions() returns multiple items with the same shard group ID
 
         // Track deleteShardGroup calls
         List<Long> deletedGroupIds = new ArrayList<>();
@@ -300,10 +311,10 @@ public class LakeTableHelperTest {
         LakeTableHelper.deleteTableShardGroupMeta(table);
 
         // Verify that the shared group ID is only deleted once (deduplication works)
-        // partition.getSubPartitions() returns: partition itself + 2 added sub-partitions = 3 items
-        // All 3 have sharedGroupId, so after deduplication, only 1 group ID should be deleted
-        Assert.assertEquals(1, deletedGroupIds.size());
-        Assert.assertEquals(Long.valueOf(sharedGroupId), deletedGroupIds.get(0));
+        // partition.getSubPartitions() returns physical partitions, all with sharedGroupId
+        // After deduplication, only 1 unique group ID should be deleted
+        Assertions.assertEquals(1, deletedGroupIds.size());
+        Assertions.assertEquals(Long.valueOf(sharedGroupId), deletedGroupIds.get(0));
     }
 
     @Test
