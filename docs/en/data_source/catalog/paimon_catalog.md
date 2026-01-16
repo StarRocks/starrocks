@@ -24,6 +24,19 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
 
+### Optional FE extension (GCS/COS/Azure/OBS)
+
+Accessing Paimon tables stored on Google GCS, Tencent COS, Azure Storage, or Huawei OBS requires additional filesystem jars that are packaged as an optional FE extension.
+
+1. Build the `fe/fe-extension` module (or obtain its build artifacts):
+
+   ```bash
+   cd fe && mvn package -pl fe-extension -am -DskipTests
+   ```
+
+2. Copy all jars in `fe/fe-extension/target/fe-extension-lib/` to `${FE_HOME}/lib`.
+3. Restart the FE nodes.
+
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |

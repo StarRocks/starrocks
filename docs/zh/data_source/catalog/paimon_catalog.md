@@ -24,6 +24,19 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 您只能使用 Paimon catalog 查询数据。您不能使用 Paimon catalog 删除、删除或插入数据到您的 Paimon 集群中。
 
+### 可选的 FE 扩展（GCS/COS/Azure/OBS）
+
+访问存储在 Google GCS、腾讯 COS、Azure Storage 或华为 OBS 的 Paimon 表，需要额外的文件系统 jar，这些 jar 以可选 FE 扩展的方式提供。
+
+1. 构建 `fe/fe-extension` 模块（或获取其构建产物）：
+
+   ```bash
+   cd fe && mvn package -pl fe-extension -am -DskipTests
+   ```
+
+2. 将 `fe/fe-extension/target/fe-extension-lib/` 目录下的所有 jar 复制到 `${FE_HOME}/lib`。
+3. 重启 FE 节点。
+
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |
