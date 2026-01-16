@@ -324,10 +324,12 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
+        // When is_finished() is true, it guarantees both the merge task is done and commited flag is set
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -496,10 +498,11 @@ TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -633,10 +636,11 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -782,10 +786,11 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -898,10 +903,11 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -1020,10 +1026,11 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -1136,7 +1143,10 @@ TEST_F(PartitionChunkWriterTest, test_connector_sink_profile_metrics) {
         ret = partition_writer->finish();
         EXPECT_OK(ret);
 
-        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&commited]() { return commited; });
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
+        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&]() {
+            return partition_writer->is_finished();
+        });
 
         // Verify profile metrics are recorded
         EXPECT_GE(sink_profile->write_file_timer->value(), 0) << "WriteFileTime should be non-negative";
@@ -1222,7 +1232,11 @@ TEST_F(PartitionChunkWriterTest, test_buffer_partition_writer_profile_metrics) {
         auto ret = partition_writer->finish();
         EXPECT_OK(ret);
 
-        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&commited]() { return commited; });
+        // Wait for is_finished() to ensure all async operations are complete
+        // For BufferPartitionChunkWriter, is_finished() always returns true, but we use it for consistency
+        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&]() {
+            return partition_writer->is_finished();
+        });
 
         // Verify profile metrics are recorded
         EXPECT_GT(sink_profile->write_file_timer->value(), 0) << "WriteFileTime should be positive";
