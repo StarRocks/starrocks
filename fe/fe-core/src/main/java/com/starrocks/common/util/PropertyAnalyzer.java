@@ -219,7 +219,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
     public static final String PROPERTIES_MV_REFRESH_MODE = "refresh_mode";
     // mv fast schema change mode: disabled/checked/loose
-    public static final String PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE = "fast_schema_change_mode";
+    public static final String PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE = "fast_schema_evolution_mode";
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -1890,14 +1890,14 @@ public class PropertyAnalyzer {
                 properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
             }
 
-            // fast_schema_change_mode
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE)) {
-                String str = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
-                TableProperty.MVFastSchemaChangeMode value = TableProperty.analyzeMVFastSchemaChangeMode(str);
-                materializedView.getTableProperty().setMvFastSchemaChangeMode(value);
+            // fast_schema_evolution_mode
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE);
+                TableProperty.MVFastSchemaEvolutionMode value = TableProperty.analyzeMVFastSchemaEvolutionMode(str);
+                materializedView.getTableProperty().setMvFastSchemaEvolutionMode(value);
                 materializedView.getTableProperty().getProperties().put(
-                        PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE, str);
-                properties.remove(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
+                        PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE, str);
+                properties.remove(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE);
             }
 
             // compression

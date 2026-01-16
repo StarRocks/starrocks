@@ -445,13 +445,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     private void alterFastSchemaChangeMode(Map<String, String> properties,
                                            TableProperty tableProperty,
                                            List<Runnable> appliers) {
-        String value = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
-        TableProperty.MVFastSchemaChangeMode mode = TableProperty.analyzeMVFastSchemaChangeMode(value);
-        properties.remove(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE);
+        TableProperty.MVFastSchemaEvolutionMode mode = TableProperty.analyzeMVFastSchemaEvolutionMode(value);
+        properties.remove(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE);
         appliers.add(() -> {
             tableProperty.modifyTableProperties(
-                    PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE, String.valueOf(mode));
-            tableProperty.setMvFastSchemaChangeMode(mode);
+                    PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE, String.valueOf(mode));
+            tableProperty.setMvFastSchemaEvolutionMode(mode);
         });
     }
 
@@ -640,7 +640,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
             alterTransparentMvRewriteMode(properties, tableProperty, appliers);
         }
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE)) {
             alterFastSchemaChangeMode(properties, tableProperty, appliers);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
@@ -676,8 +676,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     @Override
     public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
         MaterializedView mv = (MaterializedView) table;
-        TableProperty.MVFastSchemaChangeMode mvFastSchemaChangeMode = mv.getFastSchemaChangeMode();
-        if (mvFastSchemaChangeMode.isDisable()) {
+        TableProperty.MVFastSchemaEvolutionMode mvFastSchemaEvolutionMode = mv.getFastSchemaChangeMode();
+        if (mvFastSchemaEvolutionMode.isDisable()) {
             throw new SemanticException("Add column to materialized view failed: " +
                     "Materialized view's fast schema change mode is disabled.");
         }
@@ -788,11 +788,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // after schema change, refresh to refresh partitions to avoid data inconsistent.
             MaterializedView.AsyncRefreshContext mvAsyncRefreshContext =
                     mv.getRefreshScheme().getAsyncRefreshContext();
-            if (mvFastSchemaChangeMode.isForce()) {
+            if (mvFastSchemaEvolutionMode.isForce()) {
                 mvAsyncRefreshContext.clearVisibleVersionMap();
                 LOG.info("After adding column to materialized view {}, clear all partition infos to trigger full refresh",
                         mv.getName());
-            } else if (mvFastSchemaChangeMode.isChecked()) {
+            } else if (mvFastSchemaEvolutionMode.isChecked()) {
                 long baseColumnCreatedTime = baseColumn.getCreatedTime();
                 if (baseColumnCreatedTime == -1) {
                     mvAsyncRefreshContext.clearVisibleVersionMap();

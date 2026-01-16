@@ -184,7 +184,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
-    public enum MVFastSchemaChangeMode {
+    public enum MVFastSchemaEvolutionMode {
         DISABLED,   // disable mv fast schema change
         CHECKED,    // enable mv fast schema change, and check mv and base table version change
         // to avoid mv refresh/query error
@@ -212,19 +212,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
             return this == FORCE;
         }
 
-        public static MVFastSchemaChangeMode defaultValue() {
+        public static MVFastSchemaEvolutionMode defaultValue() {
             return CHECKED;
         }
 
-        public static MVFastSchemaChangeMode parse(String str) {
+        public static MVFastSchemaEvolutionMode parse(String str) {
             if (StringUtils.isEmpty(str)) {
                 return CHECKED;
             }
-            return EnumUtils.getEnumIgnoreCase(MVFastSchemaChangeMode.class, str);
+            return EnumUtils.getEnumIgnoreCase(MVFastSchemaEvolutionMode.class, str);
         }
 
         public static String valueList() {
-            return Joiner.on(",").join(MVFastSchemaChangeMode.values());
+            return Joiner.on(",").join(MVFastSchemaEvolutionMode.values());
 
         }
     }
@@ -291,7 +291,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
     private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
-    private MVFastSchemaChangeMode mvFastSchemaChangeMode = MVFastSchemaChangeMode.defaultValue();
+    private MVFastSchemaEvolutionMode mvFastSchemaEvolutionMode = MVFastSchemaEvolutionMode.defaultValue();
 
     private boolean enablePersistentIndex = false;
 
@@ -505,7 +505,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
         buildMVTransparentRewriteMode();
-        buildMVFastSchemaChangeMode();
+        buildMVFastSchemaEvolutionMode();
         buildLocation();
         return this;
     }
@@ -717,9 +717,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildMVFastSchemaChangeMode() {
-        String value = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE);
-        this.mvFastSchemaChangeMode = MVFastSchemaChangeMode.parse(value);
+    public TableProperty buildMVFastSchemaEvolutionMode() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE);
+        this.mvFastSchemaEvolutionMode = MVFastSchemaEvolutionMode.parse(value);
         return this;
     }
 
@@ -734,12 +734,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return res;
     }
 
-    public static MVFastSchemaChangeMode analyzeMVFastSchemaChangeMode(String value) {
-        MVFastSchemaChangeMode res = MVFastSchemaChangeMode.parse(value);
+    public static MVFastSchemaEvolutionMode analyzeMVFastSchemaEvolutionMode(String value) {
+        MVFastSchemaEvolutionMode res = MVFastSchemaEvolutionMode.parse(value);
         if (res == null) {
-            String valueList = MVFastSchemaChangeMode.valueList();
+            String valueList = MVFastSchemaEvolutionMode.valueList();
             throw new SemanticException(
-                    PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_CHANGE_MODE
+                    PropertyAnalyzer.PROPERTIES_MV_FAST_SCHEMA_EVOLUTION_MODE
                             + " can only be " + valueList + " but got " + value);
         }
         return res;
@@ -1165,12 +1165,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this.mvTransparentRewriteMode;
     }
 
-    public void setMvFastSchemaChangeMode(MVFastSchemaChangeMode value) {
-        this.mvFastSchemaChangeMode = value;
+    public void setMvFastSchemaEvolutionMode(MVFastSchemaEvolutionMode value) {
+        this.mvFastSchemaEvolutionMode = value;
     }
 
-    public MVFastSchemaChangeMode getMvFastSchemaChangeMode() {
-        return this.mvFastSchemaChangeMode;
+    public MVFastSchemaEvolutionMode getMvFastSchemaEvolutionMode() {
+        return this.mvFastSchemaEvolutionMode;
     }
 
     public boolean enablePersistentIndex() {

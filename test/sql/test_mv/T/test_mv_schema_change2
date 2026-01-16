@@ -20,7 +20,7 @@ CREATE MATERIALIZED VIEW test_mv1
 PARTITION BY date_trunc('day', dt)
 DISTRIBUTED BY hash(c0) 
 PROPERTIES (
-  "fast_schema_change_mode" = "loose"
+  "fast_schema_evolution_mode" = "loose"
 )
 AS 
 SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0;
@@ -67,7 +67,7 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 INSERT INTO t1 VALUES ('2026-01-04', 0, "c1_0", "c2_0", 0, 0);
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
-SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0 order by c0 limit 3;
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0 order by ALL limit 3;
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 
 -- add group by key column
@@ -75,13 +75,13 @@ ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN c4 AS c4;
 function: wait_alter_table_finish()
 DESC test_mv1;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4", "test_mv1")
-SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by c0 limit 3;
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 from t1 group by dt, c0, c4 order by ALL limit 3;
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- refresh mv after insert
 INSERT INTO t1 VALUES ('2026-01-05', 0, "c1_0", "c2_0", 0, 0);
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
-SELECT dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4 order by c0 limit 3;
+SELECT dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4 order by ALL limit 3;
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 
 -- test mv drop column
@@ -89,13 +89,13 @@ ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN cnt_c2;
 function: wait_alter_table_finish()
 DESC test_mv1;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
-SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0 order by c0 limit 3;
+SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0 order by ALL limit 3;
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- refresh mv after drop
 INSERT INTO t1 VALUES ('2026-01-06', 0, "c1_0", "c2_0", 0, 0);
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
-SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0 order by c0 limit 3;
+SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0 order by ALL limit 3;
 SELECT * FROM test_mv1 ORDER BY ALL limit 3;
 
 -- test mv drop aggregation column
@@ -103,14 +103,14 @@ ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN sum_c4;
 function: wait_alter_table_finish()
 DESC test_mv1;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
-SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by c0 limit 3;
-SELECT * FROM test_mv1 ORDER BY c0 LIMIT 3;
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- refresh mv after drop
 INSERT INTO t1 VALUES ('2026-01-07', 0, "c1_0", "c2_0", 0, 0);
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
-SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by c0 limit 3;
-SELECT * FROM test_mv1 ORDER BY c0 limit 3;
+SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL limit 3;
 
 -- test mv drop group by key column
 [UC]ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN c4;
@@ -138,7 +138,7 @@ CREATE MATERIALIZED VIEW test_mv2
 PARTITION BY date_trunc('day', dt)  
 DISTRIBUTED BY HASH(`c0`, `c1`) 
 PROPERTIES (
-  "fast_schema_change_mode" = "force"
+  "fast_schema_evolution_mode" = "force"
 )
 AS 
 SELECT dt, c0, c1 from t2;
