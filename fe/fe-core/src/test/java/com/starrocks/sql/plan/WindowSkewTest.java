@@ -49,6 +49,7 @@ class WindowSkewTest extends PlanTestBase {
     @BeforeEach
     @Override
     public void setUp() {
+        super.setUp();
         connectContext.getSessionVariable().setEnableSplitWindowSkewToUnion(true);
     }
 
@@ -162,7 +163,7 @@ class WindowSkewTest extends PlanTestBase {
 
         String sql = "select p, s, sum(x) over (partition by p order by s) from window_skew_table";
         String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
-        System.out.println(plan);
+
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
