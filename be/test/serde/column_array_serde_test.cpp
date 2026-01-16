@@ -152,6 +152,10 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column) {
     }
 }
 
+#if !DCHECK_IS_ON()
+// we have DCHECK inside VariantColumn deserialize to check version,
+// so this test case is only enabled when DCHECK is off
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     auto c1 = VariantColumn::create();
@@ -172,6 +176,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_failed_deserialize) {
     ASSERT_ERROR(ColumnArraySerde::deserialize(buffer.data(), c2.get()));
     ASSERT_EQ(0, c2->size()); // Deserialization should fail, resulting in an empty column
 }
+#endif
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, hll_column_failed_deserialize) {
