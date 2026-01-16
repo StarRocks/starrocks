@@ -43,6 +43,66 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+
+/*
+ * Rule Objective:
+ *
+ * Optimize a Window operator with a skewed partition column by splitting it into a UNION of two branches.
+ * One branch handles the skewed value (where partitioning can often be eliminated or optimized),
+ * and the other handles the remaining data.
+ *
+ * Transform the following SQL:
+ *   SELECT row_number() OVER (PARTITION BY k1 ORDER BY v1)
+ *   FROM t
+ *
+ * Into (assuming 'k1' is skewed with value 'A'):
+ *   SELECT row_number() OVER (ORDER BY v1)
+ *   FROM t
+ *   WHERE k1 = 'A'
+ *   UNION ALL
+ *   SELECT row_number() OVER (PARTITION BY k1 ORDER BY v1)
+ *   FROM t
+ *   WHERE k1 != 'A' OR k1 IS NULL
+ *
+ *
+ *                                     +--------+
+ *                                     | Window |
+ *                                     +--------+
+ *                                         |
+ *                                         v
+ *                                     +-------+
+ *                                     | Child |
+ *                                     +-------+
+ *
+ *                                         |
+ *                                         v
+ *
+ *                                     +-------+
+ *                                     | UNION |
+ *                                     +-------+
+ *                                      /     \
+ *                                     /       \
+ *                           +--------+         +--------+
+ *                           | Window |         | Window |
+ *                           | (No Ptn)|        |(Org Ptn)|
+ *                           +--------+         +--------+
+ *                               |                  |
+ *                               |                  |
+ *                          +----+-----+       +----+-------------------+
+ *                          |  Filter  |       |         Filter         |
+ *                          |   (p=V)  |       | (p!=V OR p IS NULL)    |
+ *                          +----+-----+       +----+-------------------+
+ *                               |                  |
+ *                               v                  v
+ *                           +-------+          +-------+
+ *                           | Child |          | Child |
+ *                           +-------+          +-------+
+ *
+ * Where:
+ *   - p: partition column
+ *   - V: skewed value
+ */
+
 public class SplitWindowSkewToUnionRule extends TransformationRule {
     private static final SplitWindowSkewToUnionRule INSTANCE = new SplitWindowSkewToUnionRule();
 
