@@ -20,6 +20,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -27,6 +28,8 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TKeyRange;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -1704,5 +1707,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n"
                 + "  |  \n"
                 + "  2:ANALYTIC");
+    }
+
+    @Test
+    public void testPartitionRangeGen() throws Exception {
+        String sql = "select * from lineitem_partition where L_SHIPDATE = cast(abs('19950101') as date);";
+        ExecPlan p = getExecPlan(sql);
+        OlapScanNode scanNodes = (OlapScanNode) p.getScanNodes().get(0);
+        List<TScanRangeLocations> locations = scanNodes.getScanRangeLocations(0);
+        List<TKeyRange> keyRange = locations.get(0).getScan_range().getInternal_scan_range().getPartition_column_ranges();
+        Assertions.assertEquals(1, keyRange.size());
+        Assertions.assertEquals(19920101, keyRange.get(0).begin_key);
+        Assertions.assertEquals(19930101, keyRange.get(0).end_key);
+        Assertions.assertEquals(1, scanNodes.getPartitionConjuncts().size());
     }
 }
