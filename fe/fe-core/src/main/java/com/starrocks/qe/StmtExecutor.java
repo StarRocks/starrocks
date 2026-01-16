@@ -35,7 +35,6 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -72,7 +71,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.RawScopedTimer;
-import com.starrocks.common.profile.TimeWatcher;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.CompressionUtils;
