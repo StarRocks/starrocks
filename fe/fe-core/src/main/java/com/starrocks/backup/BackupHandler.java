@@ -547,7 +547,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob, wal -> {
             // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-            dbIdToBackupOrRestoreJob.put(backupJob.jobId, backupJob);
+            dbIdToBackupOrRestoreJob.put(backupJob.dbId, backupJob);
         });
     }
 
@@ -620,7 +620,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         // write log
         globalStateMgr.getEditLog().logRestoreJob(restoreJob, wal -> {
             // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-            dbIdToBackupOrRestoreJob.put(restoreJob.jobId, restoreJob);
+            dbIdToBackupOrRestoreJob.put(restoreJob.dbId, restoreJob);
         });
     }
 

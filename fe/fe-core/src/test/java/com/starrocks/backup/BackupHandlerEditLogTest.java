@@ -50,7 +50,7 @@ public class BackupHandlerEditLogTest {
         BackupJob job = createBackupJob("backup_label");
 
         handler.addBackupJob(job);
-        Assertions.assertSame(job, handler.dbIdToBackupOrRestoreJob.get(job.getJobId()));
+        Assertions.assertSame(job, handler.dbIdToBackupOrRestoreJob.get(DB_ID));
 
         BackupJob logJob = (BackupJob) UtFrameUtils.PseudoJournalReplayer
                 .replayNextJournal(OperationType.OP_BACKUP_JOB_V2);
@@ -69,7 +69,7 @@ public class BackupHandlerEditLogTest {
         RestoreJob job = createRestoreJob("restore_label");
 
         handler.addRestoreJob(job);
-        Assertions.assertSame(job, handler.dbIdToBackupOrRestoreJob.get(job.getJobId()));
+        Assertions.assertSame(job, handler.dbIdToBackupOrRestoreJob.get(DB_ID));
 
         RestoreJob logJob = (RestoreJob) UtFrameUtils.PseudoJournalReplayer
                 .replayNextJournal(OperationType.OP_RESTORE_JOB_V2);
