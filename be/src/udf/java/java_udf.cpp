@@ -249,6 +249,8 @@ std::string JVMFunctionHelper::dumpExceptionString(jthrowable throwable) {
     CHECK(get_stack_trace != nullptr) << "Not Found JNI method getStackTrace";
     jobject stack_traces = _env->CallStaticObjectMethod(_exception_util_class, get_stack_trace, (jobject)throwable);
     LOCAL_REF_GUARD(stack_traces);
+    // don't call return if xxx, to avoid recursive
+    _env->ExceptionClear();
     return to_cxx_string((jstring)stack_traces);
 }
 
@@ -280,10 +282,7 @@ jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nulla
     }
     jobject res =
             _env->CallStaticObjectMethod(_udf_helper_class, _create_boxed_array, type, num_rows, nullable, input_arr);
-    if (_env->ExceptionCheck()) {
-        LOG(WARNING) << "fail to create array " << this->dumpExceptionString(_env->ExceptionOccurred());
-        _env->ExceptionClear();
-    }
+    RETURN_IF_JNI_EXCEPTION(_env, "create_boxed_array", nullptr);
     return res;
 }
 
@@ -297,7 +296,9 @@ jobject JVMFunctionHelper::batch_create_bytebuf(unsigned char* ptr, const uint32
     auto offsets = _env->NewIntArray(size + 1);
     _env->SetIntArrayRegion(offsets, 0, size + 1, (const int32_t*)offset);
     LOCAL_REF_GUARD(offsets);
-    return _env->CallStaticObjectMethod(_udf_helper_class, _batch_create_bytebuf, ptr, offsets, size);
+    auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_create_bytebuf, ptr, offsets, size);
+    RETURN_IF_JNI_EXCEPTION(_env, "batch_create_bytebuf", nullptr);
+    return res;
 }
 
 void JVMFunctionHelper::batch_update_single(AggBatchCallStub* stub, int state, jobject* input, int cols, int rows) {
@@ -564,13 +565,7 @@ Status ClassLoader::init() {
     LOCAL_REF_GUARD(handle);
     _handle = env->NewGlobalRef(handle);
 
-    if (jthrowable jthr = env->ExceptionOccurred()) {
-        LOCAL_REF_GUARD(jthr);
-        std::string err_msg = fmt::format("Error: couldn't create class loader {},{} ", CLASS_LOADER_NAME,
-                                          JVMFunctionHelper::getInstance().dumpExceptionString(jthr));
-        LOG(WARNING) << err_msg;
-        return Status::InternalError(err_msg);
-    }
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't create classloader");
 
     // init method id
     _get_class = env->GetMethodID((jclass)_clazz.handle(), "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
@@ -656,13 +651,7 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
 
     *has = env->CallStaticBooleanMethod(class_analyzer, hasMethod, method_name, (jobject)clazz);
 
-    if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
-        LOCAL_REF_GUARD(jthr);
-
-        std::string err = helper.dumpExceptionString(jthr);
-        env->ExceptionClear();
-        return Status::InternalError(fmt::format("call hasMemberMethod failed: {} err:{}", method, err));
-    }
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "call hasMemberMethod failed");
 
     return Status::OK();
 }
@@ -691,12 +680,8 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
     jobject result_sign = env->CallStaticObjectMethod(class_analyzer, getSign, method_name, (jobject)clazz);
     LOCAL_REF_GUARD(result_sign);
 
-    if (jthrowable thr = env->ExceptionOccurred(); thr != nullptr) {
-        LOCAL_REF_GUARD(thr);
-        std::string err = helper.dumpExceptionString(thr);
-        env->ExceptionClear();
-        return Status::InternalError(fmt::format("could't found method {} err:{}", method, err));
-    }
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "call getSignature failed");
+
     if (result_sign == nullptr) {
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
@@ -721,7 +706,9 @@ StatusOr<jobject> ClassAnalyzer::get_method_object(jclass clazz, const std::stri
 
     jobject method_object = env->CallStaticObjectMethod(class_analyzer, getMethodObject, method_name, (jobject)clazz);
     LOCAL_REF_GUARD(method_object);
-    env->ExceptionClear();
+
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "call getMethodObject failed");
+
     if (method_object == nullptr) {
         return Status::InternalError(fmt::format("couldn't found method:{}", method));
     }
