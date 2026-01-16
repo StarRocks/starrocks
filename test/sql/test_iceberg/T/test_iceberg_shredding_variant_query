@@ -1,0 +1,134 @@
+-- name: test_iceberg_shredding_variant_query
+
+-- Create Hadoop Catalog
+create external catalog iceberg_shredding_test_${uuid0}
+PROPERTIES (
+    "type"="iceberg", 
+    "iceberg.catalog.type"="hadoop", 
+    "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/warehouse/"
+);
+
+-- Prepare warehouse directory
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/warehouse/zya > /dev/null
+
+use iceberg_shredding_test_${uuid0}.zya;
+
+-- 1. Create Shredding table and load data
+CREATE TABLE test_shredding_variant (
+    data VARIANT
+) properties(
+  'format-version' = '3'
+);
+
+-- Copy shredded parquet file to OSS
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_shredding.parquet oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/shredding.parquet > /dev/null
+
+-- Load files
+alter table test_shredding_variant execute add_files(location='oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/shredding.parquet', file_format='parquet');
+
+-- 2. Create No-Shredding table and load data
+CREATE TABLE test_noshredding_variant (
+    data VARIANT
+) properties(
+  'format-version' = '3'
+);
+
+-- Copy noshredded parquet file to OSS
+shell: ossutil64 cp ../be/test/formats/parquet/test_data/variant_noshredding.parquet oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/noshredding.parquet > /dev/null
+
+-- Load files
+alter table test_noshredding_variant execute add_files(location='oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/data/noshredding.parquet', file_format='parquet');
+
+-- ========================================
+-- Query 1: Basic field extraction (Shredded)
+-- ========================================
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.age') as age,
+    get_variant_string(data, '$.city') as city,
+    variant_typeof(variant_query(data, '$.score')) as score_type,
+    cast(variant_query(data, '$.score') as string) as score_val
+FROM test_shredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 2: Nested field extraction (Consistency check between Shredded and No-Shredded)
+-- ========================================
+SELECT 'Check Shredding Consistency' as task;
+(SELECT 'shredded' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_shredding_variant WHERE get_variant_int(data, '$.id') = 1000)
+UNION ALL
+(SELECT 'noshred' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_noshredding_variant WHERE get_variant_int(data, '$.id') = 1000);
+
+-- ========================================
+-- Query 3: Complex nesting and mixed types (rank field)
+-- ========================================
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.profile.metrics.views') as views,
+    variant_typeof(variant_query(data, '$.profile.rank')) as rank_type,
+    cast(variant_query(data, '$.profile.rank') as string) as rank_val
+FROM test_shredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 4: Array structure extraction
+-- ========================================
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.events[0].type') as event0_type,
+    get_variant_int(data, '$.events[0].count') as event0_count,
+    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+FROM test_shredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 5: Direct Data Comparison (Shredded vs No-Shredded)
+-- ========================================
+-- Extract all relevant fields from both versions and sort them to verify identical content.
+SELECT '--- Shredded Data ---' as label;
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.age') as age,
+    get_variant_string(data, '$.city') as city,
+    cast(variant_query(data, '$.score') as string) as score,
+    get_variant_double(data, '$.profile.salary') as salary,
+    get_variant_string(data, '$.profile.department') as dept,
+    get_variant_int(data, '$.profile.metrics.views') as views,
+    get_variant_string(data, '$.profile.rank') as rank,
+    get_variant_string(data, '$.events[0].type') as event0_type,
+    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+FROM test_shredding_variant
+ORDER BY id;
+
+SELECT '--- No-Shredded Data ---' as label;
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_int(data, '$.age') as age,
+    get_variant_string(data, '$.city') as city,
+    cast(variant_query(data, '$.score') as string) as score,
+    get_variant_double(data, '$.profile.salary') as salary,
+    get_variant_string(data, '$.profile.department') as dept,
+    get_variant_int(data, '$.profile.metrics.views') as views,
+    get_variant_string(data, '$.profile.rank') as rank,
+    get_variant_string(data, '$.events[0].type') as event0_type,
+    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+FROM test_noshredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 6: Full Variant Column Comparison
+-- ========================================
+-- This verifies that the full variant object is correctly reconstructed from shredded sub-columns.
+SELECT '--- Full Variant Comparison ---' as label;
+(SELECT get_variant_int(data, '$.id') as id, 'shredded' as label, data FROM test_shredding_variant)
+UNION ALL
+(SELECT get_variant_int(data, '$.id') as id, 'noshred' as label, data FROM test_noshredding_variant)
+ORDER BY id, label;
+
+-- Cleanup environment
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_shredding_variant_query/${uuid0}/ > /dev/null
+
+drop table test_shredding_variant force;
+drop table test_noshredding_variant force;
+set catalog default_catalog;
+drop catalog iceberg_shredding_test_${uuid0};
