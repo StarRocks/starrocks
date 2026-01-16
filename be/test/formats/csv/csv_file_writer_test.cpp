@@ -808,7 +808,8 @@ TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
     {
         auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
         std::vector<int32_t> int_nums{1, 2};
-        col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
+        size_t appended = col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
+        ASSERT_EQ(appended, size(int_nums));
         chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto data_column = BinaryColumn::create();
@@ -971,7 +972,8 @@ TEST_F(CSVFileWriterTest, TestWriteWithoutHeader) {
     {
         auto col0 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
         std::vector<int32_t> int_nums{1, 2};
-        col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
+        size_t appended = col0->append_numbers(int_nums.data(), size(int_nums) * sizeof(int32_t));
+        ASSERT_EQ(appended, size(int_nums));
         chunk->append_column(std::move(col0), chunk->num_columns());
     }
 
