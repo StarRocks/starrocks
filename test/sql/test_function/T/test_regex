@@ -62,3 +62,103 @@ SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3);
 SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
 SELECT regexp_extract_all(str, regex, 3) from tsr;
 
+<<<<<<< HEAD
+=======
+
+-- name: test_regexp_count
+
+CREATE TABLE `tsc` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into tsc values ('abc123def456', '[0-9]'), ('test.com test.net test.org', '\\.'), ('a b  c   d', '\\s+'), ('ababababab', 'ab'), ('', '.'), (NULL, '.');
+
+select regexp_count('abc123def456', '[0-9]');
+select regexp_count('test.com test.net test.org', '\\.');
+select regexp_count('a b  c   d', '\\s+');
+select regexp_count('ababababab', 'ab');
+select regexp_count('', '.');
+select regexp_count(NULL, '.');
+select regexp_count('abc', NULL);
+select regexp_count('abc中文def', '[\\p{Han}]+');
+select regexp_count('AbCdExCeF', 'C');
+select regexp_count('1a 2b 14m', '\\d+');
+
+select str, regex, regexp_count(str, regex) from tsc order by str, regex;
+
+-- name: test_regexp_count_invalid
+
+CREATE TABLE `tsc_invalid` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into tsc_invalid values 
+('abc123def456', '[0-9'),
+('test string', '(unclosed'),
+('repetition test', '?invalid'),
+('valid test', 'valid');
+
+select str, regex, regexp_count(str, regex) from tsc_invalid order by str, regex;
+
+select regexp_count('test string', '[0-9');
+select regexp_count('test string', '(unclosed');
+select regexp_count('test string', '?invalid');
+select regexp_count('test string', 'a{,}');
+select regexp_count(NULL, '[0-9');
+select regexp_count('', '[0-9');
+select regexp_count('test', NULL);
+
+-- name: test_regexp_replace_hyperscan_vec_multiple_rows
+
+-- Test for issue #65936: regexp_replace with enable_hyperscan_vec=true 
+-- produces incorrect output when processing multiple rows
+-- This test ensures row boundaries are respected during data reconstruction
+
+CREATE TABLE `test_regexp_replace_multirow` (
+  `column_value` varchar(100) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`column_value`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`column_value`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+-- Insert test data with pattern that should be replaced
+insert into test_regexp_replace_multirow values 
+('activity_60_package_2'),
+('activity_50_package_7'),
+('activity_70_package_1'),
+('nomatch_value'),
+('test_package_suffix');
+
+-- Test with VALUES clause (original bug report scenario)
+SELECT regexp_replace(column_value, '_package_.*', '') 
+FROM (VALUES 
+    ('activity_60_package_2'),
+    ('activity_50_package_7')
+) AS t(column_value);
+
+-- Test with table data
+SELECT regexp_replace(column_value, '_package_.*', '') 
+FROM test_regexp_replace_multirow 
+ORDER BY column_value;
+
+-- Test with different patterns to ensure general correctness
+SELECT regexp_replace(column_value, '_[0-9]+', '_X') 
+FROM test_regexp_replace_multirow 
+ORDER BY column_value;
+
+-- Test with non-empty replacement
+SELECT regexp_replace(column_value, '_package_', '_pkg_') 
+FROM test_regexp_replace_multirow 
+ORDER BY column_value;
+
+-- Clean up
+DROP TABLE test_regexp_replace_multirow;
+>>>>>>> e3825d20bc ([BugFix] Fix regexp_replace hyperscan_vec processing multiple rows incorrectly (#67380))
