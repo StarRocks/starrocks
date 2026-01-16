@@ -14,15 +14,20 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.TimeUtils;
+=======
+import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.paimon.PaimonUtils;
+import com.starrocks.planner.DescriptorTable;
+>>>>>>> c0b1fa6fb1 ([Enhancement] Support complex type for paimon table (#66784))
 import com.starrocks.planner.PaimonScanNode;
-import com.starrocks.thrift.TIcebergSchema;
-import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
@@ -40,6 +45,7 @@ public class PaimonTable extends Table {
     private String databaseName;
     private String tableName;
     private org.apache.paimon.table.Table paimonNativeTable;
+    private String uuid;
     private List<String> partColumnNames;
     private List<String> paimonFieldNames;
     private Map<String, String> properties;
@@ -87,11 +93,10 @@ public class PaimonTable extends Table {
 
     @Override
     public String getUUID() {
-        if (!new Identifier(databaseName, tableName).isSystemTable()) {
-            return String.join(".", catalogName,  paimonNativeTable.uuid());
-        } else {
-            return String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid());
+        if (Strings.isNullOrEmpty(this.uuid)) {
+            this.uuid = String.join(".", catalogName, databaseName, tableName, paimonNativeTable.uuid().replace(".", "_"));
         }
+        return this.uuid;
     }
 
     @Override
@@ -147,27 +152,12 @@ public class PaimonTable extends Table {
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
-        // reuse TIcebergSchema directly for compatibility.
-        TIcebergSchema tPaimonSchema = new TIcebergSchema();
-        List<DataField> paimonFields = paimonNativeTable.rowType().getFields();
-        List<TIcebergSchemaField> tIcebergFields = new ArrayList<>(paimonFields.size());
-        for (DataField field : paimonFields) {
-            tIcebergFields.add(getTIcebergSchemaField(field));
-        }
-        tPaimonSchema.setFields(tIcebergFields);
-        tPaimonTable.setPaimon_schema(tPaimonSchema);
+        tPaimonTable.setPaimon_schema(PaimonUtils.getTPaimonSchema(this.paimonNativeTable.rowType()));
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
-    }
-
-    private TIcebergSchemaField getTIcebergSchemaField(DataField field) {
-        TIcebergSchemaField tPaimonSchemaField = new TIcebergSchemaField();
-        tPaimonSchemaField.setField_id(field.id());
-        tPaimonSchemaField.setName(field.name());
-        return tPaimonSchemaField;
     }
 
     @Override
