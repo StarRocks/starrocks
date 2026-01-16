@@ -1,0 +1,50 @@
+-- name: test_greatest_date_datetime_wrong_result
+select date(greatest(date('2026-01-14'), timestamp('2026-01-11 00:00:00')));
+-- result:
+2026-01-14
+-- !result
+-- name: test_greatest_date_datetime_returns_datetime
+select greatest(date('2026-01-11'), timestamp('2026-01-14 00:00:00'));
+-- result:
+2026-01-14 00:00:00
+-- !result
+select typeof(greatest(date('2026-01-11'), timestamp('2026-01-14 00:00:00')));
+-- result:
+datetime
+-- !result
+-- name: test_least_date_datetime_returns_datetime
+select least(date('2026-01-14'), timestamp('2026-01-11 00:00:00'));
+-- result:
+2026-01-11 00:00:00
+-- !result
+select typeof(least(date('2026-01-14'), timestamp('2026-01-11 00:00:00')));
+-- result:
+datetime
+-- !result
+-- name: test_coalesce_date_datetime_returns_datetime
+select coalesce(null, date('2026-01-11'), timestamp('2026-01-14 00:00:00'));
+-- result:
+2026-01-11 00:00:00
+-- !result
+select typeof(coalesce(null, date('2026-01-11'), timestamp('2026-01-14 00:00:00')));
+-- result:
+datetime
+-- !result
+-- name: test_greatest_pure_dates_returns_datetime
+select greatest(date('2026-01-11'), date('2026-01-14'), date('2026-01-09'));
+-- result:
+2026-01-14 00:00:00
+-- !result
+select typeof(greatest(date('2026-01-11'), date('2026-01-14'), date('2026-01-09')));
+-- result:
+datetime
+-- !result
+-- name: test_numeric_types_unchanged
+select typeof(greatest(cast(100 as int), cast(200 as bigint)));
+-- result:
+bigint
+-- !result
+select typeof(greatest(20260114, 20260115));
+-- result:
+int
+-- !result
