@@ -3788,6 +3788,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
 
+    @ConfField(mutable = false, comment = "Timeout in milliseconds for HikariCP to acquire a connection from the pool")
+    public static long jdbc_connection_timeout_ms = 10000L;
+
+    @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC statement query execution")
+    public static long jdbc_query_timeout_ms = 30000L;
+
+    @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC network operations (socket read)")
+    public static long jdbc_network_timeout_ms = 30000L;
+
     // The longest supported VARCHAR length.
     @ConfField(mutable = true)
     public static int max_varchar_length = 1048576;
