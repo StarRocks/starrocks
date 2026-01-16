@@ -324,7 +324,7 @@ public class WarehouseManagerTest {
         Partition partition = new Partition(123, 456, "aaa", index, null);
         ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
-                        index, Collections.emptyList(), 1));
+                        index, Collections.emptyList(), List.of(), 1));
         Assertions.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
@@ -399,10 +399,12 @@ public class WarehouseManagerTest {
         OlapScanNode scanNode = newOlapScanNode();
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(123, 456, "aaa", index, null);
-        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
+        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(),
+                List.of(), 1);
         // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
         // getAliveComputeNodes.
-        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
+        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(),
+                List.of(), 1);
     }
 
     private OlapScanNode newOlapScanNode() {
