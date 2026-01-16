@@ -94,7 +94,7 @@ public class LakeRestoreJob extends RestoreJob {
     protected void genFileMapping(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                   BackupJobInfo.BackupPartitionInfo backupPartInfo, boolean overwrite) {
         for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameByMetaId(localIdx.getMetaId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
@@ -263,7 +263,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
         for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
                     restoredIdx.getId(), medium, true);

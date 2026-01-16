@@ -565,9 +565,9 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testRecyclePartition() {
-        Partition p1 = new Partition(111, 112, "uno", null, null);
-        Partition p2SameName = new Partition(22, 221, "dos", null, null);
-        Partition p2 = new Partition(222, 223, "dos", null, null);
+        Partition p1 = new Partition(111, 112, "uno", new MaterializedIndex(), null);
+        Partition p2SameName = new Partition(22, 221, "dos", new MaterializedIndex(), null);
+        Partition p2 = new Partition(222, 223, "dos", new MaterializedIndex(), null);
 
         // 1. add 2 partitions
         long dbId = 1;
@@ -698,9 +698,9 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testShowCatalogRecycleBinPartition() {
-        Partition p1 = new Partition(111, 112, "uno", null, null);
-        Partition p2SameName = new Partition(22, 23, "dos", null, null);
-        Partition p2 = new Partition(222, 223, "dos", null, null);
+        Partition p1 = new Partition(111, 112, "uno", new MaterializedIndex(), null);
+        Partition p2SameName = new Partition(22, 23, "dos", new MaterializedIndex(), null);
+        Partition p2 = new Partition(222, 223, "dos", new MaterializedIndex(), null);
 
         // 1. add 2 partitions
         long dbId = 1;
@@ -738,7 +738,7 @@ public class CatalogRecycleBinTest {
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
         // Create non-recoverable partition with retention period = 7200 seconds (2 hours)
-        Partition p1 = new Partition(101, 102, "p1", null, null);
+        Partition p1 = new Partition(101, 102, "p1", new MaterializedIndex(), null);
         RecycleRangePartitionInfo info1 =
                 new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, null);
         info1.setRecoverable(false);
@@ -776,7 +776,7 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
 
         // Non-recoverable partition with retention period
-        Partition p1 = new Partition(201, 202, "p1", null, null);
+        Partition p1 = new Partition(201, 202, "p1", new MaterializedIndex(), null);
         RecycleRangePartitionInfo info1 =
                 new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, null);
         info1.setRecoverable(false);
@@ -784,7 +784,7 @@ public class CatalogRecycleBinTest {
         recycleBin.recyclePartition(info1);
         
         // Non-recoverable partition without retention period
-        Partition p2 = new Partition(301, 302, "p2", null, null);
+        Partition p2 = new Partition(301, 302, "p2", new MaterializedIndex(), null);
         RecycleRangePartitionInfo info2 =
                 new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, null);
         info2.setRecoverable(false);
