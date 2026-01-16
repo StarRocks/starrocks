@@ -3,6 +3,7 @@ on:
   issue_comment:
     types: [created]
 jobs:
+  if: false
   execute:
     if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/translate')
     runs-on: ubuntu-latest
