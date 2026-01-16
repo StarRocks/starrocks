@@ -272,21 +272,23 @@ public class StarRocksFEServer {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             LOG.info("start to transfer leader");
             JournalWriter journalWriter = GlobalStateMgr.getCurrentState().getJournalWriter();
-            // stop journal writer
             journalWriter.stopAndWait();
             Journal journal = GlobalStateMgr.getCurrentState().getJournal();
 
-            // transfer leader
             if (journal instanceof BDBJEJournal) {
                 BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
                 if (bdbEnvironment != null) {
-                    // close bdb env, leader election will be triggered
+                    if (RunMode.isSharedDataMode()) {
+                        StarMgrServer.getCurrentState().stopJournal();
+                    }
+
                     bdbEnvironment.close();
-                    // wait for new leader
-                    while (true) {
+
+                    long maxWaitMs = Config.max_graceful_exit_time_second * 1000L / 2;
+                    long startTime = System.currentTimeMillis();
+                    while (System.currentTimeMillis() - startTime < maxWaitMs) {
                         try {
                             InetSocketAddress address = GlobalStateMgr.getCurrentState().getHaProtocol().getLeader();
-                            // wait for new leader to be ready
                             if (isNewLeaderReady(address.getHostString())) {
                                 LOG.info("leader is transferred to {}", address);
                                 break;
@@ -294,6 +296,10 @@ public class StarRocksFEServer {
                         } catch (Exception e) {
                             Thread.sleep(300L);
                         }
+                    }
+
+                    if (System.currentTimeMillis() - startTime >= maxWaitMs) {
+                        LOG.warn("leader transfer wait timeout after {}ms, proceeding with shutdown", maxWaitMs);
                     }
                 }
 

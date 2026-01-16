@@ -235,5 +235,38 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public JournalWriter getJournalWriter() {
         return journalWriter;
     }
+
+    /**
+     * Stop the journal writer and close the journal.
+     * This method should be called before closing the BDBEnvironment during leader transfer
+     * to ensure all StarMgr database handles are properly closed, preventing
+     * "Unclosed Database: starmgr_*" errors.
+     */
+    @java.lang.SuppressWarnings("squid:S2142")
+    public void stopJournalAndClose() {
+        if (replayer != null) {
+            replayer.setStop();
+            try {
+                replayer.join();
+            } catch (InterruptedException e) {
+                LOG.warn("got exception when stopping the star mgr replayer thread during shutdown, {}.", e.getMessage());
+            }
+            replayer = null;
+        }
+
+        if (journalWriter != null) {
+            try {
+                journalWriter.stopAndWait();
+            } catch (InterruptedException e) {
+                LOG.warn("got exception when stopping star mgr journal writer, {}.", e.getMessage());
+            }
+        }
+
+        if (bdbjeJournal != null) {
+            bdbjeJournal.close();
+        }
+
+        LOG.info("StarMgr journal stopped and closed");
+    }
 }
 
