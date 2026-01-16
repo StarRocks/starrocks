@@ -2427,13 +2427,7 @@ public class StmtExecutor {
         Database db =
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
-<<<<<<< HEAD
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
-=======
-            String catalogAndDb = tableRef.getCatalogName() != null ?
-                    tableRef.getCatalogName() + "." + tableRef.getDbName() : tableRef.getDbName();
-            throw new SemanticException("Database %s is not found", catalogAndDb);
->>>>>>> 2615ed7c0e ([BugFix] Fix ScopedTimer cause Concurrency Exception (#67913))
         }
 
         Locker locker = new Locker();
