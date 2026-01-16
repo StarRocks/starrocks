@@ -19,9 +19,9 @@ package com.starrocks.common.util;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;
@@ -29,14 +29,8 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.InformationFunction;
-import com.starrocks.sql.ast.expression.VariableExpr;
 import com.starrocks.statistic.StatsConstants;
->>>>>>> 9176d687b4 ([Enhancement] Ignore information schema for warehouse idle check (#67958))
 import org.apache.commons.lang3.StringUtils;
 
 public class SqlUtils {
