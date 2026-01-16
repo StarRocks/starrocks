@@ -473,6 +473,13 @@ CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");
 CONF_mInt64(pk_index_size_tiered_max_level, "5");
 // Used to control the sampling interval size for SSTable files.
 CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
+// Controls merge condition evaluation behavior within the same transaction for primary key tables.
+// When enabled (true), allows load spilling and parallel execution optimizations for condition updates
+// by skipping merge condition checks on data from the same transaction. This improves performance
+// when ingesting large batches with condition updates, as same-transaction conflicts don't need
+// complex comparison logic.
+// Default: false (conservative, validates all conditions even within same transaction)
+CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.

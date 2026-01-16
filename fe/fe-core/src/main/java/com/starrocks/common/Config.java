@@ -3177,11 +3177,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
 
-    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
-    public static int lake_publish_version_max_threads = 512;
+    @ConfField(mutable = true, comment = "the max number of threads for publishing version",
+            aliases = {"lake_publish_version_max_threads"})
+    public static int publish_version_max_threads = 512;
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
+
+    @ConfField(mutable = false, comment = "whether allow using publish thread pool for shared-nothing")
+    public static boolean shared_nothing_publish_use_thread_pool = false;
 
     @ConfField(mutable = true, comment =
             "Consider balancing between workers during tablet migration in shared data mode. Default: true")

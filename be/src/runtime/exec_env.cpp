@@ -613,12 +613,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_put_aggregate_metadata_thread_pool));
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-    RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_get")
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_pk_index_execution_thread_pool));
-    RETURN_IF_ERROR(ThreadPoolBuilder("pk_index_flush")
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
                             .set_min_threads(1)
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())

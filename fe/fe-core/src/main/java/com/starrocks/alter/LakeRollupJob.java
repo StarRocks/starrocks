@@ -258,7 +258,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
             watershedTxnId = getNextTransactionId();
             watershedGtid = getNextGtid();
-            addRollIndexToCatalog(table);
+            addRollupIndexToCatalog(table);
         }
 
         // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
@@ -551,7 +551,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 addTabletToInvertedIndex(table);
                 table.setState(OlapTable.OlapTableState.ROLLUP);
             } else if (jobState == JobState.WAITING_TXN) {
-                addRollIndexToCatalog(table);
+                addRollupIndexToCatalog(table);
             } else if (jobState == JobState.RUNNING) {
                     // do nothing
             } else if (jobState == JobState.FINISHED_REWRITING) {
@@ -613,7 +613,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
     }
 
-    void addRollIndexToCatalog(@NotNull OlapTable tbl) {
+    void addRollupIndexToCatalog(@NotNull OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long partitionId = physicalPartition.getId();
@@ -687,7 +687,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
                 List<MaterializedIndex> allMaterializedIndex = physicalPartition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 for (MaterializedIndex index : allMaterializedIndex) {
                     allOtherPartitionTablets.addAll(index.getTablets());
@@ -743,7 +743,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 invertedIndex.deleteTablet(rollupTablet.getId());
             }
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            partition.deleteRollupIndex(rollupIndexMetaId);
+            partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
             partition.setMinRetainVersion(0);
         }
         table.deleteIndexInfo(rollupIndexName);
@@ -762,9 +762,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
                 LOG.debug("update visible version of partition {} to {}. jobId={}", physicalPartition.getId(),
                         commitVersion, jobId);
-                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexMetaId);
+                MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
                 Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
-                physicalPartition.visualiseShadowIndex(rollupIndexMetaId, false);
+                physicalPartition.visualiseShadowIndex(rollupIndex.getId(), false);
             }
         }
         table.rebuildFullSchema();

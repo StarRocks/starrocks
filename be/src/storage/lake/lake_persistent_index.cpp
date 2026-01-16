@@ -595,8 +595,12 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
                                                  .input_sstables(txn_log.op_compaction().input_sstables_size() - 1)
                                                  .max_rss_rowid();
                                  if (result.max_max_rss_rowid != max_rss_rowid) {
-                                     LOG(ERROR) << "early sst compact max_rss_rowid mismatch, expected: "
-                                                << result.max_max_rss_rowid << ", got: " << max_rss_rowid;
+                                     // This should not happen.
+                                     std::string error_msg = fmt::format(
+                                             "early sst compact max_rss_rowid mismatch, expected: {}, got: {}",
+                                             result.max_max_rss_rowid, max_rss_rowid);
+                                     LOG(ERROR) << error_msg;
+                                     return Status::InternalError(error_msg);
                                  }
                                  for (const auto& sstable_pb : sstables) {
                                      auto* output_sstable = txn_log.mutable_op_compaction()->add_output_sstables();

@@ -195,6 +195,7 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
     } else {
         DCHECK_GE(arg_types.size(), 1);
         TypeDescriptor arg_type = arg_types[0];
+        TypeDescriptor ret_type = return_type;
         // Because intersect_count have two input types.
         // And intersect_count's first argument's type is alwasy Bitmap,
         // so we use its second arguments type as input.
@@ -228,7 +229,13 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
             TypeDescriptor child_type = arg_type.children[0];
             arg_type = std::move(child_type);
         }
-        return get_aggregate_function(agg_func_name, arg_type.type, return_type.type, is_result_nullable, binary_type,
+
+        if (agg_func_name == "sum_map") {
+            ret_type = arg_type.children[1];
+            arg_type = arg_type.children[0];
+        }
+
+        return get_aggregate_function(agg_func_name, arg_type.type, ret_type.type, is_result_nullable, binary_type,
                                       func_version);
     }
 }

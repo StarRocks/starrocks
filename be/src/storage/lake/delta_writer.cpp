@@ -206,9 +206,11 @@ private:
 
     Status check_partial_update_with_sort_key(const Chunk& chunk);
 
-    bool is_partial_update();
+    bool is_partial_update() const;
 
     Status merge_blocks_to_segments();
+
+    bool should_enable_load_spill() const;
 
     TabletManager* _tablet_manager;
     const int64_t _tablet_id;
@@ -324,6 +326,25 @@ const DictColumnsValidMap* DeltaWriterImpl::global_dict_columns_valid_info() con
     return &_tablet_writer->global_dict_columns_valid_info();
 }
 
+// Determines whether load spilling should be enabled for this write operation.
+// Load spilling allows writing data to disk when memory is insufficient, improving stability for large loads.
+//
+// CONSTRAINTS for Primary Key tables - spilling is disabled when:
+// 1. Merge conditions exist AND config doesn't allow ignoring same-transaction conditions
+//    WHY: Condition merge requires reading old values during ingestion, which conflicts with spilling
+// 2. Partial updates are involved
+//    WHY: Partial updates need to merge with existing data, requiring all columns in memory
+// 3. Separate sort keys are used
+//    WHY: Sort key handling requires special memory layout incompatible with spilling
+//
+// For non-PK tables: Always allow spilling if globally enabled (no special constraints)
+bool DeltaWriterImpl::should_enable_load_spill() const {
+    return config::enable_load_spill &&
+           (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS ||
+            ((config::ignore_merge_condition_inside_same_transaction || _merge_condition.empty()) &&
+             !is_partial_update() && !_tablet_schema->has_separate_sort_key()));
+}
+
 Status DeltaWriterImpl::build_schema_and_writer() {
     if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
@@ -340,9 +361,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                     _global_dicts);
         }
         RETURN_IF_ERROR(_tablet_writer->open());
-        if (config::enable_load_spill &&
-            !(_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-              (!_merge_condition.empty() || is_partial_update() || _tablet_schema->has_separate_sort_key()))) {
+        if (should_enable_load_spill()) {
             if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
                 _load_spill_block_mgr = std::make_unique<LoadSpillBlockManager>(
                         UniqueId(_load_id).to_thrift(),
@@ -419,6 +438,11 @@ inline Status DeltaWriterImpl::reset_memtable() {
 inline Status DeltaWriterImpl::flush_async() {
     Status st;
     if (_mem_table != nullptr) {
+        DeferOp defer([this] {
+            _mem_table.reset();
+            _last_write_ts = 0;
+        });
+
         RETURN_IF_ERROR(_mem_table->finalize());
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
@@ -442,8 +466,6 @@ inline Status DeltaWriterImpl::flush_async() {
                                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
                     }
                 });
-        _mem_table.reset(nullptr);
-        _last_write_ts = 0;
     }
     return st;
 }
@@ -612,7 +634,7 @@ Status DeltaWriterImpl::init_write_schema() {
     return Status::OK();
 }
 
-bool DeltaWriterImpl::is_partial_update() {
+bool DeltaWriterImpl::is_partial_update() const {
     return _write_schema->num_columns() < _tablet_schema->num_columns();
 }
 

@@ -1157,6 +1157,56 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## Hive テーブルの Truncate
+
+[TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) ステートメントを使用して、Hive マネージドテーブルからすべてのデータを迅速に削除できます。この操作は以下をサポートしています：
+
+- 非パーティションテーブルのすべてのデータを削除
+- パーティションテーブルのすべてのパーティションを削除
+- パーティションテーブルの特定のパーティションを削除
+
+### 構文
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### パラメータ
+
+- `table_name`: データを削除する Hive テーブルの名前。データベース内のテーブルを削除する前に、[Hive カタログとデータベースに切り替える](#hive-catalog-とデータベースに切り替える)必要があります。
+- `partition_name = partition_value`: どのパーティションを削除するかを識別するための、パーティション列の名前と値。
+
+### 使用例
+
+Hive カタログとデータベースに切り替えた後、データベース内の Hive テーブルを以下のステートメントで truncate できます。
+
+1. 非パーティションテーブルを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. パーティションテーブルのすべてのパーティションを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. 単一パーティションテーブルの特定パーティションを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. 複数パーティションテーブルの特定パーティションを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
+   ```
+
 ## Hive テーブルの削除
 
 StarRocks の内部テーブルと同様に、Hive テーブルに対する [DROP](../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、[DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) ステートメントを使用してその Hive テーブルを削除できます。この機能は v3.1 以降でサポートされています。現在、StarRocks は Hive の管理テーブルのみを削除することをサポートしています。

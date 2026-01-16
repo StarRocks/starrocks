@@ -427,6 +427,7 @@ set(EXEC_FILES
         ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
+        ./util/slice_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp
@@ -543,6 +544,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_retain_info_test.cpp
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
+    ./storage/lake/delete_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp

@@ -53,6 +53,9 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.BatchRemoveBasicStatsMetaLog;
+import com.starrocks.statistic.BatchRemoveHistogramStatsMetaLog;
+import com.starrocks.statistic.BatchRemoveMultiColumnStatsMetaLog;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
@@ -211,14 +214,17 @@ public class EditLogDeserializer {
             .put(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, ExternalAnalyzeJob.class)
             .put(OperationType.OP_ADD_BASIC_STATS_META, BasicStatsMeta.class)
             .put(OperationType.OP_REMOVE_BASIC_STATS_META, BasicStatsMeta.class)
+            .put(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, BatchRemoveBasicStatsMetaLog.class)
             .put(OperationType.OP_ADD_HISTOGRAM_STATS_META, HistogramStatsMeta.class)
             .put(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, HistogramStatsMeta.class)
+            .put(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH, BatchRemoveHistogramStatsMetaLog.class)
             .put(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, ExternalBasicStatsMeta.class)
             .put(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, ExternalBasicStatsMeta.class)
             .put(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, ExternalHistogramStatsMeta.class)
             .put(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, ExternalHistogramStatsMeta.class)
             .put(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
+            .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH, BatchRemoveMultiColumnStatsMetaLog.class)
             .put(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, ModifyTableColumnOperationLog.class)
             .put(OperationType.OP_MODIFY_COLUMN_COMMENT, ModifyColumnCommentLog.class)
             .put(OperationType.OP_CREATE_CATALOG, Catalog.class)
