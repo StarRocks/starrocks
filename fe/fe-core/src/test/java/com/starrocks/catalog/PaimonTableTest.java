@@ -112,6 +112,12 @@ public class PaimonTableTest {
     public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
         String dbName = "testDB";
         String tableName = "testTable";
+        new Expectations() {
+            {
+                paimonNativeTable.uuid();
+                result = "fake_uuid";
+            }
+        };
         PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
         PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);
         org.junit.jupiter.api.Assertions.assertEquals(table, table2);
