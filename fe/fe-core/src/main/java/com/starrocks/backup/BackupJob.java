@@ -800,7 +800,8 @@ public class BackupJob extends AbstractJob {
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
-        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                "BackupJob: jobId[" + jobId + "]" + " label[" + label + "]");
     }
 
     private boolean uploadFile(String localFilePath, String remoteFilePath) {
@@ -888,7 +889,8 @@ public class BackupJob extends AbstractJob {
 
         // log
         globalStateMgr.getEditLog().logBackupJob(this);
-        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                "BackupJob: jobId[" + jobId + "]" + " label[" + label + "]");
         LOG.info("finished to cancel backup job. current state: {}. {}", curState.name(), this);
     }
 
