@@ -1087,7 +1087,7 @@ public class PaimonMetadataTest {
         List<String> result2 = newMetadata.listPartitionNames("db2", "tbl2", null);
 
         // Before fix, if the key does not contain "db" and "table", it will return 2. After fix, it will return 3.
-        assertEquals(2, result2.size());
+        assertEquals(3, result2.size());
 
     }
 }
