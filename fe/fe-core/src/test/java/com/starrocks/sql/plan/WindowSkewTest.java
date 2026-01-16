@@ -72,15 +72,15 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: sum(3: x)");
         assertContains(plan, "UNION");
         // Validate that data is split into NULL and NOT NULL paths
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [6: p, INT, true] IS NOT NULL");
         assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
         // Validate Union child expressions match the expected columns from both branches
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true; " +
-                        "result nullable: true], ]\n" +
-                        "  |  partition by: [1: p, INT, true]\n" +
-                        "  |  order by: [2: s, INT, true] ASC\n" +
+                        "  |  functions: [, sum[([8: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        " result nullable: true], ]\n" +
+                        "  |  partition by: [6: p, INT, true]\n" +
+                        "  |  order by: [7: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 700\n" +
                         "  |  column statistics: \n" +
@@ -166,15 +166,15 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (cast([1: p, INT, true] as VARCHAR(1048576)) != '1') " +
-                "OR ([1: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: (cast([6: p, INT, true] as VARCHAR(1048576)) != '1') " +
+                "OR ([6: p, INT, true] IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        "  |  functions: [, sum[([8: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
                         " result nullable: true], ]\n" +
-                        "  |  partition by: [1: p, INT, true]\n" +
-                        "  |  order by: [2: s, INT, true] ASC\n" +
+                        "  |  partition by: [6: p, INT, true]\n" +
+                        "  |  order by: [7: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 730\n" +
                         "  |  column statistics: \n" +
@@ -212,7 +212,7 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [1: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [8: p, INT, true] IS NOT NULL");
         assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
     }
 
