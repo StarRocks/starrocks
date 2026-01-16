@@ -31,7 +31,8 @@ class FunctionContext;
 
 class BuiltinInvertedReader : public InvertedReader {
 public:
-    explicit BuiltinInvertedReader(const uint32_t index_id) : InvertedReader("", index_id), _bitmap_index(nullptr) {}
+    explicit BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num)
+            : InvertedReader("", index_id), _gram_num(gram_num), _bitmap_index(nullptr) {}
 
     ~BuiltinInvertedReader() override {}
 
@@ -59,6 +60,7 @@ public:
     InvertedIndexReaderType get_inverted_index_reader_type() override { return InvertedIndexReaderType::TEXT; }
 
 private:
+    int32_t _gram_num;
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
 };
 
