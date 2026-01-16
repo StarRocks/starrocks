@@ -276,6 +276,12 @@ public class StarRocksFEServer {
             journalWriter.stopAndWait();
             Journal journal = GlobalStateMgr.getCurrentState().getJournal();
 
+            // stop star mgr journal writer before bdb env close, to avoid "Unclosed Database: starmgr_*" errors
+            if (RunMode.isSharedDataMode()) {
+                JournalWriter starMgrJournalWriter = StarMgrServer.getCurrentState().getJournalSystem().getJournalWriter();
+                starMgrJournalWriter.stopAndWait();
+            }
+
             // transfer leader
             if (journal instanceof BDBJEJournal) {
                 BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
