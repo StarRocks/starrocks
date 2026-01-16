@@ -32,6 +32,7 @@ Regarding StarRocks specifics, we have a list of product names and technical phr
 - Docker
 - Kubernetes
 - Kubernetes secret
+- MinIO
 
 These words appear often on lists like this:
 
@@ -41,11 +42,7 @@ etc...
 
 Never translate them in this context.
 
-Here is a chunk of documentation in docusaurus Markdown format to translate. 
-
-```markdown
-{md_chunk}
-```
-
 Return the translation only in markdown format, without adding anything else. Do not add the ```markdown``` tags or any backticks.
+
+Here is a chunk of documentation in docusaurus Markdown format to translate. 
 
