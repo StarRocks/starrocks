@@ -190,6 +190,10 @@ public class PaimonMetadataTest {
                 result = new ArrayList<>(Collections.singleton("col1"));
                 paimonNativeTable.location().toString();
                 result = "hdfs://127.0.0.1:10000/paimon";
+                paimonNativeTable.primaryKeys();
+                result = List.of("col2");
+                paimonNativeTable.uuid();
+                result = "fake_uuid";
             }
         };
         com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
@@ -204,7 +208,7 @@ public class PaimonMetadataTest {
         assertEquals(ScalarType.DOUBLE, paimonTable.getBaseSchema().get(1).getType());
         org.junit.jupiter.api.Assertions.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         assertEquals("paimon_catalog", paimonTable.getCatalogName());
-        assertEquals("paimon_catalog.null", paimonTable.getUUID());
+        assertEquals("paimon_catalog.db1.tbl1.fake_uuid", paimonTable.getUUID());
     }
 
     @Test
