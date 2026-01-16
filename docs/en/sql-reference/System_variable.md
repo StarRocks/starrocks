@@ -651,10 +651,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: boolean
 * **Introduced in**: -
 
-### enable_large_string_metadata_length (global)
+### max_unknown_string_meta_length (global)
 
-* **Description**: Whether to use an extended fallback length for string columns in query result metadata when a client relies on that metadata and the reported max length may be smaller than actual values (which can cause empty returns or truncation in some BI tools). When set to `false`, such columns fall back to length `64` in metadata. When set to `true`, CHAR columns fall back to `255`, and other string columns fall back to `1048576` (1 MB).
-* **Default**: false
+* **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
+* **Default**: 64
+* **Data Type**: int
+* **Introduced in**: v3.5.12
 
 ### enable_load_profile
 

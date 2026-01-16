@@ -500,10 +500,12 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
 
-### enable_large_string_metadata_length (global)
+### max_unknown_string_meta_length (global)
 
-* 描述：当客户端依赖查询结果元数据中的字符串最大长度，而该长度可能小于真实值（在部分 BI 工具中会导致返回空值或截断）时，是否使用扩展的回退长度。当设置为 `false` 时，这类列在元数据中回退为长度 `64`；当设置为 `true` 时，CHAR 列回退为 `255`，其他字符串列回退为 `1048576`（1 MB）。
-* 默认值：false
+* 描述：当字符串列的最大长度未知时用于元数据的回退长度。如果客户端依赖该元数据且报告的长度小于真实值，部分 BI 工具可能返回空值或截断。小于等于 0 时回退为 `64`；有效范围为 `1` ~ `1048576`。
+* 默认值：64
+* 数据类型：Int
+* 引入版本：v3.5.12
 
 ### enable_lake_tablet_internal_parallel
 

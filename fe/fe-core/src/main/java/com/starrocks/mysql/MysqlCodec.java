@@ -335,11 +335,7 @@ public class MysqlCodec {
                 ScalarType charType = ((ScalarType) type);
                 int charLength = charType.getLength();
                 if (charLength == -1) {
-                    if (GlobalVariable.isEnableLargeStringMetadataLength()) {
-                        charLength = (type.getPrimitiveType() == PrimitiveType.CHAR) ? 255 : 1048576;
-                    } else {
-                        charLength = 64;
-                    }
+                    charLength = GlobalVariable.getMaxUnknownStringMetaLength();  // default 64
                 }
                 // utf8 charset
                 return charLength * 3;

@@ -77,7 +77,7 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
     public static final String ENABLE_TDE = "enable_tde";
-    public static final String ENABLE_LARGE_STRING_METADATA_LENGTH = "enable_large_string_metadata_length";
+    public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
 
     // cngroup
     public static final String CNGROUP_RESOURCE_USAGE_FRESH_RATIO = "cngroup_resource_usage_fresh_ratio";
@@ -223,8 +223,8 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = ENABLE_TDE, flag = VariableMgr.GLOBAL | VariableMgr.READ_ONLY)
     public static boolean enableTde = KeyMgr.isEncrypted();
 
-    @VariableMgr.VarAttr(name = ENABLE_LARGE_STRING_METADATA_LENGTH, flag = VariableMgr.GLOBAL)
-    private static boolean enableLargeStringMetadataLength = false;
+    @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
+    private static int maxUnknownStringMetaLength = 64;
 
     @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
     private static double cngroupResourceUsageFreshRatio = 0.5;
@@ -394,8 +394,11 @@ public final class GlobalVariable {
         GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
     }
 
-    public static boolean isEnableLargeStringMetadataLength() {
-        return enableLargeStringMetadataLength;
+    public static int getMaxUnknownStringMetaLength() {
+        if (maxUnknownStringMetaLength <= 0) {
+            return 64;
+        }
+        return maxUnknownStringMetaLength;
     }
 
     public static void setCngroupResourceUsageFreshRatio(double value) {
