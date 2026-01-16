@@ -281,9 +281,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setCreator(ConnectContext.get().getCurrentUserIdentity().toString());
             }
 
-            // set base index id
-            long baseIndexId = metastore.getNextId();
-            table.setBaseIndexId(baseIndexId);
+            // set base index meta id
+            long baseIndexMetaId = metastore.getNextId();
+            table.setBaseIndexMetaId(baseIndexMetaId);
 
             // get use light schema change
             try {
