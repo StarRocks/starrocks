@@ -84,9 +84,13 @@ public class HashDistributionDesc {
 
         if (this.sourceType == SourceType.SHUFFLE_AGG && item.sourceType == SourceType.SHUFFLE_JOIN) {
             return distributionColsEquals(item.distributionCols);
-        } else if (this.sourceType == SourceType.SHUFFLE_JOIN && (item.sourceType == SourceType.SHUFFLE_AGG ||
-                item.sourceType == SourceType.SHUFFLE_JOIN)) {
+        } else if (this.sourceType == SourceType.SHUFFLE_JOIN && item.sourceType == SourceType.SHUFFLE_AGG) {
+            // SHUFFLE_AGG is order-insensitive, so it can be satisfied by a permutation.
             return distributionColsContainsAll(item.distributionCols);
+        } else if (this.sourceType == SourceType.SHUFFLE_JOIN && item.sourceType == SourceType.SHUFFLE_JOIN) {
+            // SHUFFLE_JOIN is order-sensitive, because the hash-partitioning key order affects
+            // the hash value and must match on both sides of a shuffle join.
+            return distributionColsEquals(item.distributionCols);
         } else if (!this.sourceType.equals(item.sourceType) && this.sourceType != SourceType.LOCAL) {
             return false;
         }

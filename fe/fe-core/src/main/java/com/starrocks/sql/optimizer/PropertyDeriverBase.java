@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -55,8 +54,8 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
             // required property type is SHUFFLE_JOIN, adjust the required property shuffle columns based on the column
             // order required by parent
             List<DistributionCol> requiredColumns = requiredShuffleDescOptional.get().getDistributionCols();
-            boolean adjustBasedOnLeft = CollectionUtils.isEqualCollection(requiredColumns, leftShuffleColumns);
-            boolean adjustBasedOnRight = CollectionUtils.isEqualCollection(requiredColumns, rightShuffleColumns);
+            boolean adjustBasedOnLeft = requiredColumns.equals(leftShuffleColumns);
+            boolean adjustBasedOnRight = requiredColumns.equals(rightShuffleColumns);
 
             if (adjustBasedOnLeft || adjustBasedOnRight) {
                 List<DistributionCol> requiredLeft = Lists.newArrayList();
