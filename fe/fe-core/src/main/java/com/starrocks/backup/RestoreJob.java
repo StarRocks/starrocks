@@ -1558,7 +1558,8 @@ public class RestoreJob extends AbstractJob {
                 status = st;
             }
             MetricRepo.COUNTER_UNFINISHED_RESTORE_JOB.increase(-1L);
-            WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                    "RestoreJob: jobId[" + jobId + "] label[" + label + "]");
             return;
         }
         LOG.info("waiting {} tablets to commit. {}", unfinishedSignatureToId.size(), this);
@@ -1917,7 +1918,8 @@ public class RestoreJob extends AbstractJob {
             return;
         }
 
-        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                "RestoreJob: jobId[" + jobId + "] label[" + label + "]");
         LOG.info("finished to cancel restore job. is replay: {}. {}", isReplay, this);
     }
 

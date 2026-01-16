@@ -68,7 +68,8 @@ public class TaskRunExecutor {
                 // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
-                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId());
+                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId(),
+                        "TaskRun: name[" + status.getTaskName() + "]");
             }
             return status.getState();
         }, taskRunPool);

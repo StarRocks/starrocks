@@ -1465,7 +1465,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.STOPPED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "RoutineLoad: name: " + name);
     }
 
     private void executeCancel(ErrorReason reason) {
@@ -1473,7 +1473,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.CANCELLED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "RoutineLoad: name: " + name);
     }
 
     private void clearTasks() {
