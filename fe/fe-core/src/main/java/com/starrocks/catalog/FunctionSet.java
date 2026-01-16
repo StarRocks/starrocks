@@ -977,7 +977,9 @@ public class FunctionSet {
         if (functionName.equalsIgnoreCase(IFNULL) ||
                 functionName.equalsIgnoreCase(NULLIF) ||
                 functionName.equalsIgnoreCase(IF) ||
-                functionName.equalsIgnoreCase(COALESCE)) {
+                functionName.equalsIgnoreCase(COALESCE) ||
+                functionName.equalsIgnoreCase(LEAST) ||
+                functionName.equalsIgnoreCase(GREATEST)) {
             if (functionName.equalsIgnoreCase(IF)) {
                 arg_index = 1;
             }
