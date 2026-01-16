@@ -360,4 +360,24 @@ public class MysqlSchemaResolverTest {
             Assertions.fail();
         }
     }
+
+    @Test
+    public void testQueryTimeoutIsSet() throws SQLException {
+        new Expectations() {
+            {
+                preparedStatement.setQueryTimeout((int) (com.starrocks.common.Config.jdbc_query_timeout_ms / 1000));
+                minTimes = 1;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            // Assert that setQueryTimeout was called and the operation completed successfully
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertFalse(partitionNames.isEmpty());
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
 }

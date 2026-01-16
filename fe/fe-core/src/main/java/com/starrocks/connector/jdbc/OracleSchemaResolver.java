@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
@@ -166,6 +167,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName.toUpperCase());
             ps.setString(2, tableName.toUpperCase());
+            ps.setQueryTimeout((int) (Config.jdbc_query_timeout_ms / 1000));
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<String> list = ImmutableList.builder();
             while (rs.next()) {
@@ -196,6 +198,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName.toUpperCase());
             ps.setString(2, tableName.toUpperCase());
+            ps.setQueryTimeout((int) (Config.jdbc_query_timeout_ms / 1000));
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<String> list = ImmutableList.builder();
             while (rs.next()) {
@@ -214,6 +217,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
             ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout((int) (Config.jdbc_query_timeout_ms / 1000));
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<Partition> list = ImmutableList.builder();
             long createTime = TimeUtils.getEpochSeconds();
