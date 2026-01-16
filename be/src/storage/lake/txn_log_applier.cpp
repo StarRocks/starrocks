@@ -295,16 +295,8 @@ public:
     }
 
     Status finish() override {
-        // For lake pk replication transactions, we don't need to handle primary index or delvec operations.
-        // This is because the tablet metadata is directly copied from the source cluster's table
         if (_is_lake_replication) {
-            _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
-            _metadata->set_version(_new_version);
-            _has_finalized = true;
-            if (_skip_write_tablet_metadata) {
-                return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
-            }
-            return _tablet.put_metadata(_metadata);
+            return finalize_lake_replication();
         }
 
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
@@ -378,6 +370,20 @@ private:
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
         }
+        return Status::OK();
+    }
+
+    Status finalize_lake_replication() {
+        // For lake pk replication transactions, we don't need to handle primary index or delvec operations.
+        // This is because the tablet metadata is directly copied from the source cluster's table
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
+        _metadata->set_version(_new_version);
+        if (_skip_write_tablet_metadata) {
+            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+        }
+        // Persist the tablet metadata
+        RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
+        _has_finalized = true;
         return Status::OK();
     }
 
