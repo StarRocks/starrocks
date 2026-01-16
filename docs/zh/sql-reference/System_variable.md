@@ -498,8 +498,70 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_iceberg_metadata_cache
 
+<<<<<<< HEAD
 * 描述：是否缓存 Iceberg 表指针和分区名相关的数据。在 3.2.1 到 3.2.3 版本，该参数默认值统一为 `true`。自 3.2.4 版本起，如果 Iceberg 集群的元数据服务为 AWS Glue，该参数默认值仍为 `true`，如果 Iceberg 集群的元数据服务为 Hive Metastore（简称 HMS）或其他，则该参数默认值变更为 `false`。
 * 引入版本：v3.2.1
+=======
+* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
+* 默认值：true
+
+### max_unknown_string_meta_length (global)
+
+* 描述：当字符串列的最大长度未知时用于元数据的回退长度。如果客户端依赖该元数据且报告的长度小于真实值，部分 BI 工具可能返回空值或截断。小于等于 0 时回退为 `64`；有效范围为 `1` ~ `1048576`。
+* 默认值：64
+* 数据类型：Int
+* 引入版本：v3.5.12
+
+### enable_lake_tablet_internal_parallel
+
+* 描述：是否开启存算分离集群内云原生表的 Tablet 并行 Scan.
+* 默认值：true
+* 类型：Boolean
+* 引入版本：v3.3.0
+
+### enable_load_profile
+
+* **作用域**: Session
+* **描述**: 启用后，FE 会请求收集 load 作业的运行时 profile，load 协调器将在 load 完成后收集/导出该 profile。对于 stream load，FE 会设置 `TQueryOptions.enable_profile = true` 并将 `load_profile_collect_second`（来自 `stream_load_profile_collect_threshold_second`）传递给 backends；协调器随后有条件地调用 profile 收集（参见 StreamLoadTask.collectProfile()）。实际行为是此会话变量与目标表上的表级属性 `enable_load_profile` 的逻辑 OR；采集还受 `load_profile_collect_interval_second`（FE 端采样间隔）的限制以避免频繁采集。会话标志通过 `SessionVariable.isEnableLoadProfile()` 读取，并且可以通过 `setEnableLoadProfile(...)` 按连接设置。
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
+### enable_local_shuffle_agg
+
+* **描述**: 控制 planner 和 cost model 是否可以生成使用本地 shuffle 的单阶段局部聚合计划（Scan -> LocalShuffle -> OnePhaseAgg），而不是两阶段/全局 shuffle 聚合。启用时（默认），优化器和成本模型会：
+  - 允许在单 backend+compute-node 集群中将 Scan 与 Global Agg 之间的 SHUFFLE exchange 替换为本地 shuffle + 单阶段聚合（参见 `PruneShuffleDistributionNodeRule` 和 `EnforceAndCostTask`），
+  - 在该单节点场景下让成本模型忽略 SHUFFLE 的网络成本以偏好单阶段计划（`CostModel`）。
+  仅在 `enable_pipeline_engine` 启用且集群为单个 backend+compute 节点时考虑替换。规划器在不安全的情况下仍会拒绝本地 shuffle 转换（例如 DISTINCT 聚合、检测到的数据倾斜、缺失/未知的列统计、多输入算子如 joins 或其他语义限制）。某些代码路径（INSERT/UPDATE/DELETE 的 planner 和 MaterializedViewOptimizer）会临时禁用该会话标志，因为非查询的 sink 或某些重写需要按 driver 分配扫描，而本地 shuffle 无法使用这种分配。
+* **范围**: Session
+* **默认值**: `true`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
+### enable_materialized_view_agg_pushdown_rewrite
+
+* 描述：是否为物化视图查询改写启用聚合函数下推。如果设置为 `true`，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。有关此功能的具体场景和限制的详细信息，请参见 [聚合函数下推](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#聚合下推)。
+* 默认值：false
+* 引入版本：v3.3.0
+
+### enable_materialized_view_for_insert
+
+* 描述：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
+
+### enable_materialized_view_text_match_rewrite
+
+* 描述：是否启用基于文本的物化视图改写。当此项设置为 `true` 时，优化器将查询与现有的物化视图进行比较。如果物化视图定义的抽象语法树与查询或其子查询的抽象语法树匹配，则会对查询进行改写。
+* 默认值：true
+* 引入版本：v3.2.5，v3.3.0
+
+### enable_materialized_view_union_rewrite
+
+* 描述：是否启用物化视图 UNION 改写。如果此项设置为 true，则系统在物化视图的谓词不能满足查询的谓词时，会尝试使用 UNION ALL 来补偿谓词。
+* 默认值：true
+* 引入版本：v2.5.20，v3.1.9，v3.2.7，v3.3.0
+>>>>>>> b490997bf0 ([BugFix] change max string length to 1M when unknown (#67873))
 
 ### enable_metadata_profile
 

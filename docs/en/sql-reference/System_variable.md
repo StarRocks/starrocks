@@ -509,8 +509,86 @@ Default value: `true`.
 
 ### enable_iceberg_metadata_cache
 
+<<<<<<< HEAD
 * **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 * **Introduced in**: v3.2.1
+=======
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Default**: true
+
+### enable_lake_tablet_internal_parallel
+
+* **Description**: Whether to enable Parallel Scan for Cloud-native tables in a shared-data cluster.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v3.3.0
+
+### enable_lambda_pushdown
+
+* **Description**: Session-scoped boolean toggle that controls predicate pushdown behavior in the optimizer. Specifically, the `PushDownPredicateProjectRule` consults this flag: when `true` (default) the rule may push predicates through `Project` operators even if those projects contain `LambdaFunctionOperator` expressions; when `false` the rule inspects the project's expressions and aborts the pushdown if any lambda is present (the rule returns no transformation). This affects only the optimizer transformation phase (planning) and can be changed per session via the `SessionVariable` getter/setter (`getEnableLambdaPushDown` / `setEnableLambdaPushdown`).
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.3.6, v3.4.0, v3.5.0
+
+### enable_large_in_predicate
+
+* **Scope**: Session
+* **Description**: When enabled, the parser will convert IN-lists whose literal count meets or exceeds `large_in_predicate_threshold` into a special `LargeInPredicate` (handled in `AstBuilder`). The optimizer rule `LargeInPredicateToJoinRule` then converts that predicate into a `LEFT_SEMI_JOIN` (for IN) or `NULL_AWARE_LEFT_ANTI_JOIN` (for NOT IN) against a `RawValues` constant table, reducing FE memory and planning cost for very large IN lists by avoiding one expression node per constant. The transformation has correctness restrictions (no OR compound predicates, only one large-IN per query); if these restrictions or other conditions cause the optimization to fail, the planner throws `LargeInPredicateException` and upper layers (via `StmtExecutor` / `ConnectProcessor`) retry the query from the parser stage with `enable_large_in_predicate` disabled so the query falls back to the traditional expression-based IN handling. Use `large_in_predicate_threshold` to control the minimum literal count that triggers this behavior.
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
+### max_unknown_string_meta_length (global)
+
+* **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
+* **Default**: 64
+* **Data Type**: int
+* **Introduced in**: v3.5.12
+
+### enable_load_profile
+
+* **Scope**: Session
+* **Description**: When enabled, the FE requests collection of the runtime profile for load jobs and the load coordinator will collect/export the profile after a load completes. For stream load, FE sets `TQueryOptions.enable_profile = true` and passes `load_profile_collect_second` (from `stream_load_profile_collect_threshold_second`) to backends; the coordinator then conditionally calls profile collection (see StreamLoadTask.collectProfile()). The effective behavior is the logical OR of this session variable and the table-level property `enable_load_profile` on the destination table; collection is further gated by `load_profile_collect_interval_second` (FE-side sampling interval) to avoid frequent collection. The session flag is read via `SessionVariable.isEnableLoadProfile()` and can be set per-connection with `setEnableLoadProfile(...)`.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_local_shuffle_agg
+
+* **Description**: Controls whether the planner and cost model may produce a one-phase local aggregation plan that uses a local shuffle (Scan -> LocalShuffle -> OnePhaseAgg) instead of a two-phase/global-shuffle aggregation. When enabled (the default), the optimizer and cost model will:
+  - allow replacing a SHUFFLE exchange between Scan and Global Agg with a local shuffle + one-phase agg on single-backend-and-compute-node clusters (see `PruneShuffleDistributionNodeRule` and `EnforceAndCostTask`),
+  - let the cost model ignore network cost for SHUFFLE in that single-node case to favor the one-phase plan (`CostModel`).
+  The replacement is only considered when `enable_pipeline_engine` is enabled and the cluster is a single backend+compute node. The planner still rejects local-shuffle conversion in unsafe cases (e.g., DISTINCT aggregates, detected data skew, missing/unknown column statistics, multi-input operators like joins, or other semantic restrictions). Some code paths (INSERT/UPDATE/DELETE planners and MaterializedViewOptimizer) temporarily disable this session flag because non-query sinks or certain rewrites require per-driver scan assignment that local-shuffle cannot use.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_materialized_view_agg_pushdown_rewrite
+
+* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown).
+* **Default**: false
+* **Introduced in**: v3.3.0
+
+### enable_materialized_view_for_insert
+
+* **Description**: Whether to allow StarRocks to rewrite queries in INSERT INTO SELECT statements.
+* **Default**: false, which means Query Rewrite in such scenarios is disabled by default.
+* **Introduced in**: v2.5.18, v3.0.9, v3.1.7, v3.2.2
+
+### enable_materialized_view_text_match_rewrite
+
+* **Description**: Whether to enable text-based materialized view rewrite. When this item is set to true, the optimizer will compare the query with the existing materialized views. A query will be rewritten if the abstract syntax tree of the materialized view's definition matches that of the query or its sub-query.
+* **Default**: true
+* **Introduced in**: v3.2.5, v3.3.0
+
+### enable_materialized_view_union_rewrite
+
+* **Description**: Whether to enable materialized view union rewrite. If this item is set to `true`, the system seeks to compensate the predicates using UNION ALL when the predicates in the materialized view cannot satisfy the query's predicates.
+* **Default**: true
+* **Introduced in**: v2.5.20, v3.1.9, v3.2.7, v3.3.0
+>>>>>>> b490997bf0 ([BugFix] change max string length to 1M when unknown (#67873))
 
 ### enable_metadata_profile
 

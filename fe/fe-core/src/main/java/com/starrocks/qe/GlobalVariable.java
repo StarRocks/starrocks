@@ -77,6 +77,7 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN = "activate_all_roles_on_login";
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
     public static final String ENABLE_TDE = "enable_tde";
+    public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
 
     // cngroup
     public static final String CNGROUP_SCHEDULE_MODE = "cngroup_schedule_mode";
@@ -219,6 +220,21 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = ENABLE_TDE, flag = VariableMgr.GLOBAL | VariableMgr.READ_ONLY)
     public static boolean enableTde = KeyMgr.isEncrypted();
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
+    private static int maxUnknownStringMetaLength = 64;
+
+    @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
+    private static double cngroupResourceUsageFreshRatio = 0.5;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_RUNNING_QUERY_COUNT)
+    private static long cngroupLowWatermarkRunningQueryCount = 8;
+
+    @VariableMgr.VarAttr(name = CNGROUP_LOW_WATERMARK_CPU_USED_PERMILLE)
+    private static long cngroupLowWatermarkCPUUsedPermille = 600;
+
+>>>>>>> b490997bf0 ([BugFix] change max string length to 1M when unknown (#67873))
     @VariableMgr.VarAttr(name = CNGROUP_SCHEDULE_MODE)
     private static String cngroupScheduleMode = "standard";
 
@@ -378,6 +394,40 @@ public final class GlobalVariable {
         GlobalVariable.activateAllRolesOnLogin = activateAllRolesOnLogin;
     }
 
+<<<<<<< HEAD
+=======
+    public static int getMaxUnknownStringMetaLength() {
+        if (maxUnknownStringMetaLength <= 0) {
+            return 64;
+        }
+        return maxUnknownStringMetaLength;
+    }
+
+    public static void setCngroupResourceUsageFreshRatio(double value) {
+        cngroupResourceUsageFreshRatio = value;
+    }
+
+    public static double getCngroupResourceUsageFreshRatio() {
+        return cngroupResourceUsageFreshRatio;
+    }
+
+    public static void setCngroupLowWatermarkRunningQueryCount(long value) {
+        cngroupLowWatermarkRunningQueryCount = value;
+    }
+
+    public static long getCngroupLowWatermarkRunningQueryCount() {
+        return cngroupLowWatermarkRunningQueryCount;
+    }
+
+    public static void setCngroupLowWatermarkCPUUsedPermille(long value) {
+        cngroupLowWatermarkCPUUsedPermille = value;
+    }
+
+    public static long getCngroupLowWatermarkCPUUsedPermille() {
+        return cngroupLowWatermarkCPUUsedPermille;
+    }
+
+>>>>>>> b490997bf0 ([BugFix] change max string length to 1M when unknown (#67873))
     public static void setCngroupScheduleMode(String mode) {
         cngroupScheduleMode = mode;
     }
