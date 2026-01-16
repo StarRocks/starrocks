@@ -92,17 +92,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
     private static final long RETRY_INTERVAL_MS = 1000;
-    private static final int LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE = 512;
-    public static final int LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE = 4096;
-    // about 16 (2 * LAKE_PUBLISH_MAX_QUEUE_SIZE/LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE ) tasks pending for
+    private static final int PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE = 512;
+    public static final int PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE = 4096;
+    // about 16 (2 * PUBLISH_MAX_QUEUE_SIZE/PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE ) tasks pending for
     // each thread under the default configurations
-    private static final int LAKE_PUBLISH_MAX_QUEUE_SIZE = 4096;
+    private static final int PUBLISH_MAX_QUEUE_SIZE = 4096;
 
-    private ThreadPoolExecutor lakeTaskExecutor;
+    // for shared-data, task executor thread will be responsible for sending publish tasks to BE
+    // and modify transaction state on FE
+    // for shared-nothing, task executor thread will be responsible for checking publish task
+    // result and modify transaction state on FE
+    private ThreadPoolExecutor taskExecutor;
     private ThreadPoolExecutor deleteTxnLogExecutor;
 
     @VisibleForTesting
-    protected Set<Long> publishingLakeTransactions;
+    protected Set<Long> publishingTransactionIds;
 
     @VisibleForTesting
     protected Set<Long> publishingLakeTransactionsBatchTableId;
@@ -155,55 +159,55 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    private int getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig() {
-        String configVarName = "lake_publish_version_max_threads";
-        int maxSize = Config.lake_publish_version_max_threads;
+    private int getOrFixTaskExecutorThreadPoolMaxSizeConfig() {
+        String configVarName = "publish_version_max_threads";
+        int maxSize = Config.publish_version_max_threads;
         if (maxSize <= 0) {
             LOG.warn("Invalid configuration value '{}' for {}, force set to default value:{}",
-                    maxSize, configVarName, LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE);
-            maxSize = LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE;
-            Config.lake_publish_version_max_threads = maxSize;
-        } else if (maxSize > LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE) {
+                    maxSize, configVarName, PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE);
+            maxSize = PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE;
+            Config.publish_version_max_threads = maxSize;
+        } else if (maxSize > PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE) {
             LOG.warn(
                     "Configuration value for item {} exceeds the preset hard limit. Config value:{}," +
                             " preset hard limit:{}. Force set to default value:{}.",
-                    configVarName, maxSize, LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE,
-                    LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE);
-            maxSize = LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE;
-            Config.lake_publish_version_max_threads = maxSize;
+                    configVarName, maxSize, PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE,
+                    PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE);
+            maxSize = PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE;
+            Config.publish_version_max_threads = maxSize;
         }
         return maxSize;
     }
 
-    private void adjustLakeTaskExecutor() {
-        if (lakeTaskExecutor == null) {
+    private void adjustTaskExecutor() {
+        if (taskExecutor == null) {
             return;
         }
 
         // only do update with valid setting
-        int newNumThreads = Config.lake_publish_version_max_threads;
-        if (newNumThreads > LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE || newNumThreads <= 0) {
+        int newNumThreads = Config.publish_version_max_threads;
+        if (newNumThreads > PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE || newNumThreads <= 0) {
             // DON'T LOG, otherwise the log line will repeat everytime the listener refreshes
             return;
         }
-        ThreadPoolManager.setFixedThreadPoolSize(lakeTaskExecutor, newNumThreads);
+        ThreadPoolManager.setFixedThreadPoolSize(taskExecutor, newNumThreads);
     }
 
     /**
-     * Create a thread pool executor for LakeTable synchronizing publish.
-     * The thread pool size can be configured by `Config.lake_publish_version_max_threads` and is affected by the
+     * Create a thread pool executor for synchronizing publish tasks.
+     * The thread pool size can be configured by `Config.publish_version_max_threads` and is affected by the
      * following constant variables
-     * - LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE
-     * - LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
-     * - LAKE_PUBLISH_MAX_QUEUE_SIZE
+     * - PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE
+     * - PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE
+     * - PUBLISH_MAX_QUEUE_SIZE
      * <p>
-     * The valid range for the configuration item `Config.lake_publish_version_max_threads` is
-     * (0, LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE], if the initial value is out of range,
-     * the LAKE_PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE will be used. During the runtime update, if the new value provided
+     * The valid range for the configuration item `Config.publish_version_max_threads` is
+     * (0, PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE], if the initial value is out of range,
+     * the PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE will be used. During the runtime update, if the new value provided
      * is out of range, the value will be just ignored silently.
      * <p>
      * The thread pool is created with the corePoolSize and maxPoolSize equals to
-     * `Config.lake_publish_version_max_threads`, or set to LAKE_PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE in case exceeded.
+     * `Config.publish_version_max_threads`, or set to PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE in case exceeded.
      * core threads are also allowed to timeout when idle.
      * <p>
      * Threads in the thread pool will be created in the following way:
@@ -216,21 +220,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
      *
      * @return the thread pool executor
      */
-    public @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
-        if (lakeTaskExecutor == null) {
-            int numThreads = getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig();
-            lakeTaskExecutor =
-                    ThreadPoolManager.newDaemonFixedThreadPool(numThreads, LAKE_PUBLISH_MAX_QUEUE_SIZE,
-                            "lake-publish-task",
+    public @NotNull ThreadPoolExecutor getTaskExecutor() {
+        if (taskExecutor == null) {
+            int numThreads = getOrFixTaskExecutorThreadPoolMaxSizeConfig();
+            taskExecutor =
+                    ThreadPoolManager.newDaemonFixedThreadPool(numThreads, PUBLISH_MAX_QUEUE_SIZE,
+                            "publish-task",
                             true);
             // allow core thread timeout as well
-            lakeTaskExecutor.allowCoreThreadTimeOut(true);
+            taskExecutor.allowCoreThreadTimeOut(true);
 
             // register ThreadPool config change listener
             GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
-                    .registerListener(() -> this.adjustLakeTaskExecutor());
+                    .registerListener(() -> this.adjustTaskExecutor());
         }
-        return lakeTaskExecutor;
+        return taskExecutor;
     }
 
     private @NotNull ThreadPoolExecutor getDeleteTxnLogExecutor() {
@@ -253,11 +257,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return deleteTxnLogExecutor;
     }
 
-    private @NotNull Set<Long> getPublishingLakeTransactions() {
-        if (publishingLakeTransactions == null) {
-            publishingLakeTransactions = Sets.newConcurrentHashSet();
+    private @NotNull Set<Long> getPublishingTransactions() {
+        if (publishingTransactionIds == null) {
+            publishingTransactionIds = Sets.newConcurrentHashSet();
         }
-        return publishingLakeTransactions;
+        return publishingTransactionIds;
     }
 
     // Only one table in all transactionStates in transactionStateBatch
@@ -305,63 +309,93 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
 
         // try to finish the transaction, if failed just retry in next loop
+        Set<Long> publishingTransactions = getPublishingTransactions();
         for (TransactionState transactionState : readyTransactionStates) {
-            Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
-            Set<Long> publishErrorReplicaIds = Sets.newHashSet();
-            Set<Long> unfinishedBackends = Sets.newHashSet();
-            boolean allTaskFinished = true;
-            for (PublishVersionTask publishVersionTask : transTasks.values()) {
-                if (publishVersionTask.isFinished()) {
-                    // sometimes backend finish publish version task, but it maybe failed to change
-                    // transaction id to version for some tablets,
-                    // and it will upload the failed tablet info to fe and fe will deal with them
-                    Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
-                    if (!errReplicas.isEmpty()) {
-                        publishErrorReplicaIds.addAll(errReplicas);
-                    }
-                } else {
-                    allTaskFinished = false;
-                    // Publish version task may succeed and finish in quorum replicas
-                    // but not finish in one replica.
-                    // here collect the backendId that do not finish publish version
-                    unfinishedBackends.add(publishVersionTask.getBackendId());
+            if (!Config.shared_nothing_publish_use_thread_pool) {
+                tryFinishTransaction(transactionState);
+            } else {
+                long txnId = transactionState.getTransactionId();
+                if (!publishingTransactions.add(txnId)) {
+                    LOG.debug("skip finish publish transaction {}", txnId);
+                    continue;
                 }
-            }
-            boolean shouldFinishTxn = true;
-            if (!allTaskFinished) {
-                shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
-                        publishErrorReplicaIds, unfinishedBackends);
-            }
-
-            if (shouldFinishTxn) {
                 try {
-                    // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
-                    // This approach prevents blocking subsequent transactions due to the current one.
-                    globalTransactionMgr.finishTransaction(transactionState.getDbId(),
-                            transactionState.getTransactionId(), publishErrorReplicaIds,
-                            Config.finish_transaction_default_lock_timeout_ms);
-                } catch (StarRocksException exception) {
-                    if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
-                        LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
-                                transactionState.getTransactionId(), exception.getMessage());
-                        continue;
-                    } else {
-                        throw exception;
-                    }
-                }
-                if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
-                    transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
-                            transactionState, publishErrorReplicaIds.size());
-                } else {
-                    for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
-                        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
-                    }
-                    // clear publish version tasks to reduce memory usage when state changed to visible.
-                    transactionState.clearAfterPublished();
+                    getTaskExecutor().execute(() -> {
+                        try {
+                            tryFinishTransaction(transactionState);
+                        } catch (Throwable t) {
+                            LOG.error("Error processing transaction {}", txnId, t);
+                        } finally {
+                            publishingTransactions.remove(txnId);
+                        }
+                    });
+                } catch (Throwable e) {
+                    // Task rejected, remove from processing set
+                    publishingTransactions.remove(txnId);
+                    LOG.warn("Failed to submit publish task for txn {}: {}", txnId, e.getMessage());
                 }
             }
         } // end for readyTransactionStates
+    }
+
+    private void tryFinishTransaction(TransactionState transactionState) throws StarRocksException {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+        Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
+        Set<Long> publishErrorReplicaIds = Sets.newHashSet();
+        Set<Long> unfinishedBackends = Sets.newHashSet();
+        boolean allTaskFinished = true;
+        for (PublishVersionTask publishVersionTask : transTasks.values()) {
+            if (publishVersionTask.isFinished()) {
+                // sometimes backend finish publish version task, but it maybe failed to change
+                // transaction id to version for some tablets,
+                // and it will upload the failed tablet info to fe and fe will deal with them
+                Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
+                if (!errReplicas.isEmpty()) {
+                    publishErrorReplicaIds.addAll(errReplicas);
+                }
+            } else {
+                allTaskFinished = false;
+                // Publish version task may succeed and finish in quorum replicas
+                // but not finish in one replica.
+                // here collect the backendId that do not finish publish version
+                unfinishedBackends.add(publishVersionTask.getBackendId());
+            }
+        }
+        boolean shouldFinishTxn = true;
+        if (!allTaskFinished) {
+            shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState,
+                    publishErrorReplicaIds, unfinishedBackends);
+        }
+
+        if (shouldFinishTxn) {
+            try {
+                // Attempt to finish the transaction with a lock timeout. If it fails, it will be retried in the next cycle.
+                // This approach prevents blocking subsequent transactions due to the current one.
+                globalTransactionMgr.finishTransaction(transactionState.getDbId(),
+                        transactionState.getTransactionId(), publishErrorReplicaIds,
+                        Config.finish_transaction_default_lock_timeout_ms);
+            } catch (StarRocksException exception) {
+                if (exception.getErrorCode() == ErrorCode.ERR_LOCK_ERROR) {
+                    LOG.warn("Fail to get lock to finish transaction {}, error: {}. Will retry later",
+                            transactionState.getTransactionId(), exception.getMessage());
+                    return;
+                } else {
+                    throw exception;
+                }
+            }
+            if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+                transactionState.updateSendTaskTime();
+                LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
+                        transactionState, publishErrorReplicaIds.size());
+            } else {
+                for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
+                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
+                }
+                // clear publish version tasks to reduce memory usage when state changed to visible.
+                transactionState.clearAfterPublished();
+            }
+        }
     }
 
     private void publishVersionNew(GlobalTransactionMgr globalTransactionMgr, List<TransactionState> txns) {
@@ -392,7 +426,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
-        Set<Long> publishingTransactions = getPublishingLakeTransactions();
+        Set<Long> publishingTransactions = getPublishingTransactions();
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
             if (!publishingTransactions.contains(txnId)) { // the set did not already contain the specified element
@@ -417,7 +451,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     void publishVersionForLakeTableBatch(List<TransactionStateBatch> readyTransactionStatesBatch) {
         Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
-        Set<Long> publishingTransactions = getPublishingLakeTransactions();
+        Set<Long> publishingTransactions = getPublishingTransactions();
         for (TransactionStateBatch txnStateBatch : readyTransactionStatesBatch) {
             if (txnStateBatch.size() == 1) {
                 // there are two situations:
@@ -768,7 +802,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     commitInfo.setVersionTime(versionTime);
                 }
                 return success;
-            }, getLakeTaskExecutor()).exceptionally(ex -> {
+            }, getTaskExecutor()).exceptionally(ex -> {
                 LOG.error("Fail to publish txn batch", ex);
                 long versionTime = -System.currentTimeMillis();
                 for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
@@ -834,7 +868,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
             partitionCommitInfo.setVersionTime(success ? System.currentTimeMillis() : -System.currentTimeMillis());
             return success;
-        }, getLakeTaskExecutor()).exceptionally(ex -> {
+        }, getTaskExecutor()).exceptionally(ex -> {
             LOG.error("Fail to publish txn " + txnState.getTransactionId(), ex);
             partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
             return false;
