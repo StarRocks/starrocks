@@ -2308,7 +2308,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_sstable_meta) {
 
         // This publish should succeed after the fix
         auto result = publish_single_version(tablet_id, version + 1, txn_id);
-        ASSERT_OK(result.status()) << "Write after full replication should succeed";
+        ASSERT_OK(result);
         version++;
     }
 

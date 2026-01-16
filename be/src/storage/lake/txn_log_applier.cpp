@@ -630,7 +630,6 @@ private:
                 for (size_t i = 0; i < dcg_ver.column_files_size(); ++i) {
                     FileMetaPB file_meta;
                     file_meta.set_name(dcg_ver.column_files(i));
-                    file_meta.set_size(0); // dcg files don't store size in metadata
                     if (dcg_ver.shared_files_size() > 0) {
                         file_meta.set_shared(dcg_ver.shared_files(i));
                     }
