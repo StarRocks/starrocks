@@ -731,4 +731,751 @@ public class InsertPlannerTest {
             }
         };
     }
+
+    // ==================== PredicateEstimator Coverage Tests ====================
+    // These tests are designed to improve coverage of InsertPartitionEstimator.PredicateEstimator
+    // by testing various predicate scenarios and verifying the estimated partition count
+
+    /**
+     * Test partition estimation with equality predicate on single partition column
+     * Expected: estimate = 1 (single value from equality predicate)
+     */
+    @Test
+    public void testEstimatePartitionWithEqualityPredicate(@Mocked GlobalStateMgr gsm,
+                                                           @Mocked MetadataMgr metadataMgr,
+                                                           @Mocked IcebergTable icebergTable,
+                                                           @Mocked InsertStmt insertStmt,
+                                                           @Mocked QueryStatement queryStatement,
+                                                           @Mocked SelectRelation selectRelation,
+                                                           @Mocked SlotRef slotRef,
+                                                           @Mocked StringLiteral literal) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                // 100 existing partitions
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt = '2024-01-01'
+                selectRelation.getPredicate();
+                result = createBinaryPredicate(BinaryType.EQ, slotRef, literal);
+                minTimes = 0;
+
+                slotRef.getColumnName();
+                result = "dt";
+                minTimes = 0;
+
+                literal.getStringValue();
+                result = "2024-01-01";
+                minTimes = 0;
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // Equality predicate on single partition column should estimate 1 partition
+        assertEquals(1L, estimatedCount);
+    }
+
+    /**
+     * Test partition estimation with IN predicate
+     * Expected: estimate = 3 (number of values in IN list)
+     */
+    @Test
+    public void testEstimatePartitionWithInPredicate(@Mocked GlobalStateMgr gsm,
+                                                      @Mocked MetadataMgr metadataMgr,
+                                                      @Mocked IcebergTable icebergTable,
+                                                      @Mocked InsertStmt insertStmt,
+                                                      @Mocked QueryStatement queryStatement,
+                                                      @Mocked SelectRelation selectRelation,
+                                                      @Mocked SlotRef slotRef,
+                                                      @Mocked InPredicate inPredicate,
+                                                      @Mocked StringLiteral literal1,
+                                                      @Mocked StringLiteral literal2,
+                                                      @Mocked StringLiteral literal3) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt IN ('2024-01-01', '2024-01-02', '2024-01-03')
+                selectRelation.getPredicate();
+                result = inPredicate;
+                minTimes = 0;
+
+                inPredicate.isNotIn();
+                result = false;
+                minTimes = 0;
+
+                inPredicate.isConstantValues();
+                result = true;
+                minTimes = 0;
+
+                inPredicate.getChild(0);
+                result = slotRef;
+                minTimes = 0;
+
+                inPredicate.getInElementNum();
+                result = 3;
+                minTimes = 0;
+
+                inPredicate.getChildren();
+                result = Lists.newArrayList(slotRef, literal1, literal2, literal3);
+                minTimes = 0;
+
+                slotRef.getColumnName();
+                result = "dt";
+                minTimes = 0;
+
+                literal1.getStringValue();
+                result = "2024-01-01";
+                minTimes = 0;
+
+                literal2.getStringValue();
+                result = "2024-01-02";
+                minTimes = 0;
+
+                literal3.getStringValue();
+                result = "2024-01-03";
+                minTimes = 0;
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // IN predicate should estimate 3 partitions
+        assertEquals(3L, estimatedCount);
+    }
+
+    /**
+     * Test partition estimation with OR predicate on same column
+     * Expected: estimate = 2 (sum of OR values)
+     */
+    @Test
+    public void testEstimatePartitionWithOrSameColumn(@Mocked GlobalStateMgr gsm,
+                                                       @Mocked MetadataMgr metadataMgr,
+                                                       @Mocked IcebergTable icebergTable,
+                                                       @Mocked InsertStmt insertStmt,
+                                                       @Mocked QueryStatement queryStatement,
+                                                       @Mocked SelectRelation selectRelation,
+                                                       @Mocked SlotRef slotRef1,
+                                                       @Mocked SlotRef slotRef2,
+                                                       @Mocked StringLiteral literal1,
+                                                       @Mocked StringLiteral literal2,
+                                                       @Mocked BinaryPredicate leftPred,
+                                                       @Mocked BinaryPredicate rightPred,
+                                                       @Mocked CompoundPredicate orPredicate) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt = '2024-01-01' OR dt = '2024-01-02'
+                selectRelation.getPredicate();
+                result = orPredicate;
+                minTimes = 0;
+
+                orPredicate.getOp();
+                result = CompoundPredicate.Operator.OR;
+                minTimes = 0;
+
+                orPredicate.getChild(0);
+                result = leftPred;
+                minTimes = 0;
+
+                orPredicate.getChild(1);
+                result = rightPred;
+                minTimes = 0;
+
+                setupBinaryPredicateExpectations(leftPred, slotRef1, literal1, "dt", "2024-01-01", BinaryType.EQ);
+                setupBinaryPredicateExpectations(rightPred, slotRef2, literal2, "dt", "2024-01-02", BinaryType.EQ);
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // OR on same column should estimate 2 partitions
+        assertEquals(2L, estimatedCount);
+    }
+
+    /**
+     * Test partition estimation with OR predicate on different columns
+     * Expected: estimate = -1 (return -1 due to complexity)
+     */
+    @Test
+    public void testEstimatePartitionWithOrDifferentColumns(@Mocked GlobalStateMgr gsm,
+                                                            @Mocked MetadataMgr metadataMgr,
+                                                            @Mocked IcebergTable icebergTable,
+                                                            @Mocked InsertStmt insertStmt,
+                                                            @Mocked QueryStatement queryStatement,
+                                                            @Mocked SelectRelation selectRelation,
+                                                            @Mocked SlotRef slotRef1,
+                                                            @Mocked SlotRef slotRef2,
+                                                            @Mocked StringLiteral literal1,
+                                                            @Mocked StringLiteral literal2,
+                                                            @Mocked BinaryPredicate leftPred,
+                                                            @Mocked BinaryPredicate rightPred,
+                                                            @Mocked CompoundPredicate orPredicate) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(
+                        new Column("dt", DateType.DATE),
+                        new Column("country", VarcharType.VARCHAR)
+                );
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt = '2024-01-01' OR country = 'US'
+                selectRelation.getPredicate();
+                result = orPredicate;
+                minTimes = 0;
+
+                orPredicate.getOp();
+                result = CompoundPredicate.Operator.OR;
+                minTimes = 0;
+
+                orPredicate.getChild(0);
+                result = leftPred;
+                minTimes = 0;
+
+                orPredicate.getChild(1);
+                result = rightPred;
+                minTimes = 0;
+
+                setupBinaryPredicateExpectations(leftPred, slotRef1, literal1, "dt", "2024-01-01", BinaryType.EQ);
+                setupBinaryPredicateExpectations(rightPred, slotRef2, literal2, "country", "US", BinaryType.EQ);
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // OR on different columns should fall back to -1
+        assertEquals(-1, estimatedCount);
+    }
+
+    /**
+     * Test partition estimation with AND predicate on multiple partition columns
+     * Expected: estimate = 1 (product of equality predicates: 1 * 1 = 1)
+     */
+    @Test
+    public void testEstimatePartitionWithAndPredicate(@Mocked GlobalStateMgr gsm,
+                                                      @Mocked MetadataMgr metadataMgr,
+                                                      @Mocked IcebergTable icebergTable,
+                                                      @Mocked InsertStmt insertStmt,
+                                                      @Mocked QueryStatement queryStatement,
+                                                      @Mocked SelectRelation selectRelation,
+                                                      @Mocked SlotRef slotRef1,
+                                                      @Mocked SlotRef slotRef2,
+                                                      @Mocked StringLiteral literal1,
+                                                      @Mocked StringLiteral literal2,
+                                                      @Mocked BinaryPredicate leftPred,
+                                                      @Mocked BinaryPredicate rightPred,
+                                                      @Mocked CompoundPredicate andPredicate) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(
+                        new Column("dt", DateType.DATE),
+                        new Column("country", VarcharType.VARCHAR)
+                );
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt = '2024-01-01' AND country = 'US'
+                selectRelation.getPredicate();
+                result = andPredicate;
+                minTimes = 0;
+
+                andPredicate.getOp();
+                result = CompoundPredicate.Operator.AND;
+                minTimes = 0;
+
+                andPredicate.getChild(0);
+                result = leftPred;
+                minTimes = 0;
+
+                andPredicate.getChild(1);
+                result = rightPred;
+                minTimes = 0;
+
+                setupBinaryPredicateExpectations(leftPred, slotRef1, literal1, "dt", "2024-01-01", BinaryType.EQ);
+                setupBinaryPredicateExpectations(rightPred, slotRef2, literal2, "country", "US", BinaryType.EQ);
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // AND on multiple partition columns should estimate 1 partition (1 * 1 = 1)
+        assertEquals(1L, estimatedCount);
+    }
+
+    /**
+     * Test partition estimation with range predicate (>)
+     * Expected: estimate = 10 (10% of 100 existing partitions)
+     */
+    @Test
+    public void testEstimatePartitionWithRangePredicate(@Mocked GlobalStateMgr gsm,
+                                                        @Mocked MetadataMgr metadataMgr,
+                                                        @Mocked StatisticStorage statisticStorage,
+                                                        @Mocked IcebergTable icebergTable,
+                                                        @Mocked InsertStmt insertStmt,
+                                                        @Mocked QueryStatement queryStatement,
+                                                        @Mocked SelectRelation selectRelation,
+                                                        @Mocked NodeMgr nodeMgr,
+                                                        @Mocked SystemInfoService clusterInfo,
+                                                        @Mocked SlotRef slotRef,
+                                                        @Mocked StringLiteral literal) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                gsm.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getAliveBackendNumber();
+                result = 10;
+                minTimes = 0;
+
+                clusterInfo.getTotalComputeNodeNumber();
+                result = 0;
+                minTimes = 0;
+
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+
+                gsm.getStatisticStorage();
+                result = statisticStorage;
+                minTimes = 0;
+
+                // NDV = 100
+                ColumnStatistic columnStatistic = new ColumnStatistic(
+                        Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 100);
+                statisticStorage.getColumnStatistic(icebergTable, "dt");
+                result = columnStatistic;
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt > '2024-01-01'
+                selectRelation.getPredicate();
+                result = createBinaryPredicate(BinaryType.GT, slotRef, literal);
+                minTimes = 0;
+
+                slotRef.getColumnName();
+                result = "dt";
+                minTimes = 0;
+
+                literal.getStringValue();
+                result = "2024-01-01";
+                minTimes = 0;
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // Range predicate should estimate 10% of NDV
+        assertEquals(10L, estimatedCount);
+    }
+
+    /**
+     * Test partition estimation with NOT IN predicate
+     * Expected: estimate = 100 (falls back to existing partition count)
+     */
+    @Test
+    public void testEstimatePartitionWithNotInPredicate(@Mocked GlobalStateMgr gsm,
+                                                         @Mocked MetadataMgr metadataMgr,
+                                                         @Mocked StatisticStorage statisticStorage,
+                                                         @Mocked IcebergTable icebergTable,
+                                                         @Mocked InsertStmt insertStmt,
+                                                         @Mocked QueryStatement queryStatement,
+                                                         @Mocked SelectRelation selectRelation,
+                                                         @Mocked NodeMgr nodeMgr,
+                                                         @Mocked SystemInfoService clusterInfo,
+                                                         @Mocked SlotRef slotRef,
+                                                         @Mocked InPredicate notInPredicate) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = gsm;
+                minTimes = 0;
+
+                gsm.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                gsm.getNodeMgr();
+                result = nodeMgr;
+                minTimes = 0;
+
+                nodeMgr.getClusterInfo();
+                result = clusterInfo;
+                minTimes = 0;
+
+                clusterInfo.getAliveBackendNumber();
+                result = 10;
+                minTimes = 0;
+
+                clusterInfo.getTotalComputeNodeNumber();
+                result = 0;
+                minTimes = 0;
+
+                metadataMgr.listPartitionNames(anyString, anyString, anyString,
+                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                result = createPartitionList(100);
+                minTimes = 0;
+
+                icebergTable.getCatalogName();
+                result = "test_catalog";
+                minTimes = 0;
+
+                icebergTable.getCatalogDBName();
+                result = "test_db";
+                minTimes = 0;
+
+                icebergTable.getCatalogTableName();
+                result = "test_table";
+                minTimes = 0;
+
+                icebergTable.getPartitionColumns();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+
+                gsm.getStatisticStorage();
+                result = statisticStorage;
+                minTimes = 0;
+
+                ColumnStatistic columnStatistic = new ColumnStatistic(
+                        Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 100);
+                statisticStorage.getColumnStatistic(icebergTable, "dt");
+                result = columnStatistic;
+                minTimes = 0;
+
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                // WHERE dt NOT IN ('2024-01-01', '2024-01-02')
+                selectRelation.getPredicate();
+                result = notInPredicate;
+                minTimes = 0;
+
+                notInPredicate.isNotIn();
+                result = true;
+                minTimes = 0;
+
+                notInPredicate.getChild(0);
+                result = slotRef;
+                minTimes = 0;
+
+                slotRef.getColumnName();
+                result = "dt";
+                minTimes = 0;
+
+                insertStmt.isStaticKeyPartitionInsert();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        long estimatedCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
+        // NOT IN should fall back to existing partition count
+        assertEquals(100L, estimatedCount);
+    }
+
+    // ==================== Helper Methods ====================
+
+    private List<String> createPartitionList(int count) {
+        List<String> partitions = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            partitions.add("p" + i);
+        }
+        return partitions;
+    }
+
+    private void setupBinaryPredicateExpectations(@Mocked BinaryPredicate predicate,
+                                                   @Mocked SlotRef slotRef,
+                                                   @Mocked StringLiteral literal,
+                                                   String columnName,
+                                                   String literalValue,
+                                                   BinaryType binaryType) {
+        new Expectations() {
+            {
+                predicate.getOp();
+                result = binaryType;
+                minTimes = 0;
+
+                predicate.getChild(0);
+                result = slotRef;
+                minTimes = 0;
+
+                predicate.getChild(1);
+                result = literal;
+                minTimes = 0;
+
+                slotRef.getColumnName();
+                result = columnName;
+                minTimes = 0;
+
+                literal.getStringValue();
+                result = literalValue;
+                minTimes = 0;
+            }
+        };
+    }
+
+    private BinaryPredicate createBinaryPredicate(BinaryType type, SlotRef slotRef, StringLiteral literal) {
+        BinaryPredicate pred = new BinaryPredicate(type, slotRef, literal);
+        return pred;
+    }
 }

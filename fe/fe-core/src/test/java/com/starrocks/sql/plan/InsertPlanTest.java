@@ -853,6 +853,9 @@ public class InsertPlanTest extends PlanTestBase {
 
                 icebergTable.getPartitionColumnNames();
                 result = new ArrayList<>();
+
+                icebergTable.getPartitionColumns();
+                result = new ArrayList<>();
             }
         };
 
