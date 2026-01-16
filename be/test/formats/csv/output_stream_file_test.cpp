@@ -71,7 +71,7 @@ TEST_F(OutputStreamFileTest, TestBasicCompression) {
     EXPECT_NE(compressed_content, test_data);
 
     // Decompress and verify
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -132,7 +132,7 @@ TEST_F(OutputStreamFileTest, TestLargeDataCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -164,7 +164,7 @@ TEST_F(OutputStreamFileTest, TestMultipleWrites) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     std::string expected = chunk1 + chunk2 + chunk3;
     EXPECT_EQ(decompressed, expected);
 }
@@ -197,7 +197,7 @@ TEST_F(OutputStreamFileTest, TestDataLargerThanBuffer) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -255,7 +255,7 @@ TEST_F(OutputStreamFileTest, TestSpecialCharacters) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -286,7 +286,7 @@ TEST_F(OutputStreamFileTest, TestBinaryData) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     EXPECT_EQ(decompressed, test_data);
 }
 
@@ -341,12 +341,12 @@ TEST_F(OutputStreamFileTest, TestVerySmallWrites) {
     std::string compressed_content;
     ASSERT_OK(_fs.read_file(file_path, &compressed_content));
 
-    std::string decompressed = starrocks::test::decompress_gzip(compressed_content);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::GZIP);
     EXPECT_EQ(decompressed, test_data);
 }
 
-// Test SNAPPY compression is rejected (does not support incremental compression)
-TEST_F(OutputStreamFileTest, TestSnappyCompressionRejected) {
+// Test SNAPPY compression
+TEST_F(OutputStreamFileTest, TestSnappyCompression) {
     std::string file_path = "/test_snappy.csv.snappy";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
@@ -354,11 +354,23 @@ TEST_F(OutputStreamFileTest, TestSnappyCompressionRejected) {
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
     auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-
-    // SNAPPY does not support incremental compression, so creation should fail
     auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::SNAPPY, 1024);
-    ASSERT_FALSE(compressed_stream_result.ok());
-    EXPECT_TRUE(compressed_stream_result.status().is_invalid_argument());
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",snappy,data\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::SNAPPY);
+    EXPECT_EQ(decompressed, test_data);
 }
 
 // Test ZSTD compression
@@ -392,25 +404,36 @@ TEST_F(OutputStreamFileTest, TestZstdCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = starrocks::test::decompress_data(compressed_content, CompressionTypePB::ZSTD);
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::ZSTD);
     EXPECT_EQ(decompressed, test_data);
 }
 
-// Test LZ4 (raw block) compression is rejected (does not support incremental compression)
-TEST_F(OutputStreamFileTest, TestLz4CompressionRejected) {
-    std::string file_path = "/test_lz4.csv.lz4";
+// Test LZ4 (raw block) compression
+TEST_F(OutputStreamFileTest, TestLz4RawCompression) {
+    std::string file_path = "/test_lz4raw.csv.lz4raw";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());
 
     auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
     auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
-
-    // LZ4 (raw block) does not support incremental compression, so creation should fail
-    // Use LZ4_FRAME instead for incremental compression support
     auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
-    ASSERT_FALSE(compressed_stream_result.ok());
-    EXPECT_TRUE(compressed_stream_result.status().is_invalid_argument());
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",lz4raw,data\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::LZ4);
+    EXPECT_EQ(decompressed, test_data);
 }
 
 // Test LZ4_FRAME compression
@@ -444,17 +467,180 @@ TEST_F(OutputStreamFileTest, TestLz4FrameCompression) {
     EXPECT_LT(compressed_content.size(), test_data.size());
 
     // Decompress and verify
-    std::string decompressed = starrocks::test::decompress_data(compressed_content, CompressionTypePB::LZ4_FRAME);
+    std::string decompressed =
+            starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::LZ4_FRAME);
+    EXPECT_EQ(decompressed, test_data);
+}
+
+// Test LZ4 auto-detection for frame format
+TEST_F(OutputStreamFileTest, TestLz4FrameAutoDetect) {
+    std::string file_path = "/test_lz4_frame_auto.csv.lz4";
+    auto maybe_file = _fs.new_writable_file(file_path);
+    ASSERT_OK(maybe_file.status());
+    auto file = std::move(maybe_file.value());
+
+    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4_FRAME, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",lz4frame,auto\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::LZ4);
+    EXPECT_EQ(decompressed, test_data);
+}
+
+// Test LZ4 auto-detection for block format
+TEST_F(OutputStreamFileTest, TestLz4BlockAutoDetect) {
+    std::string file_path = "/test_lz4_block_auto.csv.lz4";
+    auto maybe_file = _fs.new_writable_file(file_path);
+    ASSERT_OK(maybe_file.status());
+    auto file = std::move(maybe_file.value());
+
+    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",lz4block,auto\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::LZ4);
+    EXPECT_EQ(decompressed, test_data);
+}
+
+// Test LZ4 block stream empty terminator auto-detect
+TEST_F(OutputStreamFileTest, TestLz4BlockAutoDetectEmpty) {
+    std::string file_path = "/test_lz4_block_empty.csv.lz4";
+    auto maybe_file = _fs.new_writable_file(file_path);
+    ASSERT_OK(maybe_file.status());
+    auto file = std::move(maybe_file.value());
+
+    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::LZ4, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::LZ4);
+    EXPECT_TRUE(decompressed.empty());
+}
+
+// Test DEFLATE compression
+TEST_F(OutputStreamFileTest, TestDeflateCompression) {
+    std::string file_path = "/test_deflate.csv.deflate";
+    auto maybe_file = _fs.new_writable_file(file_path);
+    ASSERT_OK(maybe_file.status());
+    auto file = std::move(maybe_file.value());
+
+    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::DEFLATE, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",deflate,data\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::DEFLATE);
+    EXPECT_EQ(decompressed, test_data);
+}
+
+// Test ZLIB compression
+TEST_F(OutputStreamFileTest, TestZlibCompression) {
+    std::string file_path = "/test_zlib.csv.zlib";
+    auto maybe_file = _fs.new_writable_file(file_path);
+    ASSERT_OK(maybe_file.status());
+    auto file = std::move(maybe_file.value());
+
+    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::ZLIB, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",zlib,data\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::ZLIB);
+    EXPECT_EQ(decompressed, test_data);
+}
+
+// Test BZIP2 compression
+TEST_F(OutputStreamFileTest, TestBzip2Compression) {
+    std::string file_path = "/test_bzip2.csv.bz2";
+    auto maybe_file = _fs.new_writable_file(file_path);
+    ASSERT_OK(maybe_file.status());
+    auto file = std::move(maybe_file.value());
+
+    auto async_stream = std::make_unique<io::AsyncFlushOutputStream>(std::move(file), nullptr, _runtime_state);
+    auto base_stream = std::make_shared<AsyncOutputStreamFile>(async_stream.get(), 1024);
+    auto compressed_stream_result = CompressedOutputStream::create(base_stream, CompressionTypePB::BZIP2, 1024);
+    ASSERT_OK(compressed_stream_result.status());
+    auto compressed_stream = std::move(compressed_stream_result.value());
+
+    std::string test_data;
+    for (int i = 0; i < 100; i++) {
+        test_data += "Row " + std::to_string(i) + ",bzip2,data\n";
+    }
+
+    ASSERT_OK(compressed_stream->write(Slice(test_data)));
+    ASSERT_OK(compressed_stream->finalize());
+
+    std::string compressed_content;
+    ASSERT_OK(_fs.read_file(file_path, &compressed_content));
+
+    std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, CompressionTypePB::BZIP2);
     EXPECT_EQ(decompressed, test_data);
 }
 
 // Test all supported compression types with large data
-// Only GZIP, LZ4_FRAME, and ZSTD support incremental compression via frame concatenation
 TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
     std::vector<std::pair<CompressionTypePB, std::string>> compression_types = {
-            {CompressionTypePB::GZIP, ".gz"},
-            {CompressionTypePB::ZSTD, ".zst"},
-            {CompressionTypePB::LZ4_FRAME, ".lz4"},
+            {CompressionTypePB::GZIP, ".gz"},       {CompressionTypePB::ZSTD, ".zst"},
+            {CompressionTypePB::LZ4_FRAME, ".lz4"}, {CompressionTypePB::SNAPPY, ".snappy"},
+            {CompressionTypePB::LZ4, ".lz4"},       {CompressionTypePB::DEFLATE, ".deflate"},
+            {CompressionTypePB::ZLIB, ".zlib"},     {CompressionTypePB::BZIP2, ".bz2"},
     };
 
     // Generate large test data (highly compressible)
@@ -488,14 +674,7 @@ TEST_F(OutputStreamFileTest, TestAllCompressionTypesLargeData) {
         EXPECT_LT(compressed_content.size(), test_data.size())
                 << "Compression type " << static_cast<int>(compression_type) << " should compress data";
 
-        // Decompress and verify - use different function for GZIP since BlockCompressionCodec
-        // doesn't properly handle GZIP decompression output size
-        std::string decompressed;
-        if (compression_type == CompressionTypePB::GZIP) {
-            decompressed = starrocks::test::decompress_gzip(compressed_content);
-        } else {
-            decompressed = starrocks::test::decompress_data(compressed_content, compression_type);
-        }
+        std::string decompressed = starrocks::test::decompress_stream_data(compressed_content, compression_type);
         EXPECT_EQ(decompressed, test_data)
                 << "Compression type " << static_cast<int>(compression_type) << " should decompress correctly";
     }

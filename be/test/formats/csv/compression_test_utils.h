@@ -17,10 +17,12 @@
 #include <gtest/gtest.h>
 #include <zlib.h>
 
+#include <array>
 #include <string>
 
 #include "gen_cpp/segment.pb.h"
 #include "util/compression/block_compression.h"
+#include "util/compression/stream_compression.h"
 #include "util/slice.h"
 
 namespace starrocks::test {
@@ -73,6 +75,33 @@ inline std::string decompress_data(const std::string& compressed_data, Compressi
 
     uncompressed_data.resize(output.size);
     return uncompressed_data;
+}
+
+inline std::string decompress_stream_data(const std::string& compressed_data, CompressionTypePB compression_type) {
+    std::unique_ptr<StreamCompression> decompressor;
+    Status st = StreamCompression::create_decompressor(compression_type, &decompressor);
+    EXPECT_TRUE(st.ok());
+
+    std::string output;
+    size_t input_offset = 0;
+    bool stream_end = false;
+    std::array<uint8_t, 64 * 1024> out_buf{};
+    while (!stream_end) {
+        size_t input_bytes_read = 0;
+        size_t output_bytes_written = 0;
+        st = decompressor->decompress(
+                reinterpret_cast<uint8_t*>(const_cast<char*>(compressed_data.data())) + input_offset,
+                compressed_data.size() - input_offset, &input_bytes_read, out_buf.data(), out_buf.size(),
+                &output_bytes_written, &stream_end);
+        EXPECT_TRUE(st.ok());
+        input_offset += input_bytes_read;
+        output.append(reinterpret_cast<const char*>(out_buf.data()), output_bytes_written);
+        if (input_bytes_read == 0 && output_bytes_written == 0 && !stream_end) {
+            ADD_FAILURE() << "Stream decompressor made no progress";
+            break;
+        }
+    }
+    return output;
 }
 
 } // namespace starrocks::test

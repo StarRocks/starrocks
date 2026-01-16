@@ -35,9 +35,12 @@
 #include "util/compression/stream_compression.h"
 
 #include <bzlib.h>
+#include <glog/logging.h>
 #include <zlib.h>
 
+#include <limits>
 #include <memory>
+#include <optional>
 
 #include "fmt/compile.h"
 #include "gutil/strings/substitute.h"
@@ -527,6 +530,159 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
     return st;
 }
 
+class Lz4StreamCompression : public StreamCompression {
+public:
+    Lz4StreamCompression() : StreamCompression(CompressionTypePB::LZ4) {}
+    ~Lz4StreamCompression() override = default;
+    std::string debug_info() override { return "Lz4StreamCompression"; }
+
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_write, bool* stream_end) override;
+
+    Status init() override;
+
+private:
+    enum class Mode { UNKNOWN, FRAME, BLOCK };
+
+    struct Context {
+        uint32_t block_length = 0;
+        uint32_t output_length = 0;
+
+        std::vector<char> buffer;
+        char* buffer_data;
+        size_t buffer_size = 0;
+        size_t buffer_used = 0;
+    };
+    Context _ctx;
+    Mode _mode = Mode::UNKNOWN;
+    std::unique_ptr<Lz4FrameStreamCompression> _frame;
+};
+
+Status Lz4StreamCompression::init() {
+    return Status::OK();
+}
+
+Status Lz4StreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                        size_t output_len, size_t* output_bytes_write, bool* stream_end) {
+    *input_bytes_read = 0;
+    *output_bytes_write = 0;
+    *stream_end = false;
+
+    if (_mode == Mode::UNKNOWN) {
+        if (input_len < sizeof(uint32_t)) {
+            return Status::OK();
+        }
+
+        bool is_frame_magic = (decode_fixed32_le(input) == LZ4F_MAGICNUMBER);
+        if (!is_frame_magic) {
+            _mode = Mode::BLOCK;
+        } else {
+            if (input_len < LZ4F_HEADER_SIZE_MIN) {
+                return Status::OK();
+            }
+            // Verify the frame header before switching to frame mode to avoid misdetecting block data.
+            LZ4F_decompressionContext_t ctx = nullptr;
+            size_t ret = LZ4F_createDecompressionContext(&ctx, LZ4F_VERSION);
+            if (LZ4F_isError(ret)) {
+                return Status::InternalError(
+                        strings::Substitute("LZ4F create decompression context failed: $0", LZ4F_getErrorName(ret)));
+            }
+            LZ4F_frameInfo_t info;
+            size_t src_size = input_len;
+            ret = LZ4F_getFrameInfo(ctx, &info, input, &src_size);
+            LZ4F_freeDecompressionContext(ctx);
+            if (LZ4F_isError(ret)) {
+                // If the buffer can't cover the full header yet, wait for more data before deciding.
+                if (input_len < LZ4F_HEADER_SIZE_MAX) {
+                    // Request more bytes to determine if this is a valid LZ4 frame header.
+                    set_compressed_block_size(LZ4F_HEADER_SIZE_MAX);
+                    return Status::OK();
+                }
+                _mode = Mode::BLOCK;
+            } else {
+                _frame = std::make_unique<Lz4FrameStreamCompression>();
+                RETURN_IF_ERROR(_frame->init());
+                _mode = Mode::FRAME;
+            }
+        }
+    }
+
+    if (_mode == Mode::FRAME) {
+        return _frame->decompress(input, input_len, input_bytes_read, output, output_len, output_bytes_write,
+                                  stream_end);
+    }
+
+    Context* ctx = &_ctx;
+    Status st = Status::OK();
+
+    if (ctx->buffer_used == ctx->buffer_size) {
+        // Block stream format (big-endian):
+        //   [block_len][compressed_len][compressed_payload], block_len=0 terminates.
+        if (ctx->block_length == 0) {
+            if (input_len < 4) return st;
+            ctx->block_length = decode_fixed32_be(input);
+            input += 4;
+            input_len -= 4;
+            *input_bytes_read += 4;
+        }
+        if (ctx->block_length == 0) {
+            *stream_end = true;
+            return st;
+        }
+
+        if (input_len < 4) return st;
+        uint32_t compressed_len = decode_fixed32_be(input);
+        input += 4;
+        input_len -= 4;
+        if (input_len < compressed_len) {
+            set_compressed_block_size(compressed_len);
+            return st;
+        }
+
+        *input_bytes_read += (compressed_len + 4);
+        input_len -= compressed_len;
+
+        // When decompressing a new block, output_length must be 0 because it's reset
+        // when the previous block completes (see the reset at the end of this function).
+        DCHECK_EQ(ctx->output_length, 0u);
+        uint32_t expected_output_len = ctx->block_length;
+
+        if (expected_output_len > output_len) {
+            ctx->buffer.resize(expected_output_len);
+            ctx->buffer_data = ctx->buffer.data();
+        } else {
+            ctx->buffer_data = (char*)output;
+        }
+
+        int decoded = LZ4_decompress_safe(reinterpret_cast<const char*>(input), ctx->buffer_data, compressed_len,
+                                          expected_output_len);
+        if (decoded < 0) {
+            return Status::InternalError("LZ4 RawDecompress failed because of data corruption");
+        }
+        if (static_cast<uint32_t>(decoded) != expected_output_len) {
+            return Status::InternalError("LZ4 RawDecompress returned unexpected output size");
+        }
+        ctx->buffer_size = decoded;
+        ctx->buffer_used = 0;
+    }
+
+    output_len = std::min(output_len, ctx->buffer_size - ctx->buffer_used);
+    if (ctx->buffer_data != (char*)output) {
+        std::memcpy(output, ctx->buffer_data + ctx->buffer_used, output_len);
+    }
+    ctx->buffer_used += output_len;
+    ctx->output_length += output_len;
+    *output_bytes_write += output_len;
+    if (ctx->output_length == ctx->block_length) {
+        ctx->block_length = 0;
+        ctx->output_length = 0;
+        if (input_len == 0) {
+            *stream_end = true;
+        }
+    }
+    return st;
+}
+
 class LzoStreamCompression : public StreamCompression {
 public:
     LzoStreamCompression() : StreamCompression(CompressionTypePB::LZO) {}
@@ -934,6 +1090,327 @@ std::string LzoStreamCompression::debug_info() {
     return ss.str();
 }
 
+class GzipStreamCompressor : public StreamCompressor {
+public:
+    GzipStreamCompressor(CompressionTypePB type, int window_bits) : StreamCompressor(type), _window_bits(window_bits) {}
+
+    ~GzipStreamCompressor() override {
+        if (_initialized && !_finished) {
+            (void)deflateEnd(&_z_strm);
+        }
+    }
+
+    Status compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                    size_t output_len, size_t* output_bytes_written) override;
+
+    Status finish(uint8_t* output, size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+
+    size_t max_compressed_len(size_t len) const override {
+        DCHECK(_initialized) << "max_compressed_len called before init()";
+        return deflateBound(const_cast<z_stream*>(&_z_strm), len);
+    }
+
+protected:
+    Status init() override;
+
+private:
+    bool _initialized = false;
+    bool _finished = false;
+    z_stream _z_strm = {nullptr};
+    int _window_bits;
+
+    static constexpr int kMemLevel = 8;
+};
+
+Status GzipStreamCompressor::init() {
+    _z_strm.zalloc = Z_NULL;
+    _z_strm.zfree = Z_NULL;
+    _z_strm.opaque = Z_NULL;
+    int ret = deflateInit2(&_z_strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, _window_bits, kMemLevel, Z_DEFAULT_STRATEGY);
+    if (ret != Z_OK) {
+        return Status::InternalError(strings::Substitute("Fail to init zlib stream compress, res=$0", ret));
+    }
+    _initialized = true;
+    return Status::OK();
+}
+
+Status GzipStreamCompressor::compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                      size_t output_len, size_t* output_bytes_written) {
+    constexpr size_t kMaxAvail = std::numeric_limits<uInt>::max();
+    size_t in_len = std::min(input_len, kMaxAvail);
+    size_t out_len = std::min(output_len, kMaxAvail);
+    *input_bytes_read = 0;
+    *output_bytes_written = 0;
+    _z_strm.next_in = const_cast<uint8_t*>(input);
+    _z_strm.avail_in = static_cast<uInt>(in_len);
+    _z_strm.next_out = output;
+    _z_strm.avail_out = static_cast<uInt>(out_len);
+    int ret = deflate(&_z_strm, Z_NO_FLUSH);
+    *input_bytes_read = in_len - _z_strm.avail_in;
+    *output_bytes_written = out_len - _z_strm.avail_out;
+    if (ret != Z_OK && ret != Z_BUF_ERROR) {
+        return Status::InternalError(strings::Substitute("Fail to do zlib stream compress, res=$0", ret));
+    }
+    return Status::OK();
+}
+
+Status GzipStreamCompressor::finish(uint8_t* output, size_t output_len, size_t* output_bytes_written,
+                                    bool* stream_end) {
+    constexpr size_t kMaxAvail = std::numeric_limits<uInt>::max();
+    size_t out_len = std::min(output_len, kMaxAvail);
+    *output_bytes_written = 0;
+    *stream_end = false;
+    if (_finished) {
+        *stream_end = true;
+        return Status::OK();
+    }
+    _z_strm.next_in = nullptr;
+    _z_strm.avail_in = 0;
+    _z_strm.next_out = output;
+    _z_strm.avail_out = static_cast<uInt>(out_len);
+    int ret = deflate(&_z_strm, Z_FINISH);
+    *output_bytes_written = out_len - _z_strm.avail_out;
+    if (ret == Z_STREAM_END) {
+        *stream_end = true;
+        _finished = true;
+        (void)deflateEnd(&_z_strm);
+        return Status::OK();
+    }
+    if (ret != Z_OK && ret != Z_BUF_ERROR) {
+        return Status::InternalError(strings::Substitute("Fail to finish zlib stream compress, res=$0", ret));
+    }
+    return Status::OK();
+}
+
+class Bzip2StreamCompressor : public StreamCompressor {
+public:
+    Bzip2StreamCompressor() : StreamCompressor(CompressionTypePB::BZIP2) {}
+    ~Bzip2StreamCompressor() override {
+        if (_initialized && !_finished) {
+            (void)BZ2_bzCompressEnd(&_bz_strm);
+        }
+    }
+
+    Status compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                    size_t output_len, size_t* output_bytes_written) override;
+
+    Status finish(uint8_t* output, size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+
+    // Bzip2 worst-case expansion: 1% + 600 bytes (from bzip2 documentation).
+    size_t max_compressed_len(size_t len) const override { return len + (len / 100 + 600); }
+
+protected:
+    Status init() override;
+
+private:
+    bool _initialized = false;
+    bool _finished = false;
+    bz_stream _bz_strm = {nullptr};
+};
+
+Status Bzip2StreamCompressor::init() {
+    _bz_strm.bzalloc = nullptr;
+    _bz_strm.bzfree = nullptr;
+    _bz_strm.opaque = nullptr;
+    int ret = BZ2_bzCompressInit(&_bz_strm, 9, 0, 30);
+    if (ret != BZ_OK) {
+        return Status::InternalError(strings::Substitute("Fail to init bzip2 stream compress, res=$0", ret));
+    }
+    _initialized = true;
+    return Status::OK();
+}
+
+Status Bzip2StreamCompressor::compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                                       uint8_t* output, size_t output_len, size_t* output_bytes_written) {
+    constexpr size_t kMaxAvail = std::numeric_limits<unsigned int>::max();
+    size_t in_len = std::min(input_len, kMaxAvail);
+    size_t out_len = std::min(output_len, kMaxAvail);
+    *input_bytes_read = 0;
+    *output_bytes_written = 0;
+    _bz_strm.next_in = const_cast<char*>(reinterpret_cast<const char*>(input));
+    _bz_strm.avail_in = static_cast<unsigned int>(in_len);
+    _bz_strm.next_out = reinterpret_cast<char*>(output);
+    _bz_strm.avail_out = static_cast<unsigned int>(out_len);
+    int ret = BZ2_bzCompress(&_bz_strm, BZ_RUN);
+    *input_bytes_read = in_len - _bz_strm.avail_in;
+    *output_bytes_written = out_len - _bz_strm.avail_out;
+    if (ret != BZ_RUN_OK) {
+        return Status::InternalError(strings::Substitute("Fail to do bzip2 stream compress, res=$0", ret));
+    }
+    return Status::OK();
+}
+
+Status Bzip2StreamCompressor::finish(uint8_t* output, size_t output_len, size_t* output_bytes_written,
+                                     bool* stream_end) {
+    constexpr size_t kMaxAvail = std::numeric_limits<unsigned int>::max();
+    size_t out_len = std::min(output_len, kMaxAvail);
+    *output_bytes_written = 0;
+    *stream_end = false;
+    if (_finished) {
+        *stream_end = true;
+        return Status::OK();
+    }
+    _bz_strm.next_in = nullptr;
+    _bz_strm.avail_in = 0;
+    _bz_strm.next_out = reinterpret_cast<char*>(output);
+    _bz_strm.avail_out = static_cast<unsigned int>(out_len);
+    int ret = BZ2_bzCompress(&_bz_strm, BZ_FINISH);
+    *output_bytes_written = out_len - _bz_strm.avail_out;
+    if (ret == BZ_STREAM_END) {
+        *stream_end = true;
+        _finished = true;
+        (void)BZ2_bzCompressEnd(&_bz_strm);
+        return Status::OK();
+    }
+    if (ret != BZ_FINISH_OK) {
+        return Status::InternalError(strings::Substitute("Fail to finish bzip2 stream compress, res=$0", ret));
+    }
+    return Status::OK();
+}
+
+class ZstdStreamCompressor : public StreamCompressor {
+public:
+    ZstdStreamCompressor() : StreamCompressor(CompressionTypePB::ZSTD) {}
+    ~ZstdStreamCompressor() override = default;
+
+    Status compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                    size_t output_len, size_t* output_bytes_written) override;
+
+    Status finish(uint8_t* output, size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+
+    size_t max_compressed_len(size_t len) const override { return ZSTD_compressBound(len); }
+
+protected:
+    Status init() override;
+
+private:
+    std::optional<compression::ZSTD_CCtx_Pool::Ref> _ref;
+    ZSTD_CCtx* _ctx = nullptr;
+};
+
+Status ZstdStreamCompressor::init() {
+    auto maybe_ref = compression::getZSTD_CCtx();
+    if (!maybe_ref.ok()) {
+        return maybe_ref.status();
+    }
+    _ref.emplace(std::move(maybe_ref.value()));
+    _ctx = _ref->get()->ctx;
+    size_t ret = ZSTD_initCStream(_ctx, ZSTD_CLEVEL_DEFAULT);
+    if (ZSTD_isError(ret)) {
+        return Status::InternalError(
+                strings::Substitute("ZSTD init stream compress failed: $0", ZSTD_getErrorName(ret)));
+    }
+    return Status::OK();
+}
+
+Status ZstdStreamCompressor::compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                      size_t output_len, size_t* output_bytes_written) {
+    ZSTD_inBuffer in_buf = {input, input_len, 0};
+    ZSTD_outBuffer out_buf = {output, output_len, 0};
+    size_t ret = ZSTD_compressStream(_ctx, &out_buf, &in_buf);
+    if (ZSTD_isError(ret)) {
+        return Status::InternalError(strings::Substitute("ZSTD compress failed: $0", ZSTD_getErrorName(ret)));
+    }
+    *input_bytes_read = in_buf.pos;
+    *output_bytes_written = out_buf.pos;
+    return Status::OK();
+}
+
+Status ZstdStreamCompressor::finish(uint8_t* output, size_t output_len, size_t* output_bytes_written,
+                                    bool* stream_end) {
+    ZSTD_outBuffer out_buf = {output, output_len, 0};
+    size_t ret = ZSTD_endStream(_ctx, &out_buf);
+    if (ZSTD_isError(ret)) {
+        return Status::InternalError(strings::Substitute("ZSTD finish failed: $0", ZSTD_getErrorName(ret)));
+    }
+    *output_bytes_written = out_buf.pos;
+    *stream_end = (ret == 0);
+    return Status::OK();
+}
+
+class Lz4FrameStreamCompressor : public StreamCompressor {
+public:
+    Lz4FrameStreamCompressor() : StreamCompressor(CompressionTypePB::LZ4_FRAME) {}
+    ~Lz4FrameStreamCompressor() override {
+        if (_ctx != nullptr) {
+            LZ4F_freeCompressionContext(_ctx);
+        }
+    }
+
+    Status compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                    size_t output_len, size_t* output_bytes_written) override;
+
+    Status finish(uint8_t* output, size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+
+    size_t max_compressed_len(size_t len) const override {
+        return LZ4F_compressBound(len, &_prefs) + LZ4F_HEADER_SIZE_MAX;
+    }
+
+protected:
+    Status init() override;
+
+private:
+    LZ4F_cctx* _ctx = nullptr;
+    LZ4F_preferences_t _prefs = {};
+    bool _started = false;
+};
+
+Status Lz4FrameStreamCompressor::init() {
+    size_t ret = LZ4F_createCompressionContext(&_ctx, LZ4F_VERSION);
+    if (LZ4F_isError(ret)) {
+        return Status::InternalError(
+                strings::Substitute("LZ4F create compression context failed: $0", LZ4F_getErrorName(ret)));
+    }
+    return Status::OK();
+}
+
+Status Lz4FrameStreamCompressor::compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                                          uint8_t* output, size_t output_len, size_t* output_bytes_written) {
+    *input_bytes_read = 0;
+    *output_bytes_written = 0;
+    size_t offset = 0;
+    if (!_started) {
+        size_t header_size = LZ4F_compressBegin(_ctx, output, output_len, &_prefs);
+        if (LZ4F_isError(header_size)) {
+            return Status::InternalError(
+                    strings::Substitute("LZ4F compress begin failed: $0", LZ4F_getErrorName(header_size)));
+        }
+        offset += header_size;
+        _started = true;
+    }
+
+    size_t ret = LZ4F_compressUpdate(_ctx, output + offset, output_len - offset, input, input_len, nullptr);
+    if (LZ4F_isError(ret)) {
+        return Status::InternalError(strings::Substitute("LZ4F compress update failed: $0", LZ4F_getErrorName(ret)));
+    }
+    *output_bytes_written = offset + ret;
+    *input_bytes_read = input_len;
+    return Status::OK();
+}
+
+Status Lz4FrameStreamCompressor::finish(uint8_t* output, size_t output_len, size_t* output_bytes_written,
+                                        bool* stream_end) {
+    *output_bytes_written = 0;
+    *stream_end = false;
+    size_t offset = 0;
+    if (!_started) {
+        size_t header_size = LZ4F_compressBegin(_ctx, output, output_len, &_prefs);
+        if (LZ4F_isError(header_size)) {
+            return Status::InternalError(
+                    strings::Substitute("LZ4F compress begin failed: $0", LZ4F_getErrorName(header_size)));
+        }
+        offset += header_size;
+        _started = true;
+    }
+    size_t ret = LZ4F_compressEnd(_ctx, output + offset, output_len - offset, nullptr);
+    if (LZ4F_isError(ret)) {
+        return Status::InternalError(strings::Substitute("LZ4F compress end failed: $0", LZ4F_getErrorName(ret)));
+    }
+    *output_bytes_written = offset + ret;
+    *stream_end = true;
+    return Status::OK();
+}
+
 Status StreamCompression::create_decompressor(CompressionTypePB type,
                                               std::unique_ptr<StreamCompression>* decompressor) {
     switch (type) {
@@ -949,11 +1426,17 @@ Status StreamCompression::create_decompressor(CompressionTypePB type,
     case CompressionTypePB::DEFLATE:
         *decompressor = std::make_unique<GzipStreamCompression>(true);
         break;
+    case CompressionTypePB::ZLIB:
+        *decompressor = std::make_unique<GzipStreamCompression>(false);
+        break;
     case CompressionTypePB::BZIP2:
         *decompressor = std::make_unique<Bzip2StreamCompression>();
         break;
     case CompressionTypePB::LZ4_FRAME:
         *decompressor = std::make_unique<Lz4FrameStreamCompression>();
+        break;
+    case CompressionTypePB::LZ4:
+        *decompressor = std::make_unique<Lz4StreamCompression>();
         break;
     case CompressionTypePB::ZSTD:
         *decompressor = std::make_unique<ZstandardStreamCompression>();
@@ -970,6 +1453,38 @@ Status StreamCompression::create_decompressor(CompressionTypePB type,
         st = (*decompressor)->init();
     }
 
+    return st;
+}
+
+Status StreamCompressor::create_compressor(CompressionTypePB type, std::unique_ptr<StreamCompressor>* compressor) {
+    switch (type) {
+    case CompressionTypePB::GZIP:
+        *compressor = std::make_unique<GzipStreamCompressor>(CompressionTypePB::GZIP, MAX_WBITS + 16);
+        break;
+    case CompressionTypePB::DEFLATE:
+        // Use zlib-wrapped deflate to match the existing DEFLATE decompressor behavior.
+        *compressor = std::make_unique<GzipStreamCompressor>(CompressionTypePB::DEFLATE, MAX_WBITS);
+        break;
+    case CompressionTypePB::ZLIB:
+        *compressor = std::make_unique<GzipStreamCompressor>(CompressionTypePB::ZLIB, MAX_WBITS);
+        break;
+    case CompressionTypePB::BZIP2:
+        *compressor = std::make_unique<Bzip2StreamCompressor>();
+        break;
+    case CompressionTypePB::LZ4_FRAME:
+        *compressor = std::make_unique<Lz4FrameStreamCompressor>();
+        break;
+    case CompressionTypePB::ZSTD:
+        *compressor = std::make_unique<ZstdStreamCompressor>();
+        break;
+    default:
+        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
+    }
+
+    Status st = Status::OK();
+    if (*compressor != nullptr) {
+        st = (*compressor)->init();
+    }
     return st;
 }
 
