@@ -44,6 +44,7 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -692,23 +693,25 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             throw new SemanticException("Add column to materialized view only supports single base table");
         }
         Table baseTable = baseTables.get(0);
-        
-        // Validate aggregate expression - it should contain aggregate functions
-        ParseNode astParseNode = mv.initDefineQueryParseNode();
-        // chck mv's parse node is a simple QueryStatement
-        if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
-            throw new SemanticException("Materialized view definition is invalid");
-        }
-        QueryStatement queryStatement = (QueryStatement) astParseNode;
-        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
 
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
 
-
         try {
+            // Validate aggregate expression - it should contain aggregate functions
+            ParseNode astParseNode = mv.initDefineQueryParseNode();
+            // chck mv's parse node is a simple QueryStatement
+            if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
+                throw new SemanticException("Materialized view definition is invalid");
+            }
+            QueryStatement queryStatement = (QueryStatement) astParseNode;
+            if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+                throw new SemanticException("Materialized view definition is invalid, only support select statement");
+            }
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+
             // Determine the column type from the aggregate expression
             Expr addColumnExpr = clause.getAggregateExpression();
             boolean isAggregateFunction = false;
@@ -786,8 +789,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
 
             // after schema change, refresh to refresh partitions to avoid data inconsistent.
-            MaterializedView.AsyncRefreshContext mvAsyncRefreshContext =
-                    mv.getRefreshScheme().getAsyncRefreshContext();
+            MaterializedView.AsyncRefreshContext mvAsyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
             if (mvFastSchemaEvolutionMode.isForce()) {
                 mvAsyncRefreshContext.clearVisibleVersionMap();
                 LOG.info("After adding column to materialized view {}, clear all partition infos to trigger full refresh",
@@ -806,6 +808,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.info("Ignored check of MV visible version affected by schema change, " +
                         "because MV fast schema change mode is loosed:" + mv.getName());
             }
+
+            // write edit log to persist schema change
+            AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(null, mv,
+                            AlterMaterializedViewBaseTableInfosLog.AlterType.ADD_COLUMN);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(log);
 
             LOG.info("Logged schema change for materialized view '{}': added column '{}' with expression '{}'",
                     mv.getName(), columnName, addColumnExpr.toString());
@@ -866,18 +873,21 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             throw new SemanticException("Column '{}' does not exist in materialized view", columnName);
         }
 
-        ParseNode astParseNode = mv.initDefineQueryParseNode();
-        if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
-            throw new SemanticException("Materialized view definition is invalid");
-        }
-        QueryStatement queryStatement = (QueryStatement) astParseNode;
-        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
-
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
+            ParseNode astParseNode = mv.initDefineQueryParseNode();
+            if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
+                throw new SemanticException("Materialized view definition is invalid");
+            }
+            QueryStatement queryStatement = (QueryStatement) astParseNode;
+            if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+                throw new SemanticException("Materialized view definition is invalid, only support select statement");
+            }
+            SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+
             List<Column> visibleSchema = mv.getFullVisibleSchema();
             int columnIndex = -1;
             for (int i = 0; i < visibleSchema.size(); i++) {
@@ -935,6 +945,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             mv.setOriginalViewDefineSql(newDefinedSql);
             mv.resetDefinedQueryParseNode();
             CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+
+            // write edit log to persist schema change
+            AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(null, mv,
+                            AlterMaterializedViewBaseTableInfosLog.AlterType.DROP_COLUMN);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(log);
 
             // inactive related mvs
             inactiveRelatedMaterializedViewsRecursive(mv, Sets.newHashSet(columnName));
