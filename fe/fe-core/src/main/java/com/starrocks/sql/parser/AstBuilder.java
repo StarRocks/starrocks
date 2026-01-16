@@ -4947,7 +4947,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitAddMVColumnClause(com.starrocks.sql.parser.StarRocksParser.AddMVColumnClauseContext context) {
-        String columnName = context.identifier().getText();
+        String columnName = getIdentifierName(context.identifier());
         Expr aggregateExpression = (Expr) visit(context.expression());
         String comment = null;
         if (context.string() != null) {
@@ -4958,7 +4958,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitDropMVColumnClause(com.starrocks.sql.parser.StarRocksParser.DropMVColumnClauseContext context) {
-        String columnName = context.identifier().getText();
+        String columnName = getIdentifierName(context.identifier());
         return new DropMVColumnClause(columnName, createPos(context));
     }
 
