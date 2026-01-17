@@ -82,13 +82,14 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         """
         super(TestSQLCases, self).__init__(*args, **kwargs)
         self.case_info: choose_cases.ChooseCase.CaseTR
+        self.variable_dict = {}
         self._check_db_unique()
 
     def setUp(self, *args, **kwargs):
         """set up"""
         super().setUp()
         # Note: Actual connection will be done in test_sql_basic after checking @arrow_flight_sql tag
-        
+
     def _set_up(self):
         # Check if case has @arrow_flight_sql tag and setup connection accordingly
         if "arrow_flight_sql" in self.case_info.tags or arrow_mode:
@@ -180,7 +181,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.db = list()
         self.resource = list()
 
-        sql_list = self._replace_uuid_variables(sql_list)
+        sql_list, variable_dict = self._replace_uuid_variables(sql_list, self.variable_dict)
 
         for sql in sql_list:
 
@@ -229,7 +230,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         if len(self.db) == 0:
             self._create_and_use_db()
 
-        return sql_list
+        return sql_list, variable_dict
 
     def _clear_db_and_resource_if_exists(self):
         for each_db in self.db:
@@ -251,7 +252,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
     def _check_db_unique(self):
         all_db_dict = dict()
         for case in case_list:
-            sql_list = self._replace_uuid_variables(case.sql)
+            temp_variable_dict = {}
+            sql_list, _ = self._replace_uuid_variables(case.sql, temp_variable_dict)
 
             for sql in sql_list:
                 if isinstance(sql, str):
@@ -288,9 +290,8 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         )
 
     @staticmethod
-    def _replace_uuid_variables(sql_list: List) -> List:
+    def _replace_uuid_variables(sql_list: List, variable_dict) -> List: # Modified to accept and return variable_dict
         ret = list()
-        variable_dict = {}
 
         for sql in sql_list:
 
@@ -365,7 +366,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                 _sql["cmd"] = tmp_cmd
                 ret.append(_sql)
 
-        return ret
+        return ret, variable_dict # Return the variable_dict
 
     @staticmethod
     def _get_db_name(sql: str) -> str:
@@ -409,7 +410,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
 
         self._set_up()
 
-        sql_list = self._init_data(case_info.sql)
+        sql_list, variable_dict = self._init_data(case_info.sql) # Get variable_dict back
 
         self_print(f"\t → case db: {self.db}")
         self_print(f"\t → case resource: {self.resource}")
@@ -446,10 +447,18 @@ Start to run: %s
                     # check mode only work in validating mode
                     # pretreatment expect res
                     expect_res = case_info.result[sql_id]
+                    # replace expect_res variables
+                    if isinstance(expect_res, list):
+                        expect_res, _ = self._replace_uuid_variables(expect_res, variable_dict)
+                        expect_res = expect_res[0] if expect_res else []
+                    elif isinstance(expect_res, str):
+                        expect_res_list = [expect_res]
+                        expect_res_list, _ = self._replace_uuid_variables(expect_res_list, variable_dict)
+                        expect_res = expect_res_list[0]
                     expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
 
                     log.info(
-                        f"""[{sql_id}.result]: 
+                        f"""[{sql_id}.result]:
     - [exp]: {expect_res_for_log}
     - [act]: {actual_res}"""
                     )
