@@ -1625,6 +1625,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of replicas to create serially. If actual replica count exceeds this value, replicas will be created concurrently. Try to reduce this value if table creation is taking a long time to complete.
 - Introduced in: -
 
+##### tablet_meta_update_max_pending_replicas_per_be
+
+- Default: 200
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of pending replicas per Backend (BE) when altering tablet metadata in parallel within a shared-data cluster.
+- Introduced in: -
+
 ##### default_mv_partition_refresh_number
 
 - Default: 1

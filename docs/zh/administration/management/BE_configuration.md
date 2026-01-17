@@ -2361,6 +2361,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使主键表的 Compaction Score 与其他类型表的相近，便于用户理解。
 - 引入版本：-
 
+##### update_tablet_meta_info_worker_count
+
+- 默认值：10
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群alter tablet元数据的线程数。
+- 引入版本：-
+
 ##### upload_worker_count
 
 - 默认值：0
