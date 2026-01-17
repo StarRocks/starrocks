@@ -18,20 +18,29 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.PScalarType;
+import com.starrocks.proto.PTypeDesc;
+import com.starrocks.proto.PTypeNode;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.TabletRangePB;
+import com.starrocks.proto.TuplePB;
+import com.starrocks.proto.VariantPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
+import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTypeNodeType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -41,6 +50,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,11 +104,17 @@ public class SplitTabletJobTest {
 
                 response.tabletRanges = new HashMap<>();
                 for (ReshardingTabletInfoPB reshardingTabletInfoPB : request.reshardingTabletInfos) {
-                    if (reshardingTabletInfoPB.splittingTabletInfo == null) {
-                        continue;
+                    if (reshardingTabletInfoPB.splittingTabletInfo != null) {
+                        // For splitting tablets, get the old tablet's range and split it into contiguous sub-ranges
+                        Long oldTabletId = reshardingTabletInfoPB.splittingTabletInfo.oldTabletId;
+                        List<Long> newTabletIds = reshardingTabletInfoPB.splittingTabletInfo.newTabletIds;
+                        response.tabletRanges.putAll(createSplitTabletRanges(oldTabletId, newTabletIds));
                     }
-                    for (Long tabletId : reshardingTabletInfoPB.splittingTabletInfo.newTabletIds) {
-                        response.tabletRanges.put(tabletId, new TabletRangePB());
+                    if (reshardingTabletInfoPB.identicalTabletInfo != null) {
+                        // For identical tablets, the new tablet has the same range as the old tablet
+                        Long oldTabletId = reshardingTabletInfoPB.identicalTabletInfo.oldTabletId;
+                        Long newTabletId = reshardingTabletInfoPB.identicalTabletInfo.newTabletId;
+                        response.tabletRanges.put(newTabletId, createTabletRangePBFromOldTablet(oldTabletId));
                     }
                 }
 
@@ -118,11 +134,17 @@ public class SplitTabletJobTest {
                     }
 
                     for (ReshardingTabletInfoPB reshardingTabletInfoPB : publishRequest.reshardingTabletInfos) {
-                        if (reshardingTabletInfoPB.splittingTabletInfo == null) {
-                            continue;
+                        if (reshardingTabletInfoPB.splittingTabletInfo != null) {
+                            // For splitting tablets, get the old tablet's range and split it into contiguous sub-ranges
+                            Long oldTabletId = reshardingTabletInfoPB.splittingTabletInfo.oldTabletId;
+                            List<Long> newTabletIds = reshardingTabletInfoPB.splittingTabletInfo.newTabletIds;
+                            response.tabletRanges.putAll(createSplitTabletRanges(oldTabletId, newTabletIds));
                         }
-                        for (Long tabletId : reshardingTabletInfoPB.splittingTabletInfo.newTabletIds) {
-                            response.tabletRanges.put(tabletId, new TabletRangePB());
+                        if (reshardingTabletInfoPB.identicalTabletInfo != null) {
+                            // For identical tablets, the new tablet has the same range as the old tablet
+                            Long oldTabletId = reshardingTabletInfoPB.identicalTabletInfo.oldTabletId;
+                            Long newTabletId = reshardingTabletInfoPB.identicalTabletInfo.newTabletId;
+                            response.tabletRanges.put(newTabletId, createTabletRangePBFromOldTablet(oldTabletId));
                         }
                     }
                 }
@@ -175,8 +197,11 @@ public class SplitTabletJobTest {
                     if (reshardingTabletInfoPB.splittingTabletInfo == null) {
                         continue;
                     }
-                    response.tabletRanges.put(reshardingTabletInfoPB.splittingTabletInfo.newTabletIds.get(0),
-                            new TabletRangePB());
+                    // Only return range for the first tablet (fallback to identical tablet).
+                    // The range should be the same as the old tablet's range.
+                    Long oldTabletId = reshardingTabletInfoPB.splittingTabletInfo.oldTabletId;
+                    Long firstTabletId = reshardingTabletInfoPB.splittingTabletInfo.newTabletIds.get(0);
+                    response.tabletRanges.put(firstTabletId, createTabletRangePBFromOldTablet(oldTabletId));
                 }
 
                 return CompletableFuture.completedFuture(response);
@@ -198,8 +223,11 @@ public class SplitTabletJobTest {
                         if (reshardingTabletInfoPB.splittingTabletInfo == null) {
                             continue;
                         }
-                        response.tabletRanges.put(reshardingTabletInfoPB.splittingTabletInfo.newTabletIds.get(0),
-                                new TabletRangePB());
+                        // Only return range for the first tablet (fallback to identical tablet).
+                        // The range should be the same as the old tablet's range.
+                        Long oldTabletId = reshardingTabletInfoPB.splittingTabletInfo.oldTabletId;
+                        Long firstTabletId = reshardingTabletInfoPB.splittingTabletInfo.newTabletIds.get(0);
+                        response.tabletRanges.put(firstTabletId, createTabletRangePBFromOldTablet(oldTabletId));
                     }
                 }
 
@@ -256,6 +284,26 @@ public class SplitTabletJobTest {
         tabletReshardJob.setJobState(TabletReshardJob.JobState.CLEANING);
         tabletReshardJob.replay();
 
+        // After CLEANING replay, the new tablets have been added to the partition
+        // but without proper ranges (they have default Range.all() with null bounds).
+        // We need to set proper contiguous ranges for the new tablets to satisfy
+        // the strict validation in shareAdjacentTabletRangeBounds().
+        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
+        List<Tablet> newTablets = newMaterializedIndex.getTablets();
+        List<Long> newTabletIds = new ArrayList<>();
+        for (Tablet tablet : newTablets) {
+            newTabletIds.add(tablet.getId());
+        }
+        Map<Long, TabletRangePB> tabletRanges = createContiguousTabletRanges(newTabletIds);
+        for (Tablet tablet : newTablets) {
+            TabletRangePB rangePB = tabletRanges.get(tablet.getId());
+            if (rangePB != null) {
+                tablet.setRange(TabletRange.fromProto(rangePB));
+            }
+        }
+        // Now call shareAdjacentTabletRangeBounds to optimize memory
+        newMaterializedIndex.shareAdjacentTabletRangeBounds();
+
         tabletReshardJob.setJobState(TabletReshardJob.JobState.FINISHED);
         tabletReshardJob.replay();
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
@@ -263,7 +311,6 @@ public class SplitTabletJobTest {
         long newVersion = physicalPartition.getVisibleVersion();
         Assertions.assertTrue(newVersion == oldVersion + 1);
 
-        MaterializedIndex newMaterializedIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
@@ -296,6 +343,175 @@ public class SplitTabletJobTest {
         tabletReshardJob.setJobState(TabletReshardJob.JobState.ABORTED);
         tabletReshardJob.replay();
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * Creates a TuplePB with a single integer value.
+     */
+    private static TuplePB createTuplePB(int value) {
+        TuplePB tuple = new TuplePB();
+        tuple.values = new ArrayList<>();
+        VariantPB variant = new VariantPB();
+        PTypeDesc typeDesc = new PTypeDesc();
+        typeDesc.types = new ArrayList<>();
+        PTypeNode typeNode = new PTypeNode();
+        // Set type to SCALAR (0)
+        typeNode.type = TTypeNodeType.SCALAR.getValue();
+        // Set scalar type to INT
+        PScalarType scalarType = new PScalarType();
+        scalarType.type = TPrimitiveType.INT.getValue();
+        typeNode.scalarType = scalarType;
+        typeDesc.types.add(typeNode);
+        variant.type = typeDesc;
+        variant.value = String.valueOf(value);
+        tuple.values.add(variant);
+        return tuple;
+    }
+
+    /**
+     * Creates a TabletRangePB with proper bounds for contiguous ranges.
+     * The ranges will be: [lowerValue, upperValue)
+     */
+    private static TabletRangePB createTabletRangePB(int lowerValue, int upperValue) {
+        TabletRangePB rangePB = new TabletRangePB();
+        rangePB.lowerBound = createTuplePB(lowerValue);
+        rangePB.upperBound = createTuplePB(upperValue);
+        rangePB.lowerBoundIncluded = true;
+        rangePB.upperBoundIncluded = false;
+        return rangePB;
+    }
+
+    /**
+     * Creates a TabletRangePB from an existing tablet's range by looking up the tablet in the table.
+     * This is used when fallback to identical tablet - the new tablet should have the same range as the old tablet.
+     */
+    private TabletRangePB createTabletRangePBFromOldTablet(long oldTabletId) {
+        // Find the tablet with the given ID from the table
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    if (tablet.getId() == oldTabletId) {
+                        TabletRange tabletRange = tablet.getRange();
+                        if (tabletRange == null) {
+                            return createUnboundedTabletRangePB();
+                        }
+                        return createTabletRangePBFromRange(tabletRange);
+                    }
+                }
+            }
+        }
+        // Tablet not found, return unbounded range as fallback
+        return createUnboundedTabletRangePB();
+    }
+
+    /**
+     * Creates a TabletRangePB from a TabletRange.
+     */
+    private static TabletRangePB createTabletRangePBFromRange(TabletRange tabletRange) {
+        TabletRangePB rangePB = new TabletRangePB();
+        com.starrocks.common.Range<com.starrocks.catalog.Tuple> range = tabletRange.getRange();
+        if (range.getLowerBound() != null) {
+            rangePB.lowerBound = tupleToPB(range.getLowerBound());
+        }
+        if (range.getUpperBound() != null) {
+            rangePB.upperBound = tupleToPB(range.getUpperBound());
+        }
+        rangePB.lowerBoundIncluded = range.isLowerBoundIncluded();
+        rangePB.upperBoundIncluded = range.isUpperBoundIncluded();
+        return rangePB;
+    }
+
+    /**
+     * Converts a Tuple to TuplePB by using string representation of values.
+     * This creates a simple INT type TuplePB since we know our test values are integers.
+     */
+    private static TuplePB tupleToPB(com.starrocks.catalog.Tuple tuple) {
+        TuplePB tuplePB = new TuplePB();
+        tuplePB.values = new ArrayList<>();
+        for (com.starrocks.catalog.Variant variant : tuple.getValues()) {
+            VariantPB variantPB = new VariantPB();
+            // Create type description for INT
+            PTypeDesc typeDesc = new PTypeDesc();
+            typeDesc.types = new ArrayList<>();
+            PTypeNode typeNode = new PTypeNode();
+            typeNode.type = TTypeNodeType.SCALAR.getValue();
+            PScalarType scalarType = new PScalarType();
+            scalarType.type = TPrimitiveType.INT.getValue();
+            typeNode.scalarType = scalarType;
+            typeDesc.types.add(typeNode);
+            variantPB.type = typeDesc;
+            variantPB.value = variant.getStringValue();
+            tuplePB.values.add(variantPB);
+        }
+        return tuplePB;
+    }
+
+    /**
+     * Creates a TabletRangePB representing Range.all() (unbounded range).
+     * This is used when a tablet covers the entire range, e.g., when fallback to identical tablet.
+     */
+    private static TabletRangePB createUnboundedTabletRangePB() {
+        TabletRangePB rangePB = new TabletRangePB();
+        // null bounds represent an unbounded range (Range.all())
+        rangePB.lowerBound = null;
+        rangePB.upperBound = null;
+        rangePB.lowerBoundIncluded = false;
+        rangePB.upperBoundIncluded = false;
+        return rangePB;
+    }
+
+    /**
+     * Creates contiguous TabletRangePB objects for a list of tablet IDs.
+     * Returns a map from tabletId to TabletRangePB with proper contiguous ranges.
+     */
+    private static Map<Long, TabletRangePB> createContiguousTabletRanges(List<Long> tabletIds) {
+        Map<Long, TabletRangePB> result = new HashMap<>();
+        int baseValue = 0;
+        int step = 100;
+        for (int i = 0; i < tabletIds.size(); i++) {
+            int lowerValue = baseValue + i * step;
+            int upperValue = baseValue + (i + 1) * step;
+            result.put(tabletIds.get(i), createTabletRangePB(lowerValue, upperValue));
+        }
+        return result;
+    }
+
+    /**
+     * Creates split tablet ranges by dividing the old tablet's range into contiguous sub-ranges.
+     * This simulates what BE does when splitting a tablet.
+     */
+    private Map<Long, TabletRangePB> createSplitTabletRanges(long oldTabletId, List<Long> newTabletIds) {
+        Map<Long, TabletRangePB> result = new HashMap<>();
+        TabletRangePB oldRange = createTabletRangePBFromOldTablet(oldTabletId);
+
+        // If old tablet has unbounded range (Range.all()), create arbitrary contiguous ranges
+        if (oldRange.lowerBound == null && oldRange.upperBound == null) {
+            int step = 100;
+            for (int i = 0; i < newTabletIds.size(); i++) {
+                int lowerValue = i * step;
+                int upperValue = (i + 1) * step;
+                result.put(newTabletIds.get(i), createTabletRangePB(lowerValue, upperValue));
+            }
+        } else {
+            // For bounded ranges, split evenly (simplified for test)
+            // This is a simplified version - in reality, BE would split based on data distribution
+            int lowerValue = 0;
+            int upperValue = 0;
+            if (oldRange.lowerBound != null && oldRange.lowerBound.values != null && !oldRange.lowerBound.values.isEmpty()) {
+                lowerValue = Integer.parseInt(oldRange.lowerBound.values.get(0).value);
+            }
+            if (oldRange.upperBound != null && oldRange.upperBound.values != null && !oldRange.upperBound.values.isEmpty()) {
+                upperValue = Integer.parseInt(oldRange.upperBound.values.get(0).value);
+            }
+            int rangeSize = upperValue - lowerValue;
+            int step = rangeSize / newTabletIds.size();
+            for (int i = 0; i < newTabletIds.size(); i++) {
+                int subLower = lowerValue + i * step;
+                int subUpper = (i == newTabletIds.size() - 1) ? upperValue : lowerValue + (i + 1) * step;
+                result.put(newTabletIds.get(i), createTabletRangePB(subLower, subUpper));
+            }
+        }
+        return result;
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {
