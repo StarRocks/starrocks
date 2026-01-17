@@ -69,7 +69,6 @@ CREATE USER [IF NOT EXISTS] <user_identity>
   ```
 
   :::tip
-  - `PROPERTIES` works on user instead of user identity.
   - Global variables and read-only variables cannot be set for a specific user.
   - Variables take effect in the following order: SET_VAR > Session > User property > Global.
   - You can use [SHOW PROPERTY](./SHOW_PROPERTY.md) to view the properties of a specific user.
