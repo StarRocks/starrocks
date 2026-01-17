@@ -7,6 +7,8 @@ toc_max_heading_level: 4
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
+import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
+import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 説明
 
@@ -33,12 +35,7 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 #### システム
 
-```SQL
-GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
-    ON SYSTEM
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
-```
+<GrantCreateWarehouse />
 
 #### リソースグループ
 
@@ -195,6 +192,8 @@ GRANT
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
     TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
 ```
+
+<GrantWarehouse />
 
 ### ロールをロールまたはユーザーに付与
 

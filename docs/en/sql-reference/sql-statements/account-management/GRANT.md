@@ -7,6 +7,8 @@ toc_max_heading_level: 4
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
+import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
+import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 Grants roles or privileges on specific objects to a user, a role, or an external group.
 
@@ -31,12 +33,7 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 #### System
 
-```SQL
-GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
-    ON SYSTEM
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
-```
+<GrantCreateWarehouse />
 
 #### Resource group
 
@@ -193,6 +190,8 @@ GRANT
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
     TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
 ```
+
+<GrantWarehouse />
 
 ### Grant roles to roles, users, or external groups
 
