@@ -35,6 +35,9 @@ public class CTEUtils {
             // produce
             LogicalCTEAnchorOperator anchor = (LogicalCTEAnchorOperator) root.getOp();
             context.getCteContext().addCTEProduce(anchor.getCteId());
+            if (anchor.isRecursive()) {
+                context.getCteContext().addRecursiveCTE(anchor.getCteId());
+            }
 
             Preconditions.checkState(root.getInputs().get(0).getOp() instanceof LogicalCTEProduceOperator);
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getInputs().get(0).getOp();

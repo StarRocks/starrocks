@@ -116,7 +116,7 @@ import java.util.stream.Stream;
  */
 public class PlanFragment extends TreeNode<PlanFragment> {
     // id for this plan fragment
-    protected final PlanFragmentId fragmentId;
+    protected PlanFragmentId fragmentId;
 
     // root of plan tree executed by this fragment
     protected PlanNode planRoot;
@@ -133,7 +133,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // specification of the partition of the input of this fragment;
     // an UNPARTITIONED fragment is executed on only a single node
     // TODO: improve this comment, "input" is a bit misleading
-    protected final DataPartition dataPartition;
+    protected DataPartition dataPartition;
 
     // specification of how the output of this fragment is partitioned (i.e., how
     // it's sent to its destination);
@@ -222,7 +222,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      * Does not traverse the children of ExchangeNodes because those must belong to a
      * different fragment.
      */
-    private void setFragmentInPlanTree(PlanNode node) {
+    protected void setFragmentInPlanTree(PlanNode node) {
         if (node == null) {
             return;
         }
@@ -233,10 +233,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (PlanNode child : node.getChildren()) {
             setFragmentInPlanTree(child);
         }
-    }
-
-    public double getFragmentCost() {
-        return fragmentCost;
     }
 
     public void setFragmentCost(double fragmentCost) {
@@ -271,7 +267,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      * Assign ParallelExecNum by PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM in SessionVariable for synchronous request
      * Assign ParallelExecNum by default value for Asynchronous request
      */
-    private void setParallelExecNumIfExists() {
+    protected void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
             ConnectContext connectContext = ConnectContext.get();
             SessionVariable sv = connectContext.getSessionVariable();

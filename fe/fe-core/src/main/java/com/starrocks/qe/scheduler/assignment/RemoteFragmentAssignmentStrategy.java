@@ -168,6 +168,12 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
                         .forEach(workerIdSet::add);
             }
             maxParallelism = workerIdSet.size() * fragment.getParallelExecNum();
+        } else if (execFragment.childrenSize() == 0) {
+            // there is no child fragment but is remote fragment
+            // only recursive cte leaf fragment is this case now
+            // we assign all available workers
+            workerIdSet = Set.copyOf(workerProvider.getAllAvailableNodes());
+            maxParallelism = workerIdSet.size() * fragment.getParallelExecNum();
         } else {
             // there is no leftmost scan; we assign the same hosts as those of our
             // input fragment which has a higher instance_number

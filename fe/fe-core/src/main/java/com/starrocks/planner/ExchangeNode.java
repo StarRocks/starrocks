@@ -57,8 +57,10 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TSortInfo;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Receiver side of a 1:n data stream. Logically, an ExchangeNode consumes the data
@@ -109,7 +111,7 @@ public class ExchangeNode extends PlanNode {
             cardinality = inputNode.cardinality;
         }
         // Only apply the limit at the receiver if there are multiple senders.
-        if (inputNode.getFragment().isPartitioned()) {
+        if (inputNode.getFragment() != null && inputNode.getFragment().isPartitioned()) {
             if (inputNode instanceof SortNode) {
                 SortNode sortNode = (SortNode) inputNode;
                 if (Objects.equals(TopNType.ROW_NUMBER, sortNode.getTopNType()) &&
@@ -128,6 +130,23 @@ public class ExchangeNode extends PlanNode {
     public ExchangeNode(PlanNodeId id, PlanNode inputNode, DistributionSpec.DistributionType type) {
         this(id, inputNode, DataPartition.UNPARTITIONED);
         distributionType = type;
+    }
+
+    public ExchangeNode(PlanNodeId id, DistributionSpec.DistributionType type) {
+        super(id, "EXCHANGE");
+        offset = 0;
+        this.conjuncts = Lists.newArrayList();
+        this.dataPartition = DataPartition.RANDOM;
+        this.cardinality = -1;
+        this.distributionType = type;
+    }
+
+    public void setTupleIds(ArrayList<TupleId> tupleIds) {
+        this.tupleIds = tupleIds;
+    }
+
+    public void setNullableTupleIds(Set<TupleId> nullableTupleIds) {
+        this.nullableTupleIds = nullableTupleIds;
     }
 
     public void setDataPartition(DataPartition dataPartition) {

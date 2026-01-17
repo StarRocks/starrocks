@@ -28,12 +28,14 @@ import java.util.Objects;
 public class PhysicalCTEAnchorOperator extends PhysicalOperator {
     private final int cteId;
     private final int consumeNum;
+    private final boolean isRecursive;
 
-    public PhysicalCTEAnchorOperator(int cteId, int consumeNum, Projection projection) {
+    public PhysicalCTEAnchorOperator(int cteId, int consumeNum, boolean isRecursive, Projection projection) {
         super(OperatorType.PHYSICAL_CTE_ANCHOR);
         this.cteId = cteId;
         this.consumeNum = consumeNum;
         this.projection = projection;
+        this.isRecursive = isRecursive;
     }
 
     // only used for plan fragment builder
@@ -41,6 +43,7 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
         super(OperatorType.PHYSICAL_CTE_ANCHOR);
         this.cteId = cteId;
         this.consumeNum = -1;
+        this.isRecursive = false;
     }
 
     public int getCteId() {
@@ -49,6 +52,10 @@ public class PhysicalCTEAnchorOperator extends PhysicalOperator {
 
     public int getConsumeNum() {
         return consumeNum;
+    }
+
+    public boolean isRecursive() {
+        return isRecursive;
     }
 
     @Override

@@ -92,6 +92,9 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                 Set<Integer> cteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
                 if (idx == 0) {
                     cteIds.retainAll(groupExpression.inputAt(0).getLogicalProperty().getUsedCTEs().getCteIds());
+                    if (operator.isRecursive()) {
+                        cteIds.add(operator.getCteId());
+                    }
                 } else {
                     cteIds.retainAll(groupExpression.inputAt(1).getLogicalProperty().getUsedCTEs().getCteIds());
                     cteIds.add(operator.getCteId());

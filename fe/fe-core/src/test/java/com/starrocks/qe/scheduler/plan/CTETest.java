@@ -15,11 +15,23 @@
 package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.qe.scheduler.SchedulerTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Test;
 
 public class CTETest extends SchedulerTestBase {
     @Test
     public void testSimpleCTE() {
         runFileUnitTest("scheduler/cte/cte_simple");
+    }
+
+    @Test
+    public void testRecursiveCTE() throws Exception {
+        String sql = "with recursive t1 as (select 1 as l union all select * from t1 where l < 10 ) "
+                + "select * from t1";
+        String plan = getVerboseExplain(sql);
+        System.out.println(plan);
+        String fragment =
+                UtFrameUtils.getPlanAndStartScheduling(connectContext, sql).first;
+        assertContains(fragment, "Recursive Statement: SELECT 1 AS `l`");
     }
 }
