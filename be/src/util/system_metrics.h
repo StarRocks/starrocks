@@ -72,6 +72,12 @@ public:
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
+    // PageCache arena metrics
+    METRIC_DEFINE_INT_GAUGE(pagecache_arena_allocated_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(pagecache_arena_active_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(pagecache_arena_resident_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(pagecache_arena_mapped_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(pagecache_arena_retained_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(passthrough_mem_bytes, MetricUnit::BYTES);
