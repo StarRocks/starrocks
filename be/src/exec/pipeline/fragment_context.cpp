@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/fragment_context.h"
 
+#include <fmt/format.h>
+
 #include <atomic>
 #include <chrono>
 #include <future>
@@ -501,7 +503,16 @@ Status FragmentContext::prepare_active_drivers() {
     // wait for all the tasks finished
     {
         std::unique_lock<std::mutex> lock(sync_ctx->mutex);
-        sync_ctx->cv.wait(lock, [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; });
+        auto* query_ctx = runtime_state()->query_ctx();
+        int64_t remaining_ms = query_ctx != nullptr ? query_ctx->get_query_remaining_time_ms() : 0;
+        if (remaining_ms <= 0 || !sync_ctx->cv.wait_for(lock, std::chrono::milliseconds(remaining_ms),
+                                                        [&sync_ctx] { return sync_ctx->pending_tasks.load() == 0; })) {
+            int query_timeout_s = query_ctx != nullptr ? query_ctx->get_query_expire_seconds() : 0;
+            return Status::TimedOut(fmt::format(
+                    "prepare pipeline drivers timed out, query_id={}, query_timeout={}s, "
+                    "pending_tasks={}",
+                    print_id(runtime_state()->query_id()), query_timeout_s, sync_ctx->pending_tasks.load()));
+        }
     }
 
     Status* error = sync_ctx->first_error.load();
