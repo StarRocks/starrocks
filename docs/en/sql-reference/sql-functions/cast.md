@@ -58,6 +58,13 @@ Example 1: common data conversions
     +-------------------+
     |                 1 |
     +-------------------+
+
+    select cast('123.4' as INT);
+    +----------------------+
+    | CAST('123.4' AS INT) |
+    +----------------------+
+    |                  123 |
+    +----------------------+
 ```
 
 Example 2: Convert the input into ARRAY.
