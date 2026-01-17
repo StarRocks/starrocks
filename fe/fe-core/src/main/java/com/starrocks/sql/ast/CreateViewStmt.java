@@ -34,6 +34,9 @@ public class CreateViewStmt extends DdlStmt {
     //Resolved by Analyzer
     protected List<Column> columns;
     private String inlineViewDef;
+    private String originalViewDefineSql;
+    private int queryStartIndex = -1;
+    private int queryStopIndex = -1;
     private Map<String, String> properties;
 
     public CreateViewStmt(boolean ifNotExists,
@@ -133,6 +136,30 @@ public class CreateViewStmt extends DdlStmt {
 
     public void setInlineViewDef(String inlineViewDef) {
         this.inlineViewDef = inlineViewDef;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int queryStartIndex) {
+        this.queryStartIndex = queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
+    }
+
+    public void setQueryStopIndex(int queryStopIndex) {
+        this.queryStopIndex = queryStopIndex;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
