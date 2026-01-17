@@ -312,4 +312,15 @@ public class StarMgrServer {
     public void triggerNewImage() {
         journalSystem.getJournalWriter().setForceRollJournal();
     }
+
+    /**
+     * Stop the StarMgr journal writer and close the journal database handles.
+     * Must be called before closing the shared BDBEnvironment during leader transfer
+     * to prevent "Unclosed Database: starmgr_*" errors.
+     */
+    public void stopJournal() {
+        if (journalSystem != null) {
+            journalSystem.stopJournalAndClose();
+        }
+    }
 }
