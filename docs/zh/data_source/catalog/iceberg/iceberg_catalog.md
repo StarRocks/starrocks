@@ -291,7 +291,7 @@ REST catalog 的 `MetastoreParams`：
 
 必需：否
 
-描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2` 和 `JWT`。当设置为 `OAUTH2` 时，需要指定 `iceberg.catalog.oauth2.token` 或 `iceberg.catalog.oauth2.credential`。当设置为 `JWT` 时，可省略  `token` 或 `credential`，需要使用 `JWT` 方式登录 StarRocks 集群。StarRocks 会使用登陆用户的 JWT 令牌访问 Catalog。
+描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`、`JWT` 和 `GOOGLE`。当设置为 `OAUTH2` 时，需要指定 `iceberg.catalog.oauth2.token` 或 `iceberg.catalog.oauth2.credential`。当设置为 `JWT` 时，可省略 `token` 或 `credential`，需要使用 `JWT` 方式登录 StarRocks 集群。StarRocks 会使用登陆用户的 JWT 令牌访问 Catalog。当设置为 `GOOGLE` 时，将使用 Iceberg 的 Google AuthManager（Iceberg 1.10+）通过标准 Google 凭证（应用默认凭证或服务账号密钥文件）进行身份验证。
 
 ###### iceberg.catalog.oauth2.token
 
@@ -339,6 +339,30 @@ REST catalog 的 `MetastoreParams`：
 必需：否
 
 描述：是否启用视图端点以支持视图相关操作。如果设置为 `false`，将禁用视图操作（如 `getView`）。默认值：`true`。
+
+##### iceberg.catalog.gcp.auth.credentials-path
+
+必需：否
+
+描述：Google Cloud 服务账号 JSON 密钥文件的路径。如果未提供，将使用应用默认凭证（ADC）。仅当 `iceberg.catalog.security` 设置为 `GOOGLE` 时适用。
+
+##### iceberg.catalog.gcp.auth.scopes
+
+必需：否
+
+描述：请求 Google 身份验证的 OAuth 范围。默认值：`https://www.googleapis.com/auth/cloud-platform`。仅当 `iceberg.catalog.security` 设置为 `GOOGLE` 时适用。
+
+##### iceberg.catalog.io-impl
+
+必需：否
+
+描述：要使用的 FileIO 实现类。对于 Google Cloud Storage，使用 `org.apache.iceberg.gcp.gcs.GCSFileIO`。如果未指定，StarRocks 默认使用其内部缓存 FileIO 实现。
+
+##### iceberg.catalog.rest.metrics.reporting-enabled
+
+必需：否
+
+描述：是否为 Iceberg REST catalog 启用指标报告。默认值：`true`。
 
 以下示例创建了一个名为 `tabular` 的 Iceberg catalog，使用 Tabular 作为元存储：
 
@@ -411,6 +435,27 @@ SHOW DATABASES FROM r2;
 ```
 
 `<r2_warehouse_name>`、`<r2_api_token>` 和 `<r2_catalog_uri>` 的值可以从 [Cloudflare Dashboard 中获取，详细信息请参见此处](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites)。
+
+以下示例创建了一个名为 `biglake` 的 Iceberg catalog，使用 Google 身份验证连接到 Google BigLake REST Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG biglake
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://biglake.googleapis.com/iceberg/v1/restcatalog",
+    "iceberg.catalog.warehouse" = "bq://projects/project/locations/us-central1",
+    "iceberg.catalog.nested-namespace-enabled" = "true",
+    "iceberg.catalog.header.x-goog-user-project" = "project",
+    "iceberg.catalog.security" = "google",
+    "iceberg.catalog.rest-metrics-reporting-enabled" = "false",
+    "iceberg.catalog.io-impl" = "org.apache.iceberg.gcp.gcs.GCSFileIO",
+    "iceberg.catalog.vended-credentials-enabled" = "true",
+    "gcp.gcs.use_compute_engine_service_account" = "true"
+);
+```
+
+此配置使用 Google 的应用默认凭证（ADC）。如果在 GKE 或 Dataproc 上运行，凭证会自动从环境中获取。或者，您可以使用 `iceberg.catalog.gcp.auth.credentials-path` 指定服务账号密钥文件。
 
 </TabItem>
 

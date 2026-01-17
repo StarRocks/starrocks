@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.GOOGLE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.JWT;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.NONE;
 import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.Security.OAUTH2;
@@ -66,6 +67,21 @@ public class OAuth2SecurityConfigTest {
         config = OAuth2SecurityConfigBuilder.build(properties);
         Assertions.assertEquals(JWT, config.getSecurity());
         Assertions.assertEquals("jwt-token-value", config.getToken().get());
+
+        // Test Google security (Iceberg 1.10+ Google AuthManager)
+        properties = new HashMap<>();
+        properties.put("security", "google");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertEquals(GOOGLE, config.getSecurity());
+        // Google auth doesn't require token or credential - uses ADC
+        Assertions.assertFalse(config.getToken().isPresent());
+        Assertions.assertFalse(config.getCredential().isPresent());
+
+        // Test Google security case insensitive
+        properties = new HashMap<>();
+        properties.put("security", "GOOGLE");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        Assertions.assertEquals(GOOGLE, config.getSecurity());
     }
 
     @Test
@@ -97,5 +113,14 @@ public class OAuth2SecurityConfigTest {
         Assertions.assertEquals("test-audience", oauth2Properties.get().get(OAuth2Properties.AUDIENCE));
         // check token refresh disabled for JWT
         Assertions.assertEquals("false", oauth2Properties.get().get(OAuth2Properties.TOKEN_REFRESH_ENABLED));
+
+        // Test Google security properties (should return empty properties as Google auth is handled differently)
+        properties = new HashMap<>();
+        properties.put("security", "google");
+        config = OAuth2SecurityConfigBuilder.build(properties);
+        oauth2Properties = new OAuth2SecurityProperties(config);
+        // Google auth doesn't use OAuth2Properties - it uses rest.auth.type=google
+        // which is handled in IcebergRESTCatalog
+        Assertions.assertEquals(0, oauth2Properties.get().size());
     }
 }
