@@ -1237,7 +1237,9 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
+        // Load all metadata (delete vectors + DCGs) for primary index construction
+        // Rowset uses its internal _kvstore to access the correct metadata store
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), MetaLoadMode::ALL,
                                                   apply_version, &stats);
         if (!res.ok()) {
             return res.status();
