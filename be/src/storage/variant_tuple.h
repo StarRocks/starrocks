@@ -30,7 +30,14 @@ public:
 
     void reserve(size_t n) { _values.reserve(n); }
 
-    void append(const DatumVariant& value) { _values.emplace_back(value); }
+    void append(const DatumVariant& value) { _values.push_back(value); }
+
+    void append(DatumVariant&& value) { _values.push_back(std::move(value)); }
+
+    template <typename... Args>
+    void emplace(Args&&... args) {
+        _values.emplace_back(std::forward<Args>(args)...);
+    }
 
     const DatumVariant& operator[](size_t n) const { return _values[n]; }
 
@@ -41,6 +48,8 @@ public:
     DatumVariant& get(size_t n) { return _values.at(n); }
 
     const std::vector<DatumVariant>& values() const { return _values; }
+
+    void clear() { _values.clear(); }
 
     int compare(const VariantTuple& other) const;
 
