@@ -434,7 +434,8 @@ public class StatisticsCollectJobFactory {
             return;
         }
         if (table instanceof OlapTable) {
-            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL
+                    && ((OlapTable) table).getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 return;
             }
         }
