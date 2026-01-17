@@ -49,7 +49,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -405,16 +404,9 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     protected List<TabletCommitInfo> getTabletCommitInfos() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            for (Replica replica : tDeleteInfo.getFinishedReplicas()) {
-                // the inverted index contains rolling up replica
-                Long tabletId = invertedIndex.getTabletIdByReplica(replica.getId());
-                if (tabletId == null) {
-                    LOG.warn("could not find tablet id for replica {}, the tablet maybe dropped", replica);
-                    continue;
-                }
-                tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
+        for (TabletDeleteInfo tabletDeleteInfo : getTabletDeleteInfo()) {
+            for (Replica replica : tabletDeleteInfo.getFinishedReplicas()) {
+                tabletCommitInfos.add(new TabletCommitInfo(tabletDeleteInfo.getTabletId(), replica.getBackendId()));
             }
         }
         return tabletCommitInfos;
