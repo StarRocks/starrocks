@@ -79,6 +79,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -241,7 +242,9 @@ public class OlapDeleteJob extends DeleteJob {
         } else if (!st.ok()) {
             errMsg = st.toString();
         }
-        LOG.warn(errMsg);
+        if (StringUtils.isNotBlank(errMsg)) {
+            LOG.warn(errMsg);
+        }
 
         try {
             checkAndUpdateQuorum();
