@@ -310,4 +310,51 @@ TEST_F(HttpClientTest, post_failed) {
     ASSERT_TRUE(boost::algorithm::contains(st.message(), not_found));
 }
 
+TEST_F(HttpClientTest, set_resolve_host) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+    client.set_basic_auth("test1", "");
+
+    // Set DNS pinning - this forces curl to resolve the hostname to a specific IP
+    // Format: "hostname:port:ip_address"
+    // Here we pin 127.0.0.1 to itself, which should work fine
+    client.set_resolve_host("127.0.0.1:" + std::to_string(real_port) + ":127.0.0.1");
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+}
+
+TEST_F(HttpClientTest, set_fail_on_error) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+    client.set_basic_auth("test1", "");
+
+    // Test set_fail_on_error with true - HTTP 4xx/5xx will cause curl failure
+    client.set_fail_on_error(true);
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+
+    // Test set_fail_on_error with false - HTTP errors won't cause curl failure
+    HttpClient client2;
+    st = client2.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client2.set_method(GET);
+    client2.set_basic_auth("test1", "");
+    client2.set_fail_on_error(false);
+
+    response.clear();
+    st = client2.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+}
+
 } // namespace starrocks
