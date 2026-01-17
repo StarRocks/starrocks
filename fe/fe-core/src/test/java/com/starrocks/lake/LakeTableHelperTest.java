@@ -159,6 +159,164 @@ public class LakeTableHelperTest {
         Assertions.assertEquals(0, shardGroupInfos.size());
     }
 
+    /**
+     * Test deleteTableShardGroupMeta() method which deletes all shard groups for a table.
+     * This method is called when a table is dropped with FORCE option or erased from recycle bin.
+     *
+     * <p>Scenario: When DROP TABLE FORCE is executed, the table's shard group metadata in StarManager
+     * should be deleted to prevent orphan shard groups from accumulating.</p>
+     */
+    @Test
+    public void testDeleteTableShardGroupMeta(@Mocked StarOSAgent starOSAgent) {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long partitionId1 = 3001L;
+        long partitionId2 = 3002L;
+        long physicalPartitionId1 = 4001L;
+        long physicalPartitionId2 = 4002L;
+        long groupId1 = 6001L;
+        long groupId2 = 6002L;
+
+        // Create partitions with different shard group IDs
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+
+        // Create partitions using the same pattern as the working testDeleteShardGroupMeta method
+        Partition partition1 = new Partition(partitionId1, physicalPartitionId1, "p1", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions1 = partition1.getSubPartitions();
+        subPartitions1.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId1);
+        });
+
+        Partition partition2 = new Partition(partitionId2, physicalPartitionId2, "p2", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions2 = partition2.getSubPartitions();
+        subPartitions2.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(groupId2);
+        });
+
+        // Build shardGroupInfos to track which groups are deleted
+        List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
+        shardGroupInfos.add(ShardGroupInfo.newBuilder()
+                .setGroupId(groupId1)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .build());
+        shardGroupInfos.add(ShardGroupInfo.newBuilder()
+                .setGroupId(groupId2)
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
+                .build());
+
+        // Expect 2 shard groups before deletion
+        Assertions.assertEquals(2, shardGroupInfos.size());
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                for (long groupId : groupIds) {
+                    shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
+                }
+            }
+        };
+
+        List<Partition> partitions = Lists.newArrayList(partition1, partition2);
+
+        // Mock LakeTable's getAllPartitions() and isCloudNativeTableOrMaterializedView()
+        new MockUp<LakeTable>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public java.util.Collection<Partition> getAllPartitions() {
+                return partitions;
+            }
+        };
+
+        // Create a LakeTable instance (the MockUp will intercept method calls)
+        LakeTable table = new LakeTable();
+
+        // Call the method under test
+        LakeTableHelper.deleteTableShardGroupMeta(table);
+
+        // Verify all shard groups are deleted (groupId1 and groupId2)
+        Assertions.assertEquals(0, shardGroupInfos.size());
+    }
+
+    /**
+     * Test that deleteTableShardGroupMeta handles tables with multiple sub-partitions
+     * that share the same shard group ID (deduplication).
+     */
+    @Test
+    public void testDeleteTableShardGroupMetaWithDuplicateGroupIds(@Mocked StarOSAgent starOSAgent) {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        long partitionId = 3003L;
+        long physicalPartitionId1 = 4003L;
+        long physicalPartitionId2 = 4004L;
+        // All physical partitions (including Partition itself) share the same shard group ID
+        long sharedGroupId = 6003L;
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList());
+
+        // Create partition using the same pattern as the working testDeleteShardGroupMeta method
+        Partition partition = new Partition(partitionId, physicalPartitionId1, "p1", new MaterializedIndex(), distributionInfo);
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        subPartitions.forEach(physicalPartition -> {
+            MaterializedIndex materializedIndex =
+                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+            materializedIndex.setShardGroupId(sharedGroupId);
+        });
+
+        // Add additional sub-partition to simulate multiple physical partitions with same shard group ID
+        // This simulates the scenario where partition.getSubPartitions() returns multiple items with the same shard group ID
+
+        // Track deleteShardGroup calls
+        List<Long> deletedGroupIds = new ArrayList<>();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void deleteShardGroup(List<Long> groupIds) {
+                deletedGroupIds.addAll(groupIds);
+            }
+        };
+
+        List<Partition> partitions = Lists.newArrayList(partition);
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public java.util.Collection<Partition> getAllPartitions() {
+                return partitions;
+            }
+        };
+
+        LakeTable table = new LakeTable();
+        LakeTableHelper.deleteTableShardGroupMeta(table);
+
+        // Verify that the shared group ID is only deleted once (deduplication works)
+        // partition.getSubPartitions() returns physical partitions, all with sharedGroupId
+        // After deduplication, only 1 unique group ID should be deleted
+        Assertions.assertEquals(1, deletedGroupIds.size());
+        Assertions.assertEquals(Long.valueOf(sharedGroupId), deletedGroupIds.get(0));
+    }
+
     @Test
     public void testRestoreColumnUniqueIdIfNeeded() throws Exception {
         String sql = "create table test_lake_table_helper.test_tb (k1 int, k2 int, k3 varchar)";
