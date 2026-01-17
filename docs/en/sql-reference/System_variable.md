@@ -686,6 +686,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Data Type**: boolean
 * **Introduced in**: -
 
+### max_unknown_string_meta_length (global)
+
+* **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
+* **Default**: 64
+* **Data Type**: int
+* **Introduced in**: v3.5.12
+
 ### enable_load_profile
 
 * **Scope**: Session
