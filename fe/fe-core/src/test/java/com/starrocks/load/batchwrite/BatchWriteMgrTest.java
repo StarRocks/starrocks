@@ -105,13 +105,13 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
             }});
         RequestLoadResult result1 = batchWriteMgr.requestLoad(
-                tableId4, params, allNodes.get(0).getId(), allNodes.get(0).getHost());
+                tableId4, params, "root", allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result1.isOk());
         assertNotNull(result1.getValue());
         assertEquals(1, batchWriteMgr.numJobs());
 
         RequestLoadResult result2 = batchWriteMgr.requestLoad(
-                tableId4, params, allNodes.get(0).getId(), allNodes.get(0).getHost());
+                tableId4, params, "root", allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result2.isOk());
         assertEquals(result1.getValue(), result2.getValue());
         assertEquals(1, batchWriteMgr.numJobs());
@@ -162,7 +162,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 put(HTTP_BATCH_WRITE_PARALLEL, "4");
             }});
         RequestLoadResult result2 = batchWriteMgr.requestLoad(
-                tableId4, params2, allNodes.get(0).getId(), allNodes.get(0).getHost());
+                tableId4, params2, "root", allNodes.get(0).getId(), allNodes.get(0).getHost());
         assertTrue(result2.isOk());
         assertEquals(2, batchWriteMgr.numJobs());
 
