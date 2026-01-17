@@ -45,7 +45,8 @@ public class AuditEventTest {
                 .setCustomQueryId("customQueryId")
                 .setCNGroup("test_cngroup")
                 .addReadLocalCnt(100)
-                .addReadRemoteCnt(100);
+                .addReadRemoteCnt(100)
+                .setErrorMsg("errorMsg");
 
         new MockUp<RunMode>() {
             @Mock
@@ -77,5 +78,6 @@ public class AuditEventTest {
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
         Assertions.assertEquals(100, event.writeClientTimeMs);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());
+        Assertions.assertEquals("errorMsg", event.errorMessage);
     }
 }

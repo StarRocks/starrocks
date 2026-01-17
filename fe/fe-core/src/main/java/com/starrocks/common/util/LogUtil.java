@@ -55,7 +55,8 @@ public class LogUtil {
                 .setFeIp(FrontendOptions.getLocalHostAddress())
                 .setDb(authPacket == null ? "null" : authPacket.getDb())
                 .setState(ctx.getState().toString())
-                .setErrorCode(ctx.getState().getErrorMessage());
+                .setErrorCode(ctx.getState().getErrorMessage())
+                .setErrorMsg(ctx.getState().getErrorMessage());
         GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(builder.build());
 
         QueryDetail queryDetail = new QueryDetail();
