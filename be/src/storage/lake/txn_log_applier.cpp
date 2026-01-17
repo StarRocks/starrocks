@@ -575,13 +575,27 @@ private:
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 // Mark this as a lake replication transaction
                 _is_lake_replication = true;
-                
+
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
                 _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
                 _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
                 _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
+
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
+                // In lake replication scenario, we need to carefully handle compaction_inputs.
+                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                std::unordered_set<uint32_t> new_rowset_ids;
+                for (const auto& rowset : _metadata->rowsets()) {
+                    new_rowset_ids.insert(rowset.id());
+                }
+                for (auto&& old_rowset : old_rowsets) {
+                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    }
+                }
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
@@ -605,12 +619,31 @@ private:
                     _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
                 }
                 _metadata->set_next_rowset_id(new_next_rowset_id);
+                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
 
             _metadata->set_cumulative_point(0);
-            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+            // In lake replication scenario, build set of files still referenced by new metadata.
+            // These files should not be added to orphan_files to avoid being deleted by vacuum.
+            std::unordered_set<std::string> new_referenced_files;
+            if (_is_lake_replication) {
+                for (const auto& [ver, f] : _metadata->delvec_meta().version_to_file()) {
+                    new_referenced_files.insert(f.name());
+                }
+                for (const auto& sst : _metadata->sstable_meta().sstables()) {
+                    new_referenced_files.insert(sst.filename());
+                }
+                for (const auto& [sid, dcg] : _metadata->dcg_meta().dcgs()) {
+                    for (const auto& cf : dcg.column_files()) {
+                        new_referenced_files.insert(cf);
+                    }
+                }
+            }
+
             // Clear delvec_meta and add to orphan files.
             for (const auto& [version, file] : old_delvec_meta.version_to_file()) {
+                if (new_referenced_files.count(file.name()) > 0) continue;
                 FileMetaPB file_meta;
                 file_meta.set_name(file.name());
                 file_meta.set_size(file.size());
@@ -619,6 +652,7 @@ private:
             }
             // Clear sstable_meta and add to orphan files.
             for (const auto& sstable : old_sstable_meta.sstables()) {
+                if (new_referenced_files.count(sstable.filename()) > 0) continue;
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
@@ -628,6 +662,7 @@ private:
             // Clear dcg_meta and add to orphan files.
             for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
                 for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+                    if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
                     FileMetaPB file_meta;
                     file_meta.set_name(dcg_ver.column_files(i));
                     if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
@@ -1066,15 +1101,29 @@ private:
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
+
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
+                // In lake replication scenario, we need to carefully handle compaction_inputs.
+                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                std::unordered_set<uint32_t> new_rowset_ids;
+                for (const auto& rowset : _metadata->rowsets()) {
+                    new_rowset_ids.insert(rowset.id());
+                }
+                for (auto&& old_rowset : old_rowsets) {
+                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    }
+                }
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
                 for (const auto& op_write : op_replication.op_writes()) {
                     RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
                 }
+                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
             _metadata->set_cumulative_point(0);
-            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_meta.txn_id();
