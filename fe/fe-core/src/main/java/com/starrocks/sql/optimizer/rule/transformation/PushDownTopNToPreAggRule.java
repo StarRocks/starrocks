@@ -108,7 +108,8 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
         OptExpression aggGlobalChild = topnChild.inputAt(0);
         LogicalAggregationOperator aggLocal = (LogicalAggregationOperator) aggGlobalChild.getOp();
 
-        if (aggLocal.getType() != AggType.LOCAL || aggLocal.getPredicate() != null) {
+        if (aggLocal.getType() != AggType.LOCAL || aggLocal.getPredicate() != null
+                || aggLocal.getAggregations().values().stream().anyMatch(call -> call.getUsedColumns().isEmpty())) {
             return false;
         }
 

@@ -110,7 +110,7 @@ std::string RuntimeFilterPort::listeners(int32_t filter_id) {
 }
 
 void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
-        const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list, const std::vector<Columns>& keyColumns,
+        const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list, const std::vector<Columns>& key_columns,
         const std::vector<bool>& null_safe, const std::vector<TypeDescriptor>& type_descs) {
     // transform list into vector for convenience
     pipeline::RuntimeMembershipFilters rf_descs(rf_descs_list.begin(), rf_descs_list.end());
@@ -124,11 +124,15 @@ void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
     for (size_t i = 0; i < rf_descs.size(); i++) {
         auto* rf_desc = rf_descs[i];
         DCHECK(rf_desc->is_broad_cast_in_skew());
+        // Skip if runtime filter is nullptr or key columns are empty
+        if (rf_desc->runtime_filter() == nullptr || key_columns[i].empty()) {
+            continue;
+        }
         // when enable_partitioned_hash_join is true, one runtime filter's key column can be split to multiple columns
         // since skew broadcast join' build side data size is small, we just accumulate columns into a whole column for Convenience
-        auto column = keyColumns[i][0]->clone();
-        for (size_t j = 1; j < keyColumns[i].size(); j++) {
-            column->append(*keyColumns[i][j]);
+        auto column = key_columns[i][0]->clone();
+        for (size_t j = 1; j < key_columns[i].size(); j++) {
+            column->append(*key_columns[i][j]);
         }
         publish_skew_boradcast_join_key_columns(rf_desc, column, null_safe[i], type_descs[i]);
     }
@@ -317,8 +321,9 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
 }
 
 Status RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(RuntimeFilter* out) {
-    DCHECK(skew_broadcast_rf_material != nullptr);
-    DCHECK(skew_broadcast_rf_material->key_column != nullptr);
+    if (skew_broadcast_rf_material == nullptr || skew_broadcast_rf_material->key_column == nullptr) {
+        return Status::InternalError("skew broadcast rf material is nullptr");
+    }
     // add boradcast's hash table's key column into out's _hash_partition_bf's every element(Instance and driver side)
     // because we can't know which element should be used when insert one row(need partition columns and partition exprs)
     return RuntimeFilterHelper::fill_runtime_filter(
@@ -382,8 +387,8 @@ void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size
                 rf->get_membership_filter()->clear_bf();
             }
         }
-        if (rf_state->skew_broadcast_rf_material != nullptr) {
-            DCHECK(rf_state->skew_broadcast_rf_material->key_column.get() != nullptr);
+        if (rf_state->skew_broadcast_rf_material != nullptr &&
+            rf_state->skew_broadcast_rf_material->key_column != nullptr) {
             rf_state->skew_broadcast_rf_material->key_column.reset();
         }
     }
@@ -445,7 +450,10 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     if (status->filters.size() < status->expect_number) return;
 
     // skew join's rf from broadcast join not arrived yet, we need to wait.
-    if (status->is_skew_join && status->skew_broadcast_rf_material == nullptr) return;
+    if (status->is_skew_join &&
+        (status->skew_broadcast_rf_material == nullptr || status->skew_broadcast_rf_material->key_column == nullptr)) {
+        return;
+    }
 
     if (rf->type() != RuntimeFilterSerializeType::IN_FILTER) {
         finalize_membership_filters(status, rf_version, filter_id);
@@ -585,8 +593,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
 
     // this is a skew join and rf from broadcast join already arrived, we need to merge it
     // at this point, every rf instance is stored in _hash_partition_bf, so it's the best time to merge skew boradcast's rf
-    if (status->is_skew_join) {
-        DCHECK(status->skew_broadcast_rf_material != nullptr);
+    if (status->is_skew_join && status->skew_broadcast_rf_material != nullptr &&
+        status->skew_broadcast_rf_material->key_column != nullptr) {
         Status res = status->_merge_skew_broadcast_runtime_filter(out);
         if (!res.ok()) {
             VLOG_FILE << "RuntimeFilterMerger::_send_total_runtime_filter failed";
