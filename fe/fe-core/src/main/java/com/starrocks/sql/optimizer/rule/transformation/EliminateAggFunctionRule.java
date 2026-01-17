@@ -101,6 +101,8 @@ public class EliminateAggFunctionRule extends TransformationRule {
             newProjectMap.put(groupingKey, groupingKey);
         }
 
+        newAggCallMap.forEach((k, v) -> newProjectMap.put(k, k));
+
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
 
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(newProjectMap);
