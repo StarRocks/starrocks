@@ -238,7 +238,8 @@ public class DeltaLakeCacheSizeEstimatorTest {
         DeltaLakeFileStatus deltaStatus = DeltaLakeFileStatus.of(fileStatus);
 
         try {
-            String complexJson = "{\"id\": 1, \"user\": {\"name\": \"John\", \"age\": 30}, \"items\": [1, 2, 3], \"active\": true}";
+            String complexJson =
+                    "{\"id\": 1, \"user\": {\"name\": \"John\", \"age\": 30}, \"items\": [1, 2, 3], \"active\": true}";
             JsonNode node = mapper.readTree(complexJson);
             List<JsonNode> jsonNodes = new ArrayList<>();
             jsonNodes.add(node);
