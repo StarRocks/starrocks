@@ -24,6 +24,19 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 Paimon catalog はデータのクエリにのみ使用できます。Paimon catalog を使用して、Paimon クラスターにデータを削除、削除、または挿入することはできません。
 
+### オプションの FE 拡張（GCS/COS/Azure/OBS）
+
+Google GCS、Tencent COS、Azure Storage、または Huawei OBS 上の Paimon テーブルにアクセスするには、追加のファイルシステム jar が必要で、これはオプションの FE 拡張として提供されます。
+
+1. `fe/fe-extension` モジュールをビルドする（またはビルド成果物を取得する）：
+
+   ```bash
+   cd fe && mvn package -pl fe-extension -am -DskipTests
+   ```
+
+2. `fe/fe-extension/target/fe-extension-lib/` 内のすべての jar を `${FE_HOME}/lib` にコピーする。
+3. FE ノードを再起動する。
+
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |
@@ -128,7 +141,7 @@ StarRocks が Paimon クラスターのメタデータにアクセスする方�
 | ------------------------ | ---- | ---------------------------------------------------- |
 | paimon.catalog.type      | はい | Paimon クラスターで使用するメタストアのタイプ。このパラメータを `filesystem` または `hive` に設定します。 |
 | paimon.catalog.warehouse | はい | Paimon データのウェアハウスストレージパス。 |
-| hive.metastore.uris      | いいえ | Hive メタストアの URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。
+| hive.metastore.uris      | いいえ | Hive メタストアの URI。形式: `thrift://<metastore_IP_address>:<metastore_port>`。Hive メタストアで高可用性 (HA) が有効になっている場合、複数のメタストア URI を指定し、カンマ (`,`) で区切ることができます。例: `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 
 > **注意**
 >
