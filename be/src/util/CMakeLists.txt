@@ -121,6 +121,7 @@ set(UTIL_FILES
   llm_cache.cpp
   llm_query_service.cpp
   variant.cpp
+  uuid_generator.cpp
 )
 
 ADD_BE_LIB(Util

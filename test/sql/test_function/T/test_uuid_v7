@@ -1,0 +1,67 @@
+-- name: test_uuid_v7
+-- Test UUID v7 basic generation
+select length(uuid_v7());
+select uuid_v7() != uuid_v7();
+
+-- Test UUID v7 format (8-4-4-4-12 with hyphens)
+select regexp(uuid_v7(), '^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$');
+
+-- Test UUID v7 version field
+select substr(uuid_v7(), 15, 1) = '7';
+
+-- Test UUID v7 variant field (should be 8, 9, a, or b)
+select substr(uuid_v7(), 20, 1) in ('8', '9', 'a', 'b');
+
+-- Test UUID v7 uniqueness
+with uuids as (
+    select uuid_v7() as u from TABLE(generate_series(1, 100))
+)
+select count(*) = count(distinct u) from uuids;
+
+-- Test UUID v7 time ordering
+-- Generate UUIDs in sequence, they should be lexicographically ordered or equal
+with ordered_uuids as (
+    select uuid_v7() as u1, uuid_v7() as u2, uuid_v7() as u3
+)
+select u1 <= u2 and u2 <= u3 from ordered_uuids;
+
+-- Test UUID v7 numeric
+select uuid_v7_numeric() != uuid_v7_numeric();
+
+-- Test UUID v7 numeric uniqueness
+with uuid_nums as (
+    select uuid_v7_numeric() as u from TABLE(generate_series(1, 100))
+)
+select count(*) = count(distinct u) from uuid_nums;
+
+-- Test UUID v7 can be used in table creation
+CREATE TABLE test_uuid_v7_table (
+    id INT,
+    uid VARCHAR(36) DEFAULT uuid_v7()
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+INSERT INTO test_uuid_v7_table(id) VALUES (1), (2), (3);
+
+-- Verify UUIDs were generated
+select id, length(uid), substr(uid, 15, 1) from test_uuid_v7_table order by id;
+
+-- Verify uniqueness in table
+select count(*) = count(distinct uid) from test_uuid_v7_table;
+
+DROP TABLE test_uuid_v7_table;
+
+-- Test UUID v7 numeric as default value
+CREATE TABLE test_uuid_v7_numeric_table (
+    id INT,
+    uid LARGEINT DEFAULT uuid_v7_numeric()
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1;
+
+INSERT INTO test_uuid_v7_numeric_table(id) VALUES (1), (2), (3);
+
+-- Verify numeric UUIDs were generated and are unique
+select count(*) = count(distinct uid) from test_uuid_v7_numeric_table;
+select count(*) from test_uuid_v7_numeric_table where uid is not null;
+
+DROP TABLE test_uuid_v7_numeric_table;
