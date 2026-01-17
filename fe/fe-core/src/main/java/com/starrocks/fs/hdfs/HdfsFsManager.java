@@ -330,6 +330,8 @@ public class HdfsFsManager {
     // arguments for obs
     public static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
     public static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
+    public static final String FS_OBS_ACCESS_KEY_UNDERSCORE = "fs.obs.access_key";
+    public static final String FS_OBS_SECRET_KEY_UNDERSCORE = "fs.obs.secret_key";
     protected static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     protected static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
