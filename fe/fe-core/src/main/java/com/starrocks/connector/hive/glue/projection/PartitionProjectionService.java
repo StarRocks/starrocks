@@ -267,7 +267,7 @@ public class PartitionProjectionService {
             throw new IllegalArgumentException(
                     "Cannot enumerate all partitions for table with INJECTED projection columns: " +
                     injectedColumns + ". INJECTED columns require explicit filter values in the WHERE clause. " +
-                    "Use getProjectedPartitions() with specific filter values instead.");
+                    "Add a filter like 'WHERE " + injectedColumns.get(0) + " = <value>' to query this table.");
         }
 
         PartitionProjection projection = createProjection(table);
