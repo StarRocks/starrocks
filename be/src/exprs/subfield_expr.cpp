@@ -61,10 +61,7 @@ public:
             const Column* tmp_col = ColumnHelper::get_data_column(col.get());
             DCHECK(tmp_col->is_struct());
             const auto* struct_column = down_cast<const StructColumn*>(tmp_col);
-            col = struct_column->field_column(fieldname);
-            if (col == nullptr) {
-                return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
-            }
+            ASSIGN_OR_RETURN(col, struct_column->field_column(fieldname));
         }
 
         if (col->is_nullable()) {
