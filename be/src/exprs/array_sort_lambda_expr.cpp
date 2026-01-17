@@ -91,6 +91,15 @@ void ArraySortLambdaExpr::close(RuntimeState* state, ExprContext* context, Funct
     Expr::close(state, context, scope);
 }
 
+Status ArraySortLambdaExpr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    RETURN_IF_ERROR(Expr::do_for_each_child(callback));
+
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(callback(expr));
+    }
+    return Status::OK();
+}
+
 // Helper class to manage comparisons during sorting
 
 class SortComparator {
