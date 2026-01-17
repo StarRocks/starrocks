@@ -1666,8 +1666,8 @@ public class RedirectStatusTest {
 
     @Test
     public void testGrantPrivilegeStmt() {
-        GrantPrivilegeStmt stmt =
-                new GrantPrivilegeStmt(null, null, new GrantRevokeClause(new UserRef("", ""), ""), null, false);
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, null, new GrantRevokeClause(new UserRef("", ""), ""),
+                null, false, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
