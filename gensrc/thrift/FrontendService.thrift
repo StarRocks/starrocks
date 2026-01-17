@@ -1577,6 +1577,7 @@ struct TTableInfo {
     21: optional string table_comment
     22: optional string session_id
     23: optional i64 table_id
+    24: optional string creator
 }
 
 struct TGetTablesInfoResponse {

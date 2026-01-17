@@ -80,6 +80,7 @@ public class TablesSystemTable extends SystemTable {
                 .column("CHECKSUM", BIGINT)
                 .column("CREATE_OPTIONS", TypeFactory.createVarcharType(255))
                 .column("TABLE_COMMENT", TypeFactory.createVarcharType(2048))
+                .column("CREATOR", TypeFactory.createVarcharType(64))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
 
