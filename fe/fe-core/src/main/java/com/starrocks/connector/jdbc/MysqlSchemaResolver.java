@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
@@ -176,6 +177,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
+            ps.setQueryTimeout((int) (Config.jdbc_query_timeout_ms / 1000));
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
@@ -204,6 +206,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
+            ps.setQueryTimeout((int) (Config.jdbc_query_timeout_ms / 1000));
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<String> list = ImmutableList.builder();
             if (null != rs) {
@@ -227,6 +230,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
             ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout((int) (Config.jdbc_query_timeout_ms / 1000));
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             long createTime = TimeUtils.getEpochSeconds();
