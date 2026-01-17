@@ -36,9 +36,7 @@ class TWorkGroup;
 
 namespace workgroup {
 
-using vacuum_time_precision = std::chrono::microseconds;
 using steady_clock = std::chrono::steady_clock;
-using std::chrono::duration_cast;
 
 using pipeline::QueryContext;
 using WorkGroupType = TWorkGroupType::type;
@@ -159,17 +157,13 @@ public:
     void mark_del(const std::chrono::seconds expiration_time) {
         bool expect_false = false;
         if (_is_marked_del.compare_exchange_strong(expect_false, true)) {
-            _vacuum_ttl = duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch() + expiration_time)
-                                  .count();
+            _vacuum_ttl = steady_clock::time_point(steady_clock::now()) + expiration_time;
         }
     }
     // no drivers shall be added to this workgroup
     bool is_marked_del() const { return _is_marked_del.load(std::memory_order_acquire); }
     // a workgroup should wait several seconds to be cleaned safely.
-    bool is_expired() const {
-        const auto now = duration_cast<vacuum_time_precision>(steady_clock::now().time_since_epoch()).count();
-        return now > _vacuum_ttl;
-    }
+    bool is_expired() const { return steady_clock::time_point(steady_clock::now()) > _vacuum_ttl; }
 
     // return true if current workgroup is removable:
     // 1. is already marked del
@@ -264,7 +258,7 @@ private:
     std::atomic<size_t> _num_running_drivers = 0;
     std::atomic<size_t> _acc_num_drivers = 0;
     // vacuum_ttl is set to max, as a data race might cause a thread to read `is_marked_del = true` and `vacuum_ttl = 0`
-    int64_t _vacuum_ttl = std::numeric_limits<int64_t>::max();
+    steady_clock::time_point _vacuum_ttl = steady_clock::time_point::max();
 
     // Metrics of this workgroup
     std::atomic<int64_t> _num_running_queries = 0;
