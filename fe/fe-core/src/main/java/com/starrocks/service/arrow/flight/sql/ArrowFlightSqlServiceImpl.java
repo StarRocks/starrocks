@@ -311,7 +311,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public FlightInfo getFlightInfoSqlInfo(FlightSql.CommandGetSqlInfo command, CallContext context,
                                            FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SQL_INFO_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SQL_INFO_SCHEMA, context);
     }
 
     @Override
@@ -322,19 +322,19 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @Override
     public FlightInfo getFlightInfoTypeInfo(FlightSql.CommandGetXdbcTypeInfo command, CallContext context,
                                             FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TYPE_INFO_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TYPE_INFO_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoCatalogs(FlightSql.CommandGetCatalogs command, CallContext context,
                                             FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CATALOGS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CATALOGS_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoSchemas(FlightSql.CommandGetDbSchemas command, CallContext context,
                                            FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SCHEMAS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_SCHEMAS_SCHEMA, context);
     }
 
     @Override
@@ -343,37 +343,37 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         if (!command.getIncludeSchema()) {
             schemaToUse = Schemas.GET_TABLES_SCHEMA_NO_SCHEMA;
         }
-        return buildFlightInfoFromFE(command, descriptor, schemaToUse);
+        return buildFlightInfoFromFE(command, descriptor, schemaToUse, context);
     }
 
     @Override
     public FlightInfo getFlightInfoTableTypes(FlightSql.CommandGetTableTypes command, CallContext context,
                                               FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TABLE_TYPES_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_TABLE_TYPES_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoExportedKeys(FlightSql.CommandGetExportedKeys command, CallContext context,
                                                 FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_EXPORTED_KEYS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_EXPORTED_KEYS_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoImportedKeys(FlightSql.CommandGetImportedKeys command, CallContext context,
                                                 FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_IMPORTED_KEYS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_IMPORTED_KEYS_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoCrossReference(FlightSql.CommandGetCrossReference command, CallContext context,
                                                   FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CROSS_REFERENCE_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_CROSS_REFERENCE_SCHEMA, context);
     }
 
     @Override
     public FlightInfo getFlightInfoPrimaryKeys(FlightSql.CommandGetPrimaryKeys command, CallContext context,
                                                FlightDescriptor descriptor) {
-        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_PRIMARY_KEYS_SCHEMA);
+        return buildFlightInfoFromFE(command, descriptor, Schemas.GET_PRIMARY_KEYS_SCHEMA, context);
     }
 
     @Override
@@ -599,12 +599,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             ArrowFlightSqlConnectProcessor processor = new ArrowFlightSqlConnectProcessor(ctx, query);
             ArrowFlightSqlResultDescriptor result = processor.execute();
 
-            // FE task will return FE as endpoint.
+            // FE task will return FE (or proxy) as endpoint.
             if (!result.isBackendResultDescriptor()) {
                 final ByteString handle = buildFETicket(ctx);
                 FlightSql.TicketStatementQuery ticketStatement =
                         FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
-                return buildFlightInfoFromFE(ticketStatement, descriptor, result.getSchema());
+                SessionVariable sv = ctx.getSessionVariable();
+                Location endpoint = getFEEndpoint(sv);
+                return buildFlightInfo(ticketStatement, descriptor, result.getSchema(), endpoint);
             }
 
             // Query task will wait until deployment to BE is finished and return BE as endpoint.
@@ -616,9 +618,9 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             ComputeNode worker = clusterInfoService.getBackendOrComputeNode(workerId);
 
             SessionVariable sv = ctx.getSessionVariable();
-            Pair<Location, ByteString> parsedEndpoint = parseEndpoint(sv, ctx.getExecutionId(), worker, rootFragmentInstanceId);
-            Location endpoint = parsedEndpoint.first;
-            ByteString handle = parsedEndpoint.second;
+            Pair<Location, ByteString> beEndpoint = getBEEndpoint(sv, ctx.getExecutionId(), worker, rootFragmentInstanceId);
+            Location endpoint = beEndpoint.first;
+            ByteString handle = beEndpoint.second;
 
             FlightSql.TicketStatementQuery ticketStatement =
                     FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
@@ -652,8 +654,14 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     }
 
     private <T extends Message> FlightInfo buildFlightInfoFromFE(T request, FlightDescriptor descriptor,
-                                                                 Schema schema) {
-        return buildFlightInfo(request, descriptor, schema, feEndpoint);
+                                                                 Schema schema, CallContext context) {
+        try {
+            ArrowFlightSqlConnectContext ctx = sessionManager.validateAndGetConnectContext(context.peerIdentity());
+            Location endpoint = getFEEndpoint(ctx.getSessionVariable());
+            return buildFlightInfo(request, descriptor, schema, endpoint);
+        } catch (InvalidConfException e) {
+            throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
+        }
     }
 
     protected <T extends Message> FlightInfo buildFlightInfo(T request, FlightDescriptor descriptor,
@@ -712,21 +720,34 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    protected Pair<Location, ByteString> parseEndpoint(SessionVariable sv, TUniqueId queryId,
+    private Location getProxyLocation(String arrowFlightProxy) throws InvalidConfException {
+        validateProxyFormat(arrowFlightProxy);
+        String[] split = arrowFlightProxy.split(":");
+        return Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
+    }
+
+    protected Location getFEEndpoint(SessionVariable sv) throws InvalidConfException {
+        if (sv.isArrowFlightProxyEnabled()) {
+            String arrowFlightProxy = sv.getArrowFlightProxy();
+            if (!arrowFlightProxy.isEmpty()) {
+                return getProxyLocation(arrowFlightProxy);
+            }
+        }
+        return feEndpoint;
+    }
+
+    protected Pair<Location, ByteString> getBEEndpoint(SessionVariable sv, TUniqueId queryId,
                                                   ComputeNode worker, TUniqueId rootFragmentInstanceId)
                                                   throws InvalidConfException {
         ByteString handle;
         Location endpoint;
         if (sv.isArrowFlightProxyEnabled()) {
             String arrowFlightProxy = sv.getArrowFlightProxy();
-            validateProxyFormat(arrowFlightProxy);
-
             handle = buildFEProxyTicket(queryId, rootFragmentInstanceId, worker);
             if (arrowFlightProxy.isEmpty()) { // route to FE
                 endpoint = feEndpoint;
             } else { // route to defined proxy
-                String[] split = arrowFlightProxy.split(":");
-                endpoint = Location.forGrpcInsecure(split[0], Integer.parseInt(split[1]));
+                endpoint = getProxyLocation(arrowFlightProxy);
             }
         } else { // route directly to BE
             handle = buildBETicket(queryId, rootFragmentInstanceId);
