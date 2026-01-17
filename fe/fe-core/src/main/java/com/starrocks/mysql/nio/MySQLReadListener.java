@@ -15,12 +15,16 @@
 package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.RequestPackage;
 import com.starrocks.mysql.ssl.SSLDecoder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.sql.ast.StatementBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
@@ -114,11 +118,39 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         ctx.cleanup();
     }
 
+    /**
+     * Determines if the connection should be terminated.
+     * <p>
+     * Termination logic:
+     * <ul>
+     *   <li>Returns {@code true} if the terminated flag is already set (client disconnected)</li>
+     *   <li>Returns {@code false} if no statement has been executed yet (executor is null)</li>
+     *   <li>During graceful exit (leader transfer), returns {@code true} only if the last executed
+     *       statement is NOT a pre-query SQL. Pre-query SQLs (like {@code select @@query_timeout},
+     *       {@code set query_timeout=xxx}, {@code select connection_id()}) are initialization queries
+     *       sent by JDBC drivers and should not cause connection termination to avoid breaking
+     *       client connections during leadership transitions.</li>
+     * </ul>
+     *
+     * @return {@code true} if the connection should be terminated, {@code false} otherwise
+     */
+    private boolean isTerminated() {
+        if (terminated) {
+            return true;
+        }
+        StmtExecutor executor = connectProcessor.getExecutor();
+        if (executor == null) {
+            return false;
+        }
+        final StatementBase lastStmt = executor.getParsedStmt();
+        return GracefulExitFlag.isGracefulExit() && !SqlUtils.isPreQuerySQL(lastStmt);
+    }
+
     private synchronized void handleRequest(RequestPackage req) {
         ctx.setThreadLocalInfo();
         try {
             connectProcessor.processOnce(req);
-            if (ctx.isKilled() || terminated) {
+            if (ctx.isKilled() || isTerminated()) {
                 ctx.stopAcceptQuery();
                 ctx.cleanup();
             }
