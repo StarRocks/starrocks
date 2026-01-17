@@ -113,6 +113,29 @@ public class KuduMetadataTest {
     }
 
     @Test
+    public void testGetTableFromHMSSetsMasterAddresses(@Mocked com.starrocks.connector.hive.IHiveMetastore hiveMetastore) {
+        KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER, true,
+                SCHEMA_EMULATION_PREFIX, Optional.of(hiveMetastore));
+
+        // Create a KuduTable that would be returned from HMS
+        KuduTable hmsKuduTable = new KuduTable(null, KUDU_CATALOG, "db1", "tbl1",
+                "impala::db1.tbl1", Lists.newArrayList(), Lists.newArrayList());
+
+        new Expectations() {
+            {
+                hiveMetastore.getTable(anyString, anyString);
+                result = hmsKuduTable;
+            }
+        };
+
+        Table table = metadata.getTable(new ConnectContext(), "db1", "tbl1");
+        KuduTable kuduTable = (KuduTable) table;
+
+        // Verify that masterAddresses was set
+        Assertions.assertEquals(KUDU_MASTER, kuduTable.getMasterAddresses());
+    }
+
+    @Test
     public void testListTableNames() throws KuduException {
         KuduMetadata metadata = new KuduMetadata(KUDU_CATALOG, new HdfsEnvironment(), KUDU_MASTER,
                 true, SCHEMA_EMULATION_PREFIX, Optional.empty());
