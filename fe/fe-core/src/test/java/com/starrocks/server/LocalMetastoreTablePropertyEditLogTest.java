@@ -35,6 +35,7 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
@@ -150,6 +151,38 @@ public class LocalMetastoreTablePropertyEditLogTest {
             return olapTable;
         } catch (com.starrocks.common.AnalysisException e) {
             throw new RuntimeException("Failed to create range partitioned table", e);
+        }
+    }
+
+    private static LakeTable createRangePartitionedLakeTable(long tableId, String tableName, int bucketNum) {
+        try {
+            List<Column> columns = new ArrayList<>();
+            // partition column
+            Column dt = new Column("dt", DateType.DATE);
+            dt.setIsKey(true);
+            columns.add(dt);
+            // target column for time_drift_constraint (DATE type, not necessarily a partition column)
+            columns.add(new Column("dt2", DateType.DATE));
+            columns.add(new Column("v2", IntegerType.BIGINT));
+
+            RangePartitionInfo partitionInfo = new RangePartitionInfo(List.of(dt));
+            partitionInfo.setDataProperty(PARTITION_ID, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
+            partitionInfo.setReplicationNum(PARTITION_ID, (short) 1);
+
+            // Create partition range: [2024-01-01, 2024-02-01)
+            PartitionKey lowerKey = PartitionKey.ofDate(LocalDate.parse("2024-01-01"));
+            PartitionKey upperKey = PartitionKey.ofDate(LocalDate.parse("2024-02-01"));
+            Range<PartitionKey> partitionRange = Range.closedOpen(lowerKey, upperKey);
+            partitionInfo.addPartition(PARTITION_ID, false, partitionRange,
+                    com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY, (short) 1);
+
+            DistributionInfo distributionInfo = new HashDistributionInfo(bucketNum, List.of(dt));
+
+            LakeTable lakeTable = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
+            lakeTable.setTableProperty(new TableProperty(new HashMap<>()));
+            return lakeTable;
+        } catch (com.starrocks.common.AnalysisException e) {
+            throw new RuntimeException("Failed to create range partitioned lake table", e);
         }
     }
 
@@ -1405,4 +1438,312 @@ public class LocalMetastoreTablePropertyEditLogTest {
         Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
         Assertions.assertFalse(table.hasForbiddenGlobalDict());
     }
+
+    @Test
+    public void testAlterTablePropertiesTableQueryTimeoutNormalCase() throws Exception {
+        // Setup
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 6000, DB_NAME + "_table_query_timeout");
+        metastore.unprotectCreateDb(db);
+        OlapTable table = createHashOlapTable(TABLE_ID + 6000, TABLE_NAME + "_table_query_timeout", 3);
+        db.registerTableUnlocked(table);
+
+        // Test - Set table_query_timeout via alterTableProperties
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "120");
+        metastore.alterTableProperties(db, table, properties);
+
+        // Verify table_query_timeout is set correctly
+        table = (OlapTable) db.getTable(TABLE_NAME + "_table_query_timeout");
+        Assertions.assertNotNull(table);
+        TableProperty tableProperty = table.getTableProperty();
+        Assertions.assertNotNull(tableProperty);
+        Assertions.assertEquals(120, tableProperty.getTableQueryTimeout());
+    }
+
+    @Test
+    public void testAlterTablePropertiesTableQueryTimeoutWithErrorCases() throws Exception {
+        // Setup
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 7000, DB_NAME + "_table_query_timeout_error");
+        metastore.unprotectCreateDb(db);
+        OlapTable table = createHashOlapTable(TABLE_ID + 7000, TABLE_NAME + "_table_query_timeout_error", 3);
+        db.registerTableUnlocked(table);
+
+        // Test 1: Invalid timeout value (0) - should throw DdlException
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "0");
+        try {
+            metastore.alterTableProperties(db, table, properties1);
+            Assertions.fail("Should throw DdlException for invalid timeout value");
+        } catch (com.starrocks.common.DdlException e) {
+            Assertions.assertTrue(e.getMessage().contains("must be greater than 0"));
+        }
+
+        // Test 2: Invalid timeout value (negative) - should throw DdlException
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "-10");
+        try {
+            metastore.alterTableProperties(db, table, properties2);
+            Assertions.fail("Should throw DdlException for negative timeout value");
+        } catch (com.starrocks.common.DdlException e) {
+            Assertions.assertTrue(e.getMessage().contains("must be greater than 0"));
+        }
+
+        // Test 3: Invalid format (not a number) - should throw DdlException
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "invalid");
+        try {
+            metastore.alterTableProperties(db, table, properties3);
+            Assertions.fail("Should throw DdlException for invalid number format");
+        } catch (com.starrocks.common.DdlException e) {
+            Assertions.assertTrue(e.getMessage().contains("must be a valid integer"));
+        }
+
+        // Test 4: Valid large timeout value (greater than cluster timeout) - should succeed
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "600");
+        metastore.alterTableProperties(db, table, properties4);
+        table = (OlapTable) db.getTable(TABLE_NAME + "_table_query_timeout_error");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals(600, table.getTableProperty().getTableQueryTimeout());
+
+        // Test 5: Update timeout value - should succeed
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "180");
+        metastore.alterTableProperties(db, table, properties5);
+        table = (OlapTable) db.getTable(TABLE_NAME + "_table_query_timeout_error");
+        Assertions.assertEquals(180, table.getTableProperty().getTableQueryTimeout());
+    }
+
+    @Test
+    public void testTablePropertyBuildTableQueryTimeout() {
+        // Test TableProperty.buildTableQueryTimeout() boundary cases
+        TableProperty tableProperty = new TableProperty(new HashMap<>());
+        
+        // Test 1: Valid timeout value
+        tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "120");
+        tableProperty.buildTableQueryTimeout();
+        Assertions.assertEquals(120, tableProperty.getTableQueryTimeout());
+        
+        // Test 2: Timeout value is 0 - should fall back to default (-1) and remove invalid property
+        tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "0");
+        tableProperty.buildTableQueryTimeout();
+        Assertions.assertEquals(-1, tableProperty.getTableQueryTimeout());
+        Assertions.assertFalse(tableProperty.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+        
+        // Test 3: Timeout value is negative (but not -1) - should fall back to default (-1) and remove invalid property
+        tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "-10");
+        tableProperty.buildTableQueryTimeout();
+        Assertions.assertEquals(-1, tableProperty.getTableQueryTimeout());
+        Assertions.assertFalse(tableProperty.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+        
+        // Test 4: Invalid format (not a number) - should fall back to default (-1) and remove invalid property
+        tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "invalid");
+        tableProperty.buildTableQueryTimeout();
+        Assertions.assertEquals(-1, tableProperty.getTableQueryTimeout());
+        Assertions.assertFalse(tableProperty.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+
+        // Test 5: -1 means unset/reset to default (should not throw)
+        tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "-1");
+        tableProperty.buildTableQueryTimeout();
+        Assertions.assertEquals(-1, tableProperty.getTableQueryTimeout());
+        Assertions.assertFalse(tableProperty.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+        
+        // Test 6: Property not set - should set to -1
+        tableProperty.getProperties().remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        tableProperty.buildTableQueryTimeout();
+        Assertions.assertEquals(-1, tableProperty.getTableQueryTimeout());
+    }
+
+    @Test
+    public void testAlterTablePropertiesWithTimeDriftAndFastSchemaEvolutionV2AndTableQueryTimeout() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 8000, DB_NAME + "_table_query_timeout_mix");
+        metastore.unprotectCreateDb(db);
+
+        LakeTable table = createRangePartitionedLakeTable(TABLE_ID + 8000, TABLE_NAME + "_table_query_timeout_mix", 3);
+        db.registerTableUnlocked(table);
+
+        String spec = "dt2 between days_sub(dt, 1) and days_add(dt, 1)";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, "true");
+        properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "120");
+        properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+
+        metastore.alterTableProperties(db, table, properties);
+
+        LakeTable altered = (LakeTable) db.getTable(table.getName());
+        Assertions.assertNotNull(altered);
+        // Verify table_query_timeout via OlapTable.getTableQueryTimeout() to ensure lambda in applier was executed
+        Assertions.assertEquals(120, altered.getTableQueryTimeout());
+        Assertions.assertEquals(120, altered.getTableProperty().getTableQueryTimeout());
+        Assertions.assertEquals(spec, altered.getTableProperty().getTimeDriftConstraintSpec());
+        Assertions.assertTrue(altered.isFastSchemaEvolutionV2());
+        Assertions.assertFalse(altered.enableStatisticCollectOnFirstLoad());
+
+        // Cover OlapTable.getCommonProperties export for compaction strategy and table_query_timeout
+        altered.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY, "real_time");
+        altered.getTableProperty().buildCompactionStrategy();
+        Map<String, String> exported = altered.getProperties();
+        // compactionStrategyToString returns "REAL_TIME" (uppercase) as defined in TableProperty.REAL_TIME_COMPACTION_STRATEGY
+        Assertions.assertEquals("REAL_TIME", exported.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
+        Assertions.assertEquals("120", exported.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+    }
+
+    /**
+     * Test alterTableProperties with only table_query_timeout property.
+     * Covers LocalMetastore.alterTableQueryTimeout method (lines 3888-3903).
+     */
+    @Test
+    public void testAlterTableQueryTimeoutOnly() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 9100, DB_NAME + "_timeout_only");
+        metastore.unprotectCreateDb(db);
+
+        OlapTable table = createHashOlapTable(TABLE_ID + 9100, TABLE_NAME + "_timeout_only", 3);
+        db.registerTableUnlocked(table);
+
+        // Verify initial state
+        Assertions.assertEquals(-1, table.getTableQueryTimeout());
+
+        // Set table_query_timeout only
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "180");
+        metastore.alterTableProperties(db, table, properties);
+
+        // Verify via OlapTable.getTableQueryTimeout() - this calls tableProperty.getTableQueryTimeout()
+        // The applier in alterTableQueryTimeout calls:
+        // table.setTableQueryTimeout(180) -> which updates TableProperty and builds table_query_timeout.
+        OlapTable altered = (OlapTable) db.getTable(TABLE_NAME + "_timeout_only");
+        Assertions.assertNotNull(altered);
+        Assertions.assertEquals(180, altered.getTableQueryTimeout());
+    }
+
+    @Test
+    public void testAlterTableQueryTimeoutResetToDefault() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 9103, DB_NAME + "_timeout_reset");
+        metastore.unprotectCreateDb(db);
+
+        OlapTable table = createHashOlapTable(TABLE_ID + 9103, TABLE_NAME + "_timeout_reset", 3);
+        db.registerTableUnlocked(table);
+
+        // Set to a positive value first.
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "120");
+        metastore.alterTableProperties(db, table, properties);
+        Assertions.assertEquals(120, table.getTableQueryTimeout());
+        Assertions.assertEquals("120", table.getProperties().get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+
+        // Reset to default by setting -1.
+        Map<String, String> resetProps = new HashMap<>();
+        resetProps.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "-1");
+        metastore.alterTableProperties(db, table, resetProps);
+        Assertions.assertEquals(-1, table.getTableQueryTimeout());
+        Assertions.assertFalse(table.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+    }
+
+    /**
+     * Test alterTableProperties with only cloud_native_fast_schema_evolution_v2 property.
+     * Covers LocalMetastore.alterCloudNativeFastSchemaEvolutionV2 method (lines 3879-3886).
+     */
+    @Test
+    public void testAlterCloudNativeFastSchemaEvolutionV2Only() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 9101, DB_NAME + "_fast_schema_only");
+        metastore.unprotectCreateDb(db);
+
+        LakeTable table = createRangePartitionedLakeTable(TABLE_ID + 9101, TABLE_NAME + "_fast_schema_only", 3);
+        db.registerTableUnlocked(table);
+
+        // Verify initial state (default is true for LakeTable)
+        // Set it to false first, then to true to verify the change
+        table.setFastSchemaEvolutionV2(false);
+        Assertions.assertFalse(table.isFastSchemaEvolutionV2());
+
+        // Set cloud_native_fast_schema_evolution_v2 only
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, "true");
+        metastore.alterTableProperties(db, table, properties);
+
+        // Verify via LakeTable.isFastSchemaEvolutionV2()
+        // The applier in alterCloudNativeFastSchemaEvolutionV2 calls:
+        // ((LakeTable) table).setFastSchemaEvolutionV2(value)
+        LakeTable altered = (LakeTable) db.getTable(TABLE_NAME + "_fast_schema_only");
+        Assertions.assertNotNull(altered);
+        Assertions.assertTrue(altered.isFastSchemaEvolutionV2());
+    }
+
+    /**
+     * Test alterTableProperties with only time_drift_constraint property.
+     * Covers LocalMetastore.alterTimeDriftConstraint method (line 3932).
+     */
+    @Test
+    public void testAlterTimeDriftConstraintOnly() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 9102, DB_NAME + "_time_drift_only");
+        metastore.unprotectCreateDb(db);
+
+        LakeTable table = createRangePartitionedLakeTable(TABLE_ID + 9102, TABLE_NAME + "_time_drift_only", 3);
+        db.registerTableUnlocked(table);
+
+        // Set time_drift_constraint only
+        String spec = "dt2 between days_sub(dt, 1) and days_add(dt, 1)";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, spec);
+        metastore.alterTableProperties(db, table, properties);
+
+        // Verify via TableProperty.getTimeDriftConstraintSpec()
+        LakeTable altered = (LakeTable) db.getTable(TABLE_NAME + "_time_drift_only");
+        Assertions.assertNotNull(altered);
+        Assertions.assertEquals(spec, altered.getTableProperty().getTimeDriftConstraintSpec());
+    }
+
+    @Test
+    public void testLocalMetastoreAlterHelpersAndOlapTableExport() throws Exception {
+        // This test is intentionally minimal and deterministic:
+        // - directly invokes LocalMetastore's private helper methods via reflection, then runs the captured appliers,
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        LakeTable lakeTable = createRangePartitionedLakeTable(TABLE_ID + 9200, TABLE_NAME + "_helper_lake", 3);
+        lakeTable.setFastSchemaEvolutionV2(false);
+        Assertions.assertFalse(lakeTable.isFastSchemaEvolutionV2());
+
+        List<Runnable> appliers = new ArrayList<>();
+        Map<String, String> props = new HashMap<>();
+        props.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, "true");
+
+        java.lang.reflect.Method alterFastSchema = LocalMetastore.class.getDeclaredMethod(
+                "alterCloudNativeFastSchemaEvolutionV2", OlapTable.class, Map.class, List.class);
+        alterFastSchema.setAccessible(true);
+        alterFastSchema.invoke(metastore, lakeTable, props, appliers);
+        Assertions.assertEquals(1, appliers.size());
+        appliers.get(0).run();
+        Assertions.assertTrue(lakeTable.isFastSchemaEvolutionV2());
+
+        // Cover alterTableQueryTimeout helper + its lambda body.
+        appliers.clear();
+        props.clear();
+        props.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, "120");
+        java.lang.reflect.Method alterTableTimeout = LocalMetastore.class.getDeclaredMethod(
+                "alterTableQueryTimeout", OlapTable.class, Map.class, List.class);
+        alterTableTimeout.setAccessible(true);
+        OlapTable olapTable = createHashOlapTable(TABLE_ID + 9201, TABLE_NAME + "_helper_olap", 3);
+        alterTableTimeout.invoke(metastore, olapTable, props, appliers);
+        Assertions.assertEquals(1, appliers.size());
+        appliers.get(0).run();
+        Assertions.assertEquals(120, olapTable.getTableQueryTimeout());
+
+        // Cover OlapTable setters/getters + getProperties export path.
+        olapTable.setEnableStatisticCollectOnFirstLoad(false);
+        Assertions.assertFalse(olapTable.enableStatisticCollectOnFirstLoad());
+        olapTable.setTableQueryTimeout(120);
+        Assertions.assertEquals(120, olapTable.getTableQueryTimeout());
+        Map<String, String> exported = olapTable.getProperties();
+        Assertions.assertEquals("120", exported.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+    }
+
 }
