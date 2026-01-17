@@ -2383,6 +2383,13 @@ public class OlapTable extends Table {
      */
     public void replaceTempPartitions(long dbId, List<String> partitionNames, List<String> tempPartitionNames,
                                       boolean strictRange, boolean useTempPartitionName) throws DdlException {
+        checkReplaceTempPartitions(partitionNames, tempPartitionNames, strictRange);
+        replaceTempPartitionsWithoutCheck(dbId, partitionNames, tempPartitionNames, useTempPartitionName);
+    }
+
+    public void checkReplaceTempPartitions(List<String> partitionNames,
+                                           List<String> tempPartitionNames,
+                                           boolean strictRange) throws DdlException {
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
 
@@ -2439,7 +2446,10 @@ public class OlapTable extends Table {
                 CatalogUtils.checkTempPartitionConflict(partitionList, tempPartitionList, listInfo);
             }
         }
+    }
 
+    public void replaceTempPartitionsWithoutCheck(long dbId, List<String> partitionNames,
+                                                  List<String> tempPartitionNames, boolean useTempPartitionName) {
         // begin to replace
         // 1. drop old partitions
         for (String partitionName : partitionNames) {

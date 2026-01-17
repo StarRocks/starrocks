@@ -50,12 +50,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
-import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ReplicaStatus;
@@ -72,12 +69,9 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.transaction.GtidGenerator;
-import mockit.Delegate;
-import mockit.Expectations;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -95,7 +89,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class BackupJobTest {
 
@@ -113,13 +106,8 @@ public class BackupJobTest {
     private long viewId = 10;
 
     private long repoId = 20000;
-    private AtomicLong id = new AtomicLong(50000);
 
-    @Mocked
     private GlobalStateMgr globalStateMgr;
-
-    @Mocked
-    private LocalMetastore localMetastore;
 
     private MockBackupHandler backupHandler;
 
@@ -153,9 +141,6 @@ public class BackupJobTest {
         }
     }
 
-    @Mocked
-    private EditLog editLog;
-
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
@@ -179,6 +164,7 @@ public class BackupJobTest {
 
     @BeforeEach
     public void setUp() {
+        UtFrameUtils.setUpForPersistTest();
         globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
@@ -189,8 +175,7 @@ public class BackupJobTest {
         db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.AGG_KEYS);
         View view = UnitTestUtil.createTestView(viewId);
         db.registerTableUnlocked(view);
-
-        LockManager lockManager = new LockManager();
+        globalStateMgr.getLocalMetastore().replayCreateDb(db);
 
         // Setup default NodeMgr with SystemInfoService
         SystemInfoService infoService = new SystemInfoService();
@@ -198,68 +183,8 @@ public class BackupJobTest {
         backend.setAlive(true);
         infoService.addBackend(backend);
 
-        NodeMgr nodeMgr = new NodeMgr();
+        NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
         Deencapsulation.setField(nodeMgr, "systemInfo", infoService);
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getLockManager();
-                minTimes = 0;
-                result = lockManager;
-
-                globalStateMgr.getGtidGenerator();
-                minTimes = 0;
-                result = new GtidGenerator();
-
-                globalStateMgr.getLocalMetastore();
-                minTimes = 0;
-                result = localMetastore;
-
-                globalStateMgr.getNodeMgr();
-                minTimes = 0;
-                result = nodeMgr;
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = id.getAndIncrement();
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-
-        new Expectations(localMetastore) {
-            {
-                localMetastore.getDb(anyLong);
-                minTimes = 0;
-                result = db;
-
-                localMetastore.getTable("testDb", "testTable");
-                minTimes = 0;
-                result = db.getTable(tblId);
-
-                localMetastore.getTable("testDb", UnitTestUtil.VIEW_NAME);
-                minTimes = 0;
-                result = db.getTable(viewId);
-
-                localMetastore.getTable("testDb", "unknown_tbl");
-                minTimes = 0;
-                result = null;
-            }
-        };
-
-        new Expectations() {
-            {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
-                    }
-                };
-            }
-        };
 
         new MockUp<AgentTaskExecutor>() {
             @Mock
@@ -296,6 +221,7 @@ public class BackupJobTest {
 
     @AfterEach
     public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
         Config.enable_metric_calculator = origin_enable_metric_calculator_value;
     }
 
@@ -347,7 +273,7 @@ public class BackupJobTest {
         Assertions.assertEquals(Status.OK, job.getStatus());
         Assertions.assertEquals(BackupJobState.UPLOADING, job.getState());
         Assertions.assertEquals(1, AgentTaskQueue.getTaskNum());
-        task = AgentTaskQueue.getTask(backendId, TTaskType.UPLOAD, id.get() - 1);
+        task = AgentTaskQueue.getTask(TTaskType.UPLOAD).get(0);
         Assertions.assertTrue(task instanceof UploadTask);
         UploadTask upTask = (UploadTask) task;
 
@@ -437,7 +363,8 @@ public class BackupJobTest {
 
         List<TableRefPersist> tableRefs = Lists.newArrayList();
         tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs,
+                13600 * 1000, GlobalStateMgr.getCurrentState(), repo.getId());
         job.run();
         Assertions.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assertions.assertEquals(BackupJobState.CANCELLED, job.getState());
@@ -621,7 +548,7 @@ public class BackupJobTest {
     @Test
     public void testChooseReplicaSkipsBadReplicas() {
         // Get the existing NodeMgr and modify its SystemInfoService
-        NodeMgr existingNodeMgr = globalStateMgr.getNodeMgr();
+        NodeMgr existingNodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
         SystemInfoService infoService = Deencapsulation.getField(existingNodeMgr, "systemInfo");
 
         // Clear existing backends and add test-specific ones

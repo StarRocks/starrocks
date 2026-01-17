@@ -2156,18 +2156,16 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         }
 
-        // set table state
-        if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
-            olapTable.setState(OlapTableState.OPTIMIZE);
-        } else {
-            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
-        }
-
-        // 2. add schemaChangeJob
-        addAlterJobV2(schemaChangeJob);
-
-        // 3. write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob);
+        // 2. write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob, wal -> {
+            // set table state
+            if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
+                olapTable.setState(OlapTableState.OPTIMIZE);
+            } else {
+                olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+            }
+            addAlterJobV2(schemaChangeJob);
+        });
         LOG.info("finished to create schema change job: {}", schemaChangeJob.getJobId());
         return null;
     }
@@ -2274,14 +2272,13 @@ public class SchemaChangeHandler extends AlterHandler {
         if (alterMetaJob == null) {
             return null;
         }
-        // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
 
-        // 2. add schemaChangeJob
-        addAlterJobV2(alterMetaJob);
-
-        // 3. write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterMetaJob);
+        // 2. write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterMetaJob, wal -> {
+            // set table state
+            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+            addAlterJobV2(alterMetaJob);
+        });
         LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(),
                 olapTable.getName());
         return null;
