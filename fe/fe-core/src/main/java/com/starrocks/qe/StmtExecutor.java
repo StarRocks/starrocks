@@ -1643,6 +1643,11 @@ public class StmtExecutor {
             final RawScopedTimer rawScopedTimer = new RawScopedTimer();
             do {
                 batch = coord.getNext();
+                if (batch.getStatus() != null && batch.getInternalErrorCode() != null) {
+                    processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
+                    throw new StarRocksException(batch.getInternalErrorCode(), batch.getStatus().getErrorMsg());
+                }
+
                 // for outfile query, there will be only one empty batch send back with eos flag
                 if (batch.getBatch() != null && !isOutfileQuery && needSendResult) {
                     // For some language driver, getting error packet after fields packet will be recognized as a success result
