@@ -272,6 +272,8 @@ set(STORAGE_FILES
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
+    load_spill_pipeline_merge_iterator.cpp
+    load_spill_pipeline_merge_context.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
