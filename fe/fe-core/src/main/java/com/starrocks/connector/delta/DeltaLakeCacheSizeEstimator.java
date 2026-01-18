@@ -147,28 +147,6 @@ public class DeltaLakeCacheSizeEstimator {
         return size;
     }
 
-    private static long estimateRowBasedBatchSize(int batchSize, StructType schema) {
-        long size = 0;
-
-        // ArrayList overhead for storing rows
-        size += 48; // ArrayList object
-        size += batchSize * 8L; // References array
-
-        // Estimate per-row overhead
-        int fieldCount = schema.length();
-        long perRowOverhead = 48; // Row object + field array
-        perRowOverhead += fieldCount * 24L; // Field references and metadata
-
-        // Add data size based on field types
-        for (StructField field : schema.fields()) {
-            perRowOverhead += estimateFieldDataSize(field.getDataType());
-        }
-
-        size += perRowOverhead * batchSize;
-
-        return size;
-    }
-
     private static long estimateFieldDataSize(DataType dataType) {
         if (dataType == null) {
             return 8; // Reference size
