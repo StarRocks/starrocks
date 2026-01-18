@@ -19,6 +19,12 @@ import com.starrocks.connector.PartitionInfo;
 import java.util.concurrent.TimeUnit;
 
 public class Partition implements PartitionInfo {
+    /**
+     * Placeholder for missing/not-found partitions.
+     * Used to maintain positional alignment with requested partition names.
+     */
+    public static final Partition MISSING_PARTITION = new Partition(Long.MIN_VALUE, Integer.MIN_VALUE);
+
     private final long modifiedTime;
     private int specId;
 

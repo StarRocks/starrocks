@@ -390,9 +390,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         for (String partitionName : partitionNames) {
             Partition partition = partitionMap.get(partitionName);
-            if (partition != null) {
-                partitions.add(partition);
-            }
+            // Use MISSING_PARTITION placeholder to maintain positional alignment
+            partitions.add(partition != null ? partition : Partition.MISSING_PARTITION);
         }
         return partitions.build();
     }

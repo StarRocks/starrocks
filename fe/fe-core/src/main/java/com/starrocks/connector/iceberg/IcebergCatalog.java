@@ -532,9 +532,8 @@ public interface IcebergCatalog extends MemoryTrackable {
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
         for (String partitionName : partitionNames) {
             Partition partition = partitionMap.get(partitionName);
-            if (partition != null) {
-                partitions.add(partition);
-            }
+            // Use MISSING_PARTITION placeholder to maintain positional alignment
+            partitions.add(partition != null ? partition : Partition.MISSING_PARTITION);
         }
         return partitions.build();
     }
@@ -579,13 +578,12 @@ public interface IcebergCatalog extends MemoryTrackable {
             throw new StarRocksConnectorException("Failed to stream partitions for table: " + tableName, e);
         }
 
-        // Return in the order requested
+        // Return in the order requested, using MISSING_PARTITION for not-found entries
         ImmutableList.Builder<Partition> orderedResult = ImmutableList.builder();
         for (String name : partitionNames) {
             Partition partition = result.get(name);
-            if (partition != null) {
-                orderedResult.add(partition);
-            }
+            // Use MISSING_PARTITION placeholder to maintain positional alignment
+            orderedResult.add(partition != null ? partition : Partition.MISSING_PARTITION);
         }
         return orderedResult.build();
     }

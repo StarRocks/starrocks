@@ -1281,7 +1281,7 @@ public class CachingIcebergCatalogTest {
 
     @Test
     public void testGetPartitionsByNamesWithMissingPartitions() throws IOException {
-        // Test that missing partitions are skipped (not null pointer)
+        // Test that missing partitions return MISSING_PARTITION placeholder to maintain positional alignment
         IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
         IcebergCatalogProperties props = Mockito.mock(IcebergCatalogProperties.class);
         Table nativeTable = Mockito.mock(Table.class);
@@ -1323,9 +1323,13 @@ public class CachingIcebergCatalogTest {
             List<String> requestedNames = Arrays.asList("date=2024-01-01", "date=2024-01-99");
             List<Partition> result = catalog.getPartitionsByNames(icebergTable, null, requestedNames);
 
-            // Only the existing partition should be returned
-            Assertions.assertEquals(1, result.size());
+            // Result should maintain positional alignment with requested names
+            Assertions.assertEquals(2, result.size());
+            // First partition exists
             Assertions.assertEquals(1704067200000L, result.get(0).getModifiedTime());
+            // Second partition is MISSING_PARTITION placeholder
+            Assertions.assertSame(Partition.MISSING_PARTITION, result.get(1));
+            Assertions.assertEquals(Long.MIN_VALUE, result.get(1).getModifiedTime());
         } finally {
             es.shutdownNow();
         }
