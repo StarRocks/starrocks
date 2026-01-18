@@ -303,6 +303,30 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                                 ExecutorService executorService) {
         IcebergTableName key =
                 new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
+
+        // Check cache first
+        Map<String, Partition> cached = partitionCache.getIfPresent(key);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Estimate partition count before loading
+        int threshold = icebergProperties.getIcebergPartitionStreamingThreshold();
+        long estimatedCount = -1;
+        try {
+            estimatedCount = delegate.estimatePartitionCount(icebergTable, snapshotId);
+        } catch (Exception e) {
+            LOG.debug("Failed to estimate partition count, falling back to cache", e);
+        }
+
+        if (estimatedCount > 0 && estimatedCount > threshold) {
+            LOG.info("Table {}.{} has ~{} partitions (exceeds threshold {}), bypassing partition cache",
+                    key.dbName, key.tableName, estimatedCount, threshold);
+            // For very large tables, load directly without caching to avoid OOM
+            return delegate.getPartitions(icebergTable, snapshotId, executorService);
+        }
+
+        // For smaller tables, use cache
         return partitionCache.get(key);
     }
 
