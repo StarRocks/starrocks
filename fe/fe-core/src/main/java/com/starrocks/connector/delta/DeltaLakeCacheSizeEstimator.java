@@ -57,7 +57,7 @@ public class DeltaLakeCacheSizeEstimator {
             // StructType size
             size += 64; // Base object overhead
             if (key.second != null) {
-                size += 48; // StructType fields
+                size += estimateSchemaSize(key.second);
             }
         }
 
@@ -92,15 +92,12 @@ public class DeltaLakeCacheSizeEstimator {
         }
 
         // Estimate based on batch type and characteristics
-        if (batch instanceof io.delta.kernel.defaults.internal.data.DefaultRowBasedColumnarBatch) {
-            // Row-based batches typically store data as List<Row>
-            size += estimateRowBasedBatchSize(batchSize, schema);
-        } else if (batch instanceof io.delta.kernel.defaults.internal.data.DefaultColumnarBatch) {
+        if (batch instanceof io.delta.kernel.defaults.internal.data.DefaultColumnarBatch) {
             // True columnar batch - estimate column vectors
-            size += estimateTrueColumnarBatchSize(batch, batchSize);
+            size += estimateColumnarBatchSize(batch, batchSize);
         } else {
             // Unknown implementation - use conservative estimate
-            size += batchSize * 384L; // 384 bytes per row (conservative)
+            size += batchSize * 1024L; // 1024 bytes per row (conservative)
         }
 
         return size;
@@ -214,7 +211,7 @@ public class DeltaLakeCacheSizeEstimator {
         }
     }
 
-    private static long estimateTrueColumnarBatchSize(ColumnarBatch batch, int batchSize) {
+    private static long estimateColumnarBatchSize(ColumnarBatch batch, int batchSize) {
         long size = 0;
 
         // Estimate each column vector
