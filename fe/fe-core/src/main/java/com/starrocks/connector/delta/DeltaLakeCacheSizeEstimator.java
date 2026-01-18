@@ -19,22 +19,10 @@ import com.starrocks.common.Pair;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.types.ArrayType;
-import io.delta.kernel.types.BinaryType;
-import io.delta.kernel.types.BooleanType;
-import io.delta.kernel.types.ByteType;
 import io.delta.kernel.types.DataType;
-import io.delta.kernel.types.DateType;
-import io.delta.kernel.types.DecimalType;
-import io.delta.kernel.types.DoubleType;
-import io.delta.kernel.types.FloatType;
-import io.delta.kernel.types.IntegerType;
-import io.delta.kernel.types.LongType;
 import io.delta.kernel.types.MapType;
-import io.delta.kernel.types.ShortType;
-import io.delta.kernel.types.StringType;
 import io.delta.kernel.types.StructField;
 import io.delta.kernel.types.StructType;
-import io.delta.kernel.types.TimestampType;
 
 import java.util.List;
 
@@ -145,48 +133,6 @@ public class DeltaLakeCacheSizeEstimator {
         }
 
         return size;
-    }
-
-    private static long estimateFieldDataSize(DataType dataType) {
-        if (dataType == null) {
-            return 8; // Reference size
-        }
-
-        // Conservative estimates based on data type
-        // Conservative estimates based on data type
-        if (dataType instanceof BooleanType) {
-            return 2;
-        } else if (dataType instanceof ByteType) {
-            return 2;
-        } else if (dataType instanceof ShortType) {
-            return 4;
-        } else if (dataType instanceof IntegerType) {
-            return 8;
-        } else if (dataType instanceof LongType) {
-            return 16;
-        } else if (dataType instanceof FloatType) {
-            return 16;
-        } else if (dataType instanceof DoubleType) {
-            return 24;
-        } else if (dataType instanceof StringType) {
-            return 64;
-        } else if (dataType instanceof DecimalType) {
-            return 32;
-        } else if (dataType instanceof DateType) {
-            return 16;
-        } else if (dataType instanceof TimestampType) {
-            return 24;
-        } else if (dataType instanceof BinaryType) {
-            return 128;
-        } else if (dataType instanceof ArrayType) {
-            return 128;
-        } else if (dataType instanceof MapType) {
-            return 256;
-        } else if (dataType instanceof StructType) {
-            return 256;
-        } else {
-            return 64;
-        }
     }
 
     private static long estimateColumnarBatchSize(ColumnarBatch batch, int batchSize) {
