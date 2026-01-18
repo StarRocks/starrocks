@@ -45,17 +45,14 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.exceptions.NoSuchTableException;
-import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 import org.apache.spark.util.SizeEstimator;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -406,32 +403,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private List<Partition> getPartitionsByNamesStreaming(IcebergTable icebergTable, long snapshotId,
                                                           ExecutorService executorService,
                                                           List<String> partitionNames) {
-        Set<String> requestedNames = new HashSet<>(partitionNames);
-        Map<String, Partition> result = new HashMap<>();
-
-        try (CloseableIterator<Map.Entry<String, Partition>> iterator =
-                delegate.getPartitionIterator(icebergTable, snapshotId, executorService)) {
-
-            while (iterator.hasNext() && result.size() < requestedNames.size()) {
-                Map.Entry<String, Partition> entry = iterator.next();
-                if (requestedNames.contains(entry.getKey())) {
-                    result.put(entry.getKey(), entry.getValue());
-                }
-            }
-        } catch (IOException e) {
-            throw new StarRocksConnectorException("Failed to stream partitions for table: " +
-                    icebergTable.getNativeTable().name(), e);
-        }
-
-        // Return in the order requested
-        ImmutableList.Builder<Partition> orderedResult = ImmutableList.builder();
-        for (String name : partitionNames) {
-            Partition partition = result.get(name);
-            if (partition != null) {
-                orderedResult.add(partition);
-            }
-        }
-        return orderedResult.build();
+        return collectPartitionsFromIterator(
+                delegate.getPartitionIterator(icebergTable, snapshotId, executorService),
+                partitionNames,
+                icebergTable.getNativeTable().name());
     }
 
     @Override
