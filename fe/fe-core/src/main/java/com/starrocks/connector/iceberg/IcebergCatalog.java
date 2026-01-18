@@ -404,7 +404,7 @@ public interface IcebergCatalog extends MemoryTrackable {
 
     /**
      * Estimate the partition count without loading all partitions into memory.
-     * Uses Iceberg PartitionsTable's FileScanTask.rowCount() for efficient estimation.
+     * Uses FileScanTask.estimatedRowsCount() for efficient estimation without iterating rows.
      *
      * @param icebergTable The Iceberg table
      * @param snapshotId The snapshot ID to use, or -1 for current snapshot
@@ -426,13 +426,8 @@ public interface IcebergCatalog extends MemoryTrackable {
         long count = 0;
         try (CloseableIterable<FileScanTask> tasks = tableScan.planFiles()) {
             for (FileScanTask task : tasks) {
-                // Count rows by iterating through them
-                // This is still more efficient than loading full partition data
-                try (CloseableIterable<StructLike> rows = task.asDataTask().rows()) {
-                    for (StructLike ignored : rows) {
-                        count++;
-                    }
-                }
+                // Use estimatedRowsCount() for efficient estimation without iterating all rows
+                count += task.estimatedRowsCount();
             }
         } catch (IOException e) {
             getLogger().warn("Failed to estimate partition count for table: " + nativeTable.name(), e);
@@ -535,7 +530,12 @@ public interface IcebergCatalog extends MemoryTrackable {
         // For larger requests or unknown count, use existing cached approach
         Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
         ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
+        for (String partitionName : partitionNames) {
+            Partition partition = partitionMap.get(partitionName);
+            if (partition != null) {
+                partitions.add(partition);
+            }
+        }
         return partitions.build();
     }
 

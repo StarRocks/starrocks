@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -44,14 +45,17 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 import org.apache.spark.util.SizeEstimator;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -328,6 +332,106 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         // For smaller tables, use cache
         return partitionCache.get(key);
+    }
+
+    /**
+     * Override getPartitionsByNames to avoid double-computing estimatePartitionCount.
+     * The base interface method computes estimate once, and getPartitions() computes it again on cache miss.
+     * This override computes the estimate once and uses it for both streaming decision and cache bypass decision.
+     */
+    @Override
+    public List<Partition> getPartitionsByNames(IcebergTable icebergTable,
+                                                 ExecutorService executorService,
+                                                 List<String> partitionNames) {
+        org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+        long snapshotId = -1;
+        if (nativeTable.currentSnapshot() != null) {
+            snapshotId = nativeTable.currentSnapshot().snapshotId();
+        }
+
+        // Unpartitioned tables use existing logic
+        if (nativeTable.spec().isUnpartitioned()) {
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
+            return List.of(partitionMap.get(IcebergCatalog.EMPTY_PARTITION_NAME));
+        }
+
+        // Compute estimate ONCE and use for both decisions
+        long estimatedCount = -1;
+        try {
+            estimatedCount = delegate.estimatePartitionCount(icebergTable, snapshotId);
+        } catch (Exception e) {
+            LOG.debug("Failed to estimate partition count, falling back to default", e);
+        }
+
+        // Decision 1: If requested partitions are less than 10% of total, use streaming approach
+        if (estimatedCount > 0 && partitionNames.size() < estimatedCount / 10) {
+            return getPartitionsByNamesStreaming(icebergTable, snapshotId, executorService, partitionNames);
+        }
+
+        // Decision 2: For larger requests, get all partitions
+        // But use the already-computed estimate to decide on cache bypass
+        IcebergTableName key = new IcebergTableName(
+                icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
+
+        // Check cache first
+        Map<String, Partition> cached = partitionCache.getIfPresent(key);
+        Map<String, Partition> partitionMap;
+        if (cached != null) {
+            partitionMap = cached;
+        } else {
+            // Use the already-computed estimate to decide on cache bypass
+            int threshold = icebergProperties.getIcebergPartitionStreamingThreshold();
+            if (estimatedCount > 0 && estimatedCount > threshold) {
+                LOG.info("Table {}.{} has ~{} partitions (exceeds threshold {}), bypassing partition cache",
+                        key.dbName, key.tableName, estimatedCount, threshold);
+                partitionMap = delegate.getPartitions(icebergTable, snapshotId, executorService);
+            } else {
+                partitionMap = partitionCache.get(key);
+            }
+        }
+
+        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
+        for (String partitionName : partitionNames) {
+            Partition partition = partitionMap.get(partitionName);
+            if (partition != null) {
+                partitions.add(partition);
+            }
+        }
+        return partitions.build();
+    }
+
+    /**
+     * Streaming implementation that stops as soon as all requested partitions are found.
+     */
+    private List<Partition> getPartitionsByNamesStreaming(IcebergTable icebergTable, long snapshotId,
+                                                          ExecutorService executorService,
+                                                          List<String> partitionNames) {
+        Set<String> requestedNames = new HashSet<>(partitionNames);
+        Map<String, Partition> result = new HashMap<>();
+
+        try (CloseableIterator<Map.Entry<String, Partition>> iterator =
+                delegate.getPartitionIterator(icebergTable, snapshotId, executorService)) {
+
+            while (iterator.hasNext() && result.size() < requestedNames.size()) {
+                Map.Entry<String, Partition> entry = iterator.next();
+                if (requestedNames.contains(entry.getKey())) {
+                    result.put(entry.getKey(), entry.getValue());
+                }
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException("Failed to stream partitions for table: " +
+                    icebergTable.getNativeTable().name(), e);
+        }
+
+        // Return in the order requested
+        ImmutableList.Builder<Partition> orderedResult = ImmutableList.builder();
+        for (String name : partitionNames) {
+            Partition partition = result.get(name);
+            if (partition != null) {
+                orderedResult.add(partition);
+            }
+        }
+        return orderedResult.build();
     }
 
     @Override

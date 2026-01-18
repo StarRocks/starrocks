@@ -62,8 +62,20 @@ public class StreamingPartitionIterator implements CloseableIterator<Map.Entry<S
         this.icebergTable = icebergTable;
         this.taskIterable = taskIterable;
         this.snapshotId = snapshotId;
-        this.taskIterator = taskIterable.iterator();
         this.nextEntry = null;
+
+        // Initialize taskIterator with proper resource cleanup on failure
+        try {
+            this.taskIterator = taskIterable.iterator();
+        } catch (Exception e) {
+            // Close taskIterable if iterator() throws to prevent resource leak
+            try {
+                taskIterable.close();
+            } catch (IOException closeEx) {
+                e.addSuppressed(closeEx);
+            }
+            throw e;
+        }
     }
 
     @Override
