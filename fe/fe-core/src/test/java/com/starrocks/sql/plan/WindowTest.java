@@ -1918,4 +1918,68 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n"));
     }
+
+    @Test
+    public void testRowNumberWithAggregate() throws Exception {
+        // Test for issue: row_number() with count(*) and max() in SELECT with GROUP BY
+        // This tests that aggregate columns are not pruned when window operator is above aggregate
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000);
+        String sql = "SELECT row_number() OVER(ORDER BY v1) as rid, " +
+                "count(*) as s_num, max(v2) as m_date " +
+                "FROM s1 GROUP BY v1, v2";
+
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 1: v1, 2: v2");
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : 7: row_number()\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 1: v1 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
+    public void testRowNumberWithMultipleAggregates() throws Exception {
+        // Test multiple aggregates with row_number to ensure all are preserved
+        String sql = "SELECT row_number() OVER(ORDER BY v1) as rid, " +
+                "count(*) as cnt, max(v2) as max_v2, min(v2) as min_v2, sum(v2) as sum_v2 " +
+                "FROM s1 GROUP BY v1, v2";
+
+        String plan = getFragmentPlan(sql);
+
+        // Verify all aggregate functions are present in the plan
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : clone(2: v2)\n" +
+                "  |  <slot 7> : 2: v2\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), sum(2: v2)\n" +
+                "  |  group by: 1: v1, 2: v2");
+
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : 7: min\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  <slot 9> : 9: row_number()\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 1: v1 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+    }
 }
