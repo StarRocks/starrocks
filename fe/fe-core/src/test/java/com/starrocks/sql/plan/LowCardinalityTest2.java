@@ -165,6 +165,30 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `low_card_t3` (\n" +
+                "  `d_date` date ,\n" +
+                "  `c_user` varchar(50) ,\n" +
+                "  `c_dept` varchar(50) ,\n" +
+                "  `c_par` varchar(50) ,\n" +
+                "  `c_nodevalue` varchar(50) ,\n" +
+                "  `c_brokername` varchar(50) ,\n" +
+                "  `f_asset` decimal128(20, 5) ,\n" +
+                "  `f_asset_zb` decimal128(20, 5) ,\n" +
+                "  `f_managerfee` decimal128(20, 5) ,\n" +
+                "  `fee_zb` decimal128(20, 5) ,\n" +
+                "  `cpc` int(11) \n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`d_date`, `c_user`, `c_dept`, `c_par`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`d_date`, `c_user`, `c_dept`, `c_par`) BUCKETS 16 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
@@ -2334,4 +2358,252 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                 "  |  cardinality: 1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testEnableLowCardinalityOptimizeForJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
+
+        String sql;
+        String plan;
+
+        try {
+            sql = "SELECT COUNT(distinct t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [broadcast] low_card_t1 t3 ON t1.c_dept = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  11:AGGREGATE (merge serialize)\n" +
+                            "  |  group by: [35: c_user, INT, true]",
+                    "  7:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [36: c_dept, INT, true] = [38: c_dept, INT, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [35: c_user, INT, true] = [37: c_user, INT, true]");
+
+            // Do not support shuffle.
+
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [shuffle] low_card_t1 t3 ON t1.c_dept = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  8:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                            "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [37: c_user, INT, true] = [38: c_user, INT, true]");
+
+            sql = "SELECT COUNT(distinct t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [shuffle] low_card_t1 t3 ON t1.c_user = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  13:AGGREGATE (update serialize)\n" +
+                            "  |  aggregate: count[([2: c_user, VARCHAR, true]); args: VARCHAR; " +
+                            "result: BIGINT; args nullable: true; result nullable: false]",
+                    "  8:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+
+            sql = "SELECT COUNT(1) FROM low_card_t2 t1 " +
+                    "JOIN [colocate] low_card_t2 t2 ON t1.d_date = t2.d_date and t1.c_mr = t2.c_mr";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  2:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (COLOCATE)\n" +
+                    "  |  colocate: true\n" +
+                    "  |  equal join conjunct: [1: d_date, DATE, false] = [6: d_date, DATE, false]\n" +
+                    "  |  equal join conjunct: [2: c_mr, VARCHAR, false] = [7: c_mr, VARCHAR, false]");
+
+            sql = "SELECT COUNT(1) FROM low_card_t2 t1 " +
+                    "JOIN [bucket] low_card_t2 t2 ON t1.d_date = t2.d_date and t1.c_mr = t2.c_mr";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  3:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                    "  |  equal join conjunct: [1: d_date, DATE, false] = [6: d_date, DATE, false]\n" +
+                    "  |  equal join conjunct: [2: c_mr, VARCHAR, false] = [7: c_mr, VARCHAR, false]");
+
+            // Both left and right keys in the ON equality condition must be low-cardinality column refs.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = CAST(t2.d_date as string)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: cast, VARCHAR(65533), true]");
+
+            // Low-cardinality columns cannot be DefineExpr.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = lower(t2.c_user) ";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: lower, VARCHAR, true]");
+
+            // Each low-cardinality column can participate in only one equality condition.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user " +
+                    "JOIN [broadcast] low_card_t1 t3 ON t1.c_user = t3.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  7:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: c_dept, VARCHAR, true]",
+                    "  3:HASH JOIN\n" +
+                            "  |  join op: INNER JOIN (BROADCAST)\n" +
+                            "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+
+            // Contains non-low-cardinality string columns.
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [broadcast] low_card_t1 t2 ON t1.c_user = t2.c_user and t1.c_user = cast(t2.cpc as string)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [25: cast, VARCHAR(65533), true]");
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+
+    @Test
+    public void testShuffleJoinWithDistributionCheck() throws Exception {
+        FeConstants.runningUnitTest = true;
+        try {
+            String sql;
+            String plan;
+
+            // Test case 1: Shuffle join where the join column appears in parent node's output
+            sql = "SELECT max(t1.c_user) FROM low_card_t1 t1 " +
+                    "JOIN [shuffle] low_card_t1 t2 ON t1.c_user = t2.c_user";
+            plan = getVerboseExplain(sql);
+            // The join should use original VARCHAR columns, not dictionary-encoded INT columns
+            assertContains(plan, "equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+            // No Global Dict Exprs because c_user is disabled for shuffle join
+            assertNotContains(plan, "Global Dict Exprs:");
+
+            // Test case 2: Shuffle join with multiple join columns in parent node's output
+            sql = "SELECT COUNT(1) FROM low_card_t1 t1 " +
+                    "JOIN [shuffle] low_card_t1 t2 ON t1.c_user = t2.c_user AND t1.c_dept = t2.c_dept";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+            assertContains(plan, "equal join conjunct: [3: c_dept, VARCHAR, true] = [14: c_dept, VARCHAR, true]");
+            assertNotContains(plan, "Global Dict Exprs:");
+
+            // Test case 3: Mixed scenario - shuffle join on c_user, but aggregate on c_dept
+            // c_user should NOT use dictionary (shuffle join column)
+            // c_dept SHOULD use dictionary (not involved in shuffle join)
+            sql = "SELECT MIN(t1.c_dept), MAX(t2.c_dept) FROM low_card_t1 t1 " +
+                    "JOIN [shuffle] low_card_t1 t2 ON t1.c_user = t2.c_user";
+            plan = getVerboseExplain(sql);
+            // c_user should use VARCHAR (shuffle join column)
+            assertContains(plan, "equal join conjunct: [2: c_user, VARCHAR, true] = [13: c_user, VARCHAR, true]");
+            assertContains(plan, "  9:Decode\n" +
+                    "  |  <dict id 27> : <string id 23>\n" +
+                    "  |  <dict id 28> : <string id 24>\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  8:AGGREGATE (merge finalize)\n" +
+                    "  |  aggregate: min[([27: min, INT, true]); args: INT; result: INT; " +
+                    "args nullable: true; result nullable: true], max[([28: max, INT, true]); " +
+                    "args: INT; result: INT; args nullable: true; result nullable: true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  7:EXCHANGE\n" +
+                    "     distribution type: GATHER\n" +
+                    "     cardinality: 1");
+
+            //Test case 4: context.outputStringColumns.isEmpty() is true for visitPhysicalJoin
+            sql = "SELECT t2.c_user, t4.c_dept FROM (select * from (select c_dept, c_user, first_value(c_user) " +
+                    "over(partition by c_user,c_dept order by c_dept) as rz from low_card_t3) t1 " +
+                    "where rz = '1') t2" +
+                    " JOIN [shuffle] (select * from (select c_dept, c_user, " +
+                    "first_value(c_user) over(partition by c_user,c_dept order by c_dept) as rnz " +
+                    "from low_card_t1) t3 where rnz = '1') t4 ON t2.c_user = t4.c_user and t2.c_dept = t4.c_dept;";
+            plan = getVerboseExplain(sql);
+            // Verify the execution plan don't contains Global Dict Exprs
+            assertNotContains(plan, "Global Dict Exprs:");
+            assertContains(plan, "  13:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> [2: c_user, VARCHAR, true]\n" +
+                    "  |  15 <-> [15: c_dept, VARCHAR, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  12:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  equal join conjunct: [2: c_user, VARCHAR, true] = [14: c_user, VARCHAR, true]\n" +
+                    "  |  equal join conjunct: [3: c_dept, VARCHAR, true] = [15: c_dept, VARCHAR, true]\n" +
+                    "  |  build runtime filters:\n" +
+                    "  |  - filter_id = 0, build_expr = (14: c_user), remote = false\n" +
+                    "  |  - filter_id = 1, build_expr = (15: c_dept), remote = false\n" +
+                    "  |  output columns: 2, 15\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  |----11:Project\n" +
+                    "  |    |  output columns:\n" +
+                    "  |    |  14 <-> [14: c_user, VARCHAR, true]\n" +
+                    "  |    |  15 <-> [15: c_dept, VARCHAR, true]\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    10:SELECT\n" +
+                    "  |    |  predicates: 24: first_value(14: c_user) = '1'\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    9:ANALYTIC\n" +
+                    "  |    |  functions: [, first_value[([14: c_user, VARCHAR, true]); args: VARCHAR; " +
+                    "result: VARCHAR; args nullable: true; result nullable: true], ]\n" +
+                    "  |    |  partition by: [14: c_user, VARCHAR, true], [15: c_dept, VARCHAR, true]\n" +
+                    "  |    |  order by: [15: c_dept, VARCHAR, true] ASC\n" +
+                    "  |    |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    8:SORT\n" +
+                    "  |    |  order by: [14, VARCHAR, true] ASC, [15, VARCHAR, true] ASC\n" +
+                    "  |    |  analytic partition by: [14: c_user, VARCHAR, true], [15: c_dept, VARCHAR, true]\n" +
+                    "  |    |  offset: 0\n" +
+                    "  |    |  cardinality: 1\n" +
+                    "  |    |  \n" +
+                    "  |    7:EXCHANGE\n" +
+                    "  |       distribution type: SHUFFLE\n" +
+                    "  |       partition exprs: [14: c_user, VARCHAR, true], [15: c_dept, VARCHAR, true]\n" +
+                    "  |       cardinality: 1\n" +
+                    "  |    \n" +
+                    "  5:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> [2: c_user, VARCHAR, true]\n" +
+                    "  |  3 <-> [3: c_dept, VARCHAR, true]\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  4:SELECT\n" +
+                    "  |  predicates: 12: first_value(2: c_user) = '1'\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  3:ANALYTIC\n" +
+                    "  |  functions: [, first_value[([2: c_user, VARCHAR, true]); args: VARCHAR; " +
+                    "result: VARCHAR; args nullable: true; result nullable: true], ]\n" +
+                    "  |  partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
+                    "  |  order by: [3: c_dept, VARCHAR, true] ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  \n" +
+                    "  2:SORT\n" +
+                    "  |  order by: [2, VARCHAR, true] ASC, [3, VARCHAR, true] ASC\n" +
+                    "  |  analytic partition by: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
+                    "  |  offset: 0\n" +
+                    "  |  cardinality: 1\n" +
+                    "  |  probe runtime filters:\n" +
+                    "  |  - filter_id = 0, probe_expr = (2: c_user)\n" +
+                    "  |  - filter_id = 1, probe_expr = (3: c_dept)\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE\n" +
+                    "     distribution type: SHUFFLE\n" +
+                    "     partition exprs: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
+                    "     cardinality: 1");
+            
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }
+    }
+>>>>>>> e480e48d7b ([BugFix] Fix low cardinality with data distribution bug. (#67961))
 }
