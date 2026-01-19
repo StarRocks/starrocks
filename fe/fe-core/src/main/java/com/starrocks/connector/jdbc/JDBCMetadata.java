@@ -16,6 +16,7 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Column;
@@ -44,6 +45,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
@@ -60,6 +63,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
     private HikariDataSource dataSource;
+    private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -142,11 +147,23 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
         return new HikariDataSource(config);
     }
 
     public Connection getConnection() throws SQLException {
-        return dataSource.getConnection();
+        Connection connection = dataSource.getConnection();
+        try {
+            // Set network timeout only when it's configured (>=0)
+            if (Config.jdbc_network_timeout_ms >= 0L) {
+                int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
+                connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
+            }
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
+        return connection;
     }
 
     @Override
