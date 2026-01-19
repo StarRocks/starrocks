@@ -5533,6 +5533,33 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 引入版本：-
 
+##### jdbc_connection_timeout_ms
+
+- 默认值：10000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：否
+- 描述：HikariCP 连接池获取连接的超时时间（单位：毫秒）。如果在该时间内无法从连接池获取到连接，操作将失败。
+- 引入版本：v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：JDBC Statement 查询执行的超时时间（单位：毫秒）。该超时应用于通过 JDBC Catalog 执行的所有 SQL 查询（例如分区元数据查询）。该值在传递给 JDBC 驱动时会转换为秒。
+- 引入版本：v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：JDBC 网络操作（socket 读取）的超时时间（单位：毫秒）。该超时应用于数据库元数据调用（如 getSchemas()、getTables()、getColumns()），以防止外部数据库无响应时无限期阻塞。
+- 引入版本：v3.5.13
+
 ##### query_detail_explain_level
 
 - 默认值：COSTS

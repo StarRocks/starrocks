@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -35,6 +36,19 @@ import java.util.Map;
 public abstract class JDBCSchemaResolver {
 
     boolean supportPartitionInformation = false;
+
+    /**
+     * Get the query timeout in seconds for JDBC statement execution.
+     *
+     * For jdbc_query_timeout_ms > 0, uses Math.ceil to round up sub-second values to minimum 1 second,
+     * because 0 is a special value meaning "no timeout limit".
+     * It is reasonable because sub-second query timeouts are uncommon in practice.
+     *
+     * @return query timeout in seconds
+     */
+    protected int getQueryTimeoutSeconds() {
+        return (int) Math.ceil(Config.jdbc_query_timeout_ms / 1000.0);
+    }
 
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
