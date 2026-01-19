@@ -72,16 +72,12 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
     for (int i = 0; i < child_num; i++) {
         auto child = expr->get_child(i);
 
-<<<<<<< HEAD
-        RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, child, ctx));
-=======
         // ignore dictmapping expr's children, because dictmapping expr will be rewritten by DictOptimizeParser::rewrite_expr function
         // as a unified column ref expr.
         if (!child->is_dictmapping_expr()) {
             RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, child, ctx));
         }
 
->>>>>>> 7b13dddc2f ([BugFix] [FollowUp] Fix low cardinality bug with more lamda function (#67976))
         // if child is a slotref or a lambda function or a literal, we can't replace it.
         if (child->is_slotref() || child->is_lambda_function() || child->is_literal() || child->is_constant()) {
             continue;
