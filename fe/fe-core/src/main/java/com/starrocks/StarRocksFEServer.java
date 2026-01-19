@@ -287,7 +287,8 @@ public class StarRocksFEServer {
                         LOG.warn("skip stopping StarMgr journal writer because getJournalWriter() returned null");
                     }
                 } else {
-                    LOG.warn("skip stopping StarMgr journal writer because StarMgrServer or its journal system is not initialized");
+                    LOG.warn("skip stopping StarMgr journal writer because StarMgrServer or its journal system " +
+                            "is not initialized");
                 }
             }
 
