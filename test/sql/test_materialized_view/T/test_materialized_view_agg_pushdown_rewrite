@@ -373,6 +373,7 @@ INSERT INTO dim_location_area values('1234567890', 'Zone-1'),
 ('1234567896', 'Zone-7'),
 ('1234567897', 'Zone-8');
 
+set enable_materialized_view_agg_pushdown_rewrite=true;
 CREATE MATERIALIZED VIEW mv_hourly_events
 DISTRIBUTED BY RANDOM
 Partition by (event_date)

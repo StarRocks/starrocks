@@ -593,10 +593,7 @@ GROUP BY  `id`,`pt`;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW `test_mv1` WITH SYNC MODE;
--- result:
-019b020f-7067-730f-9344-2b7084761390
--- !result
-function: print_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
+function: check_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
 -- result:
 None
 -- !result
@@ -662,6 +659,9 @@ INSERT INTO dim_location_area values('1234567890', 'Zone-1'),
 ('1234567897', 'Zone-8');
 -- result:
 -- !result
+set enable_materialized_view_agg_pushdown_rewrite=true;
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW mv_hourly_events
 DISTRIBUTED BY RANDOM
 Partition by (event_date)
@@ -680,9 +680,6 @@ GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_hourly_events WITH SYNC MODE;
--- result:
-019b020e-3633-74ce-aee0-8ca01da6a8e9
--- !result
 function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
 -- result:
 True
@@ -716,9 +713,6 @@ None	1.0
 2025-10-01 00:00:00	9.0
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_hourly_events WITH SYNC MODE;
--- result:
-019b020e-5bec-7a88-b174-fcbc85a09aea
--- !result
 function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
 -- result:
 True
