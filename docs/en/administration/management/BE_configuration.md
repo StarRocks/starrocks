@@ -1944,11 +1944,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### drop_tablet_worker_count
 
-- Default: 3
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used to drop a tablet.
+- Description: The number of threads used to drop a tablet. `0` indicates half of the CPU cores in the node.
 - Introduced in: -
 
 ##### enable_check_string_lengths
