@@ -33,7 +33,7 @@ public:
     static StatusOr<VariantRowValue> encode_json_to_variant(const JsonValue& json);
     // cast a single row possibly shredded column to variant value
     static StatusOr<VariantRowValue> encode_shredded_column_row(const ColumnPtr& column, const TypeDescriptor& type,
-                                                                size_t row);
+                                                                size_t row, VariantEncodingContext* ctx = nullptr);
 };
 
 } // namespace starrocks

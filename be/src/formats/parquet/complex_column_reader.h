@@ -338,6 +338,7 @@ private:
     ColumnReaderPtr _typed_value_reader;
     TypeDescriptor _typed_value_type;
     bool _has_typed_value{false};
+    VariantEncodingContext _ctx;
 };
 
 } // namespace starrocks::parquet

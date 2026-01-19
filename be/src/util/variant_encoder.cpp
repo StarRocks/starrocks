@@ -52,18 +52,6 @@ constexpr uint8_t kVariantMetadataOffsetSizeShift = 6;
 
 // --- Internal Encoding Helpers ---
 
-struct EncodingContext {
-    std::unordered_set<std::string> keys;
-    std::unordered_map<std::string, uint32_t> key_to_id;
-    std::vector<std::string> sorted_keys;
-
-    void reset() {
-        keys.clear();
-        key_to_id.clear();
-        sorted_keys.clear();
-    }
-};
-
 static bool is_fully_static_type(const TypeDescriptor& type) {
     if (type.type == TYPE_MAP || type.type == TYPE_JSON || type.type == TYPE_VARIANT) {
         return false;
@@ -79,19 +67,18 @@ static bool is_fully_static_type(const TypeDescriptor& type) {
     return true;
 }
 
-static void collect_keys_from_static_type(const TypeDescriptor& type, std::unordered_set<std::string>* keys) {
+static void collect_keys_from_static_type(const TypeDescriptor& type, VariantEncodingContext* ctx) {
     if (type.type == TYPE_STRUCT) {
         for (size_t i = 0; i < type.field_names.size(); ++i) {
-            keys->insert(type.field_names[i]);
-            collect_keys_from_static_type(type.children[i], keys);
+            ctx->keys.insert(type.field_names[i]);
+            collect_keys_from_static_type(type.children[i], ctx);
         }
     } else if (type.type == TYPE_ARRAY) {
-        collect_keys_from_static_type(type.children[0], keys);
+        collect_keys_from_static_type(type.children[0], ctx);
     }
 }
 
 template <typename T>
-
 static inline void append_little_endian(std::string* out, T value) {
     T le_value = arrow::bit_util::ToLittleEndian(value);
     out->append(reinterpret_cast<const char*>(&le_value), sizeof(T));
@@ -105,8 +92,8 @@ static inline void append_uint_le(std::string* out, uint32_t value, uint8_t size
 static inline void append_int128_le(std::string* out, int128_t value) {
     int64_t low = static_cast<int64_t>(value);
     int64_t high = static_cast<int64_t>(value >> 64);
-    append_little_endian(out, low);
-    append_little_endian(out, high);
+    append_little_endian<int64_t>(out, low);
+    append_little_endian<int64_t>(out, high);
 }
 
 static inline uint8_t minimal_uint_size(uint32_t value) {
@@ -135,7 +122,7 @@ static std::string encode_variant_primitive(VariantType type, T value) {
     std::string out;
     out.reserve(VariantValue::kHeaderSizeBytes + sizeof(T));
     out.push_back(encode_variant_header(type, VariantValue::BasicType::PRIMITIVE));
-    append_little_endian(&out, value);
+    append_little_endian<T>(&out, value);
     return out;
 }
 
@@ -146,9 +133,9 @@ static std::string encode_variant_decimal(VariantType type, int128_t value, uint
     out.push_back(encode_variant_header(type, VariantValue::BasicType::PRIMITIVE));
     out.push_back(static_cast<char>(scale));
     if (type == VariantType::DECIMAL4) {
-        append_little_endian(&out, static_cast<int32_t>(value));
+        append_little_endian<int32_t>(&out, static_cast<int32_t>(value));
     } else if (type == VariantType::DECIMAL8) {
-        append_little_endian(&out, static_cast<int64_t>(value));
+        append_little_endian<int64_t>(&out, static_cast<int64_t>(value));
     } else {
         append_int128_le(&out, value);
     }
@@ -258,18 +245,18 @@ static std::string encode_variant_object_from_map(const std::map<uint32_t, std::
 
 // --- JSON Key Collection & Value Encoding ---
 
-static Status collect_json_slice_keys(const vpack::Slice& slice, std::unordered_set<std::string>* keys) {
+static Status collect_json_slice_keys(const vpack::Slice& slice, VariantEncodingContext* ctx) {
     try {
         if (slice.isObject()) {
             for (vpack::ObjectIterator it(slice); it.valid(); it.next()) {
                 auto current = *it;
                 auto key = current.key.stringView();
-                keys->emplace(key.data(), key.size());
-                RETURN_IF_ERROR(collect_json_slice_keys(current.value, keys));
+                ctx->keys.emplace(key.data(), key.size());
+                RETURN_IF_ERROR(collect_json_slice_keys(current.value, ctx));
             }
         } else if (slice.isArray()) {
             for (vpack::ArrayIterator it(slice); it.valid(); it.next()) {
-                RETURN_IF_ERROR(collect_json_slice_keys(it.value(), keys));
+                RETURN_IF_ERROR(collect_json_slice_keys(it.value(), ctx));
             }
         }
     } catch (const vpack::Exception& e) {
@@ -278,8 +265,7 @@ static Status collect_json_slice_keys(const vpack::Slice& slice, std::unordered_
     return Status::OK();
 }
 
-static StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& slice,
-                                                          const std::unordered_map<std::string, uint32_t>& key_to_id) {
+static StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& slice, VariantEncodingContext* ctx) {
     try {
         if (slice.isNone() || slice.isNull()) {
             return encode_variant_null();
@@ -308,7 +294,7 @@ static StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& sl
         if (slice.isArray()) {
             std::vector<std::string> elements;
             for (vpack::ArrayIterator it(slice); it.valid(); it.next()) {
-                ASSIGN_OR_RETURN(std::string element, encode_json_to_variant_value(it.value(), key_to_id));
+                ASSIGN_OR_RETURN(std::string element, encode_json_to_variant_value(it.value(), ctx));
                 elements.emplace_back(std::move(element));
             }
             return encode_variant_array(elements);
@@ -318,12 +304,12 @@ static StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& sl
             for (vpack::ObjectIterator it(slice); it.valid(); it.next()) {
                 auto current = *it;
                 auto key = current.key.stringView();
-                auto it_key = key_to_id.find(std::string(key.data(), key.size()));
-                if (it_key == key_to_id.end()) {
+                auto it_key = ctx->key_to_id.find(std::string_view(key.data(), key.size()));
+                if (it_key == ctx->key_to_id.end()) {
                     return Status::VariantError("Variant metadata missing field: " +
                                                 std::string(key.data(), key.size()));
                 }
-                ASSIGN_OR_RETURN(std::string field_value, encode_json_to_variant_value(current.value, key_to_id));
+                ASSIGN_OR_RETURN(std::string field_value, encode_json_to_variant_value(current.value, ctx));
                 fields[it_key->second] = std::move(field_value);
             }
             return encode_variant_object_from_map(fields);
@@ -337,32 +323,27 @@ static StatusOr<std::string> encode_json_to_variant_value(const vpack::Slice& sl
 
 // --- Metadata Handling ---
 
-struct VariantMetadataBuildResult {
-    std::string metadata;
-};
-
-static StatusOr<VariantMetadataBuildResult> build_variant_metadata(EncodingContext* ctx) {
+static StatusOr<std::string> build_variant_metadata(VariantEncodingContext* ctx) {
     if (ctx->keys.empty()) {
-        VariantMetadataBuildResult result;
-        result.metadata.assign(VariantMetadata::kEmptyMetadata.data(), VariantMetadata::kEmptyMetadata.size());
-        return result;
+        return std::string(VariantMetadata::kEmptyMetadata);
     }
 
-    ctx->sorted_keys.reserve(ctx->keys.size());
+    std::vector<std::string_view> sorted_keys;
+    sorted_keys.reserve(ctx->keys.size());
     for (const auto& key : ctx->keys) {
-        ctx->sorted_keys.push_back(key);
+        sorted_keys.push_back(key);
     }
-    std::sort(ctx->sorted_keys.begin(), ctx->sorted_keys.end());
+    std::sort(sorted_keys.begin(), sorted_keys.end());
 
     uint32_t total_string_size = 0;
-    for (const auto& key : ctx->sorted_keys) {
+    for (const auto& key : sorted_keys) {
         if (key.size() > std::numeric_limits<uint32_t>::max() - total_string_size) {
             return Status::VariantError("Variant metadata string size overflow");
         }
         total_string_size += static_cast<uint32_t>(key.size());
     }
 
-    const uint32_t dict_size = static_cast<uint32_t>(ctx->sorted_keys.size());
+    const uint32_t dict_size = static_cast<uint32_t>(sorted_keys.size());
     const uint32_t max_value = std::max(dict_size, total_string_size);
     const uint8_t offset_size = minimal_uint_size(max_value);
 
@@ -378,23 +359,21 @@ static StatusOr<VariantMetadataBuildResult> build_variant_metadata(EncodingConte
 
     uint32_t offset = 0;
     append_uint_le(&metadata, offset, offset_size);
-    for (const auto& key : ctx->sorted_keys) {
+    for (const auto& key : sorted_keys) {
         offset += static_cast<uint32_t>(key.size());
         append_uint_le(&metadata, offset, offset_size);
     }
 
-    for (const auto& key : ctx->sorted_keys) {
+    for (const auto& key : sorted_keys) {
         metadata.append(key.data(), key.size());
     }
 
-    ctx->key_to_id.reserve(ctx->sorted_keys.size());
-    for (uint32_t i = 0; i < ctx->sorted_keys.size(); ++i) {
-        ctx->key_to_id.emplace(ctx->sorted_keys[i], i);
+    ctx->key_to_id.reserve(sorted_keys.size());
+    for (uint32_t i = 0; i < sorted_keys.size(); ++i) {
+        ctx->key_to_id.emplace(sorted_keys[i], i);
     }
 
-    VariantMetadataBuildResult result;
-    result.metadata = std::move(metadata);
-    return result;
+    return metadata;
 }
 
 // --- Column Processing ---
@@ -416,7 +395,7 @@ static bool is_shredded_wrapper(const StructColumn* struct_col, size_t* typed_id
 }
 
 static Status collect_keys_from_column_row(const ColumnPtr& column, const TypeDescriptor& type, size_t row,
-                                           EncodingContext* ctx) {
+                                           VariantEncodingContext* ctx) {
     if (column->is_nullable() && down_cast<const NullableColumn*>(column.get())->is_null(row)) {
         return Status::OK();
     }
@@ -476,7 +455,7 @@ static Status collect_keys_from_column_row(const ColumnPtr& column, const TypeDe
         const auto* json_col = down_cast<const JsonColumn*>(data_col.get());
         const JsonValue* json = json_col->get_object(row);
         if (json != nullptr && !json->is_null_or_none()) {
-            return collect_json_slice_keys(json->to_vslice(), &ctx->keys);
+            return collect_json_slice_keys(json->to_vslice(), ctx);
         }
         return Status::OK();
     }
@@ -486,8 +465,7 @@ static Status collect_keys_from_column_row(const ColumnPtr& column, const TypeDe
 }
 
 static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& column, const TypeDescriptor& type,
-                                                          size_t row,
-                                                          const std::unordered_map<std::string, uint32_t>& key_to_id) {
+                                                          size_t row, VariantEncodingContext* ctx) {
     if (column->is_nullable() && down_cast<const NullableColumn*>(column.get())->is_null(row)) {
         return encode_variant_null();
     }
@@ -557,7 +535,7 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
         const auto* col = down_cast<const JsonColumn*>(data_col.get());
         const JsonValue* json = col->get_object(row);
         if (json == nullptr || json->is_null_or_none()) return encode_variant_null();
-        return encode_json_to_variant_value(json->to_vslice(), key_to_id);
+        return encode_json_to_variant_value(json->to_vslice(), ctx);
     }
     case TYPE_ARRAY: {
         const auto* array_col = down_cast<const ArrayColumn*>(data_col.get());
@@ -566,7 +544,7 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
         const ColumnPtr& elements = array_col->elements_column();
         std::vector<std::string> encoded_elements;
         for (uint32_t i = offset_data[row]; i < offset_data[row + 1]; ++i) {
-            ASSIGN_OR_RETURN(auto encoded, encode_value_from_column_row(elements, type.children[0], i, key_to_id));
+            ASSIGN_OR_RETURN(auto encoded, encode_value_from_column_row(elements, type.children[0], i, ctx));
             encoded_elements.emplace_back(std::move(encoded));
         }
         return encode_variant_array(encoded_elements);
@@ -585,9 +563,9 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
             const Datum key_datum = ColumnHelper::get_data_column(keys_col)->get(i);
             if (key_datum.is_null()) continue;
             std::string key_str = datum_to_string(key_type_info.get(), key_datum);
-            auto it = key_to_id.find(key_str);
-            if (it == key_to_id.end()) return Status::VariantError("Variant metadata missing field: " + key_str);
-            ASSIGN_OR_RETURN(auto encoded_value, encode_value_from_column_row(values_col, value_type, i, key_to_id));
+            auto it = ctx->key_to_id.find(key_str);
+            if (it == ctx->key_to_id.end()) return Status::VariantError("Variant metadata missing field: " + key_str);
+            ASSIGN_OR_RETURN(auto encoded_value, encode_value_from_column_row(values_col, value_type, i, ctx));
             fields[it->second] = std::move(encoded_value);
         }
         return encode_variant_object_from_map(fields);
@@ -602,7 +580,7 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
             if (!(typed_col->is_nullable() && down_cast<const NullableColumn*>(typed_col.get())->is_null(row))) {
                 size_t type_typed_idx = typed_idx;
                 if (!type.field_names.empty()) find_struct_field_idx(type.field_names, "typed_value", &type_typed_idx);
-                return encode_value_from_column_row(typed_col, type.children[type_typed_idx], row, key_to_id);
+                return encode_value_from_column_row(typed_col, type.children[type_typed_idx], row, ctx);
             }
             if (!(value_col->is_nullable() && down_cast<const NullableColumn*>(value_col.get())->is_null(row))) {
                 ColumnPtr value_data = ColumnHelper::get_data_column(value_col);
@@ -617,10 +595,11 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
         std::map<uint32_t, std::string> fields;
         for (size_t i = 0; i < struct_col->fields_size(); ++i) {
             const std::string& field_name = field_names[i];
-            auto it = key_to_id.find(field_name);
-            if (it == key_to_id.end()) return Status::VariantError("Variant metadata missing field: " + field_name);
+            auto it = ctx->key_to_id.find(field_name);
+            if (it == ctx->key_to_id.end())
+                return Status::VariantError("Variant metadata missing field: " + field_name);
             ASSIGN_OR_RETURN(auto encoded_value, encode_value_from_column_row(struct_col->get_column_by_idx(i),
-                                                                              type.children[i], row, key_to_id));
+                                                                              type.children[i], row, ctx));
             fields[it->second] = std::move(encoded_value);
         }
         return encode_variant_object_from_map(fields);
@@ -632,29 +611,31 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
 
 // --- Public APIs ---
 
-static StatusOr<VariantRowValue> encode_shredded_column_row_internal(const ColumnPtr& column,
-                                                                     const TypeDescriptor& type, size_t row,
-                                                                     EncodingContext* ctx) {
-    ctx->reset();
-    RETURN_IF_ERROR(collect_keys_from_column_row(column, type, row, ctx));
-    ASSIGN_OR_RETURN(auto metadata_result, build_variant_metadata(ctx));
-    ASSIGN_OR_RETURN(auto value, encode_value_from_column_row(column, type, row, ctx->key_to_id));
-    return VariantRowValue::create(metadata_result.metadata, value);
-}
-
 StatusOr<VariantRowValue> VariantEncoder::encode_json_to_variant(const JsonValue& json) {
     vpack::Slice slice = json.to_vslice();
-    EncodingContext ctx;
-    RETURN_IF_ERROR(collect_json_slice_keys(slice, &ctx.keys));
-    ASSIGN_OR_RETURN(auto metadata_result, build_variant_metadata(&ctx));
-    ASSIGN_OR_RETURN(std::string value, encode_json_to_variant_value(slice, ctx.key_to_id));
-    return VariantRowValue::create(metadata_result.metadata, value);
+    VariantEncodingContext ctx;
+    RETURN_IF_ERROR(collect_json_slice_keys(slice, &ctx));
+    ASSIGN_OR_RETURN(auto metadata, build_variant_metadata(&ctx));
+    ASSIGN_OR_RETURN(std::string value, encode_json_to_variant_value(slice, &ctx));
+    return VariantRowValue::create(metadata, value);
 }
 
 StatusOr<VariantRowValue> VariantEncoder::encode_shredded_column_row(const ColumnPtr& column,
-                                                                     const TypeDescriptor& type, size_t row) {
-    EncodingContext ctx;
-    return encode_shredded_column_row_internal(column, type, row, &ctx);
+                                                                     const TypeDescriptor& type, size_t row,
+                                                                     VariantEncodingContext* ctx) {
+    VariantEncodingContext local_ctx;
+    if (ctx == nullptr) {
+        ctx = &local_ctx;
+    }
+    if (!ctx->metadata_built) {
+        ctx->reset();
+        RETURN_IF_ERROR(collect_keys_from_column_row(column, type, row, ctx));
+        ASSIGN_OR_RETURN(auto metadata, build_variant_metadata(ctx));
+        ctx->metadata_raw = metadata;
+        ctx->metadata_built = true;
+    }
+    ASSIGN_OR_RETURN(auto value, encode_value_from_column_row(column, type, row, ctx));
+    return VariantRowValue::create(ctx->metadata_raw, value);
 }
 
 template <LogicalType LT, typename EncodeFn>
@@ -718,23 +699,23 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                 data_col->is_nullable() ? down_cast<const NullableColumn*>(data_col.get()) : nullptr;
         if (nullable) data_col = nullable->data_column();
 
-        EncodingContext ctx;
+        VariantEncodingContext ctx;
         if (is_fully_static_type(type)) {
-            collect_keys_from_static_type(type, &ctx.keys);
-            ASSIGN_OR_RETURN(auto metadata_result, build_variant_metadata(&ctx));
+            collect_keys_from_static_type(type, &ctx);
+            ASSIGN_OR_RETURN(auto metadata, build_variant_metadata(&ctx));
             for (size_t i = 0; i < num_rows; ++i) {
                 const size_t row = is_const ? 0 : i;
                 if (nullable && nullable->is_null(row)) {
                     builder->append_null();
                     continue;
                 }
-                auto res = encode_value_from_column_row(data_col, type, row, ctx.key_to_id);
+                auto res = encode_value_from_column_row(data_col, type, row, &ctx);
                 if (!res.ok()) {
                     if (allow_throw) return res.status();
                     builder->append_null();
                     continue;
                 }
-                builder->append(VariantRowValue::create(metadata_result.metadata, res.value()).value());
+                builder->append(VariantRowValue::create(metadata, res.value()).value());
             }
         } else {
             for (size_t i = 0; i < num_rows; ++i) {
@@ -744,7 +725,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     continue;
                 }
                 // Reuse encode_shredded_column_row for row-level discovery and encoding
-                auto res = encode_shredded_column_row_internal(data_col, type, row, &ctx);
+                auto res = VariantEncoder::encode_shredded_column_row(data_col, type, row, &ctx);
                 if (!res.ok()) {
                     if (allow_throw) return res.status();
                     builder->append_null();

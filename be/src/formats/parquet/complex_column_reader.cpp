@@ -736,8 +736,15 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 variant_column->append(VariantRowValue::from_null());
             } else if (def_levels[i] >= level_info.max_def_level) {
                 // Variant group exists, prefer typed_value when available
+                const Slice metadata_slice = metadata_column->get_slice(i);
+                const Slice value_slice = value_column->get_slice(i);
                 if (has_typed) {
-                    auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i);
+                    if (!metadata_slice.empty()) {
+                        VariantMetadata meta(metadata_slice);
+                        RETURN_IF_ERROR(_ctx.use_metadata(meta));
+                    }
+                    auto variant =
+                            VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
                     if (!variant.ok()) {
                         variant_column->append(VariantRowValue::from_null());
                         continue;
@@ -745,8 +752,6 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     variant_column->append(variant.value());
                     continue;
                 }
-                const Slice metadata_slice = metadata_column->get_slice(i);
-                const Slice value_slice = value_column->get_slice(i);
 
                 // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
                 // But Variant requires non-empty value, so treat empty slices as null
@@ -781,20 +786,23 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         // Variant group is required, so all rows should have valid data (but fields can still be null)
         for (size_t i = 0; i < num_rows; ++i) {
             const bool has_typed = typed_value_nullable != nullptr && !typed_value_nullable->is_null(i);
+            const Slice metadata_slice = metadata_column->get_slice(i);
+            const Slice value_slice = value_column->get_slice(i);
             if (!has_typed && (metadata_nulls[i] || value_nulls[i])) {
                 // Even for required variant group, metadata/value fields can be null
                 variant_column->append(VariantRowValue::from_null());
             } else if (has_typed) {
-                auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i);
+                if (!metadata_slice.empty()) {
+                    VariantMetadata meta(metadata_slice);
+                    RETURN_IF_ERROR(_ctx.use_metadata(meta));
+                }
+                auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
                 if (!variant.ok()) {
                     variant_column->append(VariantRowValue::from_null());
                     continue;
                 }
                 variant_column->append(variant.value());
             } else {
-                const Slice metadata_slice = metadata_column->get_slice(i);
-                const Slice value_slice = value_column->get_slice(i);
-
                 // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
                 // But Variant requires non-empty value, so treat empty slices as null
                 if (metadata_slice.empty() || value_slice.empty()) {
