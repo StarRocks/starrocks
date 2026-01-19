@@ -117,4 +117,137 @@ The partitions into which you want to load data. You must specify all partition 
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## DELETE
+
+You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported in StarRocks v4.1 and later versions.
+
+### Syntax
+
+```SQL
+DELETE FROM <table_name> WHERE <condition>
+```
+
+### Parameters
+
+- `table_name`: The name of the Iceberg table you want to delete data from. You can use:
+  - Fully qualified name: `catalog_name.database_name.table_name`
+  - Database-qualified name (after setting catalog): `database_name.table_name`
+  - Table name only (after setting catalog and database): `table_name`
+
+- `condition`: The condition to identify which rows to delete. Can include:
+  - Comparison operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `<>`
+  - Logical operators: `AND`, `OR`, `NOT`
+  - `IN` and `NOT IN` clauses
+  - `BETWEEN` and `LIKE` operators
+  - `IS NULL` and `IS NOT NULL`
+  - Subqueries with `IN` or `EXISTS`
+
+### Examples
+
+#### Basic DELETE operations
+
+Delete rows matching a simple condition:
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE id = 3;
+```
+
+#### DELETE with IN and NOT IN
+
+Delete multiple rows using IN clause:
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE id IN (18, 20, 22);
+DELETE FROM iceberg_catalog.db.table1 WHERE id NOT IN (100, 101, 102);
+```
+
+#### DELETE with logical operators
+
+Combine multiple conditions:
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE age > 30 AND salary < 70000;
+DELETE FROM iceberg_catalog.db.table1 WHERE status = 'inactive' OR last_login < '2023-01-01';
+```
+
+#### DELETE with pattern matching
+
+Use LIKE for pattern-based deletion:
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE name LIKE 'A%';
+DELETE FROM iceberg_catalog.db.table1 WHERE email LIKE '%@example.com';
+```
+
+#### DELETE with range conditions
+
+Use BETWEEN for range-based deletion:
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE age BETWEEN 30 AND 40;
+DELETE FROM iceberg_catalog.db.table1 WHERE created_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+#### DELETE with NULL checks
+
+Delete rows with or without NULL values:
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE name IS NULL;
+DELETE FROM iceberg_catalog.db.table1 WHERE email IS NULL AND phone IS NULL;
+DELETE FROM iceberg_catalog.db.table1 WHERE age IS NOT NULL;
+```
+
+#### DELETE with subqueries
+
+Use subqueries to identify rows to delete:
+
+```SQL
+-- DELETE with IN subquery
+DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHERE expired = true);
+
+-- DELETE with EXISTS subquery
+DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
+```
+
+## TRUNCATE
+
+You can use the TRUNCATE TABLE statement to quickly delete all data from Iceberg tables.
+
+### Syntax
+
+```SQL
+TRUNCATE TABLE <table_name>
+```
+
+### Parameters
+
+- `table_name`: The name of the Iceberg table that you want to truncate data from. You can use:
+  - Fully qualified name: `catalog_name.database_name.table_name`
+  - Database-qualified name (after setting catalog): `database_name.table_name`
+  - Table name only (after setting catalog and database): `table_name`
+
+### Examples
+
+#### Example 1: Truncate a table using fully qualified name
+
+```SQL
+TRUNCATE TABLE iceberg_catalog.my_db.my_table;
+```
+
+#### Example 2: Truncate a table after setting catalog
+
+```SQL
+SET CATALOG iceberg_catalog;
+TRUNCATE TABLE my_db.my_table;
+```
+
+#### Example 3: Truncate a table after setting catalog and database
+
+```SQL
+SET CATALOG iceberg_catalog;
+USE my_db;
+TRUNCATE TABLE my_table;
+```
+
 ---
