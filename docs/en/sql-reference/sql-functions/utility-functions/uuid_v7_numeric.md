@@ -54,9 +54,3 @@ mysql> SELECT uuid_v7_numeric();
 | Index Performance | Poor | Good |
 | Fragmentation | High | Low |
 | Timestamp Info | No | Yes (48-bit ms) |
-
-## See also
-
-- [uuid](./uuid.md): Generates a random UUID v4 as string
-- [uuid_numeric](./uuid_numeric.md): Generates a numeric UUID v4
-- [uuid_v7](./uuidv7.md): Generates a time-ordered UUID v7 as string
