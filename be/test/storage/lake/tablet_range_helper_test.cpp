@@ -79,4 +79,32 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     ASSERT_THAT(res2.status().to_string(), testing::HasSubstr("Sort key index 0 must be 0, but is 1"));
 }
 
+TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+
+    auto c0 = schema_pb.add_column();
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(0);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range_pb;
+    auto lower = range_pb.mutable_lower_bound();
+    auto v0 = lower->add_values();
+    TypeDescriptor type_int(TYPE_INT);
+    v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+    v0->set_variant_type(VariantTypePB::NULL_VALUE);
+    range_pb.set_lower_bound_included(true);
+
+    auto res = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_invalid_argument());
+    ASSERT_EQ("Non-nullable primary key contains NULL in tablet range", res.status().message());
+}
+
 } // namespace starrocks::lake
