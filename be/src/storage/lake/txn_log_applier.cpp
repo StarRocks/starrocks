@@ -427,17 +427,65 @@ private:
         for (int i = 0; i < op_parallel.subtask_compactions_size(); i++) {
             const auto& subtask_op = op_parallel.subtask_compactions(i);
 
-            // Pre-check: verify all input rowsets exist in current metadata
-            // Skip this subtask if any input rowset is missing (partial success handling)
-            if (!_check_input_rowsets_exist(subtask_op)) {
-                std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(), subtask_op.input_rowsets().end());
-                LOG(WARNING) << "Parallel compaction subtask " << i << " skipped due to missing input rowsets"
-                             << ", tablet=" << _tablet.id() << ", first_input_ids=["
-                             << JoinInts(std::vector<uint32_t>(input_ids.begin(),
-                                                               input_ids.begin() + std::min(5, (int)input_ids.size())),
-                                         ",")
-                             << "]";
-                continue;
+            // Pre-check: verify input rowsets status before processing subtask
+            // For large rowset split, multiple subtasks share the same input rowsets.
+            // The first subtask (segment_range_start = 0) handles input rowset deletion.
+            const bool is_non_first_split_subtask = subtask_op.segment_range_start() > 0;
+
+            if (is_non_first_split_subtask) {
+                // For non-first subtasks of large rowset split:
+                // We need to verify the first subtask completed successfully before proceeding.
+                // - If inputs still exist in rowsets(): first subtask had conflict or was skipped
+                // - If inputs exist in compaction_inputs(): first subtask succeeded (moved them)
+                // - If inputs exist nowhere: concurrent compaction deleted them
+                if (_check_input_rowsets_exist(subtask_op)) {
+                    // Input rowsets still in rowsets() - first subtask encountered conflict
+                    // and returned early without deleting inputs. Skip this subtask to avoid
+                    // creating orphan output rowsets.
+                    std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(),
+                                                    subtask_op.input_rowsets().end());
+                    LOG(WARNING) << "Large rowset split non-first subtask " << i
+                                 << " skipped: first subtask did not complete (inputs still in rowsets)"
+                                 << ", tablet=" << _tablet.id() << ", input_ids=["
+                                 << JoinInts(std::vector<uint32_t>(
+                                                     input_ids.begin(),
+                                                     input_ids.begin() + std::min(5, (int)input_ids.size())),
+                                             ",")
+                                 << "]";
+                    continue;
+                }
+                if (!_check_input_rowsets_in_compaction_inputs(subtask_op)) {
+                    // Input rowsets neither in rowsets() nor in compaction_inputs().
+                    // This means concurrent compaction deleted them before first subtask ran,
+                    // causing first subtask to be skipped. Skip this subtask too.
+                    std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(),
+                                                    subtask_op.input_rowsets().end());
+                    LOG(WARNING) << "Large rowset split non-first subtask " << i
+                                 << " skipped: inputs deleted by concurrent compaction"
+                                 << ", tablet=" << _tablet.id() << ", input_ids=["
+                                 << JoinInts(std::vector<uint32_t>(
+                                                     input_ids.begin(),
+                                                     input_ids.begin() + std::min(5, (int)input_ids.size())),
+                                             ",")
+                                 << "]";
+                    continue;
+                }
+                // First subtask succeeded - inputs are in compaction_inputs(). Proceed.
+            } else {
+                // For normal subtasks (or first subtask of large rowset split):
+                // Skip if any input rowset is missing (concurrent compaction already processed them)
+                if (!_check_input_rowsets_exist(subtask_op)) {
+                    std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(),
+                                                    subtask_op.input_rowsets().end());
+                    LOG(WARNING) << "Parallel compaction subtask " << i << " skipped due to missing input rowsets"
+                                 << ", tablet=" << _tablet.id() << ", first_input_ids=["
+                                 << JoinInts(std::vector<uint32_t>(
+                                                     input_ids.begin(),
+                                                     input_ids.begin() + std::min(5, (int)input_ids.size())),
+                                             ",")
+                                 << "]";
+                    continue;
+                }
             }
 
             // Reuse publish_primary_compaction for each subtask
@@ -470,11 +518,30 @@ private:
         return Status::OK();
     }
 
-    // Helper function: check if all input rowsets exist in current metadata
+    // Helper function: check if all input rowsets exist in current metadata rowsets()
     bool _check_input_rowsets_exist(const TxnLogPB_OpCompaction& op) const {
         for (uint32_t input_id : op.input_rowsets()) {
             bool found = false;
             for (const auto& rowset : _metadata->rowsets()) {
+                if (rowset.id() == input_id) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Helper function: check if all input rowsets have been moved to compaction_inputs()
+    // This indicates that the first subtask of a large rowset split has completed successfully
+    // and moved the input rowsets from rowsets() to compaction_inputs().
+    bool _check_input_rowsets_in_compaction_inputs(const TxnLogPB_OpCompaction& op) const {
+        for (uint32_t input_id : op.input_rowsets()) {
+            bool found = false;
+            for (const auto& rowset : _metadata->compaction_inputs()) {
                 if (rowset.id() == input_id) {
                     found = true;
                     break;
