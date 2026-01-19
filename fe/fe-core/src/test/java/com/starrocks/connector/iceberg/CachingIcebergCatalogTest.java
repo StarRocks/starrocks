@@ -1412,5 +1412,397 @@ public class CachingIcebergCatalogTest {
             es.shutdownNow();
         }
     }
+
+    @Test
+    public void testStreamingPartitionIteratorConstructorCloseIOException() {
+        // Test that IOException during taskIterable.close() is suppressed
+        Table nativeTable = Mockito.mock(Table.class);
+        AtomicBoolean closeCalled = new AtomicBoolean(false);
+
+        CloseableIterable<FileScanTask> taskIterable = new CloseableIterable<FileScanTask>() {
+            @Override
+            public CloseableIterator<FileScanTask> iterator() {
+                throw new RuntimeException("Simulated iterator() failure");
+            }
+
+            @Override
+            public void close() throws IOException {
+                closeCalled.set(true);
+                throw new IOException("Simulated close failure");
+            }
+        };
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setCatalogDBName("db")
+                .setCatalogTableName("test_table")
+                .setNativeTable(nativeTable)
+                .build();
+
+        RuntimeException thrown = Assertions.assertThrows(RuntimeException.class, () -> {
+            new StreamingPartitionIterator(nativeTable, icebergTable, taskIterable, 1L);
+        });
+
+        // Verify close was called and IOException was suppressed
+        Assertions.assertTrue(closeCalled.get(), "close() should be called");
+        Assertions.assertEquals(1, thrown.getSuppressed().length, "IOException should be suppressed");
+        Assertions.assertTrue(thrown.getSuppressed()[0] instanceof IOException);
+    }
+
+    @Test
+    public void testStreamingPartitionIteratorRowReadException() throws IOException {
+        // Test exception handling when reading partition rows fails
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DataTask dataTask = Mockito.mock(DataTask.class);
+
+        Mockito.when(nativeTable.specs()).thenReturn(Map.of(0, spec));
+
+        // Task throws exception when getting rows
+        Mockito.when(task.asDataTask()).thenReturn(dataTask);
+        Mockito.when(dataTask.rows()).thenThrow(new RuntimeException("Failed to read rows"));
+
+        List<FileScanTask> tasks = List.of(task);
+        CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(tasks);
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setCatalogDBName("db")
+                .setCatalogTableName("test_table")
+                .setNativeTable(nativeTable)
+                .build();
+
+        StreamingPartitionIterator iterator = new StreamingPartitionIterator(
+                nativeTable, icebergTable, taskIterable, 1L);
+
+        // Should throw RuntimeException when trying to read
+        Assertions.assertThrows(RuntimeException.class, iterator::hasNext);
+        iterator.close();
+    }
+
+    @Test
+    public void testStreamingPartitionIteratorGetLastUpdatedException() throws IOException {
+        // Test exception handling when getting last_updated_at fails
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DataTask dataTask = Mockito.mock(DataTask.class);
+        StructLike row = Mockito.mock(StructLike.class);
+
+        Mockito.when(nativeTable.specs()).thenReturn(Map.of(0, spec));
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.timestampMillis()).thenReturn(1704067200000L);
+
+        // Row returns valid partition data but throws on last_updated_at
+        org.apache.iceberg.util.StructProjection partitionData =
+                Mockito.mock(org.apache.iceberg.util.StructProjection.class);
+        Mockito.when(row.get(0, org.apache.iceberg.util.StructProjection.class)).thenReturn(partitionData);
+        Mockito.when(row.get(1, Integer.class)).thenReturn(0);
+        Mockito.when(row.get(9, Long.class)).thenThrow(new RuntimeException("Cannot read last_updated_at"));
+
+        Mockito.when(spec.fields()).thenReturn(List.of());
+
+        CloseableIterable<StructLike> rowIterable = CloseableIterable.withNoopClose(List.of(row));
+        Mockito.when(task.asDataTask()).thenReturn(dataTask);
+        Mockito.when(dataTask.rows()).thenReturn(rowIterable);
+
+        List<FileScanTask> tasks = List.of(task);
+        CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(tasks);
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setCatalogDBName("db")
+                .setCatalogTableName("test_table")
+                .setNativeTable(nativeTable)
+                .build();
+
+        StreamingPartitionIterator iterator = new StreamingPartitionIterator(
+                nativeTable, icebergTable, taskIterable, 1L);
+
+        // Should handle exception gracefully and use snapshot timestamp
+        Assertions.assertTrue(iterator.hasNext());
+        Map.Entry<String, Partition> entry = iterator.next();
+        Assertions.assertEquals(1704067200000L, entry.getValue().getModifiedTime());
+        iterator.close();
+    }
+
+    @Test
+    public void testStreamingPartitionIteratorNoCurrentSnapshot() throws IOException {
+        // Test when table has no current snapshot
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DataTask dataTask = Mockito.mock(DataTask.class);
+        StructLike row = Mockito.mock(StructLike.class);
+
+        Mockito.when(nativeTable.specs()).thenReturn(Map.of(0, spec));
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(null); // No current snapshot
+        Mockito.when(nativeTable.name()).thenReturn("test_table");
+
+        // Row returns valid partition data but null last_updated_at
+        org.apache.iceberg.util.StructProjection partitionData =
+                Mockito.mock(org.apache.iceberg.util.StructProjection.class);
+        Mockito.when(row.get(0, org.apache.iceberg.util.StructProjection.class)).thenReturn(partitionData);
+        Mockito.when(row.get(1, Integer.class)).thenReturn(0);
+        Mockito.when(row.get(9, Long.class)).thenReturn(null);
+
+        Mockito.when(spec.fields()).thenReturn(List.of());
+
+        CloseableIterable<StructLike> rowIterable = CloseableIterable.withNoopClose(List.of(row));
+        Mockito.when(task.asDataTask()).thenReturn(dataTask);
+        Mockito.when(dataTask.rows()).thenReturn(rowIterable);
+
+        List<FileScanTask> tasks = List.of(task);
+        CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(tasks);
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setCatalogDBName("db")
+                .setCatalogTableName("test_table")
+                .setNativeTable(nativeTable)
+                .build();
+
+        StreamingPartitionIterator iterator = new StreamingPartitionIterator(
+                nativeTable, icebergTable, taskIterable, 1L);
+
+        // Should handle null snapshot gracefully and return -1
+        Assertions.assertTrue(iterator.hasNext());
+        Map.Entry<String, Partition> entry = iterator.next();
+        Assertions.assertEquals(-1L, entry.getValue().getModifiedTime());
+        iterator.close();
+    }
+
+    @Test
+    public void testStreamingPartitionIteratorCloseCurrentRowsIOException() throws IOException {
+        // Test IOException handling when closing currentRows
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        FileScanTask task1 = Mockito.mock(FileScanTask.class);
+        FileScanTask task2 = Mockito.mock(FileScanTask.class);
+        DataTask dataTask1 = Mockito.mock(DataTask.class);
+        DataTask dataTask2 = Mockito.mock(DataTask.class);
+        StructLike row1 = Mockito.mock(StructLike.class);
+        StructLike row2 = Mockito.mock(StructLike.class);
+
+        Mockito.when(nativeTable.specs()).thenReturn(Map.of(0, spec));
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.timestampMillis()).thenReturn(1704067200000L);
+        Mockito.when(nativeTable.name()).thenReturn("test_table");
+
+        org.apache.iceberg.util.StructProjection partitionData =
+                Mockito.mock(org.apache.iceberg.util.StructProjection.class);
+        Mockito.when(row1.get(0, org.apache.iceberg.util.StructProjection.class)).thenReturn(partitionData);
+        Mockito.when(row1.get(1, Integer.class)).thenReturn(0);
+        Mockito.when(row1.get(9, Long.class)).thenReturn(1704067200000L);
+
+        Mockito.when(row2.get(0, org.apache.iceberg.util.StructProjection.class)).thenReturn(partitionData);
+        Mockito.when(row2.get(1, Integer.class)).thenReturn(0);
+        Mockito.when(row2.get(9, Long.class)).thenReturn(1704153600000L);
+
+        Mockito.when(spec.fields()).thenReturn(List.of());
+
+        // First task's rows will throw on close
+        AtomicBoolean row1Closed = new AtomicBoolean(false);
+        CloseableIterable<StructLike> rowIterable1 = new CloseableIterable<StructLike>() {
+            @Override
+            public CloseableIterator<StructLike> iterator() {
+                return CloseableIterator.withClose(List.of(row1).iterator());
+            }
+
+            @Override
+            public void close() throws IOException {
+                row1Closed.set(true);
+                throw new IOException("Simulated close failure");
+            }
+        };
+
+        CloseableIterable<StructLike> rowIterable2 = CloseableIterable.withNoopClose(List.of(row2));
+
+        Mockito.when(task1.asDataTask()).thenReturn(dataTask1);
+        Mockito.when(dataTask1.rows()).thenReturn(rowIterable1);
+        Mockito.when(task2.asDataTask()).thenReturn(dataTask2);
+        Mockito.when(dataTask2.rows()).thenReturn(rowIterable2);
+
+        List<FileScanTask> tasks = List.of(task1, task2);
+        CloseableIterable<FileScanTask> taskIterable = CloseableIterable.withNoopClose(tasks);
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setCatalogDBName("db")
+                .setCatalogTableName("test_table")
+                .setNativeTable(nativeTable)
+                .build();
+
+        StreamingPartitionIterator iterator = new StreamingPartitionIterator(
+                nativeTable, icebergTable, taskIterable, 1L);
+
+        // Should handle IOException gracefully and continue to next task
+        Assertions.assertTrue(iterator.hasNext());
+        iterator.next(); // First row
+        Assertions.assertTrue(iterator.hasNext()); // Should move to next task despite close exception
+        iterator.next(); // Second row
+        Assertions.assertFalse(iterator.hasNext());
+        Assertions.assertTrue(row1Closed.get(), "First rows should be closed");
+        iterator.close();
+    }
+
+    @Test
+    public void testStreamingPartitionIteratorCloseTaskIterableIOException() throws IOException {
+        // Test IOException handling when closing taskIterable
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        FileScanTask task = Mockito.mock(FileScanTask.class);
+        DataTask dataTask = Mockito.mock(DataTask.class);
+        StructLike row = Mockito.mock(StructLike.class);
+
+        Mockito.when(nativeTable.specs()).thenReturn(Map.of(0, spec));
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.timestampMillis()).thenReturn(1704067200000L);
+        Mockito.when(nativeTable.name()).thenReturn("test_table");
+
+        org.apache.iceberg.util.StructProjection partitionData =
+                Mockito.mock(org.apache.iceberg.util.StructProjection.class);
+        Mockito.when(row.get(0, org.apache.iceberg.util.StructProjection.class)).thenReturn(partitionData);
+        Mockito.when(row.get(1, Integer.class)).thenReturn(0);
+        Mockito.when(row.get(9, Long.class)).thenReturn(1704067200000L);
+
+        Mockito.when(spec.fields()).thenReturn(List.of());
+
+        CloseableIterable<StructLike> rowIterable = CloseableIterable.withNoopClose(List.of(row));
+        Mockito.when(task.asDataTask()).thenReturn(dataTask);
+        Mockito.when(dataTask.rows()).thenReturn(rowIterable);
+
+        List<FileScanTask> tasks = List.of(task);
+        AtomicBoolean taskIterableClosed = new AtomicBoolean(false);
+        CloseableIterable<FileScanTask> taskIterable = new CloseableIterable<FileScanTask>() {
+            @Override
+            public CloseableIterator<FileScanTask> iterator() {
+                return CloseableIterator.withClose(tasks.iterator());
+            }
+
+            @Override
+            public void close() throws IOException {
+                taskIterableClosed.set(true);
+                throw new IOException("Simulated taskIterable close failure");
+            }
+        };
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setCatalogDBName("db")
+                .setCatalogTableName("test_table")
+                .setNativeTable(nativeTable)
+                .build();
+
+        StreamingPartitionIterator iterator = new StreamingPartitionIterator(
+                nativeTable, icebergTable, taskIterable, 1L);
+
+        // Iterate through all entries
+        Assertions.assertTrue(iterator.hasNext());
+        iterator.next();
+        Assertions.assertFalse(iterator.hasNext());
+
+        // Close should handle IOException gracefully (not throw)
+        Assertions.assertDoesNotThrow(iterator::close);
+        Assertions.assertTrue(taskIterableClosed.get(), "taskIterable should be closed");
+    }
+
+    @Test
+    public void testGetPartitionIteratorForUnpartitionedTable() throws IOException {
+        // Test getPartitionIterator returns singleton iterator for unpartitioned tables
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        IcebergCatalogProperties props = Mockito.mock(IcebergCatalogProperties.class);
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+
+        Mockito.when(props.isEnableIcebergMetadataCache()).thenReturn(true);
+        Mockito.when(props.isEnableIcebergTableCache()).thenReturn(true);
+        Mockito.when(props.getIcebergMetaCacheTtlSec()).thenReturn(60L);
+        Mockito.when(props.getIcebergDataFileCacheMemoryUsageRatio()).thenReturn(0.0);
+        Mockito.when(props.getIcebergDeleteFileCacheMemoryUsageRatio()).thenReturn(0.0);
+        Mockito.when(props.getIcebergPartitionStreamingThreshold()).thenReturn(100);
+
+        Mockito.when(nativeTable.spec()).thenReturn(spec);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(true);
+
+        // For unpartitioned tables, getPartitions should be called
+        Map<String, Partition> partitionMap = new HashMap<>();
+        partitionMap.put("", new Partition(1704067200000L));
+        Mockito.when(delegate.getPartitions(Mockito.any(IcebergTable.class), Mockito.anyLong(), Mockito.any()))
+                .thenReturn(partitionMap);
+
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        try {
+            CachingIcebergCatalog catalog = new CachingIcebergCatalog("iceberg_test", delegate, props, es);
+            IcebergTable icebergTable = IcebergTable.builder()
+                    .setCatalogDBName("db")
+                    .setCatalogTableName("test_table")
+                    .setNativeTable(nativeTable)
+                    .build();
+
+            CloseableIterator<Map.Entry<String, Partition>> iterator =
+                    catalog.getPartitionIterator(icebergTable, 1L, null);
+
+            // Should return a singleton iterator with empty partition name
+            Assertions.assertTrue(iterator.hasNext());
+            Map.Entry<String, Partition> entry = iterator.next();
+            Assertions.assertEquals("", entry.getKey());
+            Assertions.assertEquals(1704067200000L, entry.getValue().getModifiedTime());
+            Assertions.assertFalse(iterator.hasNext());
+            iterator.close();
+        } finally {
+            es.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testCollectPartitionsFromIteratorSupplierException() {
+        // Test that exception during iterator creation is properly wrapped
+        IcebergCatalog delegate = Mockito.mock(IcebergCatalog.class);
+        IcebergCatalogProperties props = Mockito.mock(IcebergCatalogProperties.class);
+        Table nativeTable = Mockito.mock(Table.class);
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+
+        Mockito.when(props.isEnableIcebergMetadataCache()).thenReturn(true);
+        Mockito.when(props.isEnableIcebergTableCache()).thenReturn(true);
+        Mockito.when(props.getIcebergMetaCacheTtlSec()).thenReturn(60L);
+        Mockito.when(props.getIcebergDataFileCacheMemoryUsageRatio()).thenReturn(0.0);
+        Mockito.when(props.getIcebergDeleteFileCacheMemoryUsageRatio()).thenReturn(0.0);
+        Mockito.when(props.getIcebergPartitionStreamingThreshold()).thenReturn(100);
+
+        Mockito.when(nativeTable.spec()).thenReturn(spec);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(false);
+        Mockito.when(nativeTable.currentSnapshot()).thenReturn(snapshot);
+        Mockito.when(snapshot.snapshotId()).thenReturn(1L);
+        Mockito.when(nativeTable.name()).thenReturn("test_table");
+
+        // Large table to trigger streaming path
+        Mockito.when(delegate.estimatePartitionCount(Mockito.any(IcebergTable.class), Mockito.anyLong()))
+                .thenReturn(1000L);
+
+        // getPartitionIterator throws exception
+        Mockito.when(delegate.getPartitionIterator(Mockito.any(IcebergTable.class), Mockito.anyLong(), Mockito.any()))
+                .thenThrow(new RuntimeException("Failed to create iterator"));
+
+        ExecutorService es = Executors.newSingleThreadExecutor();
+        try {
+            CachingIcebergCatalog catalog = new CachingIcebergCatalog("iceberg_test", delegate, props, es);
+            IcebergTable icebergTable = IcebergTable.builder()
+                    .setCatalogDBName("db")
+                    .setCatalogTableName("test_table")
+                    .setNativeTable(nativeTable)
+                    .build();
+
+            List<String> requestedNames = Arrays.asList("date=2024-01-01");
+
+            // Should throw StarRocksConnectorException wrapping the original exception
+            StarRocksConnectorException thrown = Assertions.assertThrows(
+                    StarRocksConnectorException.class,
+                    () -> catalog.getPartitionsByNames(icebergTable, null, requestedNames)
+            );
+            Assertions.assertTrue(thrown.getMessage().contains("Failed to stream partitions"));
+        } finally {
+            es.shutdownNow();
+        }
+    }
 }
 

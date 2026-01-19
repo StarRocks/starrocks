@@ -38,6 +38,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,7 +49,12 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 
 import static com.starrocks.connector.iceberg.IcebergPartitionTransform.YEAR;
 
@@ -344,5 +350,41 @@ public class IcebergPartitionUtils {
             }
             return ExprUtils.compoundOr(result);
         }
+    }
+
+    /**
+     * Collects partitions from iterator matching the requested names.
+     * Stops early once all requested partitions are found and returns them in request order.
+     *
+     * @param iteratorSupplier Supplier that creates the partition iterator (creation happens inside try block)
+     * @param partitionNames The partition names to retrieve
+     * @param tableName The table name for error messages
+     * @return List of partitions in the order they were requested
+     */
+    public static List<Partition> collectPartitionsFromIterator(
+            Supplier<CloseableIterator<Map.Entry<String, Partition>>> iteratorSupplier,
+            List<String> partitionNames,
+            String tableName) {
+        Set<String> requestedNames = new HashSet<>(partitionNames);
+        Map<String, Partition> result = new HashMap<>();
+
+        try (CloseableIterator<Map.Entry<String, Partition>> iterator = iteratorSupplier.get()) {
+            while (iterator.hasNext() && result.size() < requestedNames.size()) {
+                Map.Entry<String, Partition> entry = iterator.next();
+                if (requestedNames.contains(entry.getKey())) {
+                    result.put(entry.getKey(), entry.getValue());
+                }
+            }
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Failed to stream partitions for table: " + tableName, e);
+        }
+
+        // Return in the order requested, using MISSING_PARTITION for not-found entries
+        ImmutableList.Builder<Partition> orderedResult = ImmutableList.builder();
+        for (String name : partitionNames) {
+            Partition partition = result.get(name);
+            orderedResult.add(partition != null ? partition : Partition.MISSING_PARTITION);
+        }
+        return orderedResult.build();
     }
 }

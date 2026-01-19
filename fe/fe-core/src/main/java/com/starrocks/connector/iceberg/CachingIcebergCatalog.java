@@ -402,8 +402,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private List<Partition> getPartitionsByNamesStreaming(IcebergTable icebergTable, long snapshotId,
                                                           ExecutorService executorService,
                                                           List<String> partitionNames) {
-        return collectPartitionsFromIterator(
-                delegate.getPartitionIterator(icebergTable, snapshotId, executorService),
+        return IcebergPartitionUtils.collectPartitionsFromIterator(
+                () -> delegate.getPartitionIterator(icebergTable, snapshotId, executorService),
                 partitionNames,
                 icebergTable.getNativeTable().name());
     }

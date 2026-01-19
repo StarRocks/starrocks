@@ -545,46 +545,9 @@ public interface IcebergCatalog extends MemoryTrackable {
     private List<Partition> getPartitionsByNamesStreaming(IcebergTable icebergTable, long snapshotId,
                                                           ExecutorService executorService,
                                                           List<String> partitionNames) {
-        return collectPartitionsFromIterator(
-                getPartitionIterator(icebergTable, snapshotId, executorService),
+        return IcebergPartitionUtils.collectPartitionsFromIterator(
+                () -> getPartitionIterator(icebergTable, snapshotId, executorService),
                 partitionNames,
                 icebergTable.getNativeTable().name());
-    }
-
-    /**
-     * Collects partitions from iterator matching the requested names.
-     * Stops early once all requested partitions are found and returns them in request order.
-     *
-     * @param iterator The partition iterator (will be closed by this method)
-     * @param partitionNames The partition names to retrieve
-     * @param tableName The table name for error messages
-     * @return List of partitions in the order they were requested
-     */
-    default List<Partition> collectPartitionsFromIterator(
-            CloseableIterator<Map.Entry<String, Partition>> iterator,
-            List<String> partitionNames,
-            String tableName) {
-        java.util.Set<String> requestedNames = new java.util.HashSet<>(partitionNames);
-        Map<String, Partition> result = new HashMap<>();
-
-        try (iterator) {
-            while (iterator.hasNext() && result.size() < requestedNames.size()) {
-                Map.Entry<String, Partition> entry = iterator.next();
-                if (requestedNames.contains(entry.getKey())) {
-                    result.put(entry.getKey(), entry.getValue());
-                }
-            }
-        } catch (IOException e) {
-            throw new StarRocksConnectorException("Failed to stream partitions for table: " + tableName, e);
-        }
-
-        // Return in the order requested, using MISSING_PARTITION for not-found entries
-        ImmutableList.Builder<Partition> orderedResult = ImmutableList.builder();
-        for (String name : partitionNames) {
-            Partition partition = result.get(name);
-            // Use MISSING_PARTITION placeholder to maintain positional alignment
-            orderedResult.add(partition != null ? partition : Partition.MISSING_PARTITION);
-        }
-        return orderedResult.build();
     }
 }
