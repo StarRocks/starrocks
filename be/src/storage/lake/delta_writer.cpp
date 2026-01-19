@@ -439,7 +439,7 @@ inline Status DeltaWriterImpl::reset_memtable() {
 inline Status DeltaWriterImpl::flush_async() {
     Status st;
     if (_mem_table != nullptr) {
-        RETURN_IF_ERROR(_mem_table->finalize());
+        //RETURN_IF_ERROR(_mem_table->finalize());
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }

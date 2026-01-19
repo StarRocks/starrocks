@@ -227,6 +227,7 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     // if memtable is full, push it to the flush executor,
     // and create a new memtable for incoming data
     bool suggest_flush = false;
+    /*
     if (is_full()) {
         size_t orig_bytes = write_buffer_size();
         RETURN_IF_ERROR(_merge());
@@ -238,7 +239,7 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
             // so flush is suggested even buffer is not full
             suggest_flush = true;
         }
-    }
+    }*/
     if (is_full()) {
         suggest_flush = true;
     }
