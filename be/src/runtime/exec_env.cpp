@@ -1059,9 +1059,6 @@ void ExecEnv::destroy() {
     if (HttpBrpcStubCache::getInstance() != nullptr) {
         HttpBrpcStubCache::getInstance()->shutdown();
     }
-    if (LakeServiceBrpcStubCache::getInstance() != nullptr) {
-        LakeServiceBrpcStubCache::getInstance()->shutdown();
-    }
     SAFE_DELETE(_pipeline_timer);
     SAFE_DELETE(_broker_client_cache);
     SAFE_DELETE(_frontend_client_cache);
