@@ -758,13 +758,35 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
                     VariantMetadata meta(metadata_slice);
                     RETURN_IF_ERROR(_ctx.use_metadata(meta));
-                    auto variant =
-                            VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
-                    if (!variant.ok()) {
-                        variant_column->append(VariantRowValue::from_null());
-                        continue;
+
+                    // For partially shredded objects (both value and typed_value non-null),
+                    // we need to pass both columns to the encoder for merging
+                    if (!value_slice.empty() && _typed_value_type.is_struct_type()) {
+                        // Construct wrapper struct with value and typed_value fields
+                        Columns fields{value_col, typed_value_col};
+                        auto wrapper_col = StructColumn::create(fields, {"value", "typed_value"});
+                        TypeDescriptor wrapper_type;
+                        wrapper_type.type = TYPE_STRUCT;
+                        wrapper_type.field_names = {"value", "typed_value"};
+                        wrapper_type.children.push_back(TypeDescriptor(TYPE_VARBINARY));
+                        wrapper_type.children.push_back(_typed_value_type);
+
+                        auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
+                        if (!variant.ok()) {
+                            variant_column->append(VariantRowValue::from_null());
+                            continue;
+                        }
+                        variant_column->append(variant.value());
+                    } else {
+                        // Only typed_value is present, encode directly
+                        auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i,
+                                                                                  &_ctx);
+                        if (!variant.ok()) {
+                            variant_column->append(VariantRowValue::from_null());
+                            continue;
+                        }
+                        variant_column->append(variant.value());
                     }
-                    variant_column->append(variant.value());
                     continue;
                 }
 
@@ -817,12 +839,35 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
                 VariantMetadata meta(metadata_slice);
                 RETURN_IF_ERROR(_ctx.use_metadata(meta));
-                auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
-                if (!variant.ok()) {
-                    variant_column->append(VariantRowValue::from_null());
-                    continue;
+
+                // For partially shredded objects (both value and typed_value non-null),
+                // we need to pass both columns to the encoder for merging
+                if (!value_slice.empty() && _typed_value_type.is_struct_type()) {
+                    // Construct wrapper struct with value and typed_value fields
+                    Columns fields{value_col, typed_value_col};
+                    auto wrapper_col = StructColumn::create(fields, {"value", "typed_value"});
+                    TypeDescriptor wrapper_type;
+                    wrapper_type.type = TYPE_STRUCT;
+                    wrapper_type.field_names = {"value", "typed_value"};
+                    wrapper_type.children.push_back(TypeDescriptor(TYPE_VARBINARY));
+                    wrapper_type.children.push_back(_typed_value_type);
+
+                    auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
+                    if (!variant.ok()) {
+                        variant_column->append(VariantRowValue::from_null());
+                        continue;
+                    }
+                    variant_column->append(variant.value());
+                } else {
+                    // Only typed_value is present, encode directly
+                    auto variant =
+                            VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
+                    if (!variant.ok()) {
+                        variant_column->append(VariantRowValue::from_null());
+                        continue;
+                    }
+                    variant_column->append(variant.value());
                 }
-                variant_column->append(variant.value());
             } else {
                 // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
                 // But Variant requires non-empty value, so treat empty slices as null

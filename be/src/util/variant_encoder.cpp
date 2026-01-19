@@ -599,25 +599,94 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
             const ColumnPtr& typed_col = struct_col->get_column_by_idx(typed_idx);
             const ColumnPtr& value_col = struct_col->get_column_by_idx(value_idx);
 
+            const bool has_typed =
+                    !(typed_col->is_nullable() && down_cast<const NullableColumn*>(typed_col.get())->is_null(row));
+            const bool has_value =
+                    !(value_col->is_nullable() && down_cast<const NullableColumn*>(value_col.get())->is_null(row));
+
             // Per Apache Parquet Variant Shredding Spec:
             // - If typed_value is non-null: encode from typed_value (shredded representation)
             // - Else if value is non-null: use value directly (raw variant encoding)
             // - Else both null: return variant null
             //
-            // NOTE: For objects, both can be non-null (partially shredded object).
-            // Current implementation prioritizes typed_value and ignores value in this case.
-            // This works correctly when:
-            // 1. All shredded fields are in typed_value
-            // 2. All non-shredded fields are in value
-            // 3. No overlap between the two
-            // The spec guarantees writers produce data this way, so typed_value alone
-            // contains complete information about shredded fields.
-            if (!(typed_col->is_nullable() && down_cast<const NullableColumn*>(typed_col.get())->is_null(row))) {
+            // Special case: For partially shredded objects, both can be non-null.
+            // In this case, we need to merge fields from both:
+            // - value contains non-shredded fields (raw variant-encoded object)
+            // - typed_value contains shredded fields (struct columns)
+            if (has_typed && has_value) {
+                // Check if typed_value is an object (struct type)
+                size_t type_typed_idx = typed_idx;
+                if (!type.field_names.empty()) find_struct_field_idx(type.field_names, "typed_value", &type_typed_idx);
+                const TypeDescriptor& typed_value_type = type.children[type_typed_idx];
+
+                if (typed_value_type.type == TYPE_STRUCT) {
+                    // Partially shredded object: merge value and typed_value
+                    ColumnPtr value_data = ColumnHelper::get_data_column(value_col);
+                    Slice value_slice = down_cast<const BinaryColumn*>(value_data.get())->get_slice(row);
+
+                    if (!value_slice.empty()) {
+                        // Decode value to extract non-shredded fields
+                        VariantValue value_variant(value_slice);
+                        if (value_variant.type() == VariantType::OBJECT) {
+                            // Get field IDs from value (non-shredded fields)
+                            ASSIGN_OR_RETURN(auto value_obj_info, value_variant.get_object_info());
+
+                            // Build merged field map
+                            std::map<uint32_t, std::string> merged_fields;
+
+                            // Add non-shredded fields from value
+                            for (uint32_t i = 0; i < value_obj_info.num_elements; ++i) {
+                                uint32_t field_id = VariantUtil::read_little_endian_unsigned32(
+                                        value_slice.data + value_obj_info.id_start_offset + i * value_obj_info.id_size,
+                                        value_obj_info.id_size);
+
+                                uint32_t field_start = VariantUtil::read_little_endian_unsigned32(
+                                        value_slice.data + value_obj_info.offset_start_offset +
+                                                i * value_obj_info.offset_size,
+                                        value_obj_info.offset_size);
+                                uint32_t field_end = VariantUtil::read_little_endian_unsigned32(
+                                        value_slice.data + value_obj_info.offset_start_offset +
+                                                (i + 1) * value_obj_info.offset_size,
+                                        value_obj_info.offset_size);
+
+                                const char* field_data =
+                                        value_slice.data + value_obj_info.data_start_offset + field_start;
+                                size_t field_size = field_end - field_start;
+                                merged_fields[field_id] = std::string(field_data, field_size);
+                            }
+
+                            // Add shredded fields from typed_value (these override if there's conflict)
+                            const auto* typed_struct =
+                                    down_cast<const StructColumn*>(ColumnHelper::get_data_column(typed_col).get());
+                            const auto& typed_field_names = !typed_value_type.field_names.empty()
+                                                                    ? typed_value_type.field_names
+                                                                    : typed_struct->field_names();
+
+                            for (size_t i = 0; i < typed_struct->fields_size(); ++i) {
+                                const std::string& field_name = typed_field_names[i];
+                                auto it = ctx->key_to_id.find(field_name);
+                                if (it == ctx->key_to_id.end()) {
+                                    return Status::VariantError("Variant metadata missing field: " + field_name);
+                                }
+                                ASSIGN_OR_RETURN(auto encoded_value,
+                                                 encode_value_from_column_row(typed_struct->get_column_by_idx(i),
+                                                                              typed_value_type.children[i], row, ctx));
+                                merged_fields[it->second] = std::move(encoded_value);
+                            }
+
+                            return encode_variant_object_from_map(merged_fields);
+                        }
+                    }
+                }
+                // Fall through to normal typed_value encoding if not a partially shredded object
+            }
+
+            if (has_typed) {
                 size_t type_typed_idx = typed_idx;
                 if (!type.field_names.empty()) find_struct_field_idx(type.field_names, "typed_value", &type_typed_idx);
                 return encode_value_from_column_row(typed_col, type.children[type_typed_idx], row, ctx);
             }
-            if (!(value_col->is_nullable() && down_cast<const NullableColumn*>(value_col.get())->is_null(row))) {
+            if (has_value) {
                 ColumnPtr value_data = ColumnHelper::get_data_column(value_col);
                 Slice value_slice = down_cast<const BinaryColumn*>(value_data.get())->get_slice(row);
                 if (value_slice.empty()) return encode_variant_null();
