@@ -200,6 +200,7 @@ set(STORAGE_FILES
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
+    lake/segment_metadata_filter.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
