@@ -126,7 +126,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
     compact_stat->set_write_segment_bytes(context->stats->write_segment_bytes);
     compact_stat->set_write_time_remote(context->stats->io_ns_write_remote);
     compact_stat->set_in_queue_time_sec(context->stats->in_queue_time_sec);
-    compact_stat->set_sub_task_count(1); // each tablet will have 1 task
+    compact_stat->set_sub_task_count(context->subtask_count);
     compact_stat->set_total_compact_input_file_size(context->stats->input_file_size);
     if (context->skip_write_txnlog && context->txn_log != nullptr) {
         // context->txn_log could be nullptr if the task is failed before writing txn log.

@@ -48,6 +48,17 @@ public:
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
                     size_t compaction_segment_limit);
 
+    // Create a Rowset with a specific segment range [segment_start, segment_end).
+    // Used for large rowset split compaction where a single rowset is split into multiple subtasks.
+    // Each subtask processes a subset of segments.
+    //
+    // Requires:
+    //  - segment_start >= 0
+    //  - segment_end > segment_start
+    //  - segment_end <= metadata.segments_size()
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
+                    int32_t segment_start, int32_t segment_end);
+
     virtual ~Rowset();
 
     DISALLOW_COPY_AND_MOVE(Rowset);
@@ -83,12 +94,23 @@ public:
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
     // if _compaction_segment_limit is set > 0, it means only partial segments will be used
+    // if _segment_range_end > 0, it means segment range mode is used
     [[nodiscard]] int64_t num_segments() const {
+        if (_segment_range_end > 0) {
+            return _segment_range_end - _segment_range_start;
+        }
         return _compaction_segment_limit > 0 ? _compaction_segment_limit : metadata().segments_size();
     }
 
     // only used in compaction
     [[nodiscard]] bool partial_segments_compaction() const { return _compaction_segment_limit > 0; }
+
+    // Check if this rowset uses segment range mode (for large rowset split compaction)
+    [[nodiscard]] bool is_segment_range_mode() const { return _segment_range_end > 0; }
+
+    // Get segment range [start, end), only valid when is_segment_range_mode() returns true
+    [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
+    [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }
     // only used in compaction
     [[nodiscard]] Status add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_compaction,
                                                               TabletWriter* writer, uint64_t& uncompacted_num_rows,
@@ -145,6 +167,11 @@ private:
     // default is 0 means every segment will be used.
     // only used for compaction
     size_t _compaction_segment_limit;
+    // Segment range for large rowset split compaction.
+    // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
+    // Default is 0, meaning all segments are used.
+    int32_t _segment_range_start = 0;
+    int32_t _segment_range_end = 0;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {

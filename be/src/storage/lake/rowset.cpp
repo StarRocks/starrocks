@@ -90,6 +90,33 @@ Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int
     }
 }
 
+Rowset::Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index, int32_t segment_start,
+               int32_t segment_end)
+        : _tablet_mgr(tablet_mgr),
+          _tablet_id(tablet_metadata->id()),
+          _metadata(&tablet_metadata->rowsets(rowset_index)),
+          _index(rowset_index),
+          _tablet_metadata(std::move(tablet_metadata)),
+          _parallel_load(false), // Disable parallel load to ensure segment order
+          _compaction_segment_limit(0),
+          _segment_range_start(segment_start),
+          _segment_range_end(segment_end) {
+    DCHECK(segment_start >= 0);
+    DCHECK(segment_end > segment_start);
+    DCHECK(segment_end <= _metadata->segments_size());
+
+    auto rowset_id = _tablet_metadata->rowsets(rowset_index).id();
+    if (_tablet_metadata->rowset_to_schema().empty() ||
+        _tablet_metadata->rowset_to_schema().find(rowset_id) == _tablet_metadata->rowset_to_schema().end()) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    } else {
+        auto schema_id = _tablet_metadata->rowset_to_schema().at(rowset_id);
+        CHECK(_tablet_metadata->historical_schemas().count(schema_id) > 0);
+        _tablet_schema =
+                GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->historical_schemas().at(schema_id)).first;
+    }
+}
+
 Rowset::~Rowset() {
     if (_tablet_metadata) {
         DCHECK_LT(_index, _tablet_metadata->rowsets_size())
@@ -525,6 +552,14 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     const auto& files_to_offset = metadata().bundle_file_offsets();
     int index = 0;
 
+    // Determine segment range based on mode
+    int32_t seg_start = 0;
+    int32_t seg_end = metadata().segments_size();
+    if (is_segment_range_mode()) {
+        seg_start = _segment_range_start;
+        seg_end = _segment_range_end;
+    }
+
     std::vector<std::future<std::pair<StatusOr<SegmentPtr>, std::string>>> segment_futures;
     auto check_status = [&](StatusOr<SegmentPtr>& segment_or, const std::string& seg_name, int seg_id) -> Status {
         if (segment_or.ok()) {
@@ -538,7 +573,10 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
         return Status::OK();
     };
 
-    for (const auto& seg_name : metadata().segments()) {
+    // For segment range mode, seg_id should match the original segment index
+    seg_id = seg_start;
+    for (index = seg_start; index < seg_end; index++) {
+        const auto& seg_name = metadata().segments(index);
         std::string segment_path;
         auto lake_io_opts = seg_options.lake_io_opts;
         if (lake_io_opts.location_provider) {
@@ -563,7 +601,6 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
             }
             segment_info.encryption_meta = metadata().segment_encryption_metas(index);
         }
-        index++;
 
         if (_parallel_load) {
             auto task = std::make_shared<std::packaged_task<std::pair<StatusOr<SegmentPtr>, std::string>()>>([=]() {
@@ -599,7 +636,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     for (int i = 0; i < segment_futures.size(); i++) {
         auto result_pair = segment_futures[i].get();
         auto segment_or = result_pair.first;
-        if (auto status = check_status(segment_or, result_pair.second, i); !status.ok()) {
+        // In segment range mode, the actual segment ID is seg_start + i, not i
+        if (auto status = check_status(segment_or, result_pair.second, seg_start + i); !status.ok()) {
             return status;
         }
     }
