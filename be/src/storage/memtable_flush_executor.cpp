@@ -142,6 +142,15 @@ Status FlushToken::wait() {
     return _status;
 }
 
+// wait all tasks in token to be completed or timeout
+// @return true if all tasks are completed, false if timeout
+StatusOr<bool> FlushToken::wait_for(int64_t timeout_ms) {
+    bool completed = _flush_token->wait_for(MonoDelta::FromMilliseconds(timeout_ms));
+    std::lock_guard l(_status_lock);
+    RETURN_IF_ERROR(_status);
+    return completed;
+}
+
 void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size,
                                  int64_t slot_idx) {
     // If previous flush has failed, return directly

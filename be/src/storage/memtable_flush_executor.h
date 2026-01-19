@@ -88,6 +88,10 @@ public:
     // wait all tasks in token to be completed.
     Status wait();
 
+    // wait all tasks in token to be completed or timeout
+    // @return true if all tasks are completed, false if timeout
+    StatusOr<bool> wait_for(int64_t timeout_ms);
+
     // get flush operations' statistics
     const FlushStatistic& get_stats() const { return _stats; }
 
