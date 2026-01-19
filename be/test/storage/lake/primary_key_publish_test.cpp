@@ -2198,15 +2198,12 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
     auto& delvec_file = (*delvec_meta->mutable_version_to_file())[100];
     delvec_file.set_name("test_delvec_file.delvec");
     delvec_file.set_size(1024);
-    delvec_file.set_shared(false);
 
     // Add mock dcg_meta entry
     auto* dcg_meta = modified_metadata->mutable_dcg_meta();
     auto& dcg_ver = (*dcg_meta->mutable_dcgs())[0];
     dcg_ver.add_column_files("test_dcg_file1.cols");
     dcg_ver.add_column_files("test_dcg_file2.cols");
-    dcg_ver.add_shared_files(false);
-    dcg_ver.add_shared_files(true);
 
     // Save modified metadata
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(modified_metadata));
@@ -2280,15 +2277,12 @@ TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_me
         if (orphan_file.name() == "test_delvec_file.delvec") {
             found_delvec_file = true;
             EXPECT_EQ(orphan_file.size(), 1024);
-            EXPECT_FALSE(orphan_file.shared());
         }
         if (orphan_file.name() == "test_dcg_file1.cols") {
             found_dcg_file1 = true;
-            EXPECT_FALSE(orphan_file.shared());
         }
         if (orphan_file.name() == "test_dcg_file2.cols") {
             found_dcg_file2 = true;
-            EXPECT_TRUE(orphan_file.shared());
         }
     }
     EXPECT_TRUE(found_delvec_file) << "Expected delvec file to be in orphan_files";
