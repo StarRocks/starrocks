@@ -24,6 +24,7 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -78,6 +79,15 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
         return Status::OK();
     }
     RETURN_IF_ERROR(_block->flush());
+    if (_block->is_remote()) {
+        // Update remote block write metric
+        StarRocksMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
+        StarRocksMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
+    } else {
+        // Update local block write metric
+        StarRocksMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
+        StarRocksMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
+    }
     RETURN_IF_ERROR(_block_manager->release_block(_block));
     // Save this block into block container.
     _block_manager->block_container()->append_block(_block);
@@ -179,8 +189,14 @@ public:
                 COUNTER_UPDATE(metrics.block_count, 1);
                 if (_blocks[_block_idx]->is_remote()) {
                     COUNTER_UPDATE(metrics.remote_block_count, 1);
+                    StarRocksMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
+                    StarRocksMetrics::instance()->load_spill_remote_bytes_read_total.increment(
+                            _blocks[_block_idx]->size());
                 } else {
                     COUNTER_UPDATE(metrics.local_block_count, 1);
+                    StarRocksMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
+                    StarRocksMetrics::instance()->load_spill_local_bytes_read_total.increment(
+                            _blocks[_block_idx]->size());
                 }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());
