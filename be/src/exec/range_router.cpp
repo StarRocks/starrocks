@@ -71,6 +71,9 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
                 break;
             }
         }
+        if (type_descs[i] == nullptr) {
+            return Status::InvalidArgument(fmt::format("Missing concrete type for range boundary at index {}", i));
+        }
     }
 
     auto parse_bound = [&](const TTuple& bound, MutableColumns& boundary_columns) {
@@ -79,22 +82,21 @@ Status RangeRouter::init(const std::vector<TTabletRange>& tablet_ranges, size_t 
             DCHECK(type_desc != nullptr);
             MutableColumnPtr& column = boundary_columns[i];
             if (!column) {
-                column = ColumnHelper::create_column(*type_desc, false);
+                column = ColumnHelper::create_column(*type_desc, true);
                 column->reserve(num_ranges);
             }
 
             const auto& value = bound.values[i];
-            Datum datum;
-            std::string value_str;
-            auto type_info = get_type_info(type_desc->type, type_desc->precision, type_desc->scale);
-            if (value.__isset.value) {
-                value_str = value.value;
+            if (value.variant_type == TVariantType::NULL_VALUE) {
+                column->append_nulls(1);
+            } else if (value.variant_type == TVariantType::NORMAL_VALUE && value.__isset.value) {
+                auto type_info = get_type_info(*type_desc);
+                Datum datum;
+                RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, value.value, nullptr));
+                column->append_datum(datum);
             } else {
-                return Status::InternalError("Missing value in range bound");
+                return Status::InternalError("Invalid value in range bound");
             }
-            RETURN_IF_ERROR(datum_from_string(type_info.get(), &datum, value_str, nullptr));
-
-            column->append_datum(datum);
         }
         return Status::OK();
     };
@@ -179,10 +181,13 @@ Status RangeRouter::_validate_range(const std::vector<TTabletRange>& tablet_rang
     // 2. check if full range is covered by the tablet ranges and that adjacent
     //    boundaries are type-consistent and value-equal.
     auto variant_equal = [](const TVariant& a, const TVariant& b) -> StatusOr<bool> {
+        if (a.variant_type == TVariantType::NULL_VALUE || b.variant_type == TVariantType::NULL_VALUE) {
+            return a.variant_type == b.variant_type;
+        }
         if (a.__isset.value && b.__isset.value) {
             return a.value == b.value;
         }
-        return Status::InternalError("TVariant.value is required for range validation");
+        return Status::InternalError("Invalid variant for range validation");
     };
 
     for (size_t i = 1; i < tablet_ranges.size(); ++i) {

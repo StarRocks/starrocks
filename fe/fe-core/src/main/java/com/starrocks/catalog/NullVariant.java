@@ -17,29 +17,30 @@ package com.starrocks.catalog;
 import com.starrocks.thrift.TVariant;
 import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeSerializer;
 
 import java.util.Objects;
 
-public class MinVariant extends Variant {
-    public MinVariant(Type type) {
+public class NullVariant extends Variant {
+    public NullVariant(Type type) {
         super(type);
     }
 
     @Override
     public String getStringValue() {
-        return "MIN";
+        return "NULL";
     }
 
     @Override
     public long getLongValue() {
-        return Long.MIN_VALUE;
+        throw new IllegalStateException("NullVariant has no numeric value");
     }
 
     @Override
     public TVariant toThrift() {
         TVariant variant = new TVariant();
-        variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
-        variant.setVariant_type(TVariantType.MINIMUM);
+        variant.setType(TypeSerializer.toThrift(type));
+        variant.setVariant_type(TVariantType.NULL_VALUE);
         return variant;
     }
 
@@ -53,15 +54,15 @@ public class MinVariant extends Variant {
         if (this == object) {
             return true;
         }
-        if (!(object instanceof MinVariant)) {
+        if (!(object instanceof NullVariant)) {
             return false;
         }
-        MinVariant other = (MinVariant) object;
+        NullVariant other = (NullVariant) object;
         return Objects.equals(this.type, other.type);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(MinVariant.class, type);
+        return Objects.hash(NullVariant.class, type);
     }
 }

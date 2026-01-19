@@ -23,19 +23,11 @@
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "storage/chunk_helper.h"
+#include "storage/datum_variant.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/types.h"
 
 namespace starrocks::lake {
-
-Status TabletRangeHelper::_parse_string_to_datum(const TypeDescriptor& type_desc, const std::string& value_str,
-                                                 Datum* datum, MemPool* mem_pool) {
-    auto type_info = get_type_info(type_desc);
-    if (type_info == nullptr) {
-        return Status::InternalError(fmt::format("Unsupported type: {}", type_desc.type));
-    }
-    return datum_from_string(type_info.get(), datum, value_str, mem_pool);
-}
 
 Status TabletRangeHelper::_validate_tablet_range(const TabletRangePB& tablet_range_pb) {
     if (!tablet_range_pb.has_lower_bound() && !tablet_range_pb.has_upper_bound()) {
@@ -91,17 +83,8 @@ StatusOr<SeekRange> TabletRangeHelper::create_seek_range_from(const TabletRangeP
             auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
             schema.append(std::move(f));
 
-            const auto& v = tuple.values(i);
-            if (!v.has_type()) {
-                return Status::Corruption("Missing type in TabletRangePB bound value");
-            }
-            if (!v.has_value()) {
-                return Status::Corruption("Missing value in TabletRangePB_VariantPB bound value");
-            }
-
             Datum datum;
-            auto type_desc = TypeDescriptor::from_protobuf(v.type());
-            RETURN_IF_ERROR(_parse_string_to_datum(type_desc, v.value(), &datum, mem_pool));
+            RETURN_IF_ERROR(DatumVariant::from_proto(tuple.values(i), &datum, nullptr, nullptr, mem_pool));
             values.emplace_back(std::move(datum));
         }
         return SeekTuple(std::move(schema), std::move(values));
@@ -156,18 +139,15 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
         auto chunk = std::make_unique<Chunk>();
         for (int i = 0; i < tuple.values_size(); i++) {
             const int idx = sort_key_idxes[i];
-            const auto& v = tuple.values(i);
-            if (!v.has_type()) {
-                return Status::Corruption("Missing type in TabletRangePB bound value");
-            }
-            if (!v.has_value()) {
-                return Status::Corruption("Missing value in TabletRangePB_VariantPB bound value");
-            }
 
             Datum datum;
-            auto type_desc = TypeDescriptor::from_protobuf(v.type());
-            RETURN_IF_ERROR(_parse_string_to_datum(type_desc, v.value(), &datum, nullptr));
-            auto column = ColumnHelper::create_column(type_desc, false);
+            TypeDescriptor type_desc;
+            RETURN_IF_ERROR(DatumVariant::from_proto(tuple.values(i), &datum, &type_desc));
+            const bool is_nullable = tablet_schema->column(idx).is_nullable();
+            if (!is_nullable && datum.is_null()) {
+                return Status::InvalidArgument("Non-nullable primary key contains NULL in tablet range");
+            }
+            auto column = ColumnHelper::create_column(type_desc, is_nullable);
             column->append_datum(datum);
             chunk->append_column(std::move(column), (SlotId)idx);
         }
