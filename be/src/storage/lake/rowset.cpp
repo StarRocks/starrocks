@@ -15,14 +15,17 @@
 #include "storage/lake/rowset.h"
 
 #include <future>
+#include <unordered_set>
 
 #include "column/datum_convert.h"
+#include "common/config.h"
 #include "runtime/current_thread.h"
 #include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/lake_delvec_loader.h"
+#include "storage/lake/segment_metadata_filter.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -307,9 +310,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
 
     std::vector<ChunkIteratorPtr> segment_iterators;
-    if (options.stats) {
-        options.stats->segments_read_count += num_segments();
-    }
 
     SeekRange tablet_range;
     if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
@@ -319,13 +319,48 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
                          TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
     }
 
+    // Check if segment metadata filter can be used.
+    // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
+    bool use_metadata_filter = config::enable_lake_segment_metadata_filter && metadata().segment_metas_size() > 0 &&
+                               !options.pred_tree_for_zone_map.empty() && options.tablet_schema != nullptr;
+
+    std::unordered_set<int> skip_segment_idxs;
+    if (use_metadata_filter) {
+        for (int i = 0; i < metadata().segment_metas_size() && i < num_segments(); i++) {
+            const auto& segment_meta = metadata().segment_metas(i);
+            if (!SegmentMetadataFilter::may_contain(segment_meta, options.pred_tree_for_zone_map,
+                                                    *options.tablet_schema)) {
+                skip_segment_idxs.insert(i);
+                if (options.stats) {
+                    // Use num_rows from segment metadata if available, otherwise use 0
+                    int64_t filtered_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
+                    options.stats->segment_metadata_filtered += filtered_rows;
+                    options.stats->segments_metadata_filtered++;
+                }
+                VLOG(2) << "Skipped segment " << i << " by metadata filter, rowset: " << metadata().id();
+            }
+        }
+    }
+
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr));
+    const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
+    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+
+    // Update segments_read_count after filtering
+    if (options.stats) {
+        options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+    }
+
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
+        // Skip segments that were filtered by metadata filter (nullptr placeholders)
+        if (seg_ptr == nullptr) {
+            continue;
+        }
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
+
         seg_options.tablet_range = std::nullopt;
         if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
             seg_options.tablet_range = tablet_range;
@@ -523,7 +558,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache,
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                             std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments) {
+                             std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+                             const std::unordered_set<int>* skip_segment_idxs) {
 #if !defined BE_TEST && !defined(BUILD_FORMAT_LIB)
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
@@ -577,6 +613,13 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptio
     seg_id = seg_start;
     for (index = seg_start; index < seg_end; index++) {
         const auto& seg_name = metadata().segments(index);
+        // Skip segments that are filtered by metadata filter
+        if (skip_segment_idxs != nullptr && skip_segment_idxs->count(index) > 0) {
+            segments->emplace_back(nullptr);
+            seg_id++;
+            continue;
+        }
+
         std::string segment_path;
         auto lake_io_opts = seg_options.lake_io_opts;
         if (lake_io_opts.location_provider) {

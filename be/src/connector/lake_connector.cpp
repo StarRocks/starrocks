@@ -760,6 +760,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
+    _seg_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentMetadataFilterRows", TUnit::UNIT, segment_init_name);
+    _segs_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentsMetadataFiltered", TUnit::UNIT, segment_init_name);
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
@@ -892,6 +896,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_record_predicate_filter_counter, _reader->stats().rows_record_predicate_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_seg_metadata_filtered_counter, _reader->stats().segment_metadata_filtered);
+    COUNTER_UPDATE(_segs_metadata_filtered_counter, _reader->stats().segments_metadata_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
