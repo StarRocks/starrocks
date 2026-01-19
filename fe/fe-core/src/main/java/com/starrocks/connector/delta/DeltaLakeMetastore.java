@@ -43,7 +43,6 @@ import io.delta.kernel.utils.CloseableIterator;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.util.SizeEstimator;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -80,8 +79,12 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         this.checkpointCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeCheckpointMetaCacheTtlSec(), TimeUnit.SECONDS)
                 .weigher((key, value) -> {
-                    long size = SizeEstimator.estimate(key) + SizeEstimator.estimate(value);
-                    return (int) Math.min(size, Integer.MAX_VALUE);
+                    // Structure-based estimation
+                    long structureEstimated = DeltaLakeCacheSizeEstimator.estimateCheckpointByStructure(
+                            (Pair<DeltaLakeFileStatus, StructType>) key, (List<ColumnarBatch>) value);
+
+                    // Return structure-based estimate for cache size limiting
+                    return (int) Math.min(structureEstimated, Integer.MAX_VALUE);
                 })
                 .maximumWeight(checkpointCacheSize)
                 .build(new CacheLoader<>() {
@@ -95,8 +98,12 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         this.jsonCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(properties.getDeltaLakeJsonMetaCacheTtlSec(), TimeUnit.SECONDS)
                 .weigher((key, value) -> {
-                    long size = SizeEstimator.estimate(key) + SizeEstimator.estimate(value);
-                    return (int) Math.min(size, Integer.MAX_VALUE);
+                    // Structure-based estimation
+                    long structureEstimated = DeltaLakeCacheSizeEstimator.estimateJsonByStructure(
+                            (DeltaLakeFileStatus) key, (List<JsonNode>) value);
+
+                    // Return structure-based estimate for cache size limiting
+                    return (int) Math.min(structureEstimated, Integer.MAX_VALUE);
                 })
                 .maximumWeight(jsonCacheSize)
                 .build(new CacheLoader<>() {
