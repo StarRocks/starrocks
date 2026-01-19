@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -136,7 +137,9 @@ public class View extends Table {
     }
 
     public void setOriginalViewDef(String originalViewDef) {
-        this.originalViewDef = originalViewDef;
+        // Ensure that credentials are redacted before storing the original view definition to
+        // avoid persisting sensitive information
+        this.originalViewDef = SqlCredentialRedactor.redact(originalViewDef);
     }
 
     public String getDDLViewDef() {
