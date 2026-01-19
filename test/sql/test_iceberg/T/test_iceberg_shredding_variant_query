@@ -57,7 +57,8 @@ ORDER BY id;
 SELECT 'Check Shredding Consistency' as task;
 (SELECT 'shredded' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_shredding_variant WHERE get_variant_int(data, '$.id') = 1000)
 UNION ALL
-(SELECT 'noshred' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_noshredding_variant WHERE get_variant_int(data, '$.id') = 1000);
+(SELECT 'noshred' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_noshredding_variant WHERE get_variant_int(data, '$.id') = 1000)
+order by label;
 
 -- ========================================
 -- Query 3: Complex nesting and mixed types (rank field)
