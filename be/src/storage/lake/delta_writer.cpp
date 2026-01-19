@@ -155,6 +155,8 @@ public:
 
     Status flush();
 
+    StatusOr<bool> wait_for_flush_token(int64_t timeout_ms);
+
     Status flush_async();
 
     int64_t queueing_memtable_num() const;
@@ -505,6 +507,14 @@ inline Status DeltaWriterImpl::flush() {
     return _flush_token->wait();
 }
 
+StatusOr<bool> DeltaWriterImpl::wait_for_flush_token(int64_t timeout_ms) {
+    if (_flush_token == nullptr) {
+        // This will happen when flush is invoked before any write.
+        return true;
+    }
+    return _flush_token->wait_for(timeout_ms);
+}
+
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.
 Status DeltaWriterImpl::open() {
@@ -563,7 +573,6 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     auto start_time = MonotonicNanos();
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.write_time_ns, MonotonicNanos() - start_time); });
     _last_write_ts = butil::gettimeofday_s();
-    Status st;
     auto res = _mem_table->insert(chunk, indexes, 0, indexes_size);
     if (!res.ok()) {
         return res.status();
@@ -571,17 +580,29 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     auto full = res.value();
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
-        st = flush();
+        RETURN_IF_ERROR(flush_async());
+        bool wait_finish = false;
+        do {
+            ASSIGN_OR_RETURN(wait_finish, wait_for_flush_token(100 /* ms */));
+            // Keep waiting until memory is under limit
+        } while (_mem_tracker->limit_exceeded_by_ratio(70) && !wait_finish);
+
         ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     } else if (_mem_tracker->parent() && _mem_tracker->parent()->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
-        st = flush();
+        RETURN_IF_ERROR(flush_async());
+        bool wait_finish = false;
+        do {
+            ASSIGN_OR_RETURN(wait_finish, wait_for_flush_token(100 /* ms */));
+            // Keep waiting until memory is under limit
+        } while (_mem_tracker->parent()->limit_exceeded_by_ratio(70) && !wait_finish);
+
         ADD_COUNTER_RELAXED(_stats.memory_exceed_count, 1);
     } else if (full) {
-        st = flush_async();
+        RETURN_IF_ERROR(flush_async());
         ADD_COUNTER_RELAXED(_stats.memtable_full_count, 1);
     }
-    return st;
+    return Status::OK();
 }
 
 Status DeltaWriterImpl::init_write_schema() {
