@@ -92,6 +92,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -2157,6 +2158,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 null, properties, computeResource);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
+            if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
+                tablet.setRange(new TabletRange());
+            }
             index.addTablet(tablet, tabletMeta);
             tabletIdSet.add(tablet.getId());
         }
@@ -2239,6 +2243,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
                 // create a new tablet with random chosen backends
                 LocalTablet tablet = new LocalTablet(getNextId());
+                if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
+                    tablet.setRange(new TabletRange());
+                }
 
                 // add tablet to inverted index first
                 index.addTablet(tablet, tabletMeta);
