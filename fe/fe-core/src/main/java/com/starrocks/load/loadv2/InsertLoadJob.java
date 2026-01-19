@@ -130,9 +130,9 @@ public class InsertLoadJob extends LoadJob {
 
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) {
         writeLock();
-        JobState finalState;
         try {
             this.finishTimestamp = System.currentTimeMillis();
+            JobState finalState;
             if (Strings.isNullOrEmpty(failMsg)) {
                 finalState = JobState.FINISHED;
                 this.progress = 100;
@@ -143,17 +143,17 @@ public class InsertLoadJob extends LoadJob {
             }
             this.loadingStatus.setTrackingUrl(trackingUrl);
             this.coordinator = null;
+            // persistent
+            GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
+                    new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress,
+                            this.loadStartTimestamp, this.finishTimestamp, finalState, this.failMsg),
+                    wal -> {
+                        this.state = finalState;
+                    });
         } finally {
             writeUnlock();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
         }
-        // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
-                new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress, 
-                this.loadStartTimestamp, this.finishTimestamp, finalState, this.failMsg),
-                wal -> {
-                    this.state = finalState;
-                });
     }
 
     @Override
