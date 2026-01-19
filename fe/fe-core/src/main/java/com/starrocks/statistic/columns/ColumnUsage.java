@@ -140,6 +140,14 @@ public class ColumnUsage implements GsonPostProcessable {
         return this.lastUsed.isAfter(lastPersist);
     }
 
+    /**
+     * Check if the column usage record is still valid.
+     * A record becomes invalid when its corresponding database, table, or column has been dropped.
+     */
+    public boolean isValid() {
+        return getColumnFullId().toNames().isPresent();
+    }
+
     public ColumnUsage merge(ColumnUsage other) {
         Preconditions.checkArgument(other.equals(this));
         ColumnUsage merged = new ColumnUsage(this.columnId, this.tableName, EnumSet.copyOf(this.useCase));

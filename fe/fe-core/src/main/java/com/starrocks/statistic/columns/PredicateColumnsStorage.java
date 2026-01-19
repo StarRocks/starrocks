@@ -117,6 +117,9 @@ public class PredicateColumnsStorage {
     private static final String VACUUM = "DELETE FROM " + TABLE_FULL_NAME +
             " WHERE fe_id='$feId' AND last_used < '$lastUsed'";
 
+    private static final String VACUUM_INVALID = "DELETE FROM " + TABLE_FULL_NAME +
+            " WHERE fe_id='$feId' AND db_id=$dbId AND table_id=$tableId AND column_id=$columnId";
+
     private static final PredicateColumnsStorage INSTANCE = new PredicateColumnsStorage();
 
     /**
@@ -282,6 +285,30 @@ public class PredicateColumnsStorage {
 
         String sql = sw.toString();
         executor.executeDML(sql);
+    }
+
+    /**
+     * Remove records for dropped db/table/column from persistent storage
+     */
+    public void vacuumInvalidRecords(List<ColumnFullId> invalidIds) {
+        if (invalidIds == null || invalidIds.isEmpty()) {
+            return;
+        }
+        String selfName = String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFid());
+        for (ColumnFullId invalidId : invalidIds) {
+            VelocityContext context = new VelocityContext();
+            context.put("feId", selfName);
+            context.put("dbId", invalidId.getDbId());
+            context.put("tableId", invalidId.getTableId());
+            context.put("columnId", invalidId.getColumnUniqueId());
+
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", VACUUM_INVALID);
+
+            String sql = sw.toString();
+            executor.executeDML(sql);
+        }
+        LOG.info("vacuumed {} invalid predicate column records from storage", invalidIds.size());
     }
 
     public boolean isSystemTableReady() {

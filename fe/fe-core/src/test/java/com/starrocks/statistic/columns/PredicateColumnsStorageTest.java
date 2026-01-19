@@ -173,6 +173,44 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         Assertions.assertEquals(2, resultWithCorrupted.size());
         Assertions.assertEquals(usage1, resultWithCorrupted.get(0));
         Assertions.assertEquals(usage2, resultWithCorrupted.get(1));
+
+        // database not found (simulates dropped database)
+        String rowDbNotFound = String.format("{\"data\": ['%s',%d,%d,%d,'%s','%s','%s']}",
+                feName,
+                999999L, // non-existent db id
+                t1.getId(),
+                v4.getUniqueId(),
+                "predicate",
+                DateUtils.formatDateTimeUnix(LocalDateTime.now()),
+                DateUtils.formatDateTimeUnix(LocalDateTime.now())
+        );
+        TResultBatch batchWithDbNotFound = new TResultBatch();
+        batchWithDbNotFound.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(rowDbNotFound.getBytes()),
+                ByteBuffer.wrap(row2.getBytes())));
+        List<ColumnUsage> resultWithDbNotFound = PredicateColumnsStorage.resultToColumnUsage(List.of(batchWithDbNotFound));
+        // Should silently skip the record with non-existent db, returning only 2 valid records
+        Assertions.assertEquals(2, resultWithDbNotFound.size());
+        Assertions.assertEquals(usage1, resultWithDbNotFound.get(0));
+        Assertions.assertEquals(usage2, resultWithDbNotFound.get(1));
+
+        // table not found (simulates dropped table)
+        String rowTableNotFound = String.format("{\"data\": ['%s',%d,%d,%d,'%s','%s','%s']}",
+                feName,
+                db.getId(),
+                999999L, // non-existent table id
+                v4.getUniqueId(),
+                "predicate",
+                DateUtils.formatDateTimeUnix(LocalDateTime.now()),
+                DateUtils.formatDateTimeUnix(LocalDateTime.now())
+        );
+        TResultBatch batchWithTableNotFound = new TResultBatch();
+        batchWithTableNotFound.setRows(List.of(ByteBuffer.wrap(row1.getBytes()), ByteBuffer.wrap(rowTableNotFound.getBytes()),
+                ByteBuffer.wrap(row2.getBytes())));
+        List<ColumnUsage> resultWithTableNotFound = PredicateColumnsStorage.resultToColumnUsage(List.of(batchWithTableNotFound));
+        // Should silently skip the record with non-existent table, returning only 2 valid records
+        Assertions.assertEquals(2, resultWithTableNotFound.size());
+        Assertions.assertEquals(usage1, resultWithTableNotFound.get(0));
+        Assertions.assertEquals(usage2, resultWithTableNotFound.get(1));
     }
 
     @Test
@@ -212,5 +250,74 @@ class PredicateColumnsStorageTest extends PlanTestBase {
                 ColumnUsage.UseCase.DISTINCT), r1.getUseCases());
         Assertions.assertEquals(LocalDateTime.parse("2025-01-02T02:02:03"), r1.getLastUsed());
 
+    }
+
+    @Test
+    public void testColumnUsageIsValid() {
+        Database db = starRocksAssert.getDb("test");
+        Table t1 = starRocksAssert.getTable("test", "t1");
+        Column v4 = t1.getColumn("v4");
+
+        // Valid column usage (existing db/table/column)
+        ColumnUsage validUsage = new ColumnUsage(ColumnFullId.create(db, t1, v4),
+                TableName.fromString("default_catalog.test.t1"),
+                ColumnUsage.UseCase.PREDICATE);
+        Assertions.assertTrue(validUsage.isValid());
+
+        // Invalid column usage (non-existent db)
+        ColumnUsage invalidDbUsage = new ColumnUsage(
+                new ColumnFullId(999999L, t1.getId(), v4.getUniqueId()),
+                TableName.fromString("default_catalog.test.t1"),
+                ColumnUsage.UseCase.PREDICATE);
+        Assertions.assertFalse(invalidDbUsage.isValid());
+
+        // Invalid column usage (non-existent table)
+        ColumnUsage invalidTableUsage = new ColumnUsage(
+                new ColumnFullId(db.getId(), 999999L, v4.getUniqueId()),
+                TableName.fromString("default_catalog.test.t1"),
+                ColumnUsage.UseCase.PREDICATE);
+        Assertions.assertFalse(invalidTableUsage.isValid());
+
+        // Invalid column usage (non-existent column)
+        ColumnUsage invalidColumnUsage = new ColumnUsage(
+                new ColumnFullId(db.getId(), t1.getId(), 999999L),
+                TableName.fromString("default_catalog.test.t1"),
+                ColumnUsage.UseCase.PREDICATE);
+        Assertions.assertFalse(invalidColumnUsage.isValid());
+    }
+
+    @Test
+    public void testVacuumInvalidRecords() {
+        ConnectContext.ScopeGuard guard = connectContext.bindScope();
+
+        SimpleExecutor repo = Mockito.mock(SimpleExecutor.class);
+        PredicateColumnsStorage instance = new PredicateColumnsStorage(repo);
+
+        // Test vacuumInvalidRecords with invalid column ids
+        List<ColumnFullId> invalidIds = List.of(
+                new ColumnFullId(999999L, 888888L, 777777L),
+                new ColumnFullId(111111L, 222222L, 333333L)
+        );
+        instance.vacuumInvalidRecords(invalidIds);
+
+        // Verify that DELETE statements were executed for each invalid record
+        Mockito.verify(repo).executeDML(
+                "DELETE FROM _statistics_.predicate_columns WHERE fe_id='" + feName +
+                        "' AND db_id=999999 AND table_id=888888 AND column_id=777777");
+        Mockito.verify(repo).executeDML(
+                "DELETE FROM _statistics_.predicate_columns WHERE fe_id='" + feName +
+                        "' AND db_id=111111 AND table_id=222222 AND column_id=333333");
+
+        // Test with empty list (should not execute any DML)
+        Mockito.reset(repo);
+        instance.vacuumInvalidRecords(List.of());
+        Mockito.verify(repo, Mockito.never()).executeDML(Mockito.anyString());
+
+        // Test with null (should not execute any DML)
+        Mockito.reset(repo);
+        instance.vacuumInvalidRecords(null);
+        Mockito.verify(repo, Mockito.never()).executeDML(Mockito.anyString());
+
+        guard.close();
     }
 }

@@ -184,6 +184,20 @@ public class PredicateColumnsMgr {
                     Config.statistic_predicate_columns_ttl_hours);
         }
 
+        // Remove invalid records where the corresponding db/table/column has been dropped
+        List<ColumnFullId> invalidIds = id2columnUsage.values().stream()
+                .filter(x -> !x.isValid())
+                .map(ColumnUsage::getColumnFullId)
+                .collect(Collectors.toList());
+        if (!invalidIds.isEmpty()) {
+            for (ColumnFullId invalidId : invalidIds) {
+                id2columnUsage.keySet().removeIf(x -> x.getColumnFullId().equals(invalidId));
+            }
+            LOG.info("removed {} invalid predicate column records (dropped db/table/column)", invalidIds.size());
+            // Also remove from persistent storage
+            getStorage().vacuumInvalidRecords(invalidIds);
+        }
+
         // If the process crashed before vacuum the storage, the storage may be different from in-memory state,
         // but it doesn't matter. Because we will remove them finally.
         getStorage().vacuum(ttlTime);
