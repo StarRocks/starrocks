@@ -20,7 +20,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
