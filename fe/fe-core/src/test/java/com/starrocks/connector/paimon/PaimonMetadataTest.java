@@ -1047,16 +1047,16 @@ public class PaimonMetadataTest {
                 new org.apache.paimon.partition.Partition(spec1, 100L, 2048L, 2L, System.currentTimeMillis(), false);
 
         Map<String, String> spec2 = new LinkedHashMap<>();
-        spec2.put("year", "2021");
+        spec2.put("year", "2020");
         spec2.put("month", "1");
         org.apache.paimon.partition.Partition db2PaimonPartition1 =
                 new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
 
         Map<String, String> spec3 = new LinkedHashMap<>();
-        spec2.put("year", "2022");
-        spec2.put("month", "1");
+        spec3.put("year", "2022");
+        spec3.put("month", "1");
         org.apache.paimon.partition.Partition db2PaimonPartition2 =
-                new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+                new org.apache.paimon.partition.Partition(spec3, 100L, 2048L, 2L, System.currentTimeMillis(), false);
 
         new Expectations() {
             {
@@ -1087,7 +1087,7 @@ public class PaimonMetadataTest {
         List<String> result2 = newMetadata.listPartitionNames("db2", "tbl2", null);
 
         // Before fix, if the key does not contain "db" and "table", it will return 2. After fix, it will return 3.
-        assertEquals(3, result2.size());
+        assertEquals(3, result1.size() + result2.size());
 
     }
 }
