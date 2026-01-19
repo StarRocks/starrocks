@@ -65,9 +65,3 @@ This structure ensures that UUIDs generated later will sort after earlier ones, 
 | Index Performance | Poor | Good |
 | Fragmentation | High | Low |
 | Timestamp Info | No | Yes (48-bit ms) |
-
-## See also
-
-- [uuid](./uuid.md): Generates a random UUID v4
-- [uuid_numeric](./uuid_numeric.md): Generates a numeric UUID v4
-- [uuid_v7_numeric](./uuid_v7_numeric.md): Generates a numeric UUID v7
