@@ -73,22 +73,22 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: sum(3: x)");
         assertContains(plan, "UNION");
         // Validate that data is split into NULL and NOT NULL paths
-        assertContains(plan, "Predicates: [6: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [5: p, INT, true] IS NOT NULL");
         assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
         // Validate Union child expressions match the expected columns from both branches
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([8: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
                         " result nullable: true], ]\n" +
-                        "  |  partition by: [6: p, INT, true]\n" +
-                        "  |  order by: [7: s, INT, true] ASC\n" +
+                        "  |  partition by: [5: p, INT, true]\n" +
+                        "  |  order by: [6: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 700\n" +
                         "  |  column statistics: \n" +
                         "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+                        "  |  * sum(7: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
 
         assertContains(plan,
                 "ANALYTIC\n" +
@@ -167,22 +167,22 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (cast([6: p, INT, true] as VARCHAR(1048576)) != '1') " +
-                "OR ([6: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: (cast([5: p, INT, true] as VARCHAR(1048576)) != '1') " +
+                "OR ([5: p, INT, true] IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
-                        "  |  functions: [, sum[([8: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                        "  |  functions: [, sum[([7: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
                         " result nullable: true], ]\n" +
-                        "  |  partition by: [6: p, INT, true]\n" +
-                        "  |  order by: [7: s, INT, true] ASC\n" +
+                        "  |  partition by: [5: p, INT, true]\n" +
+                        "  |  order by: [6: s, INT, true] ASC\n" +
                         "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                         "  |  cardinality: 730\n" +
                         "  |  column statistics: \n" +
                         "  |  * p-->[-Infinity, Infinity, 0.0, NaN, NaN] MCV: [[1:300]] ESTIMATE\n" +
                         "  |  * s-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * x-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                        "  |  * sum(3: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
+                        "  |  * sum(7: x)-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN");
         assertContains(plan,
                 "ANALYTIC\n" +
                         "  |  functions: [, sum[([3: x, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
@@ -213,7 +213,7 @@ class WindowSkewTest extends PlanTestBase {
 
         assertContains(plan, "Output Exprs:1: p | 2: s | 4: avg(3: x) | 5: rank()");
         assertContains(plan, "UNION");
-        assertContains(plan, "Predicates: [8: p, INT, true] IS NOT NULL");
+        assertContains(plan, "Predicates: [6: p, INT, true] IS NOT NULL");
         assertContains(plan, "Predicates: [1: p, INT, true] IS NULL");
     }
 

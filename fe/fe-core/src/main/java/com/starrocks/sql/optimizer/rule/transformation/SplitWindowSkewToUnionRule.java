@@ -43,8 +43,6 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-
 
 /*
  * Rule Objective:
@@ -177,6 +175,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // 2. Build Skewed Branch (where p == skewed_value)
         // In this branch, we remove the partitioning to handle the skewed data separately.
+        // We do not duplicate the child since we can reuse it directly.
         BranchResult skewedBranch = buildBranch(
                 context,
                 child,
@@ -188,6 +187,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // 3. Build Unskewed Branch (where p != skewed_value)
         // We keep the original partition expressions for the rest of the data.
+        // We need to duplicate the child to avoid conflicts in column references.
         BranchResult unskewedBranch = buildBranch(
                 context,
                 child,
@@ -198,7 +198,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         );
 
         // 4. Build Union
-        LogicalUnionOperator unionOp = buildUnionOperator(context, child, window, skewedBranch, unskewedBranch);
+        LogicalUnionOperator unionOp = buildUnionOperator(context, child, window, unskewedBranch);
 
         return Lists.newArrayList(OptExpression.create(unionOp, skewedBranch.root, unskewedBranch.root));
     }
@@ -206,26 +206,23 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
     private LogicalUnionOperator buildUnionOperator(OptimizerContext context,
                                                     OptExpression child,
                                                     LogicalWindowOperator window,
-                                                    BranchResult skewedBranch,
                                                     BranchResult unskewedBranch) {
         List<ColumnRefOperator> outputColumns = Lists.newArrayList();
         List<ColumnRefOperator> skewedChildColumns = Lists.newArrayList();
         List<ColumnRefOperator> unskewedChildColumns = Lists.newArrayList();
 
-        // 1. Map Window Function Results
-        for (ColumnRefOperator originalCol : window.getWindowCall().keySet()) {
-            outputColumns.add(originalCol);
-            skewedChildColumns.add(skewedBranch.columnMapping.get(originalCol));
-            unskewedChildColumns.add(unskewedBranch.columnMapping.get(originalCol));
+        // Combine window output columns and child pass-through columns
+        List<ColumnRefOperator> allColumns = Lists.newArrayList(window.getWindowCall().keySet());
+        if (child.getOutputColumns() != null) {
+            allColumns.addAll(child.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory()));
         }
 
-        // 2. Map Pass-through Columns
-        if (child.getOutputColumns() != null) {
-            for (ColumnRefOperator col : child.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory())) {
-                outputColumns.add(col);
-                skewedChildColumns.add(skewedBranch.columnMapping.getOrDefault(col, col));
-                unskewedChildColumns.add(unskewedBranch.columnMapping.getOrDefault(col, col));
-            }
+        // Populate lists based on mappings
+        for (ColumnRefOperator col : allColumns) {
+            outputColumns.add(col);
+            // For the skewed branch, we use the original columns.
+            skewedChildColumns.add(col);
+            unskewedChildColumns.add(unskewedBranch.columnMapping.get(col));
         }
 
         return new LogicalUnionOperator(outputColumns, List.of(skewedChildColumns, unskewedChildColumns), true);
@@ -238,87 +235,70 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                                      ScalarOperator predicate,
                                      boolean needsDuplication) {
 
-        // Create Filter
-        LogicalFilterOperator filterOp = new LogicalFilterOperator(predicate);
-        OptExpression filterExpr = OptExpression.create(filterOp, child);
-        OptExpressionDuplicator duplicator = null;
-
-        List<ScalarOperator> currentPartitionExprs = partitionExprs;
-        List<Ordering> currentOrderByElements = originalWindow.getOrderByElements();
-        List<Ordering> currentEnforceSortColumns = originalWindow.getEnforceSortColumns();
-
-        if (needsDuplication) {
-            duplicator = new OptExpressionDuplicator(context.getColumnRefFactory(), context);
-            filterExpr = duplicator.duplicate(filterExpr);
-
-            final OptExpressionDuplicator finalDuplicator = duplicator;
-
-            // Rewrite partition expressions
-            currentPartitionExprs = partitionExprs.stream()
-                    .map(duplicator::rewriteAfterDuplicate)
-                    .collect(Collectors.toList());
-
-            // Rewrite order by elements
-            if (originalWindow.getOrderByElements() != null) {
-                currentOrderByElements = originalWindow.getOrderByElements().stream()
-                        .map(o -> new Ordering(
-                                finalDuplicator.getColumnMapping().get(o.getColumnRef()),
-                                o.isAscending(),
-                                o.isNullsFirst())
-                        )
-                        .collect(Collectors.toList());
-            }
-
-            // Rewrite enforce sort columns
-            if (originalWindow.getEnforceSortColumns() != null) {
-                currentEnforceSortColumns = originalWindow.getEnforceSortColumns().stream()
-                        .map(o -> new Ordering(
-                                finalDuplicator.getColumnMapping().get(o.getColumnRef()),
-                                o.isAscending(),
-                                o.isNullsFirst())
-                        )
-                        .collect(Collectors.toList());
-            }
-        }
-
-        // Create Window
-        Map<ColumnRefOperator, CallOperator> newWindowCalls = Maps.newHashMap();
+        OptExpression filterExpr = OptExpression.create(new LogicalFilterOperator(predicate), child);
         Map<ColumnRefOperator, ColumnRefOperator> mapping = Maps.newHashMap();
-        ColumnRefFactory factory = context.getColumnRefFactory();
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : originalWindow.getWindowCall().entrySet()) {
-            ColumnRefOperator originalCol = entry.getKey();
-            CallOperator originalCall = entry.getValue();
-
-            ColumnRefOperator newCol = factory.create(originalCol.getName(), originalCol.getType(), originalCol.isNullable());
-            // Rewrite CallOperator arguments for duplicated branch
-            CallOperator newCall = originalCall;
-            if (duplicator != null) {
-                newCall = (CallOperator) duplicator.rewriteAfterDuplicate(originalCall);
-            }
-
-            newWindowCalls.put(newCol, newCall);
-            mapping.put(originalCol, newCol);
-        }
-
-        if (duplicator != null) {
-            mapping.putAll(duplicator.getColumnMapping());
-        }
-
-        LogicalWindowOperator newWindow = new LogicalWindowOperator.Builder()
-                .setWindowCall(newWindowCalls)
-                .setPartitionExpressions(currentPartitionExprs)
-                .setOrderByElements(currentOrderByElements)
+        LogicalWindowOperator.Builder windowBuilder = new LogicalWindowOperator.Builder()
                 .setAnalyticWindow(originalWindow.getAnalyticWindow())
-                .setEnforceSortColumns(currentEnforceSortColumns)
                 .setUseHashBasedPartition(partitionExprs.isEmpty() && originalWindow.isUseHashBasedPartition())
                 .setIsSkewed(partitionExprs.isEmpty() && originalWindow.isSkewed())
-                .setInputIsBinary(originalWindow.isInputIsBinary())
-                .build();
+                .setInputIsBinary(originalWindow.isInputIsBinary());
 
-        OptExpression windowExpr = OptExpression.create(newWindow, filterExpr);
+        if (needsDuplication) {
+            OptExpressionDuplicator duplicator = new OptExpressionDuplicator(context.getColumnRefFactory(), context);
+            filterExpr = duplicator.duplicate(filterExpr);
 
-        return new BranchResult(windowExpr, mapping);
+            windowBuilder.setPartitionExpressions(rewriteExpressions(partitionExprs, duplicator));
+            windowBuilder.setOrderByElements(rewriteOrderings(originalWindow.getOrderByElements(), duplicator));
+            windowBuilder.setEnforceSortColumns(rewriteOrderings(originalWindow.getEnforceSortColumns(), duplicator));
+
+            Map<ColumnRefOperator, CallOperator> newWindowCalls = Maps.newHashMap();
+            ColumnRefFactory factory = context.getColumnRefFactory();
+
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : originalWindow.getWindowCall().entrySet()) {
+                ColumnRefOperator originalCol = entry.getKey();
+                CallOperator originalCall = entry.getValue();
+
+                CallOperator newCall = (CallOperator) duplicator.rewriteAfterDuplicate(originalCall);
+                // Create a new output column for the duplicated window function
+                ColumnRefOperator newCol = factory.create(newCall.toString(), originalCol.getType(), originalCol.isNullable());
+
+                newWindowCalls.put(newCol, newCall);
+                mapping.put(originalCol, newCol);
+            }
+
+            windowBuilder.setWindowCall(newWindowCalls);
+            mapping.putAll(duplicator.getColumnMapping());
+        } else {
+            windowBuilder.setPartitionExpressions(partitionExprs);
+            windowBuilder.setOrderByElements(originalWindow.getOrderByElements());
+            windowBuilder.setEnforceSortColumns(originalWindow.getEnforceSortColumns());
+            windowBuilder.setWindowCall(originalWindow.getWindowCall());
+        }
+
+        return new BranchResult(OptExpression.create(windowBuilder.build(), filterExpr), mapping);
+    }
+
+    private List<ScalarOperator> rewriteExpressions(List<ScalarOperator> exprs, OptExpressionDuplicator duplicator) {
+        if (exprs == null) {
+            return null;
+        }
+        return exprs.stream()
+                .map(duplicator::rewriteAfterDuplicate)
+                .toList();
+    }
+
+    private List<Ordering> rewriteOrderings(List<Ordering> orderings, OptExpressionDuplicator duplicator) {
+        if (orderings == null) {
+            return null;
+        }
+        return orderings.stream()
+                .map(o -> new Ordering(
+                        duplicator.getColumnMapping().get(o.getColumnRef()),
+                        o.isAscending(),
+                        o.isNullsFirst())
+                )
+                .toList();
     }
 
     private static class BranchResult {
@@ -351,7 +331,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                 }
                 if (skewInfo.maybeMcvs().isPresent()) {
                     return skewInfo.maybeMcvs().get().stream().map(p -> (new SkewedInfo(col,
-                            ConstantOperator.createVarchar(p.first)))).collect(Collectors.toList());
+                            ConstantOperator.createVarchar(p.first)))).toList();
                 }
             }
         }
