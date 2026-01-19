@@ -23,8 +23,10 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.zaxxer.hikari.HikariDataSource;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -39,6 +41,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 
 import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
@@ -266,5 +269,144 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
         new JDBCMetadata(properties, "catalog");
+    }
+
+    @Test
+    public void testGetConnectionSetsNetworkTimeout() throws SQLException {
+        long originalTimeoutMs = Config.jdbc_network_timeout_ms;
+        try {
+            // Verify timeout value is correctly passed (Optimization 1)
+            Config.jdbc_network_timeout_ms = 12345;
+            new Expectations() {
+                {
+                    connection.setNetworkTimeout(
+                            (java.util.concurrent.ExecutorService) any,
+                            12345);  // Verify config value is passed correctly in milliseconds
+                    minTimes = 1;  // Fail test if setNetworkTimeout is not called
+
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                    minTimes = 0;
+                }
+            };
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result = jdbcMetadata.listDbNames(new ConnectContext());
+            // Assert the operation completes successfully
+            Assertions.assertEquals(Lists.newArrayList("test"), result);
+
+        } finally {
+            Config.jdbc_network_timeout_ms = originalTimeoutMs;
+        }
+    }
+
+    @Test
+    public void testNetworkTimeoutBoundaryConditions() throws SQLException {
+        long originalTimeoutMs = Config.jdbc_network_timeout_ms;
+        try {
+            // Test boundary conditions (Optimization 2)
+
+            // Boundary 1: timeout = 1ms (smallest positive value)
+            Config.jdbc_network_timeout_ms = 1;
+            new Expectations() {
+                {
+                    connection.setNetworkTimeout((Executor) any, 1);
+                    minTimes = 1;
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                }
+            };
+            JDBCMetadata jdbcMetadata1 = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result1 = jdbcMetadata1.listDbNames(new ConnectContext());
+            Assertions.assertEquals(Lists.newArrayList("test"), result1, "boundary: timeout=1ms");
+
+            // Boundary 2: timeout = Integer.MAX_VALUE
+            Config.jdbc_network_timeout_ms = Integer.MAX_VALUE;
+            new Expectations() {
+                {
+                    connection.setNetworkTimeout((Executor) any, Integer.MAX_VALUE);
+                    minTimes = 1;
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                }
+            };
+            JDBCMetadata jdbcMetadata2 = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result2 = jdbcMetadata2.listDbNames(new ConnectContext());
+            Assertions.assertEquals(Lists.newArrayList("test"), result2, "boundary: timeout=MAX_VALUE");
+
+            // Boundary 3: timeout = -1, setNetworkTimeout should NOT be called (code has >= 0 check)
+            Config.jdbc_network_timeout_ms = -1;
+            new Expectations() {
+                {
+                    // When timeout = -1, setNetworkTimeout should not be called
+                    connection.setNetworkTimeout((Executor) any, anyInt);
+                    maxTimes = 0;  // Fail test if setNetworkTimeout is called
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                }
+            };
+            JDBCMetadata jdbcMetadata3 = new JDBCMetadata(properties, "catalog", dataSource);
+            dbResult.beforeFirst();
+            List<String> result3 = jdbcMetadata3.listDbNames(new ConnectContext());
+            Assertions.assertEquals(Lists.newArrayList("test"), result3,
+                    "boundary: timeout=-1 (should NOT call setNetworkTimeout)");
+
+        } finally {
+            Config.jdbc_network_timeout_ms = originalTimeoutMs;
+        }
+    }
+
+    @Test
+    public void testExecutorServiceReuse() throws SQLException {
+        long originalTimeoutMs = Config.jdbc_network_timeout_ms;
+        try {
+            // Verify ExecutorService reuse (Optimization 5)
+            Config.jdbc_network_timeout_ms = 5000;
+
+            // Collect all Executor instances passed to setNetworkTimeout
+            final java.util.Set<Executor> executors = new java.util.HashSet<>();
+
+            new Expectations() {
+                {
+                    // Record all Executor instances
+                    connection.setNetworkTimeout((Executor) any, 5000);
+                    minTimes = 3;  // Expect 3 calls
+                    result = new Delegate() {
+                        void setNetworkTimeout(Executor executor, long milliseconds) {
+                            executors.add(executor);
+                        }
+                    };
+
+                    connection.getMetaData().getCatalogs();
+                    result = dbResult;
+                    minTimes = 0;
+                }
+            };
+
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+            // Call getConnection multiple times
+            dbResult.beforeFirst();
+            jdbcMetadata.listDbNames(new ConnectContext());
+
+            dbResult.beforeFirst();
+            jdbcMetadata.listDbNames(new ConnectContext());
+
+            dbResult.beforeFirst();
+            jdbcMetadata.listDbNames(new ConnectContext());
+
+            // Verify: 3 calls should use the same Executor instance (shared static Executor)
+            // This avoids creating new Executor each time, saving resources
+            Assertions.assertEquals(1, executors.size(),
+                    "Should reuse the same ExecutorService instance for multiple calls");
+            Assertions.assertNotNull(executors.iterator().next(),
+                    "Executor should be the shared static instance");
+
+        } finally {
+            Config.jdbc_network_timeout_ms = originalTimeoutMs;
+        }
     }
 }

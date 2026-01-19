@@ -4097,6 +4097,234 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：检索用户时，使用的管理员账号的密码。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### authentication_ldap_simple_server_host
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：LDAP 服务器所在主机的主机名。
+- 引入版本：-
+
+##### authentication_ldap_simple_server_port
+
+- 默认值：389
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：LDAP 服务器的端口。
+- 引入版本：-
+
+##### authentication_ldap_simple_user_search_attr
+
+- 默认值：uid
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：LDAP 对象中标识用户的属性名称。
+- 引入版本：-
+
+##### backup_job_default_timeout_ms
+
+- 默认值：86400 * 1000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：Backup 作业的超时时间。
+- 引入版本：-
+
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 `SHOW PROC /BACKENDS/{id}` 命令中启用对每个磁盘的 tablet 数量的采集
+- 引入版本：v4.0.1, v3.5.8
+
+##### enable_colocate_restore
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否为 Colocate 表启用备份恢复。`true` 表示启用 Colocate 表备份恢复，`false` 表示禁用。
+- 引入版本：v3.2.10、v3.3.3
+
+##### enable_materialized_view_concurrent_prepare
+
+- 默认值：True
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否并发准备物化视图以提高性能。
+- 引入版本：v3.4.4
+
+##### enable_metric_calculator
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
+- 引入版本：-
+
+##### enable_mv_post_image_reload_cache
+
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：FE 加载镜像后是否进行重载标志检测。如果某个 Base MV 已完成重载，其他依赖它的 MV 则无需再次重载。
+- 引入版本：v3.5.0
+
+##### enable_mv_query_context_cache
+
+- 默认值：true
+- 类型：Boolean
+- Unit:
+- 是否动态：是
+- 描述：是否开启Query级别的用于透明加速改写的物化视图Cache，用于加速改写性能。
+- 引入版本：v3.3
+
+##### enable_mv_refresh_collect_profile
+
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否为所有物化视图默认启用刷新时的 Profile 信息收集。
+- 引入版本：v3.3.0
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- 默认值：true
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否启用附加物化视图名称前缀的日志记录，用于提升调试能力。
+- 引入版本：v3.4.0
+
+##### enable_mv_refresh_query_rewrite
+
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否开启物化视图刷新时的查询改写功能，从而可以使用重写后的物化视图代替原始基表以提升性能。
+- 引入版本：v3.3.0
+
+##### enable_trace_historical_node
+
+- 默认值：false
+- 类型：布尔值
+- 单位：-
+- 是否动态：是
+- 描述：是否允许系统跟踪历史节点。将此项设置为 `true`，就可以启用 Cache Sharing 功能，并允许系统在弹性扩展过程中选择正确的缓存节点。
+- 引入版本：v3.5.1
+
+##### es_state_sync_interval_second
+
+- 默认值：10
+- 类型：Long
+- 单位：Seconds
+- 是否动态：否
+- 描述：FE 获取 Elasticsearch Index 和同步 StarRocks 外部表元数据的时间间隔。
+- 引入版本：-
+
+##### hive_meta_cache_refresh_interval_s
+
+- 默认值：3600 * 2
+- 类型：Long
+- 单位：Seconds
+- 是否动态：否
+- 描述：刷新 Hive 外表元数据缓存的时间间隔。
+- 引入版本：-
+
+##### hive_meta_store_timeout_s
+
+- 默认值：10
+- 类型：Long
+- 单位：Seconds
+- 是否动态：否
+- 描述：连接 Hive Metastore 的超时时间。
+- 引入版本：-
+
+##### jdbc_connection_idle_timeout_ms
+
+- 默认值：600000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：否
+- 描述：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
+- 引入版本：-
+
+##### jdbc_connection_timeout_ms
+
+- 默认值：10000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：否
+- 描述：HikariCP 连接池获取连接的超时时间（单位：毫秒）。如果在该时间内无法从连接池获取到连接，操作将失败。
+- 引入版本：v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：JDBC Statement 查询执行的超时时间（单位：毫秒）。该超时应用于通过 JDBC Catalog 执行的所有 SQL 查询（例如分区元数据查询）。该值在传递给 JDBC 驱动时会转换为秒。
+- 引入版本：v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- 默认值：30000
+- 类型：Long
+- 单位：毫秒
+- 是否动态：是
+- 描述：JDBC 网络操作（socket 读取）的超时时间（单位：毫秒）。该超时应用于数据库元数据调用（如 getSchemas()、getTables()、getColumns()），以防止外部数据库无响应时无限期阻塞。
+- 引入版本：v3.5.13
+
+##### jdbc_connection_pool_size
+
+- 默认值：8
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
+- 引入版本：-
+
+##### jdbc_meta_default_cache_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：JDBC Catalog 元数据缓存是否开启的默认值。当设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认开启元数据缓存。
+- 引入版本：-
+
+##### jdbc_meta_default_cache_expire_sec
+
+- 默认值：600
+- 类型：Long
+- 单位：Seconds
+- 是否动态：是
+- 描述：JDBC Catalog 元数据缓存的默认过期时间。当 `jdbc_meta_default_cache_enable` 设置为 `TRUE` 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
+- 引入版本：-
+
+##### jdbc_minimum_idle_connections
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
+- 引入版本：-
+
+>>>>>>> 1f053ec7bc ([Enhancement] Add some timeout configuration for jdbc catalog. (#68067))
 ##### jwt_jwks_url
 
 - 默认值：空字符串
