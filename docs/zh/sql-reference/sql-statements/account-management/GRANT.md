@@ -33,16 +33,7 @@ import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 #### System 相关
 
-<<<<<<< HEAD
-```SQL
-GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
-    ON SYSTEM
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-```
-=======
 <GrantCreateWarehouse />
->>>>>>> e2a09c2e1c ([Doc] Add Privileges for Warehouses (#68035))
 
 #### Resource group 相关
 
