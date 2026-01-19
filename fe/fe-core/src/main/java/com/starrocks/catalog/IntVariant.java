@@ -16,8 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.thrift.TInfinityType;
 import com.starrocks.thrift.TVariant;
+import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -64,7 +64,7 @@ public class IntVariant extends Variant {
         TVariant variant = new TVariant();
         variant.setType(TypeSerializer.toThrift(type));
         variant.setValue(getStringValue());
-        variant.setInfinity_type(TInfinityType.NONE_INFINITY);
+        variant.setVariant_type(TVariantType.NORMAL_VALUE);
         return variant;
     }
 
