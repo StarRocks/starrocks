@@ -429,7 +429,12 @@ private:
 
             // Pre-check: verify all input rowsets exist in current metadata
             // Skip this subtask if any input rowset is missing (partial success handling)
-            if (!_check_input_rowsets_exist(subtask_op)) {
+            // IMPORTANT: For large rowset split, non-first subtasks (segment_range_start > 0) share
+            // the same input rowsets with the first subtask. The first subtask handles rowset deletion,
+            // so non-first subtasks will find input rowsets missing after the first subtask completes.
+            // This is expected behavior, NOT a failure - we must NOT skip these subtasks.
+            const bool is_non_first_split_subtask = subtask_op.segment_range_start() > 0;
+            if (!is_non_first_split_subtask && !_check_input_rowsets_exist(subtask_op)) {
                 std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(), subtask_op.input_rowsets().end());
                 LOG(WARNING) << "Parallel compaction subtask " << i << " skipped due to missing input rowsets"
                              << ", tablet=" << _tablet.id() << ", first_input_ids=["

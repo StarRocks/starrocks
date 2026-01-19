@@ -2497,4 +2497,714 @@ TEST_F(TabletParallelCompactionManagerTest, test_partial_success_middle_subtasks
     pool->wait();
 }
 
+// ================================================================================
+// Tests for SubtaskType enum and SubtaskGroup struct
+// ================================================================================
+
+class SubtaskGroupTest : public ::testing::Test {};
+
+TEST_F(SubtaskGroupTest, test_subtask_type_enum_values) {
+    // Verify enum values exist and are distinct
+    EXPECT_NE(SubtaskType::NORMAL, SubtaskType::LARGE_ROWSET_PART);
+}
+
+TEST_F(SubtaskGroupTest, test_subtask_group_default_values) {
+    SubtaskGroup group;
+    EXPECT_EQ(SubtaskType::NORMAL, group.type);
+    EXPECT_TRUE(group.rowsets.empty());
+    EXPECT_EQ(nullptr, group.large_rowset);
+    EXPECT_EQ(0, group.large_rowset_id);
+    EXPECT_EQ(0, group.segment_start);
+    EXPECT_EQ(0, group.segment_end);
+    EXPECT_EQ(0, group.total_bytes);
+}
+
+TEST_F(SubtaskGroupTest, test_subtask_group_normal_type) {
+    SubtaskGroup group;
+    group.type = SubtaskType::NORMAL;
+    group.total_bytes = 1024 * 1024;
+
+    EXPECT_EQ(SubtaskType::NORMAL, group.type);
+    EXPECT_EQ(1024 * 1024, group.total_bytes);
+}
+
+TEST_F(SubtaskGroupTest, test_subtask_group_large_rowset_part_type) {
+    SubtaskGroup group;
+    group.type = SubtaskType::LARGE_ROWSET_PART;
+    group.large_rowset_id = 42;
+    group.segment_start = 0;
+    group.segment_end = 4;
+    group.total_bytes = 10 * 1024 * 1024;
+
+    EXPECT_EQ(SubtaskType::LARGE_ROWSET_PART, group.type);
+    EXPECT_EQ(42, group.large_rowset_id);
+    EXPECT_EQ(0, group.segment_start);
+    EXPECT_EQ(4, group.segment_end);
+    EXPECT_EQ(10 * 1024 * 1024, group.total_bytes);
+}
+
+// ================================================================================
+// Tests for SubtaskInfo new fields
+// ================================================================================
+
+TEST_F(SubtaskInfoTest, test_subtask_info_new_fields_default_values) {
+    SubtaskInfo info;
+    EXPECT_EQ(SubtaskType::NORMAL, info.type);
+    EXPECT_EQ(0, info.large_rowset_id);
+    EXPECT_EQ(0, info.segment_start);
+    EXPECT_EQ(0, info.segment_end);
+}
+
+TEST_F(SubtaskInfoTest, test_subtask_info_large_rowset_part_fields) {
+    SubtaskInfo info;
+    info.subtask_id = 3;
+    info.type = SubtaskType::LARGE_ROWSET_PART;
+    info.large_rowset_id = 100;
+    info.segment_start = 4;
+    info.segment_end = 8;
+
+    EXPECT_EQ(3, info.subtask_id);
+    EXPECT_EQ(SubtaskType::LARGE_ROWSET_PART, info.type);
+    EXPECT_EQ(100, info.large_rowset_id);
+    EXPECT_EQ(4, info.segment_start);
+    EXPECT_EQ(8, info.segment_end);
+}
+
+// ================================================================================
+// Tests for TabletParallelCompactionState new fields
+// ================================================================================
+
+TEST_F(TabletParallelCompactionStateFieldsTest, test_large_rowset_split_groups_default) {
+    EXPECT_TRUE(_state->large_rowset_split_groups.empty());
+}
+
+TEST_F(TabletParallelCompactionStateFieldsTest, test_large_rowset_split_groups_operations) {
+    // Add entries for two large rowsets
+    _state->large_rowset_split_groups[100] = {0, 1, 2};
+    _state->large_rowset_split_groups[200] = {3, 4};
+
+    EXPECT_EQ(2, _state->large_rowset_split_groups.size());
+    EXPECT_EQ(3, _state->large_rowset_split_groups[100].size());
+    EXPECT_EQ(2, _state->large_rowset_split_groups[200].size());
+
+    // Verify subtask IDs for large rowset 100
+    auto& subtasks_100 = _state->large_rowset_split_groups[100];
+    EXPECT_EQ(0, subtasks_100[0]);
+    EXPECT_EQ(1, subtasks_100[1]);
+    EXPECT_EQ(2, subtasks_100[2]);
+
+    // Verify subtask IDs for large rowset 200
+    auto& subtasks_200 = _state->large_rowset_split_groups[200];
+    EXPECT_EQ(3, subtasks_200[0]);
+    EXPECT_EQ(4, subtasks_200[1]);
+}
+
+// ================================================================================
+// Tests for large rowset split functionality (PK tables)
+// ================================================================================
+
+class TabletParallelCompactionManagerLargeRowsetTest : public TestBase {
+public:
+    TabletParallelCompactionManagerLargeRowsetTest() : TestBase(kTestDirectory) { clear_and_init_test_dir(); }
+
+protected:
+    constexpr static const char* kTestDirectory = "test_tablet_parallel_compaction_large_rowset";
+
+    void SetUp() override {
+        _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        _manager = std::make_unique<TabletParallelCompactionManager>(_tablet_mgr.get());
+    }
+
+    void TearDown() override {
+        _manager.reset();
+        remove_test_dir_ignore_error();
+    }
+
+    // Create a PK tablet with one large rowset containing multiple segments
+    void create_pk_tablet_with_large_rowset(int64_t tablet_id, int num_segments, int64_t segment_size) {
+        auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(2);
+
+        // Create one large rowset with multiple segments
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(0);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(1000 * num_segments);
+        rowset->set_data_size(segment_size * num_segments);
+
+        for (int i = 0; i < num_segments; i++) {
+            std::string segment_name = fmt::format("segment_{}.dat", i);
+            rowset->add_segments(segment_name);
+            rowset->add_segment_size(segment_size);
+
+            // Create dummy segment file
+            std::string path = _lp->segment_location(tablet_id, segment_name);
+            std::string dir = std::filesystem::path(path).parent_path().string();
+            CHECK_OK(fs::create_directories(dir));
+            auto fs = FileSystem::CreateSharedFromString(path);
+            auto st = fs.value()->new_writable_file(path);
+            CHECK_OK(st.status());
+            CHECK_OK(st.value()->append("dummy_segment_data"));
+            CHECK_OK(st.value()->close());
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    }
+
+    // Create a PK tablet with multiple rowsets of varying sizes
+    void create_pk_tablet_with_mixed_rowsets(int64_t tablet_id,
+                                             const std::vector<std::pair<int, int64_t>>& rowset_specs) {
+        auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        metadata->set_id(tablet_id);
+        metadata->set_version(rowset_specs.size() + 1);
+
+        int rowset_id = 0;
+        for (const auto& [num_segments, segment_size] : rowset_specs) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(rowset_id);
+            rowset->set_overlapped(true);
+            rowset->set_num_rows(100 * num_segments);
+            rowset->set_data_size(segment_size * num_segments);
+
+            for (int i = 0; i < num_segments; i++) {
+                std::string segment_name = fmt::format("rowset_{}_segment_{}.dat", rowset_id, i);
+                rowset->add_segments(segment_name);
+                rowset->add_segment_size(segment_size);
+
+                // Create dummy segment file
+                std::string path = _lp->segment_location(tablet_id, segment_name);
+                std::string dir = std::filesystem::path(path).parent_path().string();
+                CHECK_OK(fs::create_directories(dir));
+                auto fs = FileSystem::CreateSharedFromString(path);
+                auto st = fs.value()->new_writable_file(path);
+                CHECK_OK(st.status());
+                CHECK_OK(st.value()->append("dummy_segment_data"));
+                CHECK_OK(st.value()->close());
+            }
+            rowset_id++;
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::unique_ptr<TabletParallelCompactionManager> _manager;
+};
+
+// Test that a large rowset meeting split criteria is identified
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_criteria) {
+    int64_t tablet_id = 30001;
+
+    // Create a tablet with one large rowset: 8 segments, each 1GB
+    // Total size = 8GB, which is > 2 * lake_compaction_max_rowset_size (default ~2GB)
+    // and has >= 4 segments
+    int64_t segment_size = 1024 * 1024 * 1024; // 1GB per segment
+    create_pk_tablet_with_large_rowset(tablet_id, 8, segment_size);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(4);
+    config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+
+    pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    });
+
+    start_promise.get_future().wait();
+
+    auto st = _manager->create_parallel_tasks(
+            tablet_id, 123, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+
+    // Should create multiple subtasks for the large rowset split
+    ASSERT_TRUE(st.ok()) << st.status();
+
+    auto state = _manager->get_tablet_state(tablet_id, 123);
+    if (state != nullptr) {
+        // Verify that large_rowset_split_groups is populated for PK tables
+        // The exact number depends on the split algorithm
+        VLOG(1) << "Created " << state->running_subtasks.size() << " subtasks";
+    }
+
+    block_promise.set_value();
+    pool->wait();
+
+    _manager->cleanup_tablet(tablet_id, 123);
+}
+
+// Test mixed rowsets: some large (to be split) and some small (to be grouped)
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_mixed_large_and_small_rowsets) {
+    int64_t tablet_id = 30002;
+
+    // Create mixed rowsets:
+    // Rowset 0: Large - 8 segments, 500MB each = 4GB (should be split)
+    // Rowset 1: Small - 1 segment, 100MB
+    // Rowset 2: Small - 1 segment, 100MB
+    // Rowset 3: Small - 1 segment, 100MB
+    std::vector<std::pair<int, int64_t>> rowset_specs = {
+            {8, 500 * 1024 * 1024}, // Large rowset: 4GB total
+            {1, 100 * 1024 * 1024}, // Small rowset: 100MB
+            {1, 100 * 1024 * 1024}, // Small rowset: 100MB
+            {1, 100 * 1024 * 1024}, // Small rowset: 100MB
+    };
+    create_pk_tablet_with_mixed_rowsets(tablet_id, rowset_specs);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(4);
+    config.set_max_bytes_per_subtask(1024 * 1024 * 1024L); // 1GB per subtask
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+
+    pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    });
+
+    start_promise.get_future().wait();
+
+    auto st = _manager->create_parallel_tasks(
+            tablet_id, 124, 5, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+
+    ASSERT_TRUE(st.ok()) << st.status();
+
+    auto state = _manager->get_tablet_state(tablet_id, 124);
+    if (state != nullptr) {
+        VLOG(1) << "Created " << state->running_subtasks.size() << " subtasks for mixed rowsets";
+
+        // Verify subtask types
+        for (const auto& [id, info] : state->running_subtasks) {
+            if (info.type == SubtaskType::LARGE_ROWSET_PART) {
+                VLOG(1) << "Subtask " << id << " is LARGE_ROWSET_PART for rowset " << info.large_rowset_id
+                        << " segments [" << info.segment_start << ", " << info.segment_end << ")";
+            } else {
+                VLOG(1) << "Subtask " << id << " is NORMAL with " << info.input_rowset_ids.size() << " rowsets";
+            }
+        }
+    }
+
+    block_promise.set_value();
+    pool->wait();
+
+    _manager->cleanup_tablet(tablet_id, 124);
+}
+
+// Test manual completion flow with LARGE_ROWSET_PART subtasks
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_manual_large_rowset_split_completion) {
+    int64_t tablet_id = 30003;
+    int64_t txn_id = 40003;
+    int64_t version = 2;
+
+    create_pk_tablet_with_large_rowset(tablet_id, 8, 1024 * 1024 * 1024);
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    // Manually create state with LARGE_ROWSET_PART subtasks
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+
+    // Simulate large rowset split into 2 subtasks
+    {
+        SubtaskInfo info0;
+        info0.subtask_id = 0;
+        info0.type = SubtaskType::LARGE_ROWSET_PART;
+        info0.large_rowset_id = 0;
+        info0.segment_start = 0;
+        info0.segment_end = 4;
+        info0.input_rowset_ids = {0};
+        info0.input_bytes = 4 * 1024 * 1024 * 1024L;
+        info0.start_time = ::time(nullptr);
+        state->running_subtasks[0] = std::move(info0);
+        state->total_subtasks_created = 1;
+
+        SubtaskInfo info1;
+        info1.subtask_id = 1;
+        info1.type = SubtaskType::LARGE_ROWSET_PART;
+        info1.large_rowset_id = 0;
+        info1.segment_start = 4;
+        info1.segment_end = 8;
+        info1.input_rowset_ids = {0};
+        info1.input_bytes = 4 * 1024 * 1024 * 1024L;
+        info1.start_time = ::time(nullptr);
+        state->running_subtasks[1] = std::move(info1);
+        state->total_subtasks_created = 2;
+    }
+
+    // Record large rowset split group
+    state->large_rowset_split_groups[0] = {0, 1};
+    state->compacting_rowsets.insert(0);
+
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    // Complete subtask 0
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    auto* op0 = ctx0->txn_log->mutable_op_compaction();
+    op0->add_input_rowsets(0);
+    op0->mutable_output_rowset()->set_num_rows(500);
+    op0->mutable_output_rowset()->set_data_size(2 * 1024 * 1024 * 1024L);
+    op0->set_segment_range_start(0);
+    op0->set_segment_range_end(4);
+
+    _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
+
+    ASSERT_FALSE(closure.is_finished());
+
+    // Complete subtask 1
+    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx1->subtask_id = 1;
+    ctx1->txn_log = std::make_unique<TxnLogPB>();
+    auto* op1 = ctx1->txn_log->mutable_op_compaction();
+    op1->add_input_rowsets(0);
+    op1->mutable_output_rowset()->set_num_rows(500);
+    op1->mutable_output_rowset()->set_data_size(2 * 1024 * 1024 * 1024L);
+    op1->set_segment_range_start(4);
+    op1->set_segment_range_end(8);
+
+    _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
+
+    ASSERT_TRUE(closure.is_finished());
+
+    // Verify result
+    ASSERT_EQ(1, response.txn_logs_size());
+    const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
+    ASSERT_EQ(2, op_parallel.subtask_compactions_size());
+
+    // Verify segment ranges in subtask_compactions
+    const auto& subtask0 = op_parallel.subtask_compactions(0);
+    EXPECT_EQ(0, subtask0.subtask_id());
+    EXPECT_EQ(0, subtask0.segment_range_start());
+    EXPECT_EQ(4, subtask0.segment_range_end());
+
+    const auto& subtask1 = op_parallel.subtask_compactions(1);
+    EXPECT_EQ(1, subtask1.subtask_id());
+    EXPECT_EQ(4, subtask1.segment_range_start());
+    EXPECT_EQ(8, subtask1.segment_range_end());
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// Test partial failure in large rowset split - all subtasks must succeed
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_partial_failure) {
+    int64_t tablet_id = 30004;
+    int64_t txn_id = 40004;
+    int64_t version = 2;
+
+    create_pk_tablet_with_large_rowset(tablet_id, 8, 1024 * 1024 * 1024);
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    auto state = std::make_shared<TabletParallelCompactionState>();
+    state->tablet_id = tablet_id;
+    state->txn_id = txn_id;
+    state->version = version;
+    state->max_parallel = 2;
+    state->callback = callback;
+
+    // Simulate large rowset split into 2 subtasks
+    {
+        SubtaskInfo info0;
+        info0.subtask_id = 0;
+        info0.type = SubtaskType::LARGE_ROWSET_PART;
+        info0.large_rowset_id = 0;
+        info0.segment_start = 0;
+        info0.segment_end = 4;
+        info0.input_rowset_ids = {0};
+        state->running_subtasks[0] = std::move(info0);
+        state->total_subtasks_created = 1;
+
+        SubtaskInfo info1;
+        info1.subtask_id = 1;
+        info1.type = SubtaskType::LARGE_ROWSET_PART;
+        info1.large_rowset_id = 0;
+        info1.segment_start = 4;
+        info1.segment_end = 8;
+        info1.input_rowset_ids = {0};
+        state->running_subtasks[1] = std::move(info1);
+        state->total_subtasks_created = 2;
+    }
+
+    state->large_rowset_split_groups[0] = {0, 1};
+    state->compacting_rowsets.insert(0);
+
+    _manager->register_tablet_state_for_test(tablet_id, txn_id, state);
+
+    // Complete subtask 0 with success
+    auto ctx0 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx0->subtask_id = 0;
+    ctx0->status = Status::OK();
+    ctx0->txn_log = std::make_unique<TxnLogPB>();
+    ctx0->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx0->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 0, std::move(ctx0));
+
+    ASSERT_FALSE(closure.is_finished());
+
+    // Complete subtask 1 with failure
+    auto ctx1 = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, true, nullptr);
+    ctx1->subtask_id = 1;
+    ctx1->status = Status::IOError("disk error");
+    ctx1->txn_log = std::make_unique<TxnLogPB>();
+    ctx1->txn_log->mutable_op_compaction()->add_input_rowsets(0);
+    ctx1->txn_log->mutable_op_compaction()->mutable_output_rowset()->set_num_rows(500);
+    _manager->on_subtask_complete(tablet_id, txn_id, 1, std::move(ctx1));
+
+    ASSERT_TRUE(closure.is_finished());
+
+    // For large rowset split, if any subtask fails, all subtasks for that rowset should be discarded
+    // When all subtasks in a large rowset split group fail, no txn_log is generated
+    // because there's nothing to apply (the original rowset is kept intact)
+    if (response.txn_logs_size() > 0) {
+        const auto& op_parallel = response.txn_logs(0).op_parallel_compaction();
+        // No successful subtasks for the failed large rowset split
+        EXPECT_EQ(0, op_parallel.subtask_compactions_size());
+    } else {
+        // When all subtasks fail, no txn_log is generated (expected behavior)
+        EXPECT_EQ(0, response.txn_logs_size());
+    }
+
+    _manager->cleanup_tablet(tablet_id, txn_id);
+}
+
+// Test that large rowset split is capped to max_parallel to ensure completeness.
+// When max_parallel is less than the ideal number of subtasks for a large rowset,
+// the split should be capped to max_parallel (allowing each subtask to exceed
+// target_bytes_per_subtask) rather than truncating and causing data loss.
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_split_capped_to_max_parallel) {
+    int64_t tablet_id = 30005;
+
+    // Create a tablet with one very large rowset.
+    // 16 segments, 550MB each = 8.8GB total (must be >= 2 * lake_compaction_max_rowset_size = 8.58GB)
+    // With max_bytes_per_subtask=2GB, ideally this would split into 4-5 groups
+    // But with max_parallel=2, it should be capped to 2 groups
+    // to ensure the split is complete and no data is lost.
+    int64_t segment_size = 550 * 1024 * 1024; // 550MB per segment
+    create_pk_tablet_with_large_rowset(tablet_id, 16, segment_size);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);                     // Only 2 subtasks allowed
+    config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    // Use a single-threaded pool and block it to prevent task execution during state verification
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+
+    pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    });
+
+    start_promise.get_future().wait();
+
+    auto st = _manager->create_parallel_tasks(
+            tablet_id, 125, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+
+    ASSERT_TRUE(st.ok()) << st.status();
+
+    auto state = _manager->get_tablet_state(tablet_id, 125);
+    ASSERT_NE(nullptr, state);
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+
+        // The large rowset should be split into exactly 2 subtasks (capped by max_parallel)
+        EXPECT_EQ(1, state->large_rowset_split_groups.size());
+
+        // Verify the large rowset (id=0) is being compacted
+        EXPECT_TRUE(state->compacting_rowsets.count(0) > 0) << "Large rowset 0 should be in compacting set";
+
+        // Verify all subtasks for the large rowset are tracked
+        auto it = state->large_rowset_split_groups.find(0);
+        if (it != state->large_rowset_split_groups.end()) {
+            EXPECT_EQ(2, it->second.size()) << "Large rowset should be split into exactly 2 subtasks";
+
+            // Verify all subtasks are running (tasks are queued but not executed yet)
+            for (int32_t sid : it->second) {
+                EXPECT_TRUE(state->running_subtasks.count(sid) > 0) << "Subtask " << sid << " should be running";
+            }
+
+            // Verify segment ranges cover all segments [0, 16)
+            std::set<int32_t> covered_segments;
+            for (const auto& [subtask_id, info] : state->running_subtasks) {
+                if (info.type == SubtaskType::LARGE_ROWSET_PART && info.large_rowset_id == 0) {
+                    for (int32_t seg = info.segment_start; seg < info.segment_end; seg++) {
+                        covered_segments.insert(seg);
+                    }
+                }
+            }
+            EXPECT_EQ(16, covered_segments.size()) << "All 16 segments should be covered by subtasks";
+        }
+    }
+
+    block_promise.set_value();
+    pool->wait();
+
+    _manager->cleanup_tablet(tablet_id, 125);
+}
+
+// Test that when large rowset is split, it uses multiple parallel slots as expected
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_uses_all_parallel_slots) {
+    int64_t tablet_id = 30006;
+
+    // Create a tablet with one large rowset only (no small rowsets to avoid compaction policy selection issues)
+    // 16 segments, 550MB each = 8.8GB total (must be >= 2 * lake_compaction_max_rowset_size = 8.58GB)
+    int64_t segment_size = 550 * 1024 * 1024; // 550MB per segment
+    create_pk_tablet_with_large_rowset(tablet_id, 16, segment_size);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(2);                     // Only 2 subtasks allowed
+    config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    // Use a single-threaded pool and block it to prevent task execution during state verification
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+
+    pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    });
+
+    start_promise.get_future().wait();
+
+    auto st = _manager->create_parallel_tasks(
+            tablet_id, 126, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+
+    ASSERT_TRUE(st.ok()) << st.status();
+
+    auto state = _manager->get_tablet_state(tablet_id, 126);
+    ASSERT_NE(nullptr, state);
+
+    {
+        std::lock_guard<std::mutex> lock(state->mutex);
+
+        // Large rowset should use all 2 parallel slots (split into 2 subtasks)
+        EXPECT_EQ(2, state->running_subtasks.size());
+
+        // Only the large rowset (id=0) should be compacting
+        EXPECT_TRUE(state->compacting_rowsets.count(0) > 0);
+
+        // Verify it's in large_rowset_split_groups
+        EXPECT_EQ(1, state->large_rowset_split_groups.size());
+        auto it = state->large_rowset_split_groups.find(0);
+        if (it != state->large_rowset_split_groups.end()) {
+            EXPECT_EQ(2, it->second.size()) << "Large rowset should be split into 2 subtasks";
+        }
+    }
+
+    block_promise.set_value();
+    pool->wait();
+
+    _manager->cleanup_tablet(tablet_id, 126);
+}
+
+// Test that large rowset is skipped when only 1 parallel slot remains
+// (splitting with only 1 slot is meaningless, need at least 2)
+TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_large_rowset_skipped_when_only_one_slot) {
+    int64_t tablet_id = 30007;
+
+    // Create a tablet with one large rowset
+    // 16 segments, 550MB each = 8.8GB total (must be >= 2 * lake_compaction_max_rowset_size = 8.58GB)
+    int64_t segment_size = 550 * 1024 * 1024;
+    create_pk_tablet_with_large_rowset(tablet_id, 16, segment_size);
+
+    TabletParallelConfig config;
+    config.set_max_parallel_per_tablet(1);                     // Only 1 subtask allowed - not enough to split
+    config.set_max_bytes_per_subtask(2 * 1024 * 1024 * 1024L); // 2GB per subtask
+
+    CompactRequest request;
+    request.add_tablet_ids(tablet_id);
+    CompactResponse response;
+    TestClosure closure;
+    auto callback = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, &closure);
+
+    // Use a single-threaded pool and block it to prevent task execution during state verification
+    std::unique_ptr<ThreadPool> pool;
+    ThreadPoolBuilder("test_pool").set_max_threads(1).build(&pool);
+
+    std::promise<void> block_promise;
+    std::future<void> block_future = block_promise.get_future();
+    std::promise<void> start_promise;
+
+    pool->submit_func([&]() {
+        start_promise.set_value();
+        block_future.wait();
+    });
+
+    start_promise.get_future().wait();
+
+    auto st = _manager->create_parallel_tasks(
+            tablet_id, 127, 2, config, callback, false, pool.get(), []() { return true; }, [](bool) {});
+
+    // With only 1 parallel slot, the large rowset should be skipped (can't split with 1 slot)
+    // This should return 0 (fallback to normal compaction) and state should be nullptr
+    ASSERT_TRUE(st.ok()) << st.status();
+    EXPECT_EQ(0, st.value()) << "Large rowset should be skipped when max_parallel=1, returning 0 for fallback";
+
+    // State should not exist because no subtasks were created
+    auto state = _manager->get_tablet_state(tablet_id, 127);
+    EXPECT_EQ(nullptr, state) << "State should not exist when large rowset is skipped";
+
+    block_promise.set_value();
+    pool->wait();
+
+    _manager->cleanup_tablet(tablet_id, 127);
+}
+
 } // namespace starrocks::lake

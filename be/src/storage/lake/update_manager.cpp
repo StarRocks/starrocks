@@ -1514,6 +1514,9 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
                                                        const TabletMetadata& metadata, const Tablet& tablet,
                                                        IndexEntry* index_entry, MetaFileBuilder* builder,
                                                        int64_t base_version) {
+    // For large rowset split: non-first subtasks have segment_range_start > 0
+    const bool is_non_first_split_subtask = op_compaction.segment_range_start() > 0;
+
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
@@ -1554,9 +1557,13 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     }
     _index_cache.update_object_size(index_entry, index.memory_usage());
     // 5. update TabletMeta
-    RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
+    RETURN_IF_ERROR(
+            builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id(), is_non_first_split_subtask));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
-    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    // Skip index.apply_opcompaction for non-first subtasks (first subtask handles it)
+    if (!is_non_first_split_subtask) {
+        RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    }
 
     TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset.num_segments());
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
@@ -1572,6 +1579,10 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
                                                  const TabletMetadata& metadata, const Tablet& tablet,
                                                  IndexEntry* index_entry, MetaFileBuilder* builder,
                                                  int64_t base_version) {
+    // For large rowset split: non-first subtasks have segment_range_start > 0
+    // They skip input rowset deletion (first subtask handles it)
+    const bool is_non_first_split_subtask = op_compaction.segment_range_start() > 0;
+
     FAIL_POINT_TRIGGER_EXECUTE(hook_publish_primary_key_tablet_compaction, {
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
@@ -1580,11 +1591,15 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         return builder->apply_opcompaction(
                 op_compaction,
                 *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end()),
-                tablet_schema->id());
+                tablet_schema->id(), is_non_first_split_subtask);
     });
-    if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
-        // conflict happens
-        return Status::OK();
+
+    // Skip conflict check for non-first subtasks (first subtask handles conflict)
+    if (!is_non_first_split_subtask) {
+        if (CompactionUpdateConflictChecker::conflict_check(op_compaction, txn_id, metadata, builder)) {
+            // conflict happens
+            return Status::OK();
+        }
     }
     if (_use_light_publish_primary_compaction(tablet.tablet_mgr(), op_compaction, tablet.id(), txn_id)) {
         return light_publish_primary_compaction(op_compaction, txn_id, metadata, tablet, index_entry, builder,
@@ -1653,10 +1668,14 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
+    RETURN_IF_ERROR(
+            builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id(), is_non_first_split_subtask));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
-    RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    // Skip index.apply_opcompaction for non-first subtasks (first subtask handles it)
+    if (!is_non_first_split_subtask) {
+        RETURN_IF_ERROR(index.apply_opcompaction(metadata, op_compaction));
+    }
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("max_rowsetid", max_rowset_id);
