@@ -166,6 +166,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName.toUpperCase());
             ps.setString(2, tableName.toUpperCase());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<String> list = ImmutableList.builder();
             while (rs.next()) {
@@ -196,6 +197,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName.toUpperCase());
             ps.setString(2, tableName.toUpperCase());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<String> list = ImmutableList.builder();
             while (rs.next()) {
@@ -214,6 +216,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
             ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<Partition> list = ImmutableList.builder();
             long createTime = TimeUtils.getEpochSeconds();
