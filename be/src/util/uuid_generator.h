@@ -38,6 +38,9 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <chrono>
+#include <cstring>
+#include <random>
 #include <string>
 
 namespace starrocks {
@@ -48,8 +51,20 @@ public:
 
     static std::string next_uuid_string() { return boost::uuids::to_string(next_uuid()); }
 
+    // Generate UUID v7 according to RFC 9562
+    // Format: 48-bit timestamp (ms) + 4-bit version + 12-bit random + 2-bit variant + 62-bit random
+    static boost::uuids::uuid next_uuid_v7();
+
+    static std::string next_uuid_v7_string() { return boost::uuids::to_string(next_uuid_v7()); }
+
 private:
     static inline thread_local boost::uuids::basic_random_generator<boost::mt19937> s_tls_gen;
+
+    // Thread-local random number generator with efficient seeding
+    // Combines thread ID and high-resolution clock for better seed distribution
+    static inline thread_local std::mt19937 s_tls_rng{
+            static_cast<unsigned int>(std::hash<std::thread::id>{}(std::this_thread::get_id()) ^
+                                      std::chrono::high_resolution_clock::now().time_since_epoch().count())};
 };
 
 } // namespace starrocks
