@@ -23,7 +23,6 @@ test_db_e70dbc89852c4b2a9ab87cb70dced610.t1	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c', 't1')
 -- result:
-
 -- !result
 set enable_scan_predicate_expr_reuse=false;
 -- result:

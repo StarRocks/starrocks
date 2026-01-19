@@ -60,10 +60,6 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         }
     });
 
-    if (expr->is_dictmapping_expr()) {
-        return Status::OK();
-    }
-
     // for the lambda function, we only consider extracting the outer common expression from the lambda expr,
     // not its arguments
     int child_num = expr->is_lambda_function() ? 1 : expr->get_num_children();
@@ -77,7 +73,7 @@ Status LambdaFunction::extract_outer_common_exprs(RuntimeState* state, ExprConte
         if (!child->is_dictmapping_expr()) {
             RETURN_IF_ERROR(extract_outer_common_exprs(state, expr_ctx, child, ctx));
         }
-
+      
         // if child is a slotref or a lambda function or a literal, we can't replace it.
         if (child->is_slotref() || child->is_lambda_function() || child->is_literal() || child->is_constant()) {
             continue;
@@ -247,4 +243,16 @@ std::string LambdaFunction::debug_string() const {
     return out.str();
 }
 
+Status LambdaFunction::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    // call callback for children
+    for (auto& child : _children) {
+        RETURN_IF_ERROR(callback(child));
+    }
+    // If the lambda function contains a dictmapping expr, we don't need to extract the outer common expression.
+    // because the dictmapping expr needs to be rewritten by DictOptimizeParser::rewrite_expr/DictMappingExpr::open function.
+    for (auto& child : _common_sub_expr) {
+        RETURN_IF_ERROR(callback(child));
+    }
+    return Status::OK();
+}
 } // namespace starrocks
