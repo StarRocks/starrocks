@@ -52,7 +52,17 @@ FROM test_shredding_variant
 ORDER BY id;
 
 -- ========================================
--- Query 2: Nested field extraction (Consistency check between Shredded and No-Shredded)
+-- Query 2: Verify all fields including potentially non-shredded fields
+-- ========================================
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.name') as name,
+    get_variant_string(data, '$.email') as email
+FROM test_shredding_variant
+ORDER BY id;
+
+-- ========================================
+-- Query 3: Nested field extraction (Consistency check between Shredded and No-Shredded)
 -- ========================================
 SELECT 'Check Shredding Consistency' as task;
 (SELECT 'shredded' as label, get_variant_double(data, '$.profile.salary') as salary, get_variant_string(data, '$.profile.department') as dept FROM test_shredding_variant WHERE get_variant_int(data, '$.id') = 1000)
@@ -61,7 +71,7 @@ UNION ALL
 order by label;
 
 -- ========================================
--- Query 3: Complex nesting and mixed types (rank field)
+-- Query 4: Complex nesting and mixed types (rank field)
 -- ========================================
 SELECT 
     get_variant_int(data, '$.id') as id,
@@ -72,7 +82,7 @@ FROM test_shredding_variant
 ORDER BY id;
 
 -- ========================================
--- Query 4: Array structure extraction
+-- Query 5: Array structure extraction
 -- ========================================
 SELECT 
     get_variant_int(data, '$.id') as id,
@@ -83,7 +93,7 @@ FROM test_shredding_variant
 ORDER BY id;
 
 -- ========================================
--- Query 5: Direct Data Comparison (Shredded vs No-Shredded)
+-- Query 6: Direct Data Comparison (Shredded vs No-Shredded)
 -- ========================================
 -- Extract all relevant fields from both versions and sort them to verify identical content.
 SELECT '--- Shredded Data ---' as label;
@@ -117,7 +127,7 @@ FROM test_noshredding_variant
 ORDER BY id;
 
 -- ========================================
--- Query 6: Full Variant Column Comparison
+-- Query 7: Full Variant Column Comparison
 -- ========================================
 -- This verifies that the full variant object is correctly reconstructed from shredded sub-columns.
 SELECT '--- Full Variant Comparison ---' as label;

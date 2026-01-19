@@ -60,6 +60,19 @@ ORDER BY id;
 1003	23	city_3	String	S83
 1004	24	city_4	Int32	84
 -- !result
+SELECT 
+    get_variant_int(data, '$.id') as id,
+    get_variant_string(data, '$.name') as name,
+    get_variant_string(data, '$.email') as email
+FROM test_shredding_variant
+ORDER BY id;
+-- result:
+1000	name_0	user0@example.com
+1001	name_1	user1@example.com
+1002	name_2	user2@example.com
+1003	name_3	user3@example.com
+1004	name_4	user4@example.com
+-- !result
 SELECT 'Check Shredding Consistency' as task;
 -- result:
 Check Shredding Consistency

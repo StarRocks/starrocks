@@ -738,7 +738,24 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Variant group exists, prefer typed_value when available
                 const Slice metadata_slice = metadata_column->get_slice(i);
                 const Slice value_slice = value_column->get_slice(i);
+
+                // Apache Parquet Variant Shredding Spec:
+                // value=null, typed_value=null    → Missing value (valid only for object fields)
+                // value=non-null, typed_value=null → Value present, use raw variant encoding
+                // value=null, typed_value=non-null → Value present, encode from shredded type
+                // value=non-null, typed_value=non-null → Partially shredded object (both fields used)
+                //
+                // For primitives/arrays: value and typed_value must be mutually exclusive
+                // For objects: both can be non-null (typed_value has shredded fields, value has non-shredded fields)
                 if (has_typed) {
+                    // Validation: Check for spec violations (both non-null for non-objects)
+                    if (!value_slice.empty() && !_typed_value_type.is_struct_type()) {
+                        VLOG_FILE << "Warning: Both value and typed_value are non-null at row " << i
+                                  << " for non-object type " << type_to_string(_typed_value_type.type)
+                                  << ". Per Parquet Variant Shredding spec, this should only occur for objects. "
+                                  << "Using typed_value.";
+                    }
+
                     VariantMetadata meta(metadata_slice);
                     RETURN_IF_ERROR(_ctx.use_metadata(meta));
                     auto variant =
@@ -790,6 +807,14 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Even for required variant group, metadata/value fields can be null
                 variant_column->append(VariantRowValue::from_null());
             } else if (has_typed) {
+                // Validation: Check for spec violations (both non-null for non-objects)
+                if (!value_slice.empty() && !_typed_value_type.is_struct_type()) {
+                    VLOG_FILE << "Warning: Both value and typed_value are non-null at row " << i
+                              << " for non-object type " << type_to_string(_typed_value_type.type)
+                              << ". Per Parquet Variant Shredding spec, this should only occur for objects. "
+                              << "Using typed_value.";
+                }
+
                 VariantMetadata meta(metadata_slice);
                 RETURN_IF_ERROR(_ctx.use_metadata(meta));
                 auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
