@@ -67,6 +67,15 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_pending_duration_us);
 
+    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_write_total);
+
     REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
