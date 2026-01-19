@@ -4037,6 +4037,234 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### authentication_ldap_simple_server_host
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The host on which the LDAP server runs.
+- Introduced in: -
+
+##### authentication_ldap_simple_server_port
+
+- Default: 389
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The port of the LDAP server.
+- Introduced in: -
+
+##### authentication_ldap_simple_user_search_attr
+
+- Default: uid
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The name of the attribute that identifies users in LDAP objects.
+- Introduced in: -
+
+##### backup_job_default_timeout_ms
+
+- Default: 86400 * 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout duration of a backup job. If this value is exceeded, the backup job fails.
+- Introduced in: -
+
+##### enable_collect_tablet_num_in_show_proc_backend_disk_path
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the collection of tablet numbers for each disk in the `SHOW PROC /BACKENDS/{id}` command
+- Introduced in: v4.0.1, v3.5.8
+
+##### enable_colocate_restore
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable Backup and Restore for Colocate Tables. `true` indicates enabling Backup and Restore for Colocate Tables and `false` indicates disabling it.
+- Introduced in: v3.2.10, v3.3.3
+
+##### enable_materialized_view_concurrent_prepare
+
+- Default: true
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether to prepare materialized view concurrently to improve performance.
+- Introduced in: v3.4.4
+
+##### enable_metric_calculator
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
+- Introduced in: -
+
+##### enable_mv_post_image_reload_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to perform reload flag check after FE loaded an image. If the check is performed for a base materialized view, it is not needed for other materialized views that related to it.
+- Introduced in: v3.5.0
+
+##### enable_mv_query_context_cache
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable query-level materialized view rewrite cache to improve query rewrite performance.
+- Introduced in: v3.3
+
+##### enable_mv_refresh_collect_profile
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable profile in refreshing materialized view by default for all materialized views.
+- Introduced in: v3.3.0
+
+##### enable_mv_refresh_extra_prefix_logging
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable prefixes with materialized view names in logs for better debug.
+- Introduced in: v3.4.0
+
+##### enable_mv_refresh_query_rewrite
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable rewrite query during materialized view refresh so that the query can use the rewritten mv directly rather than the base table to improve query performance.
+- Introduced in: v3.3
+
+##### enable_trace_historical_node
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow the system to trace the historical nodes. By setting this item to `true`, you can enable the Cache Sharing feature and allow the system to choose the right cache nodes during elastic scaling.
+- Introduced in: v3.5.1
+
+##### es_state_sync_interval_second
+
+- Default: 10
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables.
+- Introduced in: -
+
+##### hive_meta_cache_refresh_interval_s
+
+- Default: 3600 * 2
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The time interval at which the cached metadata of Hive external tables is updated.
+- Introduced in: -
+
+##### hive_meta_store_timeout_s
+
+- Default: 10
+- Type: Long
+- Unit: Seconds
+- Is mutable: No
+- Description: The amount of time after which a connection to a Hive metastore times out.
+- Introduced in: -
+
+##### jdbc_connection_idle_timeout_ms
+
+- Default: 600000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
+- Introduced in: -
+
+##### jdbc_connection_timeout_ms
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The timeout in milliseconds for HikariCP connection pool to acquire a connection. If a connection cannot be acquired from the pool within this time, the operation will fail.
+- Introduced in: v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout in milliseconds for JDBC statement query execution. This timeout is applied to all SQL queries executed through JDBC catalogs (e.g., partition metadata queries). The value is converted to seconds when passed to the JDBC driver.
+- Introduced in: v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout in milliseconds for JDBC network operations (socket read). This timeout applies to database metadata calls (e.g., getSchemas(), getTables(), getColumns()) to prevent indefinite blocking when the external database is unresponsive.
+- Introduced in: v3.5.13
+
+##### jdbc_connection_pool_size
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
+- Introduced in: -
+
+##### jdbc_meta_default_cache_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: The default value for whether the JDBC Catalog metadata cache is enabled. When set to True, newly created JDBC Catalogs will default to metadata caching enabled.
+- Introduced in: -
+
+##### jdbc_meta_default_cache_expire_sec
+
+- Default: 600
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The default expiration time for the JDBC Catalog metadata cache. When `jdbc_meta_default_cache_enable` is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
+- Introduced in: -
+
+##### jdbc_minimum_idle_connections
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
+- Introduced in: -
+
+>>>>>>> 1f053ec7bc ([Enhancement] Add some timeout configuration for jdbc catalog. (#68067))
 ##### jwt_jwks_url
 
 - Default: Empty string
