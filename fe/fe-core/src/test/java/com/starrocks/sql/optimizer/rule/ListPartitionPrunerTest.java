@@ -427,7 +427,7 @@ public class ListPartitionPrunerTest {
         // col='2'
         // col='ab'
 
-        ColumnRefOperator intColumn = new ColumnRefOperator(1, Type.STRING, "col", true);
+        ColumnRefOperator intColumn = new ColumnRefOperator(1, StringType.STRING, "col", true);
 
         // column -> partition values
         Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap =
@@ -441,7 +441,7 @@ public class ListPartitionPrunerTest {
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
         columnToNullPartitions.put(intColumn, Sets.newHashSet(3L));
 
-        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(Type.INT, intColumn),
+        conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ, new CastOperator(IntegerType.INT, intColumn),
                 ConstantOperator.createInt(1)));
 
         ListPartitionPruner pruner =
