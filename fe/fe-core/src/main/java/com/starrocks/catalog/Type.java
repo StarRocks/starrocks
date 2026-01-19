@@ -39,13 +39,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.qe.GlobalVariable;
+import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -1719,7 +1719,8 @@ public abstract class Type implements Cloneable {
                 ScalarType charType = ((ScalarType) this);
                 int charLength = charType.getLength();
                 if (charLength == -1) {
-                    charLength = (this.getPrimitiveType() == PrimitiveType.CHAR) ? 255 : GlobalVariable.getMaxUnknownStringMetaLength();
+                    charLength = (this.getPrimitiveType() == PrimitiveType.CHAR) ? 255
+                        : GlobalVariable.getMaxUnknownStringMetaLength();
                 }
                 // utf8 charset
                 return charLength * 3;
