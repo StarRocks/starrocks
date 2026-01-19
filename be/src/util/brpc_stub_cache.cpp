@@ -150,13 +150,6 @@ void HttpBrpcStubCache::shutdown() {
         }
     }
 
-<<<<<<< HEAD
-    for (auto& task : task_to_cleanup) {
-        task->unschedule(_pipeline_timer);
-    }
-
-    _stub_map.clear();
-=======
     if (_pipeline_timer != nullptr) {
         for (auto& task : task_to_cleanup) {
             _pipeline_timer->unschedule(task.get());
@@ -167,7 +160,6 @@ void HttpBrpcStubCache::shutdown() {
         std::lock_guard<SpinLock> l(_lock);
         _stub_map.clear();
     }
->>>>>>> 7a67b9bdf6 ([BugFix] Fix use-after-free on pipeline timer during shutdown (#63189))
 }
 
 StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::get_http_stub(
@@ -246,13 +238,6 @@ void LakeServiceBrpcStubCache::shutdown() {
         }
     }
 
-<<<<<<< HEAD
-    for (auto& task : task_to_cleanup) {
-        task->unschedule(_pipeline_timer);
-    }
-
-    _stub_map.clear();
-=======
     if (_pipeline_timer != nullptr) {
         for (auto& task : task_to_cleanup) {
             _pipeline_timer->unschedule(task.get());
@@ -263,7 +248,6 @@ void LakeServiceBrpcStubCache::shutdown() {
         std::lock_guard<SpinLock> l(_lock);
         _stub_map.clear();
     }
->>>>>>> 7a67b9bdf6 ([BugFix] Fix use-after-free on pipeline timer during shutdown (#63189))
 }
 
 DEFINE_FAIL_POINT(get_stub_return_nullptr);
