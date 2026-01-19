@@ -142,6 +142,10 @@ private:
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
 
+    // Segment metadata filter (sort key range filtering for lake tables)
+    RuntimeProfile::Counter* _seg_metadata_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _segs_metadata_filtered_counter = nullptr;
+
     // Bloom filter
     RuntimeProfile::Counter* _bf_filter_timer = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
