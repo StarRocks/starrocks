@@ -67,7 +67,6 @@ public class HiveMetaClient {
 
     private final LinkedList<RecyclableClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
-    private final Object clientCreationLock = new Object();
 
     private final HiveConf conf;
 
@@ -156,22 +155,7 @@ public class HiveMetaClient {
             client = clientPool.poll();
         }
 
-        if (client != null) {
-            return client;
-        }
-
-        synchronized (clientCreationLock) {
-            // The pool was empty so create a new client and return that.
-            // Serialize client creation to defend against possible race conditions accessing
-            // local Kerberos state
-            synchronized (clientPoolLock) {
-                client = clientPool.poll();
-                if (client != null) {
-                    return client;
-                }
-            }
-            return new RecyclableClient(conf);
-        }
+        return client != null ? client : new RecyclableClient(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
