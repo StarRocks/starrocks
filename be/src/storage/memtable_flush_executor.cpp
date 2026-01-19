@@ -149,6 +149,7 @@ void FlushToken::_flush_memtable(MemTable* memtable, SegmentPB* segment, bool eo
         return;
     }
 
+    set_status(memtable->finalize());
     set_status(memtable->flush(segment, eos, flush_data_size, slot_idx));
     _stats.flush_count++;
     _stats.memtable_stats += memtable->get_stat();
