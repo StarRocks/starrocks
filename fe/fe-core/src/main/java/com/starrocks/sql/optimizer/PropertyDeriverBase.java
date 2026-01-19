@@ -37,7 +37,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.SHUFFLE_JOIN;
 
 public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
-
     public abstract R visitOperator(Operator node, C context);
 
 
@@ -55,15 +54,30 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
             // required property type is SHUFFLE_JOIN, adjust the required property shuffle columns based on the column
             // order required by parent
             List<DistributionCol> requiredColumns = requiredShuffleDescOptional.get().getDistributionCols();
-            boolean adjustBasedOnLeft = CollectionUtils.isEqualCollection(requiredColumns, leftShuffleColumns);
-            boolean adjustBasedOnRight = CollectionUtils.isEqualCollection(requiredColumns, rightShuffleColumns);
+            boolean sameSetLeft = CollectionUtils.isEqualCollection(requiredColumns, leftShuffleColumns);
+            boolean sameSetRight = CollectionUtils.isEqualCollection(requiredColumns, rightShuffleColumns);
+
+            boolean hasNullStrict = hasAnyNullStrict(requiredColumns) ||
+                    hasAnyNullStrict(leftShuffleColumns) ||
+                    hasAnyNullStrict(rightShuffleColumns);
+
+            boolean adjustBasedOnLeft = sameSetLeft && (!hasNullStrict ||
+                    isSameColumnIdOrder(requiredColumns, leftShuffleColumns));
+            boolean adjustBasedOnRight = sameSetRight && (!hasNullStrict ||
+                    isSameColumnIdOrder(requiredColumns, rightShuffleColumns));
 
             if (adjustBasedOnLeft || adjustBasedOnRight) {
                 List<DistributionCol> requiredLeft = Lists.newArrayList();
                 List<DistributionCol> requiredRight = Lists.newArrayList();
 
                 for (DistributionCol cid : requiredColumns) {
-                    int idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) : rightShuffleColumns.indexOf(cid);
+                    int idx;
+                    if (hasNullStrict) {
+                        idx = adjustBasedOnLeft ? indexOfByColId(leftShuffleColumns, cid.getColId())
+                                : indexOfByColId(rightShuffleColumns, cid.getColId());
+                    } else {
+                        idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) : rightShuffleColumns.indexOf(cid);
+                    }
                     requiredLeft.add(leftShuffleColumns.get(idx));
                     requiredRight.add(rightShuffleColumns.get(idx));
                 }
@@ -72,6 +86,36 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
                 return createShuffleJoinRequiredProperties(leftShuffleColumns, rightShuffleColumns);
             }
         }
+    }
+
+    private static boolean isSameColumnIdOrder(List<DistributionCol> required, List<DistributionCol> actual) {
+        if (required.size() != actual.size()) {
+            return false;
+        }
+        for (int i = 0; i < required.size(); i++) {
+            if (required.get(i).getColId() != actual.get(i).getColId()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int indexOfByColId(List<DistributionCol> cols, int colId) {
+        for (int i = 0; i < cols.size(); i++) {
+            if (cols.get(i).getColId() == colId) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean hasAnyNullStrict(List<DistributionCol> cols) {
+        for (DistributionCol c : cols) {
+            if (c.isNullStrict()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static List<PhysicalPropertySet> computeShuffleSetRequiredProperties(PhysicalSetOperation node) {

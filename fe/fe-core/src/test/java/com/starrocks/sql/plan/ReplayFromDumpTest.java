@@ -1205,4 +1205,56 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         PlanTestBase.assertContains(replayPair.second, "5:OlapScanNode\n" +
                 "     TABLE: tbl_5");
     }
+
+    @Test
+    public void test_join_key_order_eq_for_null() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/join_key_order_eq_for_null");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getPlanFragment(dumpString, queryDumpInfo.getSessionVariable(),
+                TExplainLevel.VERBOSE);
+        PlanTestBase.assertContains(replayPair.second, "31:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  equal join conjunct: [303: COALESCE, VARCHAR, true] <=> [151: COALESCE, VARCHAR, true]\n" +
+                "  |  equal join conjunct: [304: COALESCE, VARCHAR, true] <=> [152: COALESCE, VARCHAR, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (151: COALESCE), remote = false\n" +
+                "  |  - filter_id = 1, build_expr = (152: COALESCE), remote = false\n" +
+                "  |  output columns: 151, 152, 304\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  |----30:EXCHANGE\n" +
+                "  |       distribution type: SHUFFLE\n" +
+                "  |       partition exprs: [152: COALESCE, VARCHAR, true], [151: COALESCE, VARCHAR, true]\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  22:Project\n" +
+                "  |  output columns:\n" +
+                "  |  303 <-> [303: COALESCE, VARCHAR, true]\n" +
+                "  |  304 <-> [304: COALESCE, VARCHAR, true]\n" +
+                "  |  hasNullableGenerateChild: true\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  21:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [304: COALESCE, VARCHAR, true] = [332: aes_decrypt, VARCHAR, true]\n" +
+                "  |  equal join conjunct: [303: COALESCE, VARCHAR, true] = [333: aes_decrypt, VARCHAR, true]\n" +
+                "  |  output columns: 303, 304\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  |----20:EXCHANGE\n" +
+                "  |       distribution type: SHUFFLE\n" +
+                "  |       partition exprs: [332: aes_decrypt, VARCHAR, true], [333: aes_decrypt, VARCHAR, true]\n" +
+                "  |       cardinality: 1\n" +
+                "  |       probe runtime filters:\n" +
+                "  |       - filter_id = 0, probe_expr = (333: aes_decrypt)\n" +
+                "  |       - filter_id = 1, probe_expr = (332: aes_decrypt)\n" +
+                "  |    \n" +
+                "  17:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [304: COALESCE, VARCHAR, true], [303: COALESCE, VARCHAR, true]\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (303: COALESCE)\n" +
+                "     - filter_id = 1, probe_expr = (304: COALESCE)");
+    }
 }
