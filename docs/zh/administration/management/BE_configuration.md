@@ -675,6 +675,308 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：单个 HTTP 请求持续以低于 `download_low_speed_limit_kbps` 值的速度运行时，允许运行的最长时间。在配置项中指定的时间跨度内，当一个 HTTP 请求持续以低于该值的速度运行时，该请求将被中止。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### download_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE 节点下载任务的最大线程数，用于恢复作业。`0` 表示设置线程数为 BE 所在机器的 CPU 核数。
+- 引入版本：-
+
+##### drop_tablet_worker_count
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：删除 Tablet 的线程数。`0` 表示当前节点的 CPU 核数的一半。
+- 引入版本：-
+
+##### enable_check_string_lengths
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
+- 引入版本：-
+
+##### enable_event_based_compaction_framework
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 Tablet 数比较多或者单个 Tablet 数据量比较大的场景下大幅降低 Compaction 的开销。
+- 引入版本：-
+
+##### enable_lazy_delta_column_compaction
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否动态：是
+- 描述: 启用后，Compaction 将对由部分列更新产生的 Delta 列采用“懒惰”策略：StarRocks 会避免将 Delta-column 文件立即合并回其主段文件以节省 Compaction 的 I/O。实际上，Compaction 选择代码会检查是否存在部分列更新的 Rowset 和多个候选项；如果发现以上情况且此配置项为 `true`，引擎要么停止向 Compaction 添加更多输入，要么仅合并空的 Rowset（level -1），将 Delta 列保持分离。这会减少 Compaction 期间的即时 I/O 和 CPU 开销，但以延迟合并为代价（可能产生更多段和临时存储开销）。正确性和查询语义不受影响。
+- 引入版本: v3.2.3
+
+##### enable_new_load_on_memory_limit_exceeded
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
+- 引入版本：v3.3.2
+
+##### enable_pk_index_parallel_compaction
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用存算分离集群中主键索引的并行 Compaction。
+- 引入版本：-
+
+##### enable_pk_index_parallel_execution
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否启用存算分离集群中主键索引操作的并行执行。开启后，系统会在发布操作期间使用线程池并发处理分段，显著提升大表的性能。
+- 引入版本：-
+
+##### enable_pk_index_eager_build
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在导入和 Compaction 阶段即时构建 Primary Key 索引文件。开启后，系统会在数据写入时直接生成持久化的主键索引文件，提升后续查询性能。
+- 引入版本：-
+
+##### enable_pk_size_tiered_compaction_strategy
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否为 Primary Key 表开启 Size-tiered Compaction 策略。`true` 代表开启。`false` 代表关闭。
+- 引入版本：
+  - 存算分离集群自 v3.2.4, v3.1.10 起生效
+  - 存算一体集群自 v3.2.5, v3.1.10 起生效
+
+##### enable_rowset_verify
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否检查 Rowset 的正确性。开启后，会在 Compaction、Schema Change 后检查生成的 Rowset 的正确性。
+- 引入版本：-
+
+##### enable_size_tiered_compaction_strategy
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启 Size-tiered Compaction 策略 (Primary Key 表除外)。`true` 代表开启。`false` 代表关闭。
+- 引入版本：-
+
+##### enable_strict_delvec_crc_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：当此项设置为 `true` 后，系统会对 Delete Vector 的 crc32 进行严格检查，如果不一致，将返回失败。
+- 引入版本：-
+
+##### enable_transparent_data_encryption
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否动态：否
+- 描述: 启用后，StarRocks 将为新写入的存储对象（segment 文件、delete/update 文件、rowset segments、lake SSTs、persistent index 文件等）进行磁盘加密。写入路径（RowsetWriter/SegmentWriter、lake UpdateManager/LakePersistentIndex 及相关代码路径）会从 KeyCache 请求加密信息，将 encryption_info 附加到可写文件，并将 encryption_meta 持久化到 rowset / segment / sstable 元数据中（如 segment_encryption_metas、delete/update encryption metadata）。FE 与 FE/CN 的加密标志必须匹配。如果不匹配会导致 BE 在心跳时中止（LOG(FATAL)）。此参数不可在运行时修改，必须在第一次部署集群前启用，并确保密钥管理（KEK）与 KeyCache 已在集群中正确配置并同步。
+- 引入版本: v3.3.1
+
+##### file_descriptor_cache_clean_interval
+
+- 默认值：3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：文件描述符缓存清理的间隔，用于清理长期不用的文件描述符。
+- 引入版本：-
+
+##### inc_rowset_expired_sec
+
+- 默认值：1800
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：导入生效的数据，存储引擎保留的时间，用于增量克隆。
+- 引入版本：-
+
+##### load_process_max_memory_hard_limit_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单节点上所有的导入线程占据内存的硬上限（比例）。当 `enable_new_load_on_memory_limit_exceeded` 设置为 `false`，并且所有导入线程的内存占用超过 `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio` 时，系统将会拒绝新的导入线程。
+- 引入版本：v3.3.2
+
+##### load_process_max_memory_limit_percent
+
+- 默认值：30
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：单节点上所有的导入线程占据内存的软上限（百分比）。
+- 引入版本：-
+
+##### lz4_expected_compression_ratio
+
+- 默认值: 2.1
+- 类型: Double
+- 单位: -
+- 是否动态：是
+- 描述: 序列化压缩策略用于判断观察到的 LZ4 压缩是否“良好”的阈值。增大此值会提高期望的压缩比（使条件更难满足），降低则更容易使观察到的压缩被视为令人满意。根据典型数据的可压缩性进行调优。有效范围：MIN=1, MAX=65537。
+- 引入版本: v3.4.1, 3.5.0, 4.0.0
+
+##### lz4_expected_compression_speed_mbps
+
+- 默认值: 600
+- 类型: Double
+- 单位: MB/s
+- 是否动态：是
+- 描述: 自适应压缩策略中用于表示期望 LZ4 压缩吞吐量的值，单位为 MB/s。反馈例程会计算 `reward_ratio = (observed_compression_ratio / lz4_expected_compression_ratio) * (observed_speed / lz4_expected_compression_speed_mbps)`。当 reward_ratio 大于 1.0 时增加正计数器（alpha），否则增加负计数器（beta）；这会影响未来数据是否被压缩。请根据你的硬件上典型的 LZ4 吞吐量调整此值——提高它会使策略更难将一次运行判定为“良好”（需要更高的观测速度），降低则更容易被判定为良好。必须为正的有限数。
+- 引入版本: v3.4.1, 3.5.0, 4.0.0
+
+##### make_snapshot_worker_count
+
+- 默认值：5
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：BE 节点快照任务的最大线程数。
+- 引入版本：-
+
+##### manual_compaction_threads
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：Number of threads for Manual Compaction.
+- 引入版本：-
+
+##### max_base_compaction_num_singleton_deltas
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单次 Base Compaction 合并的最大 Segment 数。
+- 引入版本：-
+
+##### max_compaction_candidate_num
+
+- 默认值：40960
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Compaction 候选 Tablet 的最大数量。太大会导致内存占用和 CPU 负载高。
+- 引入版本：-
+
+##### max_compaction_concurrency
+
+- 默认值：-1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 `-1` 代表没有限制。`0` 表示禁用 Compaction。开启 Event-based Compaction Framework 时，该参数才支持动态设置。
+- 引入版本：-
+
+##### max_cumulative_compaction_num_singleton_deltas
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单次 Cumulative Compaction 能合并的最大 Segment 数。如果 Compaction 时出现内存不足的情况，可以调小该值。
+- 引入版本：-
+
+##### max_download_speed_kbps
+
+- 默认值：50000
+- 类型：Int
+- 单位：KB/Second
+- 是否动态：是
+- 描述：单个 HTTP 请求的最大下载速率。这个值会影响 BE 之间同步数据副本的速度。
+- 引入版本：-
+
+##### max_garbage_sweep_interval
+
+- 默认值：3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
+- 引入版本：-
+
+##### max_percentage_of_error_disk
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：错误磁盘达到该比例上限，BE 退出。
+- 引入版本：-
+
+##### max_queueing_memtable_per_tablet
+
+- 默认值: 2
+- 类型: Long
+- 单位: -
+- 是否动态：是
+- 描述: 控制写路径的每个 Tablet 的反压：当某个 Tablet 的排队（尚未刷写）memtable 数量达到或超过 `max_queueing_memtable_per_tablet` 时，`LocalTabletsChannel` 和 `LakeTabletsChannel` 中的写入者在提交更多写入工作之前会阻塞（sleep/retry）。这可以降低同时进行的 memtable 刷写并减少峰值内存使用，但代价是增加延迟或在高负载下发生 RPC 超时。将此值设高以允许更多并发 memtable（更多内存和 I/O 突发）；设低以限制内存压力并增加写入节流。
+- 引入版本: v3.2.0
+
+##### max_row_source_mask_memory_bytes
+
+- 默认值：209715200
+- 类型：Int
+- 单位：Bytes
+- 是否动态：否
+- 描述：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_memory_limit_per_worker` 参数的值。
+- 引入版本：-
+
+##### max_tablet_write_chunk_bytes
+
+- 默认值: 536870912
+- 类型: long
+- 单位: Bytes
+- 是否动态：是
+- 描述: 当前内存 tablet 写入 chunk 在被视为已满并入队发送之前允许的最大内存（以字节为单位）。增大此值可以在加载宽表（列数多）时减少 RPC 频率，从而提高吞吐量，但代价是更高的内存使用和更大的 RPC 负载。需要调整此值以在减少 RPC 次数与内存及序列化/BRPC 限制之间取得平衡。
+- 引入版本: v3.2.12
+
+##### max_update_compaction_num_singleton_deltas
+
+- 默认值：1000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：主键表单次 Compaction 合并的最大 Rowset 数。
+- 引入版本：-
+
+>>>>>>> e472f37842 ([Doc] Fix Default Value of drop_tablet_worker_count (#68085))
 ##### memory_limitation_per_thread_for_schema_change
 
 - 默认值：2
