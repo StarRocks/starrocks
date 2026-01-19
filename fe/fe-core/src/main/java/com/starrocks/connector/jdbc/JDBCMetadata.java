@@ -155,8 +155,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     public Connection getConnection() throws SQLException {
         Connection connection = dataSource.getConnection();
         try {
-            // Set network timeout only when it's configured (>0)
-            if (Config.jdbc_network_timeout_ms > 0L) {
+            // Set network timeout only when it's configured (>=0)
+            if (Config.jdbc_network_timeout_ms >= 0L) {
                 int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
                 connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
             }

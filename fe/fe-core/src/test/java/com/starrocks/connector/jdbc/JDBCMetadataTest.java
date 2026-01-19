@@ -342,11 +342,11 @@ public class JDBCMetadataTest {
             List<String> result2 = jdbcMetadata2.listDbNames(new ConnectContext());
             Assertions.assertEquals(Lists.newArrayList("test"), result2, "boundary: timeout=MAX_VALUE");
 
-            // Boundary 3: timeout = 0, setNetworkTimeout should NOT be called (code has > 0 check)
-            Config.jdbc_network_timeout_ms = 0;
+            // Boundary 3: timeout = -1, setNetworkTimeout should NOT be called (code has >= 0 check)
+            Config.jdbc_network_timeout_ms = -1;
             new Expectations() {
                 {
-                    // When timeout = 0, setNetworkTimeout should not be called
+                    // When timeout = -1, setNetworkTimeout should not be called
                     connection.setNetworkTimeout((Executor) any, anyInt);
                     maxTimes = 0;  // Fail test if setNetworkTimeout is called
                     connection.getMetaData().getCatalogs();
@@ -357,7 +357,7 @@ public class JDBCMetadataTest {
             dbResult.beforeFirst();
             List<String> result3 = jdbcMetadata3.listDbNames(new ConnectContext());
             Assertions.assertEquals(Lists.newArrayList("test"), result3,
-                    "boundary: timeout=0 (should NOT call setNetworkTimeout)");
+                    "boundary: timeout=-1 (should NOT call setNetworkTimeout)");
 
         } finally {
             Config.jdbc_network_timeout_ms = originalTimeoutMs;
