@@ -429,7 +429,7 @@ public class RuntimeTypeAdapterTypes {
                         .registerSubtype(AlterPolicyLog.PolicyRenameInfo.class, "PolicyRenameInfo")
                         .registerSubtype(AlterPolicyLog.PolicySetBodyInfo.class, "PolicySetBodyInfo")
                         .registerSubtype(AlterPolicyLog.PolicySetCommentInfo.class, "PolicySetCommentInfo");
-        CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(StorageVolumeMgr.class,
+        CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(AlterPolicyLog.AlterPolicyClauseInfo.class,
                 alter_policy_clause_type_runtime_adapter_factory);
 
         final RuntimeTypeAdapterFactory<AnalyzeStatus> ANALYZE_STATUS_RUNTIME_TYPE_ADAPTER_FACTORY =
