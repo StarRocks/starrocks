@@ -147,6 +147,10 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
         return property;
     }
 
+    public Map<String, String> getWarehouseSessionVariable() {
+        return property.getSessionVariables();
+    }
+
     public Map<Long, Cluster> getClusters() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
             ImmutableMap.Builder<Long, Cluster> builder = new ImmutableMap.Builder<>();

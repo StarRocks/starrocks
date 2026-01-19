@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,6 +34,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
@@ -84,6 +86,10 @@ public class DefaultWorkerProviderTest {
             res.put(i, worker);
         }
         return ImmutableMap.copyOf(res);
+    }
+    @BeforeAll
+    public static void setUp() {
+        ExtensionManager.getInstance().loadExtensionsFromClassPath("target/classes");
     }
 
     @Test

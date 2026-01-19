@@ -25,6 +25,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogDeserializer;
 import com.starrocks.persist.OperationType;
@@ -77,6 +78,7 @@ public class WarehouseManagerEPackTest {
                 return RunMode.SHARED_DATA;
             }
         };
+        ExtensionManager.getInstance().loadExtensionsFromClassPath("target/classes");
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -31,9 +32,15 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 public class StmtExecutorTest {
+
+    @BeforeAll
+    public static void setUp() {
+        ExtensionManager.getInstance().loadExtensionsFromClassPath("target/classes");
+    }
 
     @Test
     public void testIsForwardToLeader(@Mocked GlobalStateMgr state) {
