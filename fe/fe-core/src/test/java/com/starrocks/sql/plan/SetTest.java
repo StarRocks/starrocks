@@ -746,4 +746,11 @@ public class SetTest extends PlanTestBase {
                 "  |      [4: TABLE_NAME, VARCHAR, false]\n" +
                 "  |      [17: TABLE_NAME, VARCHAR, true]");
     }
+
+    @Test
+    public void testUnionStringType() throws Exception {
+        String sql = "select 'a' union all select ta from tall;";
+        ExecPlan plan = getExecPlan(sql);
+        assertContains("varchar", plan.getOutputColumns().get(0).getType().toSql());
+    }
 }
