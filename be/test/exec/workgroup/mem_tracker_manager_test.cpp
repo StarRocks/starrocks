@@ -25,7 +25,7 @@ PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_default_mem_pool) {
     const auto work_group{std::make_shared<WorkGroup>("default_wg", 123, WorkGroup::DEFAULT_VERSION, 1, 0.5, 0, 0.9,
                                                       WorkGroupType::WG_DEFAULT, WorkGroup::DEFAULT_MEM_POOL)};
 
-    const auto tracker{manager.get_parent_mem_tracker(work_group)};
+    const auto tracker{manager.register_workgroup(work_group)};
     ASSERT_EQ(tracker, GlobalEnv::GetInstance()->query_pool_mem_tracker_shared());
 }
 
@@ -38,8 +38,12 @@ PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_custom_mem_pool) {
     const auto work_group3{std::make_shared<WorkGroup>("wg_2", 134, WorkGroup::DEFAULT_VERSION, 1, 0.5, 0, 0.9,
                                                        WorkGroupType::WG_DEFAULT, "other_pool")};
 
-    ASSERT_EQ(manager.get_parent_mem_tracker(work_group1), manager.get_parent_mem_tracker(work_group2));
-    ASSERT_NE(manager.get_parent_mem_tracker(work_group1), manager.get_parent_mem_tracker(work_group3));
+    const MemTrackerPtr parent_workgroup_1 = manager.register_workgroup(work_group1);
+    const MemTrackerPtr parent_workgroup_2 = manager.register_workgroup(work_group2);
+    const MemTrackerPtr parent_workgroup_3 = manager.register_workgroup(work_group3);
+
+    ASSERT_EQ(parent_workgroup_1, parent_workgroup_2);
+    ASSERT_NE(parent_workgroup_1, parent_workgroup_3);
 }
 PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_custom_mem_pool_overwrite) {
     MemTrackerManager manager;
@@ -48,6 +52,9 @@ PARALLEL_TEST(MemTrackerMangerTest, test_mem_tracker_for_custom_mem_pool_overwri
     const auto work_group2{std::make_shared<WorkGroup>("wg_2", 134, WorkGroup::DEFAULT_VERSION, 1, 0.7, 0, 0.9,
                                                        WorkGroupType::WG_DEFAULT, "test_pool")};
 
-    ASSERT_NE(manager.get_parent_mem_tracker(work_group1), manager.get_parent_mem_tracker(work_group2));
+    const MemTrackerPtr parent_workgroup1 = manager.register_workgroup(work_group1);
+    const MemTrackerPtr parent_workgroup2 = manager.register_workgroup(work_group2);
+
+    ASSERT_NE(parent_workgroup1, parent_workgroup2);
 }
 } // namespace starrocks::workgroup

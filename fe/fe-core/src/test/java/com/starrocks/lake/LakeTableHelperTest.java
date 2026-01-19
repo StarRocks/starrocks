@@ -132,7 +132,7 @@ public class LakeTableHelperTest {
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
         subPartitions.forEach(physicalPartition -> {
             MaterializedIndex materializedIndex =
-                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
             materializedIndex.setShardGroupId(groupIdToClear);
         });
 
@@ -183,16 +183,16 @@ public class LakeTableHelperTest {
             index.addTablet(tablet, tabletMeta);
         }
         table.addPartition(partition);
-        table.setIndexMeta(index.getId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
+        table.setIndexMeta(index.getMetaId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
                 keysType);
-        List<Column> newIndexSchema = table.getSchemaByIndexMetaId(indexId);
+        List<Column> newIndexSchema = table.getSchemaByIndexMetaId(index.getMetaId());
         List<Column> baseSchema = table.getBaseSchema();
 
         {
             // reset column unique id to invalid value
             c0.setUniqueId(-1);
             c1.setUniqueId(0);
-            Assertions.assertEquals(2, table.getIndexIdToSchema().size());
+            Assertions.assertEquals(2, table.getIndexMetaIdToSchema().size());
 
             // base schema is fine
             Assertions.assertFalse(LakeTableHelper.restoreColumnUniqueId(baseSchema));

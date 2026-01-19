@@ -277,9 +277,9 @@ public class OlapTableFactory implements AbstractTableFactory {
         try {
             table.setComment(stmt.getComment());
 
-            // set base index id
-            long baseIndexId = metastore.getNextId();
-            table.setBaseIndexMetaId(baseIndexId);
+            // set base index meta id
+            long baseIndexMetaId = metastore.getNextId();
+            table.setBaseIndexMetaId(baseIndexMetaId);
 
             // get use light schema change
             try {
@@ -410,6 +410,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Only default compaction strategy is allowed for non-pk table.");
                 }
                 table.setCompactionStrategy(compactionStrategy);
+
+                // analyze lake_compaction_max_parallel property
+                try {
+                    int lakeCompactionMaxParallel = PropertyAnalyzer.analyzeLakeCompactionMaxParallel(properties);
+                    table.setLakeCompactionMaxParallel(lakeCompactionMaxParallel);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
             }
 
             try {
@@ -670,18 +678,18 @@ public class OlapTableFactory implements AbstractTableFactory {
             int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
             if (stmt.getOrderByElements() != null) {
-                table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                table.setIndexMeta(baseIndexMetaId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes,
                         sortKeyUniqueIds);
             } else {
-                table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                table.setIndexMeta(baseIndexMetaId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
             }
 
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
                 AddRollupClause addRollupClause = (AddRollupClause) alterClause;
 
-                Long baseRollupIndex = table.getIndexMetaIdByName(tableName);
+                Long baseRollupIndexMetaId = table.getIndexMetaIdByName(tableName);
 
                 // get storage type for rollup index
                 TStorageType rollupIndexStorageType = null;
@@ -693,12 +701,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 Preconditions.checkNotNull(rollupIndexStorageType);
                 // set rollup index meta to olap table
                 List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
-                        table, baseRollupIndex);
+                        table, baseRollupIndexMetaId);
                 short rollupShortKeyColumnCount =
                         GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, addRollupClause.getProperties());
                 int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
-                long rollupIndexId = metastore.getNextId();
-                table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
+                long rollupIndexMetaId = metastore.getNextId();
+                table.setIndexMeta(rollupIndexMetaId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                         rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
             }
 

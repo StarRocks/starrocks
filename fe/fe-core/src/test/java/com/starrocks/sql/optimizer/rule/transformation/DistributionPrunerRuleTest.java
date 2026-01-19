@@ -25,11 +25,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.planner.PartitionColumnFilter;
+import com.starrocks.planner.RangeDistributionPruner;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
@@ -43,6 +45,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
@@ -172,7 +176,7 @@ public class DistributionPrunerRuleTest {
                 partition.getSubPartitions();
                 result = Arrays.asList(physicalPartition);
 
-                physicalPartition.getIndex(anyLong);
+                physicalPartition.getLatestIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();
@@ -204,5 +208,96 @@ public class DistributionPrunerRuleTest {
                 .setSelectedTabletId(Lists.newArrayList(1L, 2L, 3L))
                 .build();
         assertEquals(3, newScanOperator.getSelectedTabletId().size());
+    }
+
+    @Test
+    public void transformRangeDistribution(@Mocked OlapTable olapTable, @Mocked Partition partition,
+                                           @Mocked PhysicalPartition physicalPartition,
+                                           @Mocked MaterializedIndex index,
+                                           @Mocked DistributionInfo distributionInfo) {
+        List<Long> tabletIds = Lists.newArrayList(1L, 2L, 3L);
+
+        final List<Column> columns = Lists.newArrayList(
+                new Column("dealDate", DateType.DATE, false));
+
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : columns) {
+            idToColumn.put(column.getColumnId(), column);
+        }
+
+        // Simple filter on range distribution column
+        PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
+        dealDateFilter.setLowerBound(new StringLiteral("2019-08-22"), true);
+        dealDateFilter.setUpperBound(new StringLiteral("2019-08-22"), true);
+
+        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
+        filters.put("dealDate", dealDateFilter);
+
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", DateType.DATE, false);
+        scanColumnMap.put(column1, new Column("dealDate", DateType.DATE, false));
+
+        BinaryPredicateOperator binaryPredicateOperator1 =
+                new BinaryPredicateOperator(BinaryType.GE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
+        BinaryPredicateOperator binaryPredicateOperator2 =
+                new BinaryPredicateOperator(BinaryType.LE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
+
+        ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
+
+        LogicalOlapScanOperator operator =
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
+                        1, Lists.newArrayList(1L), null, false, Lists.newArrayList(), Lists.newArrayList(), null,
+                        false);
+        operator.setPredicate(predicate);
+
+        // Mock RangeDistributionPruner to ensure RANGE branch in OptDistributionPruner is exercised
+        new MockUp<RangeDistributionPruner>() {
+            @Mock
+            public java.util.Collection<Long> prune() {
+                return tabletIds;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeDistributionColumns(OlapTable olapTable) {
+                return columns;
+            }
+        };
+
+        new Expectations() {
+            {
+                olapTable.getPartition(anyLong);
+                result = partition;
+
+                olapTable.getIdToColumn();
+                result = idToColumn;
+
+                partition.getSubPartitions();
+                result = Arrays.asList(physicalPartition);
+
+                physicalPartition.getLatestIndex(anyLong);
+                result = index;
+
+                partition.getDistributionInfo();
+                result = distributionInfo;
+
+                distributionInfo.getType();
+                result = DistributionInfo.DistributionInfoType.RANGE;
+            }
+        };
+
+        DistributionPruneRule rule = new DistributionPruneRule();
+
+        assertEquals(0, operator.getSelectedTabletId().size());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(new ColumnRefFactory()))
+                        .get(0);
+
+        assertEquals(tabletIds, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId());
     }
 }

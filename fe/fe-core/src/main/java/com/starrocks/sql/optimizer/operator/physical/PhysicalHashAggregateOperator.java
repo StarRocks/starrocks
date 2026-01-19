@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -65,6 +66,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // Only set when partial topN is pushed above local aggregation. In this case streaming aggregation has to be
     // forced to pre-aggregate because the data has to be fully reduced before evaluating the topN.
     private boolean topNLocalAgg;
+    // Only set when partial topN is pushed above local aggregation.
+    private LogicalTopNOperator.TopNSortInfo topNSortInfo;
 
     private boolean useSortAgg = false;
 
@@ -112,6 +115,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                 aggregateOperator.getProjection());
         this.mergedLocalAgg = aggregateOperator.mergedLocalAgg;
         this.topNLocalAgg = aggregateOperator.topNLocalAgg;
+        this.topNSortInfo = aggregateOperator.topNSortInfo;
         this.useSortAgg = aggregateOperator.useSortAgg;
         this.usePerBucketOptmize = aggregateOperator.usePerBucketOptmize;
         this.withoutColocateRequirement = aggregateOperator.withoutColocateRequirement;
@@ -161,6 +165,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public void setTopNLocalAgg(boolean topNLocalAgg) {
         this.topNLocalAgg = topNLocalAgg;
+    }
+
+    public LogicalTopNOperator.TopNSortInfo getTopNSortInfo() {
+        return topNSortInfo;
+    }
+
+    public void setTopNSortInfo(LogicalTopNOperator.TopNSortInfo topNSortInfo) {
+        this.topNSortInfo = topNSortInfo;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {

@@ -96,6 +96,9 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.BatchRemoveBasicStatsMetaLog;
+import com.starrocks.statistic.BatchRemoveHistogramStatsMetaLog;
+import com.starrocks.statistic.BatchRemoveMultiColumnStatsMetaLog;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
@@ -185,7 +188,7 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_DB_V2: {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.data();
-                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbInfo);
+                    globalStateMgr.getLocalMetastore().replayAlterDatabase(dbInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {
@@ -356,7 +359,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.data();
-                    globalStateMgr.getAlterJobMgr().alterView(info, true);
+                    globalStateMgr.getAlterJobMgr().replayAlterView(info);
                     break;
                 }
                 case OperationType.OP_SET_VIEW_SECURITY_LOG: {
@@ -392,7 +395,7 @@ public class EditLog {
                 }
                 case OperationType.OP_BATCH_DROP_ROLLUP: {
                     BatchDropInfo batchDropInfo = (BatchDropInfo) journal.data();
-                    for (long indexId : batchDropInfo.getIndexIdSet()) {
+                    for (long indexId : batchDropInfo.getIndexMetaIdSet()) {
                         globalStateMgr.getRollupHandler().replayDropRollup(
                                 new DropInfo(batchDropInfo.getDbId(), batchDropInfo.getTableId(), indexId, false),
                                 globalStateMgr);
@@ -546,17 +549,18 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_REPOSITORY_V2: {
                     Repository repository = (Repository) journal.data();
-                    globalStateMgr.getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repository, true);
+                    globalStateMgr.getBackupHandler().getRepoMgr().replayAddRepo(repository);
                     break;
                 }
                 case OperationType.OP_DROP_REPOSITORY: {
                     String repoName = ((Text) journal.data()).toString();
-                    globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(repoName, true);
+                    globalStateMgr.getBackupHandler().getRepoMgr().replayRemoveRepo(repoName);
                     break;
                 }
                 case OperationType.OP_DROP_REPOSITORY_V2: {
                     DropRepositoryLog dropRepositoryLog = (DropRepositoryLog) journal.data();
-                    globalStateMgr.getBackupHandler().getRepoMgr().removeRepo(dropRepositoryLog.getRepositoryName(), true);
+                    globalStateMgr.getBackupHandler().getRepoMgr()
+                            .replayRemoveRepo(dropRepositoryLog.getRepositoryName());
                     break;
                 }
                 case OperationType.OP_TRUNCATE_TABLE: {
@@ -894,6 +898,19 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_REMOVE_BASIC_STATS_META_BATCH: {
+                    BatchRemoveBasicStatsMetaLog log = (BatchRemoveBasicStatsMetaLog) journal.data();
+                    if (log.getMetas() != null) {
+                        for (BasicStatsMeta basicStatsMeta : log.getMetas()) {
+                            globalStateMgr.getAnalyzeMgr().replayRemoveBasicStatsMeta(basicStatsMeta);
+                            if (!GlobalStateMgr.isCheckpointThread()) {
+                                globalStateMgr.getAnalyzeMgr().expireTableAndColumnStatistics(basicStatsMeta.getDbId(),
+                                        basicStatsMeta.getTableId(), basicStatsMeta.getColumns());
+                            }
+                        }
+                    }
+                    break;
+                }
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddHistogramStatsMeta(histogramStatsMeta);
@@ -916,6 +933,19 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH: {
+                    BatchRemoveHistogramStatsMetaLog log = (BatchRemoveHistogramStatsMetaLog) journal.data();
+                    if (log.getMetas() != null) {
+                        for (HistogramStatsMeta histogramStatsMeta : log.getMetas()) {
+                            globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                            if (!GlobalStateMgr.isCheckpointThread()) {
+                                globalStateMgr.getStatisticStorage().expireHistogramStatistics(
+                                        histogramStatsMeta.getTableId(), Lists.newArrayList(histogramStatsMeta.getColumn()));
+                            }
+                        }
+                    }
+                    break;
+                }
                 case OperationType.OP_ADD_MULTI_COLUMN_STATS_META: {
                     MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddMultiColumnStatsMeta(multiColumnStatsMeta);
@@ -930,6 +960,19 @@ public class EditLog {
                     globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
                         globalStateMgr.getStatisticStorage().expireMultiColumnStatistics(multiColumnStatsMeta.getTableId());
+                    }
+                    break;
+                }
+                case OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH: {
+                    BatchRemoveMultiColumnStatsMetaLog log = (BatchRemoveMultiColumnStatsMetaLog) journal.data();
+                    if (log.getMetas() != null) {
+                        for (MultiColumnStatsMeta multiColumnStatsMeta : log.getMetas()) {
+                            globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
+                            if (!GlobalStateMgr.isCheckpointThread()) {
+                                globalStateMgr.getStatisticStorage()
+                                        .expireMultiColumnStatistics(multiColumnStatsMeta.getTableId());
+                            }
+                        }
                     }
                     break;
                 }
@@ -1446,8 +1489,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_SAVE_NEXTID_V2, new NextIdLog(nextId), walApplier);
     }
 
-    public void logSaveTransactionId(long transactionId) {
-        logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
+    public void logSaveTransactionId(long transactionId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId), walApplier);
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info, WALApplier walApplier) {
@@ -1468,16 +1511,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_DB, dropDbInfo);
     }
 
-    public void logEraseDb(long dbId) {
-        logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId));
+    public void logEraseDb(long dbId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId), walApplier);
     }
 
     public void logRecoverDb(RecoverInfo info) {
         logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
     }
 
-    public void logAlterDb(DatabaseInfo dbInfo) {
-        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
+    public void logAlterDb(DatabaseInfo dbInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo, walApplier);
     }
 
     public void logCreateTable(CreateTableInfo info) {
@@ -1528,24 +1571,20 @@ public class EditLog {
         logJsonObject(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
     }
 
-    public void logDropPartition(DropPartitionInfo info) {
-        logJsonObject(OperationType.OP_DROP_PARTITION, info);
+    public void logDropPartitions(DropPartitionsInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_PARTITIONS, info, walApplier);
     }
 
-    public void logDropPartitions(DropPartitionsInfo info) {
-        logJsonObject(OperationType.OP_DROP_PARTITIONS, info);
+    public void logErasePartition(long partitionId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId), walApplier);
     }
 
-    public void logErasePartition(long partitionId) {
-        logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId));
+    public void logRecoverPartition(RecoverInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info, walApplier);
     }
 
-    public void logRecoverPartition(RecoverInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
-    }
-
-    public void logModifyPartition(ModifyPartitionInfo info) {
-        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
+    public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
@@ -1556,20 +1595,20 @@ public class EditLog {
         logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
     }
 
-    public void logDisablePartitionRecovery(long partitionId) {
-        logJsonObject(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
+    public void logDisablePartitionRecovery(long partitionId, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId), walApplier);
     }
 
-    public void logDisableTableRecovery(List<Long> tableIds) {
-        logJsonObject(OperationType.OP_DISABLE_TABLE_RECOVERY, new DisableTableRecoveryInfo(tableIds));
+    public void logDisableTableRecovery(List<Long> tableIds, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DISABLE_TABLE_RECOVERY, new DisableTableRecoveryInfo(tableIds), walApplier);
     }
 
-    public void logEraseMultiTables(List<Long> tableIds) {
-        logJsonObject(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds));
+    public void logEraseMultiTables(List<Long> tableIds, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_MULTI_TABLES, new MultiEraseTableInfo(tableIds), walApplier);
     }
 
-    public void logRecoverTable(RecoverInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
+    public void logRecoverTable(RecoverInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info, walApplier);
     }
 
     public void logDropRollup(DropInfo info) {
@@ -1621,8 +1660,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, info, applier);
     }
 
-    public void logFinishMultiDelete(MultiDeleteInfo info) {
-        logJsonObject(OperationType.OP_FINISH_MULTI_DELETE, info);
+    public void logFinishMultiDelete(MultiDeleteInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_FINISH_MULTI_DELETE, info, walApplier);
     }
 
     public void logAddReplica(ReplicaPersistInfo info) {
@@ -1633,12 +1672,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
     }
 
-    public void logDeleteReplica(ReplicaPersistInfo info) {
-        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
+    public void logDeleteReplica(ReplicaPersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info, walApplier);
     }
 
-    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-        logJsonObject(OperationType.OP_BATCH_DELETE_REPLICA, info);
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BATCH_DELETE_REPLICA, info, walApplier);
     }
 
     public void logAddKey(EncryptionKeyPB key, WALApplier walApplier) {
@@ -1661,24 +1700,24 @@ public class EditLog {
         logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, info, applier);
     }
 
-    public void logDatabaseRename(DatabaseInfo databaseInfo) {
-        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
+    public void logDatabaseRename(DatabaseInfo databaseInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo, walApplier);
     }
 
-    public void logTableRename(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
+    public void logTableRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo, walApplier);
     }
 
-    public void logModifyViewDef(AlterViewInfo alterViewInfo) {
-        logJsonObject(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo);
+    public void logModifyViewDef(AlterViewInfo alterViewInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_VIEW_DEF, alterViewInfo, walApplier);
     }
 
-    public void logRollupRename(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
+    public void logRollupRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo, walApplier);
     }
 
-    public void logPartitionRename(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
+    public void logPartitionRename(TableInfo tableInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo, walApplier);
     }
 
     public void logAddBroker(ModifyBrokerInfo info, WALApplier applier) {
@@ -1714,20 +1753,20 @@ public class EditLog {
         logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
     }
 
-    public void logCreateRepository(Repository repo) {
-        logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo);
+    public void logCreateRepository(Repository repo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo, walApplier);
     }
 
-    public void logDropRepository(String repoName) {
-        logJsonObject(OperationType.OP_DROP_REPOSITORY_V2, new DropRepositoryLog(repoName));
+    public void logDropRepository(String repoName, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_REPOSITORY_V2, new DropRepositoryLog(repoName), walApplier);
     }
 
     public void logRestoreJob(RestoreJob job) {
         logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
     }
 
-    public void logTruncateTable(TruncateTableInfo info) {
-        logJsonObject(OperationType.OP_TRUNCATE_TABLE, info);
+    public void logTruncateTable(TruncateTableInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_TRUNCATE_TABLE, info, walApplier);
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
@@ -1770,8 +1809,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_SET_HAS_DELETE, info, walApplier);
     }
 
-    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
-        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
+    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo, walApplier);
     }
 
     public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob, WALApplier walApplier) {
@@ -1839,10 +1878,6 @@ public class EditLog {
         logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
     }
 
-    public void logModifyDistributionType(TableInfo tableInfo) {
-        logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
-    }
-
     public void logDynamicPartition(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DYNAMIC_PARTITION, info, walApplier);
     }
@@ -1903,12 +1938,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_UNINSTALL_PLUGIN, log, walApplier);
     }
 
-    public void logSetReplicaStatus(SetReplicaStatusOperationLog log) {
-        logJsonObject(OperationType.OP_SET_REPLICA_STATUS, log);
+    public void logSetReplicaStatus(SetReplicaStatusOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SET_REPLICA_STATUS, log, walApplier);
     }
 
-    public void logRemoveExpiredAlterJobV2(RemoveAlterJobV2OperationLog log) {
-        logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log);
+    public void logRemoveExpiredAlterJobV2(RemoveAlterJobV2OperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
     }
 
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
@@ -1967,6 +2002,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META, meta, walApplier);
     }
 
+    public void logRemoveBasicStatsMetaBatch(List<BasicStatsMeta> metas, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, new BatchRemoveBasicStatsMetaLog(metas), walApplier);
+    }
+
     public void logAddHistogramStatsMeta(HistogramStatsMeta meta, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta, walApplier);
     }
@@ -1975,12 +2014,22 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
+    public void logRemoveHistogramStatsMetaBatch(List<HistogramStatsMeta> metas, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH,
+                new BatchRemoveHistogramStatsMetaLog(metas), walApplier);
+    }
+
     public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta, walApplier);
     }
 
     public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta, WALApplier walApplier) {
         logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta, walApplier);
+    }
+
+    public void logRemoveMultiColumnStatsMetaBatch(List<MultiColumnStatsMeta> metas, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH,
+                new BatchRemoveMultiColumnStatsMetaLog(metas), walApplier);
     }
 
     public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
@@ -1999,12 +2048,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, meta, walApplier);
     }
 
-    public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
-        logJsonObject(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    public void logModifyTableColumn(ModifyTableColumnOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log, walApplier);
     }
 
-    public void logModifyColumnComment(ModifyColumnCommentLog log) {
-        logJsonObject(OperationType.OP_MODIFY_COLUMN_COMMENT, log);
+    public void logModifyColumnComment(ModifyColumnCommentLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_COLUMN_COMMENT, log, walApplier);
     }
 
     public void logCreateCatalog(Catalog log, WALApplier walApplier) {
@@ -2035,8 +2084,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
     }
 
-    public void logMvRename(RenameMaterializedViewLog log) {
-        logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
+    public void logMvRename(RenameMaterializedViewLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log, walApplier);
     }
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
@@ -2123,8 +2172,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log, walApplier);
     }
 
-    public void logMVJobState(MVMaintenanceJob job) {
-        logJsonObject(OperationType.OP_MV_JOB_STATE, job);
+    public void logMVJobState(MVMaintenanceJob job, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MV_JOB_STATE, job, walApplier);
     }
 
     public void logMVEpochChange(MVEpoch epoch) {
@@ -2181,8 +2230,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
-    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
-        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo, walApplier);
     }
 
     public void logCreateDictionary(Dictionary info, WALApplier walApplier) {
@@ -2209,8 +2258,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_DISABLE_DISK, info, applier);
     }
 
-    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_VERSION, info, walApplier);
     }
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info) {

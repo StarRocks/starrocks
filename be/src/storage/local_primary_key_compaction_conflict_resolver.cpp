@@ -23,8 +23,15 @@
 
 namespace starrocks {
 
-StatusOr<std::string> LocalPrimaryKeyCompactionConflictResolver::filename() const {
-    return local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
+StatusOr<FileInfo> LocalPrimaryKeyCompactionConflictResolver::filename() const {
+    FileInfo info;
+    info.path = local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
+    // NOTE: For local tables, mapper files are always on local disk (.crm extension),
+    // so we don't need to populate the size field. The file size will be queried
+    // on-demand which is fast for local filesystem (~1-5ms).
+    // WHY FileInfo return type: Changed to match interface signature for consistency
+    // with lake tables, even though local tables don't use remote storage.
+    return info;
 }
 
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {

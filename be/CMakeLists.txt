@@ -793,6 +793,7 @@ install(FILES
     ${BASE_DIR}/../conf/udf_security.policy
     ${BASE_DIR}/../conf/core-site.xml
     ${BASE_DIR}/../conf/asan_suppressions.conf
+    ${BASE_DIR}/../conf/type_checker_config.xml
     DESTINATION ${OUTPUT_DIR}/conf)
 
 install(DIRECTORY

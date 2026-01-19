@@ -20,12 +20,32 @@
 #include "work_group_fwd.h"
 
 namespace starrocks::workgroup {
+
+using MemTrackerPtr = std::shared_ptr<MemTracker>;
+
+struct MemTrackerInfo {
+    MemTrackerPtr tracker;
+    uint32_t child_count;
+};
+
 struct MemTrackerManager {
 public:
-    using MemTrackerPtr = std::shared_ptr<MemTracker>;
-    MemTrackerPtr get_parent_mem_tracker(const WorkGroupPtr& wg);
+    std::vector<std::string> list_mem_trackers() const;
+    /**
+    * Constructs and returns a shared_mem_tracker for the workgroup if one does not already exist.
+    * Otherwise, returns the existing instance and increments the number of tracked workgroups by one.
+    * This method must be called whenever a new workgroup is constructed.
+    */
+    [[nodiscard]] MemTrackerPtr register_workgroup(const WorkGroupPtr& wg);
+
+    /**
+    * Decrements the number of tracked workgroups of the given memory pool by one.
+    * If all its tracked children are deregistered, the memory pool entry will be erased.
+    * This method must be called whenever an existing workgroup is destructed.
+    */
+    void deregister_workgroup(const std::string& mem_pool);
 
 private:
-    std::unordered_map<std::string, MemTrackerPtr> _shared_mem_trackers{};
+    std::unordered_map<std::string, MemTrackerInfo> _shared_mem_trackers{};
 };
 } // namespace starrocks::workgroup

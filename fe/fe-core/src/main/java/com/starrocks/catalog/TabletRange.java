@@ -36,6 +36,11 @@ public class TabletRange {
         return this.range;
     }
 
+    @Override
+    public String toString() {
+        return range.toString();
+    }
+
     public static TabletRange fromThrift(TTabletRange tTabletRange) {
         return new TabletRange(
                 Range.of(Tuple.fromThrift(tTabletRange.lower_bound), Tuple.fromThrift(tTabletRange.upper_bound),

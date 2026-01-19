@@ -401,10 +401,12 @@ public class SparkLoadJobTest {
                 table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
-                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
+                result = indexId;
+                index.getMetaId();
                 result = indexId;
                 index.getTablets();
                 result = Lists.newArrayList(tablet);
@@ -448,9 +450,9 @@ public class SparkLoadJobTest {
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
         Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
-        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Map<Long, Integer> indexMetaIdToSchemaHash = Deencapsulation.getField(job, "indexMetaIdToSchemaHash");
+        Assertions.assertTrue(indexMetaIdToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexMetaIdToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(replicaId, tabletId, backendId);
@@ -504,10 +506,12 @@ public class SparkLoadJobTest {
                 table.getSchemaByIndexMetaId(Long.valueOf(12));
                 result = Lists.newArrayList(new Column("k1", VarcharType.VARCHAR));
 
-                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
 
                 index.getId();
+                result = indexId;
+                index.getMetaId();
                 result = indexId;
 
                 index.getTablets();
@@ -543,9 +547,9 @@ public class SparkLoadJobTest {
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assertions.assertTrue(tableToLoadPartitions.containsKey(tableId));
         Assertions.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
-        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
-        Assertions.assertTrue(indexToSchemaHash.containsKey(indexId));
-        Assertions.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+        Map<Long, Integer> indexMetaIdToSchemaHash = Deencapsulation.getField(job, "indexMetaIdToSchemaHash");
+        Assertions.assertTrue(indexMetaIdToSchemaHash.containsKey(indexId));
+        Assertions.assertEquals(schemaHash, (long) indexMetaIdToSchemaHash.get(indexId));
 
         // finish push task
         job.addFinishedReplica(tableId, tabletId, backendId);

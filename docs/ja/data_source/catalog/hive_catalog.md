@@ -38,7 +38,9 @@ Hive クラスターでの SQL ワークロードを成功させるためには�
   - Parquet および ORC ファイルは、以下の圧縮形式をサポートしています：NO_COMPRESSION、SNAPPY、LZ4、ZSTD、GZIP。
   - Textfile ファイルは、NO_COMPRESSION 圧縮形式をサポートしています。
 
-  Hive テーブルへのデータのシンクに使用する圧縮アルゴリズムを指定するために、セッション変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用できます。
+  テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに使用する圧縮アルゴリズムを指定できます。
+
+  Hive テーブルへの書き込み時、テーブルのプロパティに圧縮コーデックが含まれている場合、StarRocks は書き込みデータの圧縮にそのアルゴリズムを優先的に使用します。そうでない場合、システム変数 `connector_sink_compression_codec` で設定された圧縮アルゴリズムが使用されます。
 
 ## 統合準備
 
@@ -1021,7 +1023,7 @@ PARTITION BY (par_col1[, par_col2...])
 | ----------------- | ------------------------------------------------------------ |
 | location          | 管理テーブルを作成したいファイルパスです。HMS をメタストアとして使用する場合、`location` パラメータを指定する必要はありません。StarRocks は現在の Hive catalog のデフォルトファイルパスにテーブルを作成します。AWS Glue をメタデータサービスとして使用する場合：<ul><li>テーブルを作成したいデータベースに対して `location` パラメータを指定した場合、テーブルに対して `location` パラメータを指定する必要はありません。このように、テーブルは所属するデータベースのファイルパスにデフォルト設定されます。</li><li>テーブルを作成したいデータベースに対して `location` を指定していない場合、テーブルに対して `location` パラメータを指定する必要があります。</li></ul> |
 | file_format       | 管理テーブルのファイル形式です。サポートされているファイル形式は Parquet、ORC、Textfile です。ORC および Textfile 形式は v3.3 以降でサポートされています。 有効な値：`parquet`、`orc`、`textfile`。 デフォルト値：`parquet`。 |
-| compression_codec | 管理テーブルに使用される圧縮アルゴリズムです。このプロパティは v3.2.3 で非推奨となり、そのバージョン以降、Hive テーブルへのデータのシンクに使用される圧縮アルゴリズムはセッション変数 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) によって一元的に制御されます。 |
+| compression_codec | 管理テーブルに使用される圧縮アルゴリズムです。                       |
 
 ### 例
 
@@ -1068,7 +1070,7 @@ StarRocks の内部テーブルと同様に、Hive テーブル（管理テー�
 :::note
 
 - [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
-- Hive テーブルへのデータのシンクに使用する圧縮アルゴリズムを指定するために、セッション変数 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) を使用できます。
+- テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md# connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに適用する圧縮アルゴリズムを指定できます。StarRocks はテーブルプロパティで指定された圧縮コーデックを優先的に使用します。
 
 :::
 
@@ -1153,6 +1155,56 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## Hive テーブルの Truncate
+
+[TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) ステートメントを使用して、Hive マネージドテーブルからすべてのデータを迅速に削除できます。この操作は以下をサポートしています：
+
+- 非パーティションテーブルのすべてのデータを削除
+- パーティションテーブルのすべてのパーティションを削除
+- パーティションテーブルの特定のパーティションを削除
+
+### 構文
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### パラメータ
+
+- `table_name`: データを削除する Hive テーブルの名前。データベース内のテーブルを削除する前に、[Hive カタログとデータベースに切り替える](#hive-catalog-とデータベースに切り替える)必要があります。
+- `partition_name = partition_value`: どのパーティションを削除するかを識別するための、パーティション列の名前と値。
+
+### 使用例
+
+Hive カタログとデータベースに切り替えた後、データベース内の Hive テーブルを以下のステートメントで truncate できます。
+
+1. 非パーティションテーブルを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. パーティションテーブルのすべてのパーティションを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. 単一パーティションテーブルの特定パーティションを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. 複数パーティションテーブルの特定パーティションを truncate:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
    ```
 
 ## Hive テーブルの削除

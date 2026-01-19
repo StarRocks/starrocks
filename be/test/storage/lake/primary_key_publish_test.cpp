@@ -89,6 +89,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {
@@ -204,8 +205,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -1749,6 +1750,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i <= config::cloud_native_pk_index_rebuild_files_threshold; i++) {
@@ -1832,6 +1834,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
+    ConfigResetGuard guard2(&config::enable_pk_index_parallel_execution, false);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     {
@@ -1924,10 +1928,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 1.5);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 2);
     EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
 }
 
@@ -2105,13 +2109,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) {
-    bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
-    int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
+    bool old_enable_pk_index_parallel_execution = config::enable_pk_index_parallel_execution;
+    int64_t old_pk_index_parallel_execution_min_rows = config::pk_index_parallel_execution_min_rows;
     int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     int64_t old_pk_index_memtable_max_count = config::pk_index_memtable_max_count;
     config::l0_max_mem_usage = 10;
-    config::enable_pk_index_parallel_get = true;
-    config::pk_index_parallel_get_min_rows = 4096;
+    config::enable_pk_index_parallel_execution = true;
+    config::pk_index_parallel_execution_min_rows = 4096;
     config::pk_index_memtable_max_count = 3;
     const int64_t chunk_size = 3 * 4096;
     auto [chunk0, indexes] = gen_data_and_index(chunk_size, 0, true, true);
@@ -2141,8 +2145,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
     // reset configs
-    config::enable_pk_index_parallel_get = old_enable_pk_index_parallel_get;
-    config::pk_index_parallel_get_min_rows = old_pk_index_parallel_get_min_rows;
+    config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;
+    config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
 }

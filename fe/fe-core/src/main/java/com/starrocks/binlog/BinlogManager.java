@@ -125,7 +125,7 @@ public class BinlogManager {
                 tableIdToBinlogVersion.put(table.getId(), table.getBinlogVersion());
                 if (!tableIdToReplicaCount.containsKey(table.getId())) {
                     long totalReplicaCount = table.getAllPhysicalPartitions().stream().
-                            map(partition -> partition.getBaseIndex().getReplicaCount()).
+                            map(partition -> partition.getLatestBaseIndex().getReplicaCount()).
                             reduce(0L, (acc, n) -> acc + n);
                     tableIdToReplicaCount.put(table.getId(), totalReplicaCount);
                 }
@@ -146,7 +146,7 @@ public class BinlogManager {
                 try {
                     // check again if all replicas have been reported
                     long totalReplicaCount = table.getAllPhysicalPartitions().stream().
-                            map(partition -> partition.getBaseIndex().getReplicaCount()).
+                            map(partition -> partition.getLatestBaseIndex().getReplicaCount()).
                             reduce(0L, (acc, n) -> acc + n);
 
                     if (totalReplicaCount != tableIdToReplicaCount.get(table.getId())) {

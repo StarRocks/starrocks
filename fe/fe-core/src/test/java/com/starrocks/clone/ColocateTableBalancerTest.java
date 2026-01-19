@@ -123,6 +123,12 @@ public class ColocateTableBalancerTest {
                 // the interval is 0, so skip log printing to prevent too many logs
             }
         };
+        new MockUp<TabletChecker>() {
+            @Mock
+            protected void runAfterCatalogReady() {
+                System.out.println("Mocked TabletChecker.runAfterCatalogReady() called");
+            }
+        };
 
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().getAlterJobMgr().stop();
@@ -197,7 +203,7 @@ public class ColocateTableBalancerTest {
         Partition partition = table.getPartition("tbl");
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
         Assertions.assertFalse(physicalPartition.isTabletBalanced());
-        MaterializedIndex index = physicalPartition.getBaseIndex();
+        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
         BalanceStat balanceStat = index.getBalanceStat();
         Assertions.assertFalse(balanceStat.isBalanced());
         Assertions.assertEquals(BalanceType.COLOCATION_GROUP, balanceStat.getBalanceType());
@@ -222,7 +228,8 @@ public class ColocateTableBalancerTest {
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tbl3");
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
-        LocalTablet tablet = (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0);
+        LocalTablet tablet =
+                (LocalTablet) partitions.get(0).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
         long oldVal = Config.tablet_sched_repair_delay_factor_second;
         try {

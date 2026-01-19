@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <climits>
+
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
@@ -228,6 +230,10 @@ public:
             RETURN_IF_ERROR(
                     check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
         }
+        if (log.has_op_parallel_compaction()) {
+            RETURN_IF_ERROR(check_and_recover(
+                    [&]() { return apply_parallel_compaction_log(log.op_parallel_compaction(), log.txn_id()); }));
+        }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
@@ -289,6 +295,10 @@ public:
     }
 
     Status finish() override {
+        if (_is_lake_replication) {
+            return finalize_lake_replication();
+        }
+
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
@@ -363,6 +373,20 @@ private:
         return Status::OK();
     }
 
+    Status finalize_lake_replication() {
+        // For lake pk replication transactions, we don't need to handle primary index or delvec operations.
+        // This is because the tablet metadata is directly copied from the source cluster's table
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
+        _metadata->set_version(_new_version);
+        if (_skip_write_tablet_metadata) {
+            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+        }
+        // Persist the tablet metadata
+        RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
+        _has_finalized = true;
+        return Status::OK();
+    }
+
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         // get lock to avoid gc
@@ -401,8 +425,84 @@ private:
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
+
+        // Single output compaction
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
                                                                 _index_entry, &_builder, _base_version);
+    }
+
+    // Apply parallel compaction log: process multiple subtask compactions
+    // Each subtask has its own OpCompaction with independent input/output rowsets and lcrm file.
+    // Reuses publish_primary_compaction for each subtask, with pre-check to skip failed subtasks.
+    Status apply_parallel_compaction_log(const TxnLogPB_OpParallelCompaction& op_parallel, int64_t txn_id) {
+        // get lock to avoid gc
+        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+
+        RETURN_IF_ERROR(prepare_primary_index());
+
+        // Process each subtask's OpCompaction
+        for (int i = 0; i < op_parallel.subtask_compactions_size(); i++) {
+            const auto& subtask_op = op_parallel.subtask_compactions(i);
+
+            // Pre-check: verify all input rowsets exist in current metadata
+            // Skip this subtask if any input rowset is missing (partial success handling)
+            if (!_check_input_rowsets_exist(subtask_op)) {
+                std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(), subtask_op.input_rowsets().end());
+                LOG(WARNING) << "Parallel compaction subtask " << i << " skipped due to missing input rowsets"
+                             << ", tablet=" << _tablet.id() << ", first_input_ids=["
+                             << JoinInts(std::vector<uint32_t>(input_ids.begin(),
+                                                               input_ids.begin() + std::min(5, (int)input_ids.size())),
+                                         ",")
+                             << "]";
+                continue;
+            }
+
+            // Reuse publish_primary_compaction for each subtask
+            // - Internal conflict check is performed per subtask
+            // - Light publish uses subtask's lcrm_file
+            // - Primary index and metadata are updated
+            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
+                                                                             _index_entry, &_builder, _base_version));
+        }
+
+        // Apply unified SST compaction results (if any)
+        // SST compaction is tablet-level, executed once after all subtasks complete
+        // Reuse apply_opcompaction by constructing a temporary OpCompaction from OpParallelCompaction
+        if (!op_parallel.input_sstables().empty() || op_parallel.has_output_sstable() ||
+            !op_parallel.output_sstables().empty()) {
+            TxnLogPB_OpCompaction sst_op;
+            for (const auto& input_sst : op_parallel.input_sstables()) {
+                sst_op.add_input_sstables()->CopyFrom(input_sst);
+            }
+            if (op_parallel.has_output_sstable()) {
+                sst_op.mutable_output_sstable()->CopyFrom(op_parallel.output_sstable());
+            }
+            for (const auto& output_sst : op_parallel.output_sstables()) {
+                sst_op.add_output_sstables()->CopyFrom(output_sst);
+            }
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, sst_op));
+            _builder.remove_compacted_sst(sst_op);
+        }
+
+        return Status::OK();
+    }
+
+    // Helper function: check if all input rowsets exist in current metadata
+    bool _check_input_rowsets_exist(const TxnLogPB_OpCompaction& op) const {
+        for (uint32_t input_id : op.input_rowsets()) {
+            bool found = false;
+            for (const auto& rowset : _metadata->rowsets()) {
+                if (rowset.id() == input_id) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
@@ -493,6 +593,9 @@ private:
 
                 _tablet.update_mgr()->unload_primary_index(_tablet.id());
 
+                // Mark this as a lake replication transaction
+                _is_lake_replication = true;
+
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
                         << ", txn_id: " << txn_meta.txn_id() << ", metadata id: " << _metadata->id()
@@ -549,6 +652,8 @@ private:
     // True when finalize meta file success.
     bool _has_finalized = false;
     bool _rebuild_pindex = false;
+    // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
+    bool _is_lake_replication = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -565,6 +670,9 @@ public:
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
+        }
+        if (log.has_op_parallel_compaction()) {
+            RETURN_IF_ERROR(apply_parallel_compaction_log(log.op_parallel_compaction()));
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -591,6 +699,7 @@ public:
         std::vector<std::string> all_segments;
         std::vector<int64_t> all_segment_sizes;
         std::vector<std::string> all_segment_encryption_metas;
+        std::vector<const SegmentMetadataPB*> all_segment_metas;
 
         // Traverse all transaction logs and collect op_write information
         VLOG(2) << "Collecting op_write information from transaction logs for tablet " << _tablet.id();
@@ -630,6 +739,12 @@ public:
                     for (int i = 0; i < rowset.segment_encryption_metas_size(); i++) {
                         all_segment_encryption_metas.emplace_back(rowset.segment_encryption_metas(i));
                     }
+
+                    // Collect segment metas
+                    all_segment_metas.reserve(all_segment_metas.size() + rowset.segment_metas_size());
+                    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+                        all_segment_metas.emplace_back(&rowset.segment_metas(i));
+                    }
                 }
             } else {
                 return Status::NotSupported(
@@ -664,6 +779,11 @@ public:
         // Set segment encryption metas directly
         for (const auto& meta : all_segment_encryption_metas) {
             merged_rowset->add_segment_encryption_metas(meta);
+        }
+
+        // Set segment metas
+        for (const auto* segment_meta : all_segment_metas) {
+            merged_rowset->add_segment_metas()->CopyFrom(*segment_meta);
         }
 
         // Set rowset ID and update next_rowset_id
@@ -720,6 +840,39 @@ private:
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction) {
+        // Single output compaction (standard format)
+        return apply_compaction_log_single_output(op_compaction);
+    }
+
+    // Apply parallel compaction log: process multiple subtask compactions
+    // Each subtask has its own OpCompaction in subtask_compactions.
+    // Reuses apply_compaction_log_single_output for each subtask.
+    //
+    // NOTE: Parallel compaction only supports:
+    // 1. PK tables (cumulative_point is always 0)
+    // 2. Non-PK tables with size-tiered compaction strategy (cumulative_point is always 0)
+    // Non-PK tables with default (base+cumulative) strategy are NOT supported and will
+    // fallback to normal compaction in TabletParallelCompactionManager.
+    // Therefore, we don't need complex cumulative_point calculation here.
+    Status apply_parallel_compaction_log(const TxnLogPB_OpParallelCompaction& op_parallel) {
+        // Process each subtask's OpCompaction by reusing apply_compaction_log_single_output
+        // All errors (including missing rowsets) are propagated immediately.
+        for (int subtask_idx = 0; subtask_idx < op_parallel.subtask_compactions_size(); subtask_idx++) {
+            const auto& subtask_op = op_parallel.subtask_compactions(subtask_idx);
+            RETURN_IF_ERROR(apply_compaction_log_single_output(subtask_op));
+            VLOG(1) << "Applied parallel compaction subtask " << subtask_idx << ", tablet=" << _metadata->id();
+        }
+
+        // Set cumulative point to 0.
+        // Parallel compaction only supports PK tables and size-tiered non-PK tables,
+        // both of which don't use cumulative_point (always 0).
+        _metadata->set_cumulative_point(0);
+
+        return Status::OK();
+    }
+
+    // Apply compaction with single merged output (standard format)
+    Status apply_compaction_log_single_output(const TxnLogPB_OpCompaction& op_compaction) {
         // It's ok to have a compaction log without input rowset and output rowset.
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);

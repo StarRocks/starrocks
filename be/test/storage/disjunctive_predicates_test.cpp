@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"

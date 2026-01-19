@@ -663,11 +663,7 @@ Status NLJoinProbeOperator::_permute_right_join(size_t chunk_size) {
             }
         }
         permute_rows += chunk->num_rows();
-        {
-            CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
-            RETURN_IF_ERROR(guard.evaluate());
-            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
-        }
+        RETURN_IF_ERROR(_eval_conjuncts(chunk));
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         match_flag_index += cur_chunk_size;
     }
@@ -691,6 +687,14 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
     } else {
         return _pull_chunk_for_other_join(chunk_size);
     }
+}
+
+// eval conjuncts for nest loop join, apply common exprs and conjuncts first
+Status NLJoinProbeOperator::_eval_conjuncts(const ChunkPtr& chunk) {
+    CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
+    RETURN_IF_ERROR(guard.evaluate());
+    RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_other_join(size_t chunk_size) {
@@ -717,11 +721,7 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_other_join(size_t chunk_
         ASSIGN_OR_RETURN(ChunkPtr chunk, _permute_chunk_for_other_join(chunk_size));
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_other_join(chunk));
-        {
-            CommonExprEvalScopeGuard guard(chunk, _common_expr_ctxs);
-            RETURN_IF_ERROR(guard.evaluate());
-            RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
-        }
+        RETURN_IF_ERROR(_eval_conjuncts(chunk));
 
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         if (ChunkPtr res = _output_accumulator.pull()) {
@@ -750,7 +750,7 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_inner_join(size_t chunk_
         ChunkPtr chunk = _permute_chunk_for_inner_join(chunk_size);
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_inner_join(chunk));
-        RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
+        RETURN_IF_ERROR(_eval_conjuncts(chunk));
 
         RETURN_IF_ERROR(_output_accumulator.push(std::move(chunk)));
         if (ChunkPtr res = _output_accumulator.pull()) {

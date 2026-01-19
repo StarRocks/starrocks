@@ -23,6 +23,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/location_provider.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -64,9 +65,11 @@ public:
     // Note: The path of `FileInfo` is only base filename, no directory component.
     //
     // PREREQUISITES: the writer has successfully `finish()`ed but not yet `close()`ed.
-    std::vector<FileInfo> files() const { return _files; }
+    const std::vector<SegmentFileInfo>& segments() const { return _segments; }
 
-    std::vector<FileInfo> ssts() const { return _ssts; }
+    const std::vector<FileInfo>& dels() const { return _dels; }
+
+    const std::vector<FileInfo>& ssts() const { return _ssts; }
 
     const std::vector<PersistentIndexSstableRangePB>& sst_ranges() const { return _sst_ranges; }
 
@@ -164,15 +167,17 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() const { return _global_dict_columns_valid_info; }
 
-    // When the system determines that pk parallel execution can be enabled
+    // When the system determines that eager PK index build can be enabled
     // (for example, during large imports or major compaction tasks), it will invoke this function.
-    // However, whether pk parallel execution is actually enabled still depends on the schema.
-    void try_enable_pk_parallel_execution();
+    // However, whether eager PK index build is actually enabled still depends on the schema.
+    void try_enable_pk_index_eager_build();
 
-    bool enable_pk_parallel_execution() const { return _enable_pk_parallel_execution; }
-    void force_set_enable_pk_parallel_execution() { _enable_pk_parallel_execution = true; }
+    bool enable_pk_index_eager_build() const { return _enable_pk_index_eager_build; }
+    void force_set_enable_pk_index_eager_build() { _enable_pk_index_eager_build = true; }
 
     void check_global_dict(SegmentWriter* segment_writer);
+
+    const FileInfo& lcrm_file() const { return _lcrm_file; }
 
 protected:
     TabletManager* _tablet_mgr;
@@ -180,9 +185,13 @@ protected:
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
     ThreadPool* _flush_pool;
-    std::vector<FileInfo> _files;
+    std::vector<SegmentFileInfo> _segments;
+    std::vector<FileInfo> _dels;
+    std::mutex _dels_mutex;
     std::vector<FileInfo> _ssts;
     std::vector<PersistentIndexSstableRangePB> _sst_ranges;
+    // lake compaction row mapper file
+    FileInfo _lcrm_file;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
@@ -194,7 +203,7 @@ protected:
 
     bool _is_compaction = false;
     DictColumnsValidMap _global_dict_columns_valid_info;
-    bool _enable_pk_parallel_execution = false;
+    bool _enable_pk_index_eager_build = false;
 };
 
 } // namespace lake

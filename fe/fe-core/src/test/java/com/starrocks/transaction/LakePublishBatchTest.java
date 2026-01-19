@@ -94,7 +94,7 @@ public class LakePublishBatchTest {
                                                 List<TabletCommitInfo> transTablets2) {
         int num = 0;
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -261,7 +261,7 @@ public class LakePublishBatchTest {
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
 
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -308,7 +308,7 @@ public class LakePublishBatchTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -368,7 +368,7 @@ public class LakePublishBatchTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -516,16 +516,16 @@ public class LakePublishBatchTest {
         VisibleStateWaiter waiter7 = globalTransactionMgr.commitTransaction(db.getId(), transactionId7, transTablets1,
                 Lists.newArrayList(), null);
 
-        // mock the switch from single to batch by adding transactionId to publishingLakeTransactions
-        publishVersionDaemon.publishingLakeTransactions.clear();
-        publishVersionDaemon.publishingLakeTransactions.add(transactionId6);
+        // mock the switch from single to batch by adding transactionId to publishingTransactionIds
+        publishVersionDaemon.publishingTransactionIds.clear();
+        publishVersionDaemon.publishingTransactionIds.add(transactionId6);
 
         Config.lake_enable_batch_publish_version = true;
         publishVersionDaemon.runAfterCatalogReady();
         Assertions.assertFalse(waiter6.await(5, TimeUnit.SECONDS));
         Assertions.assertFalse(waiter7.await(5, TimeUnit.SECONDS));
 
-        publishVersionDaemon.publishingLakeTransactions.clear();
+        publishVersionDaemon.publishingTransactionIds.clear();
         publishVersionDaemon.runAfterCatalogReady();
         Assertions.assertTrue(waiter6.await(60, TimeUnit.SECONDS));
         Assertions.assertTrue(waiter7.await(60, TimeUnit.SECONDS));
@@ -539,7 +539,7 @@ public class LakePublishBatchTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         List<TabletCommitInfo> transTablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -618,7 +618,7 @@ public class LakePublishBatchTest {
         assertEquals(1, table.getPartitions().size());
         PhysicalPartition physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
         List<MaterializedIndex> normalIndices =
-                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         assertEquals(1, normalIndices.size());
         MaterializedIndex normalIndex = normalIndices.get(0);
         assertEquals(1, normalIndex.getTablets().size());
@@ -647,7 +647,7 @@ public class LakePublishBatchTest {
                 () -> schemaChangeJob.getJobState() == AlterJobV2.JobState.WAITING_TXN);
 
         List<MaterializedIndex> shadowIndices =
-                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
+                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         assertEquals(1, shadowIndices.size());
         MaterializedIndex shadowIndex = shadowIndices.get(0);
         assertEquals(1, shadowIndex.getTablets().size());

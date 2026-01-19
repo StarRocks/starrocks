@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 
@@ -866,8 +867,7 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertNotNull(masterAnalyzeMgr.getTableBasicStatsMeta(testTableId));
 
         // 2. Execute dropBasicStatsMetaAndData operation
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -875,13 +875,8 @@ public class AnalyzeMgrEditLogTest {
         // Mock StatisticExecutor to avoid actual execution
         new mockit.MockUp<StatisticExecutor>() {
             @mockit.Mock
-            public boolean dropTableStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId,
-                                              StatsConstants.AnalyzeType analyzeType) {
-                return true;
-            }
-
-            @mockit.Mock
-            public boolean dropTableMultiColumnStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId) {
+            public boolean dropTableStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, List<Long> tableIds,
+                                               StatsConstants.AnalyzeType analyzeType) {
                 return true;
             }
         };
@@ -906,27 +901,21 @@ public class AnalyzeMgrEditLogTest {
         // 2. Mock EditLog.logRemoveBasicStatsMeta to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
         doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logRemoveBasicStatsMeta(any(BasicStatsMeta.class), any());
+                .when(spyEditLog).logRemoveBasicStatsMetaBatch(anyList(), any());
 
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         // 3. Mock StatisticExecutor
         new mockit.MockUp<StatisticExecutor>() {
             @mockit.Mock
-            public boolean dropTableStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId,
-                                              StatsConstants.AnalyzeType analyzeType) {
-                return true;
-            }
-
-            @mockit.Mock
-            public boolean dropTableMultiColumnStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId) {
+            public boolean dropTableStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, List<Long> tableIds,
+                                               StatsConstants.AnalyzeType analyzeType) {
                 return true;
             }
         };
 
         // 4. Execute dropBasicStatsMetaAndData operation and expect exception
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -952,8 +941,7 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertEquals(1, masterAnalyzeMgr.getHistogramStatsMetaMap().size());
 
         // 2. Execute dropHistogramStatsMetaAndData operation
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -961,8 +949,7 @@ public class AnalyzeMgrEditLogTest {
         // Mock StatisticExecutor
         new mockit.MockUp<StatisticExecutor>() {
             @mockit.Mock
-            public boolean dropHistogram(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId,
-                                        List<String> columns) {
+            public boolean dropHistogramByTableIds(com.starrocks.qe.ConnectContext statsConnectCtx, List<Long> tableIds) {
                 return true;
             }
         };
@@ -983,25 +970,23 @@ public class AnalyzeMgrEditLogTest {
         exceptionAnalyzeMgr.addHistogramStatsMeta(meta);
         Assertions.assertEquals(1, exceptionAnalyzeMgr.getHistogramStatsMetaMap().size());
 
-        // 2. Mock EditLog.logRemoveHistogramStatsMeta to throw exception
+        // 2. Mock EditLog.logRemoveHistogramStatsMetaBatch to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
         doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logRemoveHistogramStatsMeta(any(HistogramStatsMeta.class), any());
+                .when(spyEditLog).logRemoveHistogramStatsMetaBatch(anyList(), any());
 
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         // 3. Mock StatisticExecutor
         new mockit.MockUp<StatisticExecutor>() {
             @mockit.Mock
-            public boolean dropHistogram(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId,
-                                        List<String> columns) {
+            public boolean dropHistogramByTableIds(com.starrocks.qe.ConnectContext statsConnectCtx, List<Long> tableIds) {
                 return true;
             }
         };
 
         // 4. Execute dropHistogramStatsMetaAndData operation and expect exception
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -1032,8 +1017,7 @@ public class AnalyzeMgrEditLogTest {
         Assertions.assertEquals(1, masterAnalyzeMgr.getMultiColumnStatsMetaMap().size());
 
         // 2. Execute dropMultiColumnStatsMetaAndData operation
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();
@@ -1041,7 +1025,8 @@ public class AnalyzeMgrEditLogTest {
         // Mock StatisticExecutor
         new mockit.MockUp<StatisticExecutor>() {
             @mockit.Mock
-            public boolean dropTableMultiColumnStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId) {
+            public boolean dropTableMultiColumnStatistics(com.starrocks.qe.ConnectContext statsConnectCtx,
+                                                          List<Long> tableIds) {
                 return true;
             }
         };
@@ -1070,21 +1055,21 @@ public class AnalyzeMgrEditLogTest {
         // 2. Mock EditLog.logRemoveMultiColumnStatsMeta to throw exception
         EditLog spyEditLog = spy(new EditLog(null));
         doThrow(new RuntimeException("EditLog write failed"))
-                .when(spyEditLog).logRemoveMultiColumnStatsMeta(any(MultiColumnStatsMeta.class), any());
+                .when(spyEditLog).logRemoveMultiColumnStatsMetaBatch(anyList(), any());
 
         GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
 
         // 3. Mock StatisticExecutor
         new mockit.MockUp<StatisticExecutor>() {
             @mockit.Mock
-            public boolean dropTableMultiColumnStatistics(com.starrocks.qe.ConnectContext statsConnectCtx, long tableId) {
+            public boolean dropTableMultiColumnStatistics(com.starrocks.qe.ConnectContext statsConnectCtx,
+                                                          List<Long> tableIds) {
                 return true;
             }
         };
 
         // 4. Execute dropMultiColumnStatsMetaAndData operation and expect exception
-        Set<Long> tableIds = new HashSet<>();
-        tableIds.add(testTableId);
+        List<Long> tableIds = List.of(testTableId);
         com.starrocks.qe.ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setStatisticsConnection(true);
         statsConnectCtx.setThreadLocalInfo();

@@ -269,7 +269,7 @@ public class ClusterSnapshotInfoTest {
                 Assertions.assertTrue(clusterSnapshotInfo.containsPartition(dbTest.getId(), olapTable.getId(),
                                                                         part.getParentId()));
 
-                for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : part.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     Assertions.assertTrue(clusterSnapshotInfo.containsMaterializedIndex(dbTest.getId(), olapTable.getId(),
                                                                                     part.getParentId(), part.getId(),
                                                                                     index.getId()));

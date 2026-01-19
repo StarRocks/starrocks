@@ -239,7 +239,7 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

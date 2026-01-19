@@ -1,0 +1,27 @@
+-- name: test_shared_data_cache_select @cloud
+CREATE DATABASE cache_select_db_${uuid0};
+-- result:
+-- !result
+USE cache_select_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (c1 string, c2 string, c3 datetime) PARTITION BY date_trunc('month', c3) DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO t1
+SELECT
+    CAST(a.n AS string),
+    CAST(a.n * c.n AS string),
+    days_sub(CURRENT_DATE(), c.n)
+FROM
+    (SELECT generate_series as n FROM TABLE(generate_series(1, 256))) a,
+    (SELECT generate_series as n FROM TABLE(generate_series(1, 256))) c;
+-- result:
+-- !result
+CACHE SELECT c1, c2, c3 FROM t1 WHERE c3 >= utc_timestamp() - INTERVAL 2 month ;
+-- result:
+[REGEX].*
+-- !result
+DROP DATABASE cache_select_db_${uuid0} FORCE;
+-- result:
+-- !result

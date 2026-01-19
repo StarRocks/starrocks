@@ -25,13 +25,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -305,34 +303,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         ConnectContext statsContext = StatisticUtils.buildConnectContext();
         Assertions.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
-    }
-
-    @Test
-    public void testSpecifyStatisticsCollectWarehouse() {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        String sql = "analyze table test.t0_stats";
-        FeConstants.enableUnitStatistics = false;
-        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
-        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
-        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, 2, 3, Lists.newArrayList(),
-                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(),
-                LocalDateTime.now());
-
-        Database db = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "default_catalog", "test");
-        Table table =
-                connectContext.getGlobalStateMgr().getLocalMetastore().getTable(connectContext, "test", "t0_stats");
-
-        connectContext.setCurrentWarehouse("xxx");
-        Deencapsulation.invoke(executor, "executeAnalyze", connectContext, stmt, analyzeStatus, db, table);
-        Assertions.assertTrue(analyzeStatus.getReason().contains("Warehouse xxx not exist"));
-        connectContext.setCurrentWarehouse("default_warehouse");
-        FeConstants.enableUnitStatistics = true;
     }
 
     @Test

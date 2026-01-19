@@ -274,6 +274,10 @@ public class HdfsFsManager {
     private static final String ADL_SCHEME = "adl";
     public static final String WASB_SCHEME = "wasb";
     public static final String WASBS_SCHEME = "wasbs";
+    private static final String AZBLOB_SCHEME = "azblob";
+    private static final String ADLS2_SCHEME = "adls2";
+    private static final String HTTP_PREFIX = "http://";
+    private static final String HTTPS_PREFIX = "https://";
     private static final String GCS_SCHEME = "gs";
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
@@ -409,6 +413,12 @@ public class HdfsFsManager {
             case WASB_SCHEME:
             case WASBS_SCHEME:
                 return getAzureFileSystem(path, loadProperties, tProperties);
+            case AZBLOB_SCHEME:
+                // Translate storage-volume azblob path to Hadoop wasb/wasbs path with endpoint embedded.
+                return getAzureFileSystem(buildAzureBlobHadoopPath(pathUri, loadProperties), loadProperties, tProperties);
+            case ADLS2_SCHEME:
+                // Translate storage-volume adls2 path to Hadoop abfs/abfss path with endpoint embedded.
+                return getAzureFileSystem(buildAdls2HadoopPath(pathUri, loadProperties), loadProperties, tProperties);
             case GCS_SCHEME:
                 return getGoogleFileSystem(path, loadProperties, tProperties);
             default:
@@ -417,6 +427,53 @@ public class HdfsFsManager {
                 // SDK is compatible with nearly all file/object storage system
                 return getUniversalFileSystem(path, loadProperties, tProperties);
         }
+    }
+
+    private String buildAzureBlobHadoopPath(WildcardURI pathUri, Map<String, String> loadProperties)
+            throws StarRocksException {
+        String endpoint = loadProperties.get(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT);
+        if (Strings.isNullOrEmpty(endpoint)) {
+            throw new StarRocksException("missing property azure.blob.endpoint for path: " + pathUri.getPath());
+        }
+        String newScheme = endpoint.toLowerCase().startsWith(HTTPS_PREFIX) ? WASBS_SCHEME : WASB_SCHEME;
+        // Hadoop Azure FS expects wasb[s]://<container>@<endpoint-without-scheme>/...
+        String endpointWithoutScheme = stripEndpointScheme(endpoint);
+        String container = pathUri.getUri().getAuthority();
+        if (Strings.isNullOrEmpty(container)) {
+            throw new StarRocksException("invalid azure path, container is empty: " + pathUri.getPath());
+        }
+        String rawPath = pathUri.getUri().getRawPath();
+        String normalizedPath = rawPath == null ? "" : rawPath;
+        return newScheme + "://" + container + "@" + endpointWithoutScheme + normalizedPath;
+    }
+
+    private String buildAdls2HadoopPath(WildcardURI pathUri, Map<String, String> loadProperties)
+            throws StarRocksException {
+        String endpoint = loadProperties.get(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT);
+        if (Strings.isNullOrEmpty(endpoint)) {
+            throw new StarRocksException("missing property azure.adls2.endpoint for path: " + pathUri.getPath());
+        }
+        String newScheme = endpoint.toLowerCase().startsWith(HTTPS_PREFIX) ? ABFSS_SCHEME : ABFS_SCHEME;
+        // Hadoop Azure FS expects abfs[s]://<container>@<endpoint-without-scheme>/...
+        String endpointWithoutScheme = stripEndpointScheme(endpoint);
+        String container = pathUri.getUri().getAuthority();
+        if (Strings.isNullOrEmpty(container)) {
+            throw new StarRocksException("invalid azure path, container is empty: " + pathUri.getPath());
+        }
+        String rawPath = pathUri.getUri().getRawPath();
+        String normalizedPath = rawPath == null ? "" : rawPath;
+        return newScheme + "://" + container + "@" + endpointWithoutScheme + normalizedPath;
+    }
+
+    private String stripEndpointScheme(String endpoint) throws StarRocksException {
+        String lowerEndpoint = endpoint.toLowerCase();
+        if (lowerEndpoint.startsWith(HTTPS_PREFIX)) {
+            return endpoint.substring(HTTPS_PREFIX.length());
+        }
+        if (lowerEndpoint.startsWith(HTTP_PREFIX)) {
+            return endpoint.substring(HTTP_PREFIX.length());
+        }
+        throw new StarRocksException("invalid azure endpoint, must start with http or https. endpoint: " + endpoint);
     }
 
     /**

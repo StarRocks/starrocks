@@ -30,14 +30,20 @@
 namespace starrocks::lake {
 
 TabletInternalParallelMergeTask::TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator,
-                                                                 MemTracker* merge_mem_tracker, Schema* schema,
-                                                                 int32_t task_index, QuitFlag* quit_flag)
+                                                                 Schema* schema, int32_t task_index,
+                                                                 QuitFlag* quit_flag,
+                                                                 RuntimeProfile::Counter* write_io_timer)
         : _writer(writer),
           _block_iterator(block_iterator),
-          _merge_mem_tracker(merge_mem_tracker),
           _schema(schema),
           _task_index(task_index),
-          _quit_flag(quit_flag) {}
+          _quit_flag(quit_flag),
+          _write_io_timer(write_io_timer) {
+    std::string tracker_label = "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" +
+                                std::to_string(writer->txn_id()) + "-" + std::to_string(task_index);
+    _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
+                                                      GlobalEnv::GetInstance()->compaction_mem_tracker());
+}
 
 TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
     if (_block_iterator != nullptr) {
@@ -46,7 +52,7 @@ TabletInternalParallelMergeTask::~TabletInternalParallelMergeTask() {
 }
 
 void TabletInternalParallelMergeTask::run() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     MonotonicStopWatch timer;
     timer.start();
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(*_schema);
@@ -59,6 +65,7 @@ void TabletInternalParallelMergeTask::run() {
         if (itr_st.is_end_of_file()) {
             break;
         } else if (itr_st.ok()) {
+            SCOPED_TIMER(_write_io_timer);
             ChunkHelper::padding_char_columns(char_field_indexes, *_schema, _writer->tablet_schema(), chunk);
             st = _writer->write(*chunk, nullptr);
             if (!st.ok()) {
@@ -70,9 +77,11 @@ void TabletInternalParallelMergeTask::run() {
         }
     }
     if (st.ok()) {
+        SCOPED_TIMER(_write_io_timer);
         st = _writer->flush();
     }
     if (st.ok()) {
+        SCOPED_TIMER(_write_io_timer);
         st = _writer->finish();
     }
     timer.stop();
