@@ -588,16 +588,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalJoin(OptExpression optExpression, DecodeInfo context) {
-        if (context.outputStringColumns.isEmpty()) {
-            return DecodeInfo.EMPTY;
-        }
         PhysicalJoinOperator join = optExpression.getOp().cast();
         DecodeInfo result = context.createOutputInfo();
         if (join.getOnPredicate() == null) {
             return result;
         }
+
         ColumnRefSet onColumns = join.getOnPredicate().getUsedColumns();
-        if (!result.inputStringColumns.containsAny(onColumns)) {
+        if (context.outputStringColumns.isEmpty() || !result.inputStringColumns.containsAny(onColumns)) {
+            onColumns.getStream().forEach(disableRewriteStringColumns::union);
             return result;
         }
 
