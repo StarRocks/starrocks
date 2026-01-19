@@ -739,10 +739,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 const Slice metadata_slice = metadata_column->get_slice(i);
                 const Slice value_slice = value_column->get_slice(i);
                 if (has_typed) {
-                    if (!metadata_slice.empty()) {
-                        VariantMetadata meta(metadata_slice);
-                        RETURN_IF_ERROR(_ctx.use_metadata(meta));
-                    }
+                    VariantMetadata meta(metadata_slice);
+                    RETURN_IF_ERROR(_ctx.use_metadata(meta));
                     auto variant =
                             VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
                     if (!variant.ok()) {
@@ -792,10 +790,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                 // Even for required variant group, metadata/value fields can be null
                 variant_column->append(VariantRowValue::from_null());
             } else if (has_typed) {
-                if (!metadata_slice.empty()) {
-                    VariantMetadata meta(metadata_slice);
-                    RETURN_IF_ERROR(_ctx.use_metadata(meta));
-                }
+                VariantMetadata meta(metadata_slice);
+                RETURN_IF_ERROR(_ctx.use_metadata(meta));
                 auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
                 if (!variant.ok()) {
                     variant_column->append(VariantRowValue::from_null());

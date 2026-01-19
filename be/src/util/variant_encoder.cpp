@@ -623,19 +623,19 @@ StatusOr<VariantRowValue> VariantEncoder::encode_json_to_variant(const JsonValue
 StatusOr<VariantRowValue> VariantEncoder::encode_shredded_column_row(const ColumnPtr& column,
                                                                      const TypeDescriptor& type, size_t row,
                                                                      VariantEncodingContext* ctx) {
+    if (ctx != nullptr) {
+        // Shredded path: Metadata already provided (e.g. from Parquet)
+        DCHECK(ctx->metadata_built);
+        ASSIGN_OR_RETURN(auto value, encode_value_from_column_row(column, type, row, ctx));
+        return VariantRowValue::create(ctx->metadata_raw, value);
+    }
+
+    // Discovery path: Need to find keys and build metadata for this row
     VariantEncodingContext local_ctx;
-    if (ctx == nullptr) {
-        ctx = &local_ctx;
-    }
-    if (!ctx->metadata_built) {
-        ctx->reset();
-        RETURN_IF_ERROR(collect_keys_from_column_row(column, type, row, ctx));
-        ASSIGN_OR_RETURN(auto metadata, build_variant_metadata(ctx));
-        ctx->metadata_raw = metadata;
-        ctx->metadata_built = true;
-    }
-    ASSIGN_OR_RETURN(auto value, encode_value_from_column_row(column, type, row, ctx));
-    return VariantRowValue::create(ctx->metadata_raw, value);
+    RETURN_IF_ERROR(collect_keys_from_column_row(column, type, row, &local_ctx));
+    ASSIGN_OR_RETURN(std::string metadata, build_variant_metadata(&local_ctx));
+    ASSIGN_OR_RETURN(auto value, encode_value_from_column_row(column, type, row, &local_ctx));
+    return VariantRowValue::create(metadata, value);
 }
 
 template <LogicalType LT, typename EncodeFn>
@@ -725,7 +725,7 @@ Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescript
                     continue;
                 }
                 // Reuse encode_shredded_column_row for row-level discovery and encoding
-                auto res = VariantEncoder::encode_shredded_column_row(data_col, type, row, &ctx);
+                auto res = VariantEncoder::encode_shredded_column_row(data_col, type, row, nullptr);
                 if (!res.ok()) {
                     if (allow_throw) return res.status();
                     builder->append_null();
