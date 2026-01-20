@@ -572,37 +572,6 @@ private:
             _metadata->mutable_dcg_meta()->Clear();
 
             if (op_replication.has_tablet_metadata()) {
-<<<<<<< HEAD
-                // Same logic for pk and non-pk tables
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-
-                const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                if (copied_tablet_meta.rowsets_size() > 0) {
-                    _metadata->mutable_rowsets()->Clear();
-                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
-                }
-
-                if (copied_tablet_meta.has_dcg_meta()) {
-                    _metadata->mutable_dcg_meta()->Clear();
-                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
-                }
-
-                if (copied_tablet_meta.has_sstable_meta()) {
-                    _metadata->mutable_sstable_meta()->Clear();
-                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
-                }
-
-                if (copied_tablet_meta.has_delvec_meta()) {
-                    _metadata->mutable_delvec_meta()->Clear();
-                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
-                }
-
-                _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                _metadata->set_cumulative_point(0);
-                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
-
-                _tablet.update_mgr()->unload_primary_index(_tablet.id());
-=======
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 // Mark this as a lake replication transaction
                 _is_lake_replication = true;
@@ -627,10 +596,6 @@ private:
                         _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
                     }
                 }
->>>>>>> b61f3b8745 ([BugFix] Clear sstable_meta during full replication for PK table with cloud native persistent index (#67954))
-
-                // Mark this as a lake replication transaction
-                _is_lake_replication = true;
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
