@@ -30,7 +30,7 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 - Scenarios: Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables), but queries against these tables involve only a few columns.</li></ul>
 
-## Basic usages  
+## Basic usage
 
 ### Create a table that uses hybrid row-column storage
 
