@@ -7,7 +7,7 @@ displayed_sidebar: docs
 SHOW PROPERTY displays properties of a user, including the maximum number of connections, the default catalog, and the default database.
 
 :::tip
-The current user can view its own property. Only users with the `user_admin` role can view the property of other users.
+The current user can view their own properties. Only users with the `user_admin` role can view the properties of other users.
 
 :::
 
@@ -33,9 +33,11 @@ SHOW PROPERTY [FOR 'user_name'] [LIKE '<property_name>']
 
 Example 1: View the properties of the current user.
 
-```Plain
+```sql
 SHOW PROPERTY;
+```
 
+```Plain
 +----------------------+-----------------+
 | Key                  | Value           |
 +----------------------+-----------------+
@@ -61,7 +63,7 @@ SHOW PROPERTY FOR 'jack';
 +----------------------+------------------+
 ```
 
-Or
+Example 3: Filter properties using `LIKE`.
 
 ```SQL
 SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';

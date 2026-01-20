@@ -48,7 +48,7 @@ SHOW PROPERTY;
 +----------------------+-----------------+
 ```
 
-示例二：查看用户 jack 的属性。
+示例二：查看用户 `jack` 的属性。
 
 ```SQL
 SHOW PROPERTY FOR 'jack';
@@ -64,7 +64,7 @@ SHOW PROPERTY FOR 'jack';
 +----------------------+------------------+
 ```
 
-示例三：使用 LIKE 过滤查看特定属性。
+示例三：使用 `LIKE` 过滤查看特定属性。
 
 ```SQL
 SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';

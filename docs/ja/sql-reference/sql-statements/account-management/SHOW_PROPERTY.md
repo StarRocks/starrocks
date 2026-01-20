@@ -47,7 +47,7 @@ SHOW PROPERTY;
 +----------------------+-----------------+
 ```
 
-例 2: ユーザー jack のプロパティを表示します。
+例 2: ユーザー `jack` のプロパティを表示します。
 
 ```SQL
 SHOW PROPERTY FOR 'jack';
@@ -63,7 +63,7 @@ SHOW PROPERTY FOR 'jack';
 +----------------------+------------------+
 ```
 
-例 3: LIKE を使用してプロパティをフィルタリングします。
+例 3: `LIKE` を使用してプロパティをフィルタリングします。
 
 ```SQL
 SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
