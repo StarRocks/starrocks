@@ -2321,7 +2321,7 @@ FieldPtr SegmentIterator::_make_field(size_t i) {
 
 Status SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const ordinal_t ordinal = _cur_rowid;
         for (ColumnIterator* iter : to->_column_iterators) {
             RETURN_IF_ERROR(iter->seek_to_ordinal(ordinal));
         }
