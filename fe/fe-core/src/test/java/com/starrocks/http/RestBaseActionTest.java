@@ -237,5 +237,4 @@ public class RestBaseActionTest {
         warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
         Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, warehouse);
     }
-
 }

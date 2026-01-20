@@ -555,7 +555,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
                     times = 1;
                     result = new Delegate<Void>() {
-
                         public void beginLoadTaskFromFrontend(String dbName,
                                                               String tableName,
                                                               String label,
@@ -570,7 +569,6 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             // Validate that the correct warehouse is passed
                             assertEquals(expectedWarehouseId, computeResource.getWarehouseId());
                         }
-
                     };
                 }
             };

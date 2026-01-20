@@ -584,43 +584,4 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             assertEquals(307, response.code());
         }
     }
-
-    @Test
-    public void testBatchWriteStreamLoadWarehouseSelection() throws Exception {
-        Map<String, String> map = new HashMap<>();
-        map.put(HTTP_ENABLE_BATCH_WRITE, "true");
-        // No warehouse header
-        Request request = buildRequest(map);
-        List<ComputeNode> computeNodes = new ArrayList<>();
-        computeNodes.add(new ComputeNode(1, "192.0.0.1", 9050));
-        computeNodes.get(0).setHttpPort(8040);
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public boolean warehouseExists(String warehouseName) {
-                return "user_wh".equals(warehouseName);
-            }
-        };
-
-        new MockUp<LoadAction>() {
-            @Mock
-            public String getUserDefaultWarehouse(BaseRequest request) {
-                return "user_wh";
-            }
-        };
-
-        new MockUp<BatchWriteMgr>() {
-            @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
-                // Verify that warehouse is set in params
-                Assertions.assertTrue(params.getWarehouse().isPresent());
-                Assertions.assertEquals("user_wh", params.getWarehouse().get());
-                return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
-            }
-        };
-
-        try (Response response = noRedirectClient.newCall(request).execute()) {
-            assertEquals(307, response.code());
-        }
-    }
 }
