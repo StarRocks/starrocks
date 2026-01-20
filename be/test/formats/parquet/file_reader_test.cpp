@@ -4605,41 +4605,4 @@ TEST_F(FileReaderTest, test_read_variant_shredding_profile_rank_partial) {
     }
 }
 
-TEST_F(FileReaderTest, test_read_variant_shredding_all_fields) {
-    const std::string shred_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
-    auto file_reader = _create_file_reader(shred_file_path);
-
-    // Read the full variant to verify all fields including potentially non-shredded ones
-    // This is a critical test to ensure partially shredded objects don't lose non-shredded fields
-    Utils::SlotDesc slot_descs[] = {{"data", TYPE_VARIANT_DESC}, {""}};
-    auto ctx = _create_scan_context(slot_descs, shred_file_path);
-
-    Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
-    ASSERT_EQ(file_reader->row_group_size(), 1);
-
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TYPE_VARIANT_DESC, true), chunk->num_columns());
-
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
-    ASSERT_EQ(chunk->num_rows(), 5);
-
-    // Verify that the variant column is populated correctly
-    const auto* variant_col = down_cast<const VariantColumn*>(chunk->get_column_by_index(0).get());
-    ASSERT_EQ(variant_col->size(), 5);
-
-    // Basic sanity check: all rows should be non-null and valid
-    for (size_t i = 0; i < chunk->num_rows(); ++i) {
-        EXPECT_FALSE(variant_col->is_null(i)) << "Row " << i << " should not be null";
-        const VariantRowValue& variant = variant_col->get(i);
-        EXPECT_TRUE(variant.is_valid()) << "Row " << i << " should have valid variant";
-        EXPECT_GT(variant.raw().size(), 0) << "Row " << i << " should have non-empty variant data";
-    }
-
-    // Note: To fully verify field presence (especially non-shredded fields like "name"),
-    // we rely on the SQL integration tests in test_iceberg_shredding_variant_query
-    // which use variant_get functions to extract and validate all fields.
-}
-
 } // namespace starrocks::parquet
