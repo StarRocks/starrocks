@@ -1627,6 +1627,26 @@ displayed_sidebar: docs
 - 单位：-
 - 描述：每个资源组的内部表扫描线程时间片与所有资源组总使用时间片的比值（两次统计之间的平均值）。
 
+### mem_pool_mem_limit_bytes
+
+- 单位：Byte
+- 描述：每个内存池的内存限制（瞬时值）。单位：字节。
+
+### mem_pool_mem_usage_bytes
+
+- 单位：Byte
+- 描述：每个内存池当前使用的总内存（瞬时值）。单位：字节。
+
+### mem_pool_mem_usage_ratio
+
+- 单位：-
+- 描述：每个内存池的内存使用量与内存限制的比值（瞬时值）。
+
+### mem_pool_workgroup_count
+
+- 单位：个
+- 描述：分配给每个内存池的资源组数量（瞬时值）。
+
 ### pipe_poller_block_queue_len
 
 - 单位：个
