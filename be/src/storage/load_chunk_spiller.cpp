@@ -395,6 +395,7 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     int64_t stop_idx = -1;
 
     // Check previous slot id for continuity
+    // Initialize to one less than the first slot to validate the first group in the continuity check.
     int64_t last_slot_idx = groups[0].slot_idx - 1;
 
     // BATCHING LOGIC: Accumulate continuous block groups until hitting size/memory limits
@@ -450,7 +451,7 @@ StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merg
     // OWNERSHIP TRANSFER: Move block groups into task to prevent premature destruction.
     // The merge iterator (created above) needs these blocks to remain valid during async
     // task execution. By holding shared_ptr in result_task, we ensure blocks outlive iterator.
-    for (int i = 0; i <= stop_idx; i++) {
+    for (int64_t i = 0; i <= stop_idx; i++) {
         result_task->block_groups.push_back(groups[i].block_group);
     }
 

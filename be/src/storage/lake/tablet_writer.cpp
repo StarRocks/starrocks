@@ -20,6 +20,8 @@
 namespace starrocks::lake {
 
 void TabletWriter::try_enable_pk_index_eager_build() {
+    // Guard against multiple calls when writers are reused or merged in different pipeline phases
+    // (e.g., eager merge and final merge); this method is intentionally idempotent.
     if (_enable_pk_index_eager_build) {
         return;
     }
