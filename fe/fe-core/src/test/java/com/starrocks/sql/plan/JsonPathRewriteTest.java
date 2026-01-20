@@ -409,5 +409,6 @@ public class JsonPathRewriteTest extends PlanTestBase {
             starRocksAssert.dropTable("json_rename");
         }
     }
+
 }
 
