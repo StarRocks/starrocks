@@ -414,7 +414,7 @@ public class IncludeObjectMgr {
     }
 
     public ReplicatedObjectMeta toObjectMeta(String clusterToken) {
-        ReplicatedObjectMeta objectMeta = new ReplicatedObjectMeta(clusterToken, GlobalStateMgr.getCurrentState());
+        ReplicatedObjectMeta objectMeta = new ReplicatedObjectMeta(clusterToken, GlobalStateMgr.getCurrentState(), this);
 
         for (Map.Entry<Catalog, Map<Long, Database>> entry : getIncludeCatalogs().entrySet()) {
             boolean ret = objectMeta.addCatalog(entry.getKey(), entry.getValue());
@@ -434,5 +434,50 @@ public class IncludeObjectMgr {
         }
 
         return objectMeta;
+    }
+
+    public static IncludeObjectMgr fromPrimaryIncludeMgr(IncludeObjectMgr primaryIncludeMgr,
+            ReplicatedObjectMap objectMap) {
+        IncludeObjectMgr includeObjectMgr = new IncludeObjectMgr();
+        if (primaryIncludeMgr == null || objectMap == null) {
+            return includeObjectMgr;
+        }
+
+        for (IncludeCatalog includeCatalog : primaryIncludeMgr.includeCatalogs.values()) {
+            if (!CatalogMgr.isInternalCatalog(includeCatalog.getCatalogId())) {
+                LOG.warn("Ignore non-internal include catalog id {}", includeCatalog.getCatalogId());
+                continue;
+            }
+            includeObjectMgr.addIncludeCatalog(includeCatalog.getCatalogId());
+        }
+
+        for (IncludeDatabase includeDatabase : primaryIncludeMgr.includeDatabases.values()) {
+            if (includeObjectMgr.includeCatalogs.containsKey(includeDatabase.getCatalogId())) {
+                continue;
+            }
+            Long localDatabaseId = objectMap.getLocalDatabaseId(includeDatabase.getDatabaseId());
+            if (localDatabaseId == null) {
+                LOG.warn("Failed to map include database id {} from primary", includeDatabase.getDatabaseId());
+                continue;
+            }
+            includeObjectMgr.addIncludeDatabase(includeDatabase.getCatalogId(), localDatabaseId);
+        }
+
+        for (IncludeTable includeTable : primaryIncludeMgr.includeTables.values()) {
+            Long localDatabaseId = objectMap.getLocalDatabaseId(includeTable.getDatabaseId());
+            Long localTableId = objectMap.getLocalTableId(includeTable.getTableId());
+            if (includeObjectMgr.includeCatalogs.containsKey(includeTable.getCatalogId()) ||
+                    (localDatabaseId != null && includeObjectMgr.includeDatabases.containsKey(localDatabaseId))) {
+                continue;
+            }
+            if (localDatabaseId == null || localTableId == null) {
+                LOG.warn("Failed to map include table id {} or database id {} from primary",
+                        includeTable.getTableId(), includeTable.getDatabaseId());
+                continue;
+            }
+            includeObjectMgr.addIncludeTable(includeTable.getCatalogId(), localDatabaseId, localTableId);
+        }
+
+        return includeObjectMgr;
     }
 }

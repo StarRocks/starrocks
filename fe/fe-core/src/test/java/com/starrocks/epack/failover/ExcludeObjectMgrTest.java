@@ -45,6 +45,8 @@ public class ExcludeObjectMgrTest {
 
         ExcludeObjectMgr excludeMgr = new ExcludeObjectMgr(stmt);
         Assert.assertTrue(excludeMgr.isExcludeCatalog("default_catalog"));
+        Assert.assertTrue(excludeMgr.isExcludeDatabase("default_catalog", "test"));
+        Assert.assertTrue(excludeMgr.isExcludeTable("default_catalog", "test", "ExcludeObjectMgrTestTable"));
     }
 
     @Test

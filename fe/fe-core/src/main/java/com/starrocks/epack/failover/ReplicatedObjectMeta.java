@@ -99,6 +99,8 @@ public class ReplicatedObjectMeta {
     private final String clusterToken;
     private final SystemInfoService systemInfoService;
 
+    private final IncludeObjectMgr includeMgr;
+
     private final Map<Long, CatalogMeta> catalogMetas = Maps.newConcurrentMap();
     private final Map<Long, DatabaseMeta> databaseMetas = Maps.newConcurrentMap();
     private final Map<Long, TableMeta> tableMetas = Maps.newConcurrentMap();
@@ -111,9 +113,10 @@ public class ReplicatedObjectMeta {
 
     private final ConcurrentHashMap<Long, Long> tableIdToIncrementId;
 
-    public ReplicatedObjectMeta(String clusterToken, GlobalStateMgr globalStateMgr) {
+    public ReplicatedObjectMeta(String clusterToken, GlobalStateMgr globalStateMgr, IncludeObjectMgr includeMgr) {
         this.clusterToken = clusterToken != null ? clusterToken : globalStateMgr.getToken();
         this.systemInfoService = globalStateMgr.getNodeMgr().getClusterInfo();
+        this.includeMgr = includeMgr;
         this.loadMgr = globalStateMgr.getLoadMgr();
         this.routineLoadMgr = globalStateMgr.getRoutineLoadMgr();
         this.streamLoadMgr = globalStateMgr.getStreamLoadMgr();
@@ -128,6 +131,10 @@ public class ReplicatedObjectMeta {
 
     public SystemInfoService getSystemInfoService() {
         return systemInfoService;
+    }
+
+    public IncludeObjectMgr getIncludeMgr() {
+        return includeMgr;
     }
 
     public Map<Long, CatalogMeta> getCatalogMetas() {

@@ -366,7 +366,7 @@ public class ExcludeObjectMgr {
     public boolean isExcludeDatabase(String catalogName, String databaseName) {
         ExcludeCatalog excludeCatalog = new ExcludeCatalog(catalogName);
         if (excludeCatalogs.contains(excludeCatalog)) {
-            return false;
+            return true;
         }
 
         ExcludeDatabase excludeDatabase = new ExcludeDatabase(catalogName, databaseName);
@@ -376,12 +376,12 @@ public class ExcludeObjectMgr {
     public boolean isExcludeTable(String catalogName, String databaseName, String tableName) {
         ExcludeCatalog excludeCatalog = new ExcludeCatalog(catalogName);
         if (excludeCatalogs.contains(excludeCatalog)) {
-            return false;
+            return true;
         }
 
         ExcludeDatabase excludeDatabase = new ExcludeDatabase(catalogName, databaseName);
         if (excludeDatabases.contains(excludeDatabase)) {
-            return false;
+            return true;
         }
 
         ExcludeTable excludeTable = new ExcludeTable(catalogName, databaseName, tableName);

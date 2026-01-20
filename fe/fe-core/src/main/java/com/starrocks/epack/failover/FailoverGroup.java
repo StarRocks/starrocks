@@ -690,6 +690,12 @@ public class FailoverGroup implements Writable {
      * Do some work when replication finished
      */
     private void handleReplicatingFinished() {
+        // Update include object mgr
+        IncludeObjectMgr primaryIncludeMgr = objectMeta != null ? objectMeta.getIncludeMgr() : null;
+        if (primaryIncludeMgr != null) {
+            includeMgr = IncludeObjectMgr.fromPrimaryIncludeMgr(primaryIncludeMgr, objectMap);
+        }
+
         state = FailoverGroupState.UPDATING;
 
         UpdateReplicatedObjectJob job = new UpdateReplicatedObjectJob(this);
@@ -781,6 +787,7 @@ public class FailoverGroup implements Writable {
             throw new RuntimeException(e);
         }
 
+        // Not update includeMgr, includeMgr uses id and is different from primary
         excludeMgr = primaryFailoverGroup.excludeMgr;
 
         for (FailoverGroupMember member : members.values()) {
