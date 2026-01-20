@@ -529,11 +529,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### drop_tablet_worker_count
 
-- Default: 3
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used to drop a tablet.
+- Description: The number of threads used to drop a tablet. `0` indicates half of the CPU cores in the node.
 - Introduced in: -
 
 ##### alter_tablet_worker_count
@@ -700,7 +700,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 <!--
 ##### memory_ratio_for_sorting_schema_change
 
-<<<<<<< HEAD
 - Default: 0.8
 - Type: Double
 - Unit:
@@ -712,134 +711,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 ##### update_cache_expire_sec
 
 - Default: 360
-=======
-- Default: 0
->>>>>>> e472f37842 ([Doc] Fix Default Value of drop_tablet_worker_count (#68085))
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-<<<<<<< HEAD
 - Description: The expiration time of Update Cache.
-=======
-- Description: The number of threads used to drop a tablet. `0` indicates half of the CPU cores in the node.
-- Introduced in: -
-
-##### enable_check_string_lengths
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to check the data length during loading to solve compaction failures caused by out-of-bound VARCHAR data.
-- Introduced in: -
-
-##### enable_event_based_compaction_framework
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable the Event-based Compaction Framework. `true` indicates Event-based Compaction Framework is enabled, and `false` indicates it is disabled. Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data.
-- Introduced in: -
-
-##### enable_lazy_delta_column_compaction
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: When enabled, compaction will prefer a "lazy" strategy for delta columns produced by partial column updates: StarRocks will avoid eagerly merging delta-column files back into their main segment files to save compaction I/O. In practice the compaction selection code checks for partial column-update rowsets and multiple candidates; if found and this flag is true, the engine will either stop adding further inputs to the compaction or only merge empty rowsets (level -1), leaving delta columns separate. This reduces immediate I/O and CPU during compaction at the cost of delayed consolidation (potentially more segments and temporary storage overhead). Correctness and query semantics are unchanged.
-- Introduced in: v3.2.3
-
-##### enable_new_load_on_memory_limit_exceeded
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to allow new loading processes when the hard memory resource limit is reached. `true` indicates new loading processes will be allowed, and `false` indicates they will be rejected.
-- Introduced in: v3.3.2
-
-##### enable_pk_index_parallel_compaction
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel Compaction for Primary Key index in a shared-data cluster.
-- Introduced in: -
-
-##### enable_pk_index_parallel_execution
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to enable parallel execution for Primary Key index operations in a shared-data cluster. When enabled, the system uses a thread pool to process segments concurrently during publish operations, significantly improving performance for large tablets.
-- Introduced in: -
-
-##### enable_pk_index_eager_build
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to eagerly build Primary Key index files during data import and compaction phases. When enabled, the system generates persistent PK index files immediately during data writes, improving subsequent query performance.
-- Introduced in: -
-
-##### enable_pk_size_tiered_compaction_strategy
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable the Size-tiered Compaction policy for Primary Key tables. `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
-- Introduced in: This item takes effect for shared-data clusters from v3.2.4 and v3.1.10 onwards, and for shared-nothing clusters from v3.2.5 and v3.1.10 onwards.
-
-##### enable_rowset_verify
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
-- Introduced in: -
-
-##### enable_size_tiered_compaction_strategy
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Whether to enable the Size-tiered Compaction policy (excluding Primary Key tables). `true` indicates the Size-tiered Compaction strategy is enabled, and `false` indicates it is disabled.
-- Introduced in: -
-
-##### enable_strict_delvec_crc_check
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: When enable_strict_delvec_crc_check is set to true, we will perform a strict CRC32 check on the delete vector, and if a mismatch is detected, a failure will be returned.
-- Introduced in: -
-
-##### enable_transparent_data_encryption
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: When enabled, StarRocks will create encrypted on‑disk artifacts for newly written storage objects (segment files, delete/update files, rowset segments, lake SSTs, persistent index files, etc.). Writers (RowsetWriter/SegmentWriter, lake UpdateManager/LakePersistentIndex and related code paths) will request encryption info from the KeyCache, attach encryption_info to writable files and persist encryption_meta into rowset / segment / sstable metadata (segment_encryption_metas, delete/update encryption metadata). The Frontend and Backend/CN encryption flags must match — a mismatch causes the BE to abort on heartbeat (LOG(FATAL)). This flag is not runtime‑mutable; enable it before deployment and ensure key management (KEK) and KeyCache are properly configured and synchronized across the cluster.
-- Introduced in: v3.3.1, 3.4.0, 3.5.0, 4.0.0
-
-##### enable_zero_copy_from_page_cache
-
-- Default: true
-- Type: boolean
-- Unit: -
-- Is mutable: Yes
-- Description: When enabled, FixedLengthColumnBase may avoid copying bytes when appending data that originates from a page-cache-backed buffer. In append_numbers the code will acquire the incoming ContainerResource and set the column's internal resource pointer (zero-copy) if all conditions are met: the config is true, the incoming resource is owned, the resource memory is aligned for the column element type, the column is empty, and the resource length is a multiple of the element size. Enabling this reduces CPU and memory-copy overhead and can improve ingestion/scan throughput. Drawbacks: it couples the column lifetime to the acquired buffer and relies on correct ownership/alignment; disable to force safe copying.
->>>>>>> e472f37842 ([Doc] Fix Default Value of drop_tablet_worker_count (#68085))
 - Introduced in: -
 
 ##### file_descriptor_cache_clean_interval
