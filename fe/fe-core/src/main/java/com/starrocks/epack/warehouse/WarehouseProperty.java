@@ -22,6 +22,9 @@ import com.starrocks.qe.GlobalVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Map;
+import java.util.TreeMap;
+
 public class WarehouseProperty {
     private static final Logger LOG = LogManager.getLogger(WarehouseProperty.class);
 
@@ -75,6 +78,9 @@ public class WarehouseProperty {
     @SerializedName(value = "query_queue_concurrency_limit")
     private int queryQueueConcurrencyLimit = -1;
 
+    @SerializedName(value = "warehouse_session_variables")
+    private Map<String, String> sessionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+
     public WarehouseProperty() {
         this.computeReplica = DEFAULT_REPLICA_NUMBER;
         this.replicationType = ReplicationType.NONE;
@@ -95,9 +101,13 @@ public class WarehouseProperty {
         this.queryQueueMaxQueuedQueries = that.queryQueueMaxQueuedQueries;
         this.queryQueuePendingTimeoutSecond = that.queryQueuePendingTimeoutSecond;
         this.queryQueueConcurrencyLimit = that.queryQueueConcurrencyLimit;
+        if (that.sessionVariables != null) {
+            this.sessionVariables.putAll(that.sessionVariables);
+        }
     }
 
-    public WarehouseProperty(int computeReplica, ReplicationType repType, WarmupLevelType warmupLevel, boolean enableQueryQueue) {
+    public WarehouseProperty(int computeReplica, ReplicationType repType, WarmupLevelType warmupLevel,
+                             boolean enableQueryQueue) {
         this.computeReplica = computeReplica;
         this.replicationType = repType;
         this.warmupLevel = warmupLevel;
@@ -176,6 +186,10 @@ public class WarehouseProperty {
         this.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
     }
 
+    public Map<String, String> getSessionVariables() {
+        return sessionVariables;
+    }
+
     public String toString() {
         return new Gson().toJson(this);
     }
@@ -195,7 +209,8 @@ public class WarehouseProperty {
                 && this.enableQueryQueueStatistic == prop.enableQueryQueueStatistic
                 && this.queryQueueMaxQueuedQueries == prop.queryQueueMaxQueuedQueries
                 && this.queryQueuePendingTimeoutSecond == prop.queryQueuePendingTimeoutSecond
-                && this.queryQueueConcurrencyLimit == prop.queryQueueConcurrencyLimit;
+                && this.queryQueueConcurrencyLimit == prop.queryQueueConcurrencyLimit
+                && this.sessionVariables.equals(prop.sessionVariables);
     }
 
     public static ReplicationType replicationTypeFromString(String strType) throws DdlException {

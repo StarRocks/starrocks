@@ -15,11 +15,15 @@
 package com.starrocks.alter;
 
 import com.starrocks.common.Config;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +44,16 @@ public class AlterHandlerEditLogTest {
 
     @BeforeEach
     public void setUp() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        ExtensionManager.getInstance().loadExtensionsFromClassPath("target/classes");
+
         UtFrameUtils.setUpForPersistTest();
+
         schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.clearJobs();
     }

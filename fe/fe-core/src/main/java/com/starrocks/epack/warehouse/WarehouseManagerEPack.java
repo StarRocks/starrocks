@@ -4,6 +4,8 @@ package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.WarmupLevel;
@@ -31,6 +33,11 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.SetListItem;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
@@ -100,7 +107,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
     private void checkWarehouseState(LocalWarehouse warehouse) {
         if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouse.getName()));
+            throw ErrorReportException.report(ErrorCode.ERR_WAREHOUSE_SUSPENDED,
+                    String.format("name: %s", warehouse.getName()));
         }
     }
 
@@ -110,7 +118,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
         }
         try {
             final LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(computeResource.getWarehouseId());
-            return String.format("%s:%s", warehouse.getName(),  getComputeResourceName(computeResource));
+            return String.format("%s:%s", warehouse.getName(), getComputeResourceName(computeResource));
         } catch (Exception e) {
             LOG.warn("Failed to get warehouse name for computeResource: {}", computeResource, e);
             return "";
@@ -188,7 +196,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
     public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
         Long computeNodeId = getComputeNodeId(computeResource, tabletId);
         if (computeNodeId == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, String.format("id: %s", computeResource));
+            throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE,
+                    String.format("id: %s", computeResource));
         }
         return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(computeNodeId);
     }
@@ -199,7 +208,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
         checkWarehouseState(warehouse);
         Cluster cluster = warehouse.getClusterByWorkGroupId(computeResource.getWorkerGroupId());
         if (cluster == null) {
-            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %s", computeResource));
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %s", computeResource));
         }
         return cluster.getNextComputeNodeHostId();
     }
@@ -218,7 +228,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     LOG.info("Warehouse {} already exists", warehouseName);
                     return;
                 }
-                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, String.format("name: %s", warehouseName));
+                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS,
+                        String.format("name: %s", warehouseName));
             }
             WarehouseProperty warehouseProperty = new WarehouseProperty();
             if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
@@ -265,8 +276,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 }
                 // enable_query_queue_statistic
                 if (properties.containsKey(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC)) {
-                    boolean enableQueryQueueStatistic = properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC)
-                            .equalsIgnoreCase("true");
+                    boolean enableQueryQueueStatistic =
+                            properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC)
+                                    .equalsIgnoreCase("true");
                     warehouseProperty.setEnableQueryQueueStatistic(enableQueryQueueStatistic);
                     properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC);
                 }
@@ -280,7 +292,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 // query_queue_max_queued_queries
                 if (properties.containsKey(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND)) {
                     int queryQueuePendingTimeoutSecond =
-                            Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND));
+                            Integer.parseInt(
+                                    properties.get(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND));
                     warehouseProperty.setQueryQueuePendingTimeoutSecond(queryQueuePendingTimeoutSecond);
                     properties.remove(WarehouseProperty.PROPERTY_QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
                 }
@@ -354,12 +367,14 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 if (stmt.isSetIfExists()) {
                     return;
                 }
-                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+                ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                        String.format("name: %s", warehouseName));
             }
             if (warehouseName.equals(Config.lake_compaction_warehouse) ||
                     warehouseName.equals(Config.lake_background_warehouse)) {
-                ErrorReport.reportDdlException(String.format("warehouse %s is used by compaction or background job, adjust " +
-                        "lake_compaction_warehouse or lake_background_warehouse first", warehouseName),
+                ErrorReport.reportDdlException(
+                        String.format("warehouse %s is used by compaction or background job, adjust " +
+                                "lake_compaction_warehouse or lake_background_warehouse first", warehouseName),
                         ErrorCode.ERR_UNKNOWN_ERROR);
             }
             warehouseEventListeners.stream()
@@ -407,7 +422,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             if (warehouse.getState() == LocalWarehouse.WarehouseState.SUSPENDED) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, String.format("name: %s", warehouseName));
+                ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_SUSPENDED,
+                        String.format("name: %s", warehouseName));
             }
 
             warehouse.suspendSelf();
@@ -463,6 +479,27 @@ public class WarehouseManagerEPack extends WarehouseManager {
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             WarehouseProperty warehouseProperty = new WarehouseProperty(warehouse.getProperty());
 
+            // analyze warehouse session variables
+            final String sessionVariablePrefix = "session.";
+            List<SetListItem> setListItems = Lists.newArrayList();
+            Map<String, String> sessionVariables = Maps.newHashMap();
+            properties.forEach((k, v) -> {
+                if (!k.startsWith(sessionVariablePrefix)) {
+                    return;
+                }
+                String varKey = k.substring(sessionVariablePrefix.length());
+                SystemVariable variable = new SystemVariable(varKey, new StringLiteral(v));
+                setListItems.add(variable);
+                sessionVariables.put(varKey, v);
+            });
+            properties.entrySet().removeIf(entry -> entry.getKey().startsWith(sessionVariablePrefix));
+            for (SetListItem item : setListItems) {
+                SystemVariable variable = (SystemVariable) item;
+                GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
+            }
+            SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+            warehouseProperty.getSessionVariables().putAll(sessionVariables);
+
             // handle update of 'compute_replica'
             if (properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA) != null) {
                 int computeReplica = Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA));
@@ -505,7 +542,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
             // handle update of 'enable_query_queue'
             if (properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC) != null) {
                 boolean enableQueryQueueStatistic =
-                        properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC).equalsIgnoreCase("true");
+                        properties.get(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC)
+                                .equalsIgnoreCase("true");
                 warehouseProperty.setEnableQueryQueueStatistic(enableQueryQueueStatistic);
                 properties.remove(WarehouseProperty.PROPERTY_ENABLE_QUERY_QUEUE_STATISTIC);
             }
@@ -541,13 +579,14 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 throw new DdlException(
                         String.format("Unknown warehouse properties: {%s}", String.join(", ", properties.keySet())));
             }
-
+            
             if (!warehouseProperty.equals(warehouse.getProperty())) { // some changes are made
                 // TODO: operation below is not atomic
                 StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
                 for (Cluster cluster : warehouse.getClusters().values()) {
                     try {
-                        ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
+                        ReplicationType replicationType =
+                                toStarOSReplicationType(warehouseProperty.getReplicationType());
                         WarmupLevel warmupLevel = toStarOSWarmupLevel(warehouseProperty.getWarmupLevel());
                         starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
                                 replicationType, warmupLevel);
