@@ -25,6 +25,12 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.type.DateType;
 import mockit.Expectations;
@@ -42,6 +48,65 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Unit tests for InsertPartitionEstimator
  */
 public class InsertPartitionEstimatorTest {
+
+    @Test
+    public void testEstimatePartitionCountFromPredicates_OrSamePartitionColumn(@Mocked InsertStmt insertStmt,
+                                                                               @Mocked IcebergTable table,
+                                                                               @Mocked QueryStatement queryStatement,
+                                                                               @Mocked SelectRelation selectRelation,
+                                                                               @Mocked SelectList selectList) {
+        // WHERE dt='2024-01-01' OR dt='2024-01-02' -> 2
+        Expr dtEq1 = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "dt"), new StringLiteral("2024-01-01"));
+        Expr dtEq2 = new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "dt"), new StringLiteral("2024-01-02"));
+        Expr predicate = new CompoundPredicate(CompoundPredicate.Operator.OR, dtEq1, dtEq2);
+
+        new Expectations() {
+            {
+                insertStmt.getQueryStatement();
+                result = queryStatement;
+                minTimes = 0;
+
+                queryStatement.getQueryRelation();
+                result = selectRelation;
+                minTimes = 0;
+
+                selectRelation.hasWhereClause();
+                result = true;
+                minTimes = 0;
+
+                selectRelation.getPredicate();
+                result = predicate;
+                minTimes = 0;
+
+                table.getPartitionColumns();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+
+                // Ensure mapping build doesn't early-exit
+                selectRelation.getSelectList();
+                result = selectList;
+                minTimes = 0;
+
+                selectList.getItems();
+                result = Lists.newArrayList(new SelectListItem(new SlotRef(null, "dt"), null));
+                minTimes = 0;
+
+                insertStmt.getTargetColumnNames();
+                result = Lists.newArrayList("dt");
+                minTimes = 0;
+
+                table.getFullSchema();
+                result = Lists.newArrayList(new Column("dt", DateType.DATE));
+                minTimes = 0;
+            }
+        };
+
+        long result = Deencapsulation.invoke(
+                InsertPartitionEstimator.class,
+                "estimateFromPredicates",
+                insertStmt, table, 100L, new HashMap<String, Double>());
+        assertEquals(2L, result);
+    }
 
     // ==================== estimatePartitionCountForInsert Tests ====================
 

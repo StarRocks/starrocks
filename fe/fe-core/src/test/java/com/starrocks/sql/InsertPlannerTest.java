@@ -42,6 +42,8 @@ import com.starrocks.type.VarcharType;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -58,6 +60,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class InsertPlannerTest {
 
     private InsertPlanner insertPlanner;
+
+    private static void setInsertPlannerLoggerLevel(Level level) {
+        Configurator.setLevel(InsertPlanner.class.getName(), level);
+    }
 
     @BeforeEach
     public void setUp() {
@@ -85,6 +91,29 @@ public class InsertPlannerTest {
         boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
                 insertStmt, icebergTable, sessionVariable);
         assertTrue(enabled);
+    }
+
+    @Test
+    public void testAdaptiveShuffleEnabledByPartitionRatio_DebugLogCovered(@Mocked GlobalStateMgr gsm,
+                                                                           @Mocked MetadataMgr metadataMgr,
+                                                                           @Mocked IcebergTable icebergTable,
+                                                                           @Mocked InsertStmt insertStmt,
+                                                                           @Mocked SessionVariable sessionVariable,
+                                                                           @Mocked QueryStatement queryStatement,
+                                                                           @Mocked SelectRelation selectRelation,
+                                                                           @Mocked NodeMgr nodeMgr,
+                                                                           @Mocked SystemInfoService clusterInfo) {
+        setInsertPlannerLoggerLevel(Level.DEBUG);
+        try {
+            setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                    queryStatement, selectRelation, 10, 0, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
+
+            boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
+                    insertStmt, icebergTable, sessionVariable);
+            assertTrue(enabled);
+        } finally {
+            setInsertPlannerLoggerLevel(Level.INFO);
+        }
     }
 
     /**
@@ -200,6 +229,29 @@ public class InsertPlannerTest {
         assertFalse(enabled);
     }
 
+    @Test
+    public void testAdaptiveShuffleDisabledWhenSingleWorker_DebugLogCovered(@Mocked GlobalStateMgr gsm,
+                                                                            @Mocked MetadataMgr metadataMgr,
+                                                                            @Mocked IcebergTable icebergTable,
+                                                                            @Mocked InsertStmt insertStmt,
+                                                                            @Mocked SessionVariable sessionVariable,
+                                                                            @Mocked QueryStatement queryStatement,
+                                                                            @Mocked SelectRelation selectRelation,
+                                                                            @Mocked NodeMgr nodeMgr,
+                                                                            @Mocked SystemInfoService clusterInfo) {
+        setInsertPlannerLoggerLevel(Level.DEBUG);
+        try {
+            setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                    queryStatement, selectRelation, 1, 0, 1000, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
+
+            boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
+                    insertStmt, icebergTable, sessionVariable);
+            assertFalse(enabled);
+        } finally {
+            setInsertPlannerLoggerLevel(Level.INFO);
+        }
+    }
+
     /**
      * Test adaptive shuffle is disabled when partition count is 1
      */
@@ -220,6 +272,29 @@ public class InsertPlannerTest {
         boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
                 insertStmt, icebergTable, sessionVariable);
         assertFalse(enabled);
+    }
+
+    @Test
+    public void testAdaptiveShuffleDisabledWhenSinglePartition_DebugLogCovered(@Mocked GlobalStateMgr gsm,
+                                                                               @Mocked MetadataMgr metadataMgr,
+                                                                               @Mocked IcebergTable icebergTable,
+                                                                               @Mocked InsertStmt insertStmt,
+                                                                               @Mocked SessionVariable sessionVariable,
+                                                                               @Mocked QueryStatement queryStatement,
+                                                                               @Mocked SelectRelation selectRelation,
+                                                                               @Mocked NodeMgr nodeMgr,
+                                                                               @Mocked SystemInfoService clusterInfo) {
+        setInsertPlannerLoggerLevel(Level.DEBUG);
+        try {
+            setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
+                    queryStatement, selectRelation, 10, 0, 1, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
+
+            boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
+                    insertStmt, icebergTable, sessionVariable);
+            assertFalse(enabled);
+        } finally {
+            setInsertPlannerLoggerLevel(Level.INFO);
+        }
     }
 
     /**
