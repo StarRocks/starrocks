@@ -776,7 +776,9 @@ public class FunctionSet {
                     .add(RAND)
                     .add(RANDOM)
                     .add(UUID)
+                    .add(UUID_NUMERIC)
                     .add(UUID_V7)
+                    .add(UUID_V7_NUMERIC)
                     .add(SLEEP)
                     .build();
 

@@ -30,7 +30,6 @@ public:
     ThreadLocalUUIDGeneratorTest() = default;
     ~ThreadLocalUUIDGeneratorTest() override = default;
 };
-}; // namespace starrocks
 
 // Test that UUIDs are unique
 TEST_F(ThreadLocalUUIDGeneratorTest, TestUniqueness) {
@@ -54,7 +53,7 @@ TEST_F(ThreadLocalUUIDGeneratorTest, TestParallelGeneration) {
     std::vector<std::vector<std::string>> thread_uuids(NUM_THREADS);
 
     for (int t = 0; t < NUM_THREADS; t++) {
-        threads.emplace_back([t, &thread_uuids, this]() {
+        threads.emplace_back([t, &thread_uuids]() {
             for (int i = 0; i < UUIDS_PER_THREAD; i++) {
                 boost::uuids::uuid uuid = ThreadLocalUUIDGenerator::next_uuid();
                 std::string uuid_string = boost::uuids::to_string(uuid);
