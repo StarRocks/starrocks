@@ -78,6 +78,11 @@ inline std::string decompress_data(const std::string& compressed_data, Compressi
 }
 
 inline std::string decompress_stream_data(const std::string& compressed_data, CompressionTypePB compression_type) {
+    // Handle GZIP using the specialized decompress_gzip() function
+    if (compression_type == CompressionTypePB::GZIP) {
+        return decompress_gzip(compressed_data);
+    }
+
     std::unique_ptr<StreamCompression> decompressor;
     Status st = StreamCompression::create_decompressor(compression_type, &decompressor);
     EXPECT_TRUE(st.ok());

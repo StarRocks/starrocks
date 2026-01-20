@@ -91,7 +91,7 @@ public:
     // input(in):               buf where compress begin
     // input_len(in):           max length of input buf
     // input_bytes_read(out):   bytes which is consumed by compressor
-    // output(out):             buf where to save compressed data
+    // output(in):              buf where to save compressed data
     // output_len(in):          max length of output buf
     // output_bytes_written(out): compressed data size in output buf
     virtual Status compress(const uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,

@@ -553,6 +553,15 @@ private:
         size_t buffer_size = 0;
         size_t buffer_used = 0;
     };
+
+    // Detects whether input is LZ4 frame or block format.
+    // Returns true if mode was detected, false if more data is needed.
+    StatusOr<bool> _detect_mode(uint8_t* input, size_t input_len);
+
+    // Decompresses data in block format.
+    Status _decompress_block(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                             size_t output_len, size_t* output_bytes_write, bool* stream_end);
+
     Context _ctx;
     Mode _mode = Mode::UNKNOWN;
     std::unique_ptr<Lz4FrameStreamCompression> _frame;
@@ -562,64 +571,62 @@ Status Lz4StreamCompression::init() {
     return Status::OK();
 }
 
-Status Lz4StreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                                        size_t output_len, size_t* output_bytes_write, bool* stream_end) {
-    *input_bytes_read = 0;
-    *output_bytes_write = 0;
-    *stream_end = false;
-
-    if (_mode == Mode::UNKNOWN) {
-        if (input_len < sizeof(uint32_t)) {
-            return Status::OK();
-        }
-
-        bool is_frame_magic = (decode_fixed32_le(input) == LZ4F_MAGICNUMBER);
-        if (!is_frame_magic) {
-            _mode = Mode::BLOCK;
-        } else {
-            if (input_len < LZ4F_HEADER_SIZE_MIN) {
-                return Status::OK();
-            }
-            // Verify the frame header before switching to frame mode to avoid misdetecting block data.
-            LZ4F_decompressionContext_t ctx = nullptr;
-            size_t ret = LZ4F_createDecompressionContext(&ctx, LZ4F_VERSION);
-            if (LZ4F_isError(ret)) {
-                return Status::InternalError(
-                        strings::Substitute("LZ4F create decompression context failed: $0", LZ4F_getErrorName(ret)));
-            }
-            LZ4F_frameInfo_t info;
-            size_t src_size = input_len;
-            ret = LZ4F_getFrameInfo(ctx, &info, input, &src_size);
-            LZ4F_freeDecompressionContext(ctx);
-            if (LZ4F_isError(ret)) {
-                // If the buffer can't cover the full header yet, wait for more data before deciding.
-                if (input_len < LZ4F_HEADER_SIZE_MAX) {
-                    // Request more bytes to determine if this is a valid LZ4 frame header.
-                    set_compressed_block_size(LZ4F_HEADER_SIZE_MAX);
-                    return Status::OK();
-                }
-                _mode = Mode::BLOCK;
-            } else {
-                _frame = std::make_unique<Lz4FrameStreamCompression>();
-                RETURN_IF_ERROR(_frame->init());
-                _mode = Mode::FRAME;
-            }
-        }
+StatusOr<bool> Lz4StreamCompression::_detect_mode(uint8_t* input, size_t input_len) {
+    if (input_len < sizeof(uint32_t)) {
+        return false; // Need more data
     }
 
-    if (_mode == Mode::FRAME) {
-        return _frame->decompress(input, input_len, input_bytes_read, output, output_len, output_bytes_write,
-                                  stream_end);
+    bool is_frame_magic = (decode_fixed32_le(input) == LZ4F_MAGICNUMBER);
+    if (!is_frame_magic) {
+        _mode = Mode::BLOCK;
+        return true;
     }
 
+    if (input_len < LZ4F_HEADER_SIZE_MIN) {
+        return false; // Need more data
+    }
+
+    // Verify the frame header before switching to frame mode to avoid misdetecting block data.
+    // Use memory pool for the temporary context.
+    StatusOr<compression::LZ4F_DCtx_Pool::Ref> maybe_ctx = compression::getLZ4F_DCtx();
+    if (!maybe_ctx.ok()) {
+        return maybe_ctx.status();
+    }
+    compression::LZ4F_DCtx_Pool::Ref ctx_ref = std::move(maybe_ctx).value();
+    LZ4F_decompressionContext_t ctx = ctx_ref->ctx;
+
+    LZ4F_frameInfo_t info;
+    size_t src_size = input_len;
+    size_t ret = LZ4F_getFrameInfo(ctx, &info, input, &src_size);
+    if (LZ4F_isError(ret)) {
+        // If the buffer can't cover the full header yet, wait for more data before deciding.
+        if (input_len < LZ4F_HEADER_SIZE_MAX) {
+            // Request more bytes to determine if this is a valid LZ4 frame header.
+            set_compressed_block_size(LZ4F_HEADER_SIZE_MAX);
+            return false; // Need more data
+        }
+        // Header is complete but invalid - fall back to block mode.
+        _mode = Mode::BLOCK;
+        return true;
+    }
+
+    // Valid frame header detected
+    _frame = std::make_unique<Lz4FrameStreamCompression>();
+    RETURN_IF_ERROR(_frame->init());
+    _mode = Mode::FRAME;
+    return true;
+}
+
+Status Lz4StreamCompression::_decompress_block(uint8_t* input, size_t input_len, size_t* input_bytes_read,
+                                               uint8_t* output, size_t output_len, size_t* output_bytes_write,
+                                               bool* stream_end) {
     Context* ctx = &_ctx;
-    Status st = Status::OK();
 
     if (ctx->buffer_used == ctx->buffer_size) {
         // Block stream format (big-endian):
         //   [block_len][compressed_len][compressed_payload], block_len=0 terminates.
         if (ctx->block_length == 0) {
-            if (input_len < 4) return st;
+            if (input_len < 4) return Status::OK();
             ctx->block_length = decode_fixed32_be(input);
             input += 4;
             input_len -= 4;
@@ -627,16 +634,16 @@ Status Lz4StreamCompression::decompress(uint8_t* input, size_t input_len, size_t
         }
         if (ctx->block_length == 0) {
             *stream_end = true;
-            return st;
+            return Status::OK();
         }
 
-        if (input_len < 4) return st;
+        if (input_len < 4) return Status::OK();
         uint32_t compressed_len = decode_fixed32_be(input);
         input += 4;
         input_len -= 4;
         if (input_len < compressed_len) {
             set_compressed_block_size(compressed_len);
-            return st;
+            return Status::OK();
         }
 
         *input_bytes_read += (compressed_len + 4);
@@ -657,10 +664,11 @@ Status Lz4StreamCompression::decompress(uint8_t* input, size_t input_len, size_t
         int decoded = LZ4_decompress_safe(reinterpret_cast<const char*>(input), ctx->buffer_data, compressed_len,
                                           expected_output_len);
         if (decoded < 0) {
-            return Status::InternalError("LZ4 RawDecompress failed because of data corruption");
+            return Status::InternalError(fmt::format("LZ4 block decompress failed: error_code={}", decoded));
         }
         if (static_cast<uint32_t>(decoded) != expected_output_len) {
-            return Status::InternalError("LZ4 RawDecompress returned unexpected output size");
+            return Status::InternalError(fmt::format("LZ4 block decompress size mismatch: expected={}, actual={}",
+                                                     expected_output_len, decoded));
         }
         ctx->buffer_size = decoded;
         ctx->buffer_used = 0;
@@ -680,7 +688,28 @@ Status Lz4StreamCompression::decompress(uint8_t* input, size_t input_len, size_t
             *stream_end = true;
         }
     }
-    return st;
+    return Status::OK();
+}
+
+Status Lz4StreamCompression::decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
+                                        size_t output_len, size_t* output_bytes_write, bool* stream_end) {
+    *input_bytes_read = 0;
+    *output_bytes_write = 0;
+    *stream_end = false;
+
+    if (_mode == Mode::UNKNOWN) {
+        ASSIGN_OR_RETURN(bool detected, _detect_mode(input, input_len));
+        if (!detected) {
+            return Status::OK(); // Need more data
+        }
+    }
+
+    if (_mode == Mode::FRAME) {
+        return _frame->decompress(input, input_len, input_bytes_read, output, output_len, output_bytes_write,
+                                  stream_end);
+    }
+
+    return _decompress_block(input, input_len, input_bytes_read, output, output_len, output_bytes_write, stream_end);
 }
 
 class LzoStreamCompression : public StreamCompression {
@@ -1146,24 +1175,26 @@ Status GzipStreamCompressor::compress(const uint8_t* input, size_t input_len, si
     _z_strm.next_out = output;
     _z_strm.avail_out = static_cast<uInt>(out_len);
     int ret = deflate(&_z_strm, Z_NO_FLUSH);
-    *input_bytes_read = in_len - _z_strm.avail_in;
-    *output_bytes_written = out_len - _z_strm.avail_out;
     if (ret != Z_OK && ret != Z_BUF_ERROR) {
         return Status::InternalError(strings::Substitute("Fail to do zlib stream compress, res=$0", ret));
     }
+    *input_bytes_read = in_len - _z_strm.avail_in;
+    *output_bytes_written = out_len - _z_strm.avail_out;
     return Status::OK();
 }
 
 Status GzipStreamCompressor::finish(uint8_t* output, size_t output_len, size_t* output_bytes_written,
                                     bool* stream_end) {
+    // Check re-enter immediately - if already finished, return as no-op
+    if (_finished) {
+        *output_bytes_written = 0;
+        *stream_end = true;
+        return Status::OK();
+    }
     constexpr size_t kMaxAvail = std::numeric_limits<uInt>::max();
     size_t out_len = std::min(output_len, kMaxAvail);
     *output_bytes_written = 0;
     *stream_end = false;
-    if (_finished) {
-        *stream_end = true;
-        return Status::OK();
-    }
     _z_strm.next_in = nullptr;
     _z_strm.avail_in = 0;
     _z_strm.next_out = output;

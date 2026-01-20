@@ -211,13 +211,8 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
-    // Use DeferOp to ensure cleanup on any failure after file creation
-    bool success = false;
-    DeferOp cleanup_on_failure([&success, &rollback_action]() {
-        if (!success) {
-            rollback_action();
-        }
-    });
+    // Use CancelableDefer to ensure cleanup on any failure after file creation
+    CancelableDefer cleanup_on_failure([&rollback_action]() { rollback_action(); });
 
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
@@ -242,7 +237,7 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
 
     auto writer = std::make_unique<CSVFileWriter>(path, csv_output_stream, _column_names, types,
                                                   std::move(column_evaluators), _parsed_options, rollback_action);
-    success = true; // Mark success to prevent cleanup
+    cleanup_on_failure.cancel(); // Prevent cleanup on success
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),

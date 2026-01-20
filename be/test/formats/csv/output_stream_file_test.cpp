@@ -410,7 +410,7 @@ TEST_F(OutputStreamFileTest, TestZstdCompression) {
 
 // Test LZ4 (raw block) compression
 TEST_F(OutputStreamFileTest, TestLz4RawCompression) {
-    std::string file_path = "/test_lz4raw.csv.lz4raw";
+    std::string file_path = "/test_lz4raw.csv.lz4";
     auto maybe_file = _fs.new_writable_file(file_path);
     ASSERT_OK(maybe_file.status());
     auto file = std::move(maybe_file.value());

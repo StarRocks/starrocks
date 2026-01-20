@@ -49,9 +49,10 @@ CompressedOutputStream::CompressedOutputStream(std::shared_ptr<OutputStream> und
         : OutputStream(buff_size),
           _underlying_stream(std::move(underlying_stream)),
           _compression_type(compression_type),
+          _is_block_compression(is_block_compression(compression_type)),
           _compressor(std::move(compressor)) {
     _compress_buffer.resize(64 * 1024);
-    if (is_block_compression(_compression_type)) {
+    if (_is_block_compression) {
         _block_buffer.reserve(kBlockBufferSize);
     }
 }
@@ -147,7 +148,7 @@ Status CompressedOutputStream::_sync(const char* data, size_t size) {
         return Status::OK();
     }
 
-    if (is_block_compression(_compression_type)) {
+    if (_is_block_compression) {
         size_t remaining = size;
         const uint8_t* input = reinterpret_cast<const uint8_t*>(data);
         while (remaining > 0) {
@@ -162,16 +163,16 @@ Status CompressedOutputStream::_sync(const char* data, size_t size) {
             }
         }
         return Status::OK();
+    } else {
+        return _compress_and_write(reinterpret_cast<const uint8_t*>(data), size);
     }
-
-    return _compress_and_write(reinterpret_cast<const uint8_t*>(data), size);
 }
 
 Status CompressedOutputStream::finalize() {
     // First flush any remaining data in the base OutputStream buffer
     RETURN_IF_ERROR(OutputStream::finalize());
 
-    if (is_block_compression(_compression_type)) {
+    if (_is_block_compression) {
         RETURN_IF_ERROR(_flush_block());
         RETURN_IF_ERROR(_write_block_end());
     } else {
@@ -195,9 +196,9 @@ Status CompressedOutputStream::finalize() {
         }
     }
 
-    // Shrink buffer to free memory
-    _block_buffer.shrink_to_fit();
-    _compress_buffer.shrink_to_fit();
+    // Clear buffers to free memory (they are no longer needed after finalization)
+    _block_buffer.clear();
+    _compress_buffer.clear();
 
     // Finalize the underlying stream
     return _underlying_stream->finalize();
@@ -207,7 +208,7 @@ std::size_t CompressedOutputStream::size() {
     size_t total_pending = _pending_buffer_size() + _block_buffer.size();
     size_t pending_estimate = 0;
     if (total_pending > 0) {
-        if (is_block_compression(_compression_type)) {
+        if (_is_block_compression) {
             // Estimate block framing overhead per block plus a final terminator.
             size_t num_blocks = (total_pending + kBlockBufferSize - 1) / kBlockBufferSize;
             size_t per_block_overhead = kBlockHeaderSize * num_blocks + kBlockEndSize;

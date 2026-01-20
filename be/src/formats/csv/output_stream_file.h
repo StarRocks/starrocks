@@ -121,6 +121,7 @@ private:
 
     std::shared_ptr<OutputStream> _underlying_stream;
     CompressionTypePB _compression_type;
+    bool _is_block_compression; // Cached result of is_block_compression(_compression_type)
     std::unique_ptr<StreamCompressor> _compressor;
     raw::RawVector<uint8_t> _compress_buffer;
     raw::RawVector<uint8_t> _block_buffer;
