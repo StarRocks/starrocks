@@ -26,6 +26,7 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -85,7 +86,7 @@ public:
         s_server->register_handler(GET, "/simple_get", &s_simple_get_handler);
         s_server->register_handler(HEAD, "/simple_get", &s_simple_get_handler);
         s_server->register_handler(POST, "/simple_post", &s_simple_post_handler);
-        s_server->start();
+        ASSERT_OK(s_server->start());
         real_port = s_server->get_real_port();
         ASSERT_NE(0, real_port);
         hostname = "http://127.0.0.1:" + std::to_string(real_port);
