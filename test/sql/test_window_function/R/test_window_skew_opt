@@ -1,0 +1,138 @@
+-- name: test_window_skew_opt
+DROP TABLE IF EXISTS window_skew_t1;
+-- result:
+-- !result
+CREATE TABLE window_skew_t1 (
+    id BIGINT AUTO_INCREMENT ,
+    pk INT,
+    v1 INT,
+    v2 INT
+   
+)
+PRIMARY KEY(id)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO window_skew_t1 (pk, v1,v2 ) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+-- result:
+-- !result
+INSERT INTO window_skew_t1 (pk, v1,v2 ) VALUES (NULL, 4, 4),(NULL, 5, 5), (NULL, 6, 6), (NULL, 7, 7),
+                                            (NULL, 8, 8), (NULL, 9, 9), ( NULL, 10, 10),
+                                            (NULL, 11, 11), (NULL, 12, 12), (NULL, 13, 13);
+-- result:
+-- !result
+ANALYZE FULL TABLE window_skew_t1;
+-- result:
+-- !result
+ANALYZE TABLE window_skew_t1 UPDATE HISTOGRAM ON pk with 32 BUCKETS 
+PROPERTIES(
+   "histogram_sample_ratio" = "1.0"
+);
+-- result:
+-- !result
+SET enable_split_window_skew_to_union = true;
+-- result:
+-- !result
+EXPLAIN COSTS SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1;
+-- result:
+[REGEX](?s)PLAN FRAGMENT.*0.*?UNION.*?ANALYTIC.*?partition by:.*?pk.*?Predicates:.*?pk.*?IS NOT NULL.*?ANALYTIC.*?order by:.*?v1.*?window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.*?Predicates:.*?pk.*?IS NULL
+-- !result
+SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+-- result:
+None	4	1
+None	5	2
+None	6	3
+None	7	4
+None	8	5
+None	9	6
+None	10	7
+None	11	8
+None	12	9
+None	13	10
+1	1	1
+2	2	1
+3	3	1
+-- !result
+SET enable_split_window_skew_to_union = false;
+-- result:
+-- !result
+EXPLAIN COSTS SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1;
+-- result:
+[REGEX](?s)PLAN FRAGMENT.*0.*?ANALYTIC.*?partition by:.*?pk.*?SORT.*?EXCHANGE.*?partition exprs:.*?pk.*?OlapScanNode
+-- !result
+SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+-- result:
+None	4	1
+None	5	2
+None	6	3
+None	7	4
+None	8	5
+None	9	6
+None	10	7
+None	11	8
+None	12	9
+None	13	10
+1	1	1
+2	2	1
+3	3	1
+-- !result
+UPDATE window_skew_t1 SET pk = 100 WHERE pk IS NULL;
+-- result:
+-- !result
+ANALYZE FULL TABLE window_skew_t1;
+-- result:
+-- !result
+ANALYZE TABLE window_skew_t1 UPDATE HISTOGRAM ON pk with 32 BUCKETS 
+PROPERTIES(
+   "histogram_sample_ratio" = "1.0"
+);
+-- result:
+-- !result
+SET enable_split_window_skew_to_union = true;
+-- result:
+-- !result
+EXPLAIN COSTS SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1;
+-- result:
+[REGEX](?s)PLAN FRAGMENT.*0.*?UNION.*?ANALYTIC.*?partition by:.*?pk.*?Predicates:.*?pk.*?!= 100.*?ANALYTIC.*?order by:.*?v1.*?window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.*?Predicates:.*?pk.*?= 100
+-- !result
+SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+-- result:
+1	1	1
+2	2	2
+3	3	3
+100	4	4
+100	5	9
+100	6	15
+100	7	22
+100	8	30
+100	9	39
+100	10	49
+100	11	60
+100	12	72
+100	13	85
+-- !result
+SET enable_split_window_skew_to_union = false;
+-- result:
+-- !result
+EXPLAIN COSTS SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1;
+-- result:
+[REGEX](?s)PLAN FRAGMENT.*0.*?ANALYTIC.*?partition by:.*?pk.*?SORT.*?EXCHANGE.*?partition exprs:.*?pk.*?OlapScanNode
+-- !result
+SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+-- result:
+1	1	1
+2	2	2
+3	3	3
+100	4	4
+100	5	9
+100	6	15
+100	7	22
+100	8	30
+100	9	39
+100	10	49
+100	11	60
+100	12	72
+100	13	85
+-- !result

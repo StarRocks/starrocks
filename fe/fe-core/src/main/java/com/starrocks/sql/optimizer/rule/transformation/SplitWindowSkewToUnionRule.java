@@ -323,7 +323,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             }
 
             ColumnStatistic colStat = statistics.getColumnStatistic(col);
-            var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat);
+            var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1));
             if (skewInfo.isSkewed()) {
 
                 if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
