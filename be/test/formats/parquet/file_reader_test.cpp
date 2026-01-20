@@ -361,7 +361,7 @@ StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(
     tRuntimeFilterDescription.__set_filter_id(1);
     tRuntimeFilterDescription.__set_has_remote_targets(false);
     tRuntimeFilterDescription.__set_build_plan_node_id(1);
-    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BORADCAST);
+    tRuntimeFilterDescription.__set_build_join_mode(TRuntimeFilterBuildJoinMode::BROADCAST);
     tRuntimeFilterDescription.__set_filter_type(TRuntimeFilterBuildType::TOPN_FILTER);
 
     TExpr col_ref = ExprsTestHelper::create_column_ref_t_expr<TYPE_INT>(slot_id, true);

@@ -16,7 +16,7 @@
 -- - multiple filters (BLOOM, BITSET, EMPTY)
 -- - enable or disable _enable_join_runtime_bitset_filter
 -- - nullable or not nullable for build and probe columns
--- - only support boradcast join
+-- - only support broadcast join
 
 CREATE TABLE __row_util_base (
   k1 bigint NULL
