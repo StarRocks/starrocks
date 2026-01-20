@@ -116,29 +116,6 @@ public class IcebergVariantShreddingTest {
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
                 .named("typed_value");
 
-        Type deepItemsChildTyped = org.apache.parquet.schema.Types.optionalGroup()
-                .addField(shreddedField("code",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
-                .addField(shreddedField("weight",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
-                .named("typed_value");
-
-        Type deepItemsChildArrayTyped = shreddedArrayTypedValue(
-                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                deepItemsChildTyped);
-
-        Type deepItemsObjectTyped = org.apache.parquet.schema.Types.optionalGroup()
-                .addField(shreddedField("children",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        deepItemsChildArrayTyped))
-                .named("typed_value");
-
-        Type deepItemsTyped = shreddedArrayTypedValue(
-                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                deepItemsObjectTyped);
-
         return org.apache.parquet.schema.Types.optionalGroup()
                 // typed_value holds shredded fields; must itself be a group
                 .id(fieldId)
@@ -148,32 +125,18 @@ public class IcebergVariantShreddingTest {
                 .addField(shreddedField("age",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
-                .addField(shreddedField("city",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
+                // city/status/name/email are intentionally omitted to keep them only in raw value.
                 .addField(shreddedField("score",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
-                .addField(shreddedField("status",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
-                .addField(shreddedField("name",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
                 .addField(shreddedField("profile",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         profileTyped))
-                .addField(shreddedField("email",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
                 .addField(shreddedField("events",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         shreddedArrayTypedValue(
                                 org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                                 eventObjectTyped)))
-                .addField(shreddedField("deep_items",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        deepItemsTyped))
                 .named("typed_value");
     }
 
@@ -258,7 +221,7 @@ public class IcebergVariantShreddingTest {
         VariantMetadata metadata = Variants.metadata(
                 "id", "age", "city", "score", "status", "name", "email", "profile",
                 "salary", "department", "rank", "metrics", "views", "ratio",
-                "events", "type", "count", "deep_items", "children", "code", "weight");
+                "events", "type", "count");
         for (int i = 0; i < 5; i++) {
             Record rec = GenericRecord.create(SCHEMA.asStruct());
             ShreddedObject obj = Variants.object(metadata);
@@ -283,20 +246,6 @@ public class IcebergVariantShreddingTest {
             event1.put("count", Variants.of((i + 1) * 2));
             events.add(event1);
             obj.put("events", events);
-            org.apache.iceberg.variants.ValueArray deepItems = Variants.array();
-            for (int j = 0; j < 2; j++) {
-                ShreddedObject deepItem = Variants.object(metadata);
-                org.apache.iceberg.variants.ValueArray children = Variants.array();
-                for (int k = 0; k < 2; k++) {
-                    ShreddedObject child = Variants.object(metadata);
-                    child.put("code", Variants.of("code_" + j + "_" + k));
-                    child.put("weight", Variants.of(i + j + k));
-                    children.add(child);
-                }
-                deepItem.put("children", children);
-                deepItems.add(deepItem);
-            }
-            obj.put("deep_items", deepItems);
             ShreddedObject profile = Variants.object(metadata);
             profile.put("salary", Variants.of(50000.0 + i * 1000));
             profile.put("department", Variants.of("dept_" + i));
