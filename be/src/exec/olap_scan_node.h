@@ -170,7 +170,8 @@ private:
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 
-    Status _prune_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges, std::vector<TScanRangeParams>* pruned_scan_ranges);
+    Status _prune_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges, 
+                              std::vector<TScanRangeParams>* pruned_scan_ranges);
 
 private:
     TOlapScanNode _olap_scan_node;
