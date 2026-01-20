@@ -106,23 +106,28 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto& partial_bloom_filter_build_params = _join_builder->get_runtime_bloom_filter_build_params();
     auto& partial_bloom_filters = _join_builder->get_runtime_bloom_filters();
 
-    // for skew join's boradcast site, we need key column for runtime filter
+    // for skew join's broadcast site, we need key column for runtime filter
     bool is_skew_broadcast_join =
             _join_builder->is_skew_join() && _distribution_mode == TJoinDistributionMode::BROADCAST;
-    std::vector<Columns> keyColumns;
+    std::vector<Columns> key_columns;
     std::vector<bool> null_safe;
     std::vector<TypeDescriptor> type_descs;
-    if (is_skew_broadcast_join) {
-        keyColumns.reserve(partial_bloom_filter_build_params.size());
+    if (is_skew_broadcast_join && !partial_bloom_filter_build_params.empty()) {
+        key_columns.reserve(partial_bloom_filter_build_params.size());
         null_safe.reserve(partial_bloom_filter_build_params.size());
         type_descs.reserve(partial_bloom_filter_build_params.size());
-        for (auto& param : partial_bloom_filter_build_params) {
-            if (UNLIKELY(!param.has_value())) {
-                return Status::InternalError("skew join build rf failed");
+        for (size_t i = 0; i < partial_bloom_filter_build_params.size(); ++i) {
+            auto& param = partial_bloom_filter_build_params[i];
+            if (param.has_value()) {
+                key_columns.emplace_back(param.value().columns);
+                null_safe.emplace_back(param.value().eq_null);
+                type_descs.emplace_back(param.value()._type_descriptor);
+            } else {
+                // if runtime filter is not created, we need to provide empty placeholders to maintain index alignment.
+                key_columns.emplace_back();
+                null_safe.emplace_back(false);
+                type_descs.emplace_back();
             }
-            keyColumns.emplace_back(param.value().columns);
-            null_safe.emplace_back(param.value().eq_null);
-            type_descs.emplace_back(param.value()._type_descriptor);
         }
     }
 
@@ -190,8 +195,13 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             if (is_skew_broadcast_join) {
                 // for skew join's broadcast join, we only publish local in/bloom runtime filter, and send key columns to rf coordinator
                 // and rf coordinator will merge key column with shuffle join's bloom filter instance
-                state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(bloom_filters, keyColumns,
-                                                                                              null_safe, type_descs);
+                if (key_columns.size() != bloom_filters.size()) {
+                    LOG(WARNING) << "key_columns.size() != bloom_filters.size(), key_columns.size="
+                                 << key_columns.size() << ", bloom_filters.size=" << bloom_filters.size();
+                } else {
+                    state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(
+                            bloom_filters, key_columns, null_safe, type_descs);
+                }
             } else {
                 state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             }

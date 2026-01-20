@@ -627,8 +627,7 @@ public class QueryOptimizer extends Optimizer {
 
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
-        if (sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite() &&
-                !sessionVariable.isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
+        if (sessionVariable.isEnableOptimizerSkewJoinOptimizeV1()) {
             skewJoinOptimize(tree, rootTaskContext);
         }
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergEqualityDeleteRewriteRule());
@@ -1060,12 +1059,9 @@ public class QueryOptimizer extends Optimizer {
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
 
         // this rule must be put after MarkParentRequiredDistributionRule
-        if (rootTaskContext.getOptimizerContext().getSessionVariable()
-                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
-                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2()) {
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
-
 
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 

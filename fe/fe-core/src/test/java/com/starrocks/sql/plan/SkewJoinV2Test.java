@@ -21,22 +21,45 @@ public class SkewJoinV2Test extends PlanTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(false);
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(true);
     }
 
     @AfterAll
     public static void afterClass() {
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(false);
         PlanTestBase.afterClass();
     }
 
     @Test
-    public void testSkewJoinV2WithRightSideHint() throws Exception {
+    public void testSkewJoinV2WithRightSideHint1() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t1.v4(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getVerboseExplain(sql);
-        assertCContains(sqlPlan, "Split expr: [4: v4, BIGINT, true] IN (1, 2)");
+        System.out.println(sqlPlan);
+        assertCContains(sqlPlan, "  Input Partition: RANDOM\n" +
+                "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
+                "  OutPut Exchange Id: 03\n" +
+                "  Split expr: ([1: v1, BIGINT, true] NOT IN (1, 2)) OR ([1: v1, BIGINT, true] IS NULL)\n" +
+                "  OutPut Partition: UNPARTITIONED\n" +
+                "  OutPut Exchange Id: 07\n" +
+                "  Split expr: [1: v1, BIGINT, true] IN (1, 2)\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     table: t0, rollup: t0");
+    }
+
+    @Test
+    public void testSkewJoinV2WithRightSideHint2() throws Exception {
+        String sql = "select v2, v5 from t1 join[skew|t1.v4(1,2)] t0 on v1 = v4 ";
+        String sqlPlan = getVerboseExplain(sql);
+        System.out.println(sqlPlan);
+        PlanTestBase.assertContains(sqlPlan, "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 1: v4\n" +
+                "  OutPut Exchange Id: 02\n" +
+                "  Split expr: ([1: v4, BIGINT, true] NOT IN (1, 2)) OR ([1: v4, BIGINT, true] IS NULL)\n" +
+                "  OutPut Partition: RANDOM\n" +
+                "  OutPut Exchange Id: 06\n" +
+                "  Split expr: [1: v4, BIGINT, true] IN (1, 2)");
     }
 
     @Test
@@ -114,7 +137,7 @@ public class SkewJoinV2Test extends PlanTestBase {
     }
 
     @Test
-    public void testSkewJoinV2WithComplexPredicate() throws Exception {
+    public void testSkewJoinV2WithComplexPredicate1() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on abs(v1) = abs(v4) ";
         String sqlPlan = getVerboseExplain(sql);
         // if on predicate's input is not column from table, then split expr should use Project's output column like "7: abs"
@@ -135,6 +158,29 @@ public class SkewJoinV2Test extends PlanTestBase {
                 + "  |  \n"
                 + "  0:OlapScanNode\n"
                 + "     table: t0, rollup: t0");
+    }
+
+    @Test
+    public void testSkewJoinV2WithComplexPredicate2() throws Exception {
+        String sql = "select v2, v5 from t1 join[skew|t0.v1(1,2)] t0 on abs(v1) = abs(v4) ";
+        String sqlPlan = getVerboseExplain(sql);
+        // if on predicate's input is not column from table, then split expr should use Project's output column like "7: abs"
+        PlanTestBase.assertContains(sqlPlan, "  Input Partition: RANDOM\n" +
+                "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 8: abs\n" +
+                "  OutPut Exchange Id: 05\n" +
+                "  Split expr: ([8: abs, LARGEINT, true] NOT IN (1, 2)) OR ([8: abs, LARGEINT, true] IS NULL)\n" +
+                "  OutPut Partition: UNPARTITIONED\n" +
+                "  OutPut Exchange Id: 09\n" +
+                "  Split expr: [8: abs, LARGEINT, true] IN (1, 2)");
+        PlanTestBase.assertContains(sqlPlan, "  Input Partition: RANDOM\n" +
+                "  SplitCastDataSink:\n" +
+                "  OutPut Partition: HASH_PARTITIONED: 7: abs\n" +
+                "  OutPut Exchange Id: 04\n" +
+                "  Split expr: ([7: abs, LARGEINT, true] NOT IN (1, 2)) OR ([7: abs, LARGEINT, true] IS NULL)\n" +
+                "  OutPut Partition: RANDOM\n" +
+                "  OutPut Exchange Id: 08\n" +
+                "  Split expr: [7: abs, LARGEINT, true] IN (1, 2)");
     }
 
     @Test
