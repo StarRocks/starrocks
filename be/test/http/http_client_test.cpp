@@ -86,13 +86,7 @@ public:
         s_server->register_handler(GET, "/simple_get", &s_simple_get_handler);
         s_server->register_handler(HEAD, "/simple_get", &s_simple_get_handler);
         s_server->register_handler(POST, "/simple_post", &s_simple_post_handler);
-<<<<<<< HEAD
-        s_server->start();
-=======
-        s_server->register_handler(GET, "/header_test", &s_header_handler);
-        s_server->register_handler(GET, "/multi_header_test", &s_multi_header_handler);
         ASSERT_OK(s_server->start());
->>>>>>> d44be25275 ([BugFix] Fix the bug of json parse in get fe metrics (#68164))
         real_port = s_server->get_real_port();
         ASSERT_NE(0, real_port);
         hostname = "http://127.0.0.1:" + std::to_string(real_port);
