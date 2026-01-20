@@ -345,6 +345,16 @@ public class JsonPathRewriteRule extends TransformationRule {
             if (builder.getPredicate() != null) {
                 requiredColumnSet.union(builder.getPredicate().getUsedColumns());
             }
+            
+            if (scanOperator instanceof LogicalOlapScanOperator olapScanOperator &&
+                    MapUtils.isNotEmpty(olapScanOperator.getColRefToColumnMetaMap())) {
+                for (ScalarOperator p : olapScanOperator.getPrunedPartitionPredicates()) {
+                    if (p != null) {
+                        requiredColumnSet.union(p.getUsedColumns());
+                    }
+                }
+            }
+
             if (scanOperator.getProjection() != null) {
                 Map<ColumnRefOperator, ScalarOperator> mapping = Maps.newHashMap();
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
