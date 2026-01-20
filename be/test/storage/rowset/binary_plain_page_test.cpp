@@ -223,7 +223,49 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
     // Reset decoder
     ASSERT_TRUE(decoder.seek_to_position_in_page(0).ok());
 
-    // Case 2: With NULLs
+    // Case 2: Nullable destination column but the page has no NULL flags (null_data is nullptr).
+    {
+        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+
+        std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
+        std::vector<const ColumnPredicate*> predicates;
+        predicates.push_back(predicate.get());
+
+        SparseRange<> range(0, 5);
+        std::vector<uint8_t> selection(5);
+        std::vector<uint16_t> selected_idx(5);
+
+        for (int i = 0; i < 5; ++i) selection[i] = 1;
+
+        Status st = decoder.next_batch_with_filter(column.get(), range, predicates, nullptr, selection.data(),
+                                                   selected_idx.data());
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ASSERT_EQ(0, selection[0]);
+        ASSERT_EQ(0, selection[1]);
+        ASSERT_EQ(1, selection[2]);
+        ASSERT_EQ(1, selection[3]);
+        ASSERT_EQ(1, selection[4]);
+
+        ASSERT_EQ(3, column->size());
+        auto nullable_col = down_cast<NullableColumn*>(column.get());
+        auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
+
+        ASSERT_EQ("c_300", binary_col->get_data()[0]);
+        ASSERT_EQ("d_400", binary_col->get_data()[1]);
+        ASSERT_EQ("e_500", binary_col->get_data()[2]);
+
+        ASSERT_EQ(3, nullable_col->null_column_raw_ptr()->size());
+        ASSERT_EQ(0, nullable_col->null_column_data()[0]);
+        ASSERT_EQ(0, nullable_col->null_column_data()[1]);
+        ASSERT_EQ(0, nullable_col->null_column_data()[2]);
+        ASSERT_FALSE(nullable_col->has_null());
+    }
+
+    // Reset decoder
+    ASSERT_TRUE(decoder.seek_to_position_in_page(0).ok());
+
+    // Case 3: With NULLs
     {
         // Use NullableColumn with ByteColumn as data
         auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
