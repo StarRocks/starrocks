@@ -152,16 +152,32 @@ void MemTrackerManager::_update_metrics_unlocked(UniqueLockType&) {
     for (auto& [mem_pool, metrics] : _shared_mem_trackers_metrics) {
         if (const auto it = _shared_mem_trackers.find(mem_pool); it != _shared_mem_trackers.end()) {
             const auto& [mem_tracker, child_count] = it->second;
-            metrics->mem_limit->set_value(mem_tracker->limit());
-            metrics->mem_usage_bytes->set_value(mem_tracker->consumption());
-            metrics->mem_usage_ratio->set_value(divide(mem_tracker->consumption(), mem_tracker->limit()));
-            metrics->workgroup_count->set_value(child_count);
+            if (metrics->mem_limit) {
+                metrics->mem_limit->set_value(mem_tracker->limit());
+            }
+            if (metrics->mem_usage_bytes) {
+                metrics->mem_usage_bytes->set_value(mem_tracker->consumption());
+            }
+            if (metrics->mem_usage_ratio) {
+                metrics->mem_usage_ratio->set_value(divide(mem_tracker->consumption(), mem_tracker->limit()));
+            }
+            if (metrics->workgroup_count) {
+                metrics->workgroup_count->set_value(child_count);
+            }
         } else {
             // Metrics entries for deleted shared_mem_trackers are never deleted, but simply set to 0.
-            metrics->mem_limit->set_value(0);
-            metrics->mem_usage_bytes->set_value(0);
-            metrics->mem_usage_ratio->set_value(0);
-            metrics->workgroup_count->set_value(0);
+            if (metrics->mem_limit) {
+                metrics->mem_limit->set_value(0);
+            }
+            if (metrics->mem_usage_bytes) {
+                metrics->mem_usage_bytes->set_value(0);
+            }
+            if (metrics->mem_usage_ratio) {
+                metrics->mem_usage_ratio->set_value(0);
+            }
+            if (metrics->workgroup_count) {
+                metrics->workgroup_count->set_value(0);
+            }
         }
     }
 }
