@@ -120,11 +120,6 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
         return ImmutableMap.of("ColumnMinMax", (long) cache.asMap().size());
     }
 
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return List.of(Pair.create(List.of(new ColumnMinMax("1", "10000")), (long) cache.asMap().size()));
-    }
-
     @VisibleForTesting
     public static String genMinMaxSql(String catalogName, Database db, OlapTable olapTable, Column column) {
         List<String> pieces = SubfieldAccessPathNormalizer.parseSimpleJsonPath(column.getColumnId().getId());

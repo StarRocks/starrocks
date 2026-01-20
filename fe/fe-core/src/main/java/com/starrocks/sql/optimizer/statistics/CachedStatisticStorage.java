@@ -689,36 +689,6 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .build();
     }
 
-    private <K, V> Pair<List<Object>, Long> sampleFromCache(AsyncLoadingCache<K, V> cache) {
-        Map<K, CompletableFuture<V>> map = cache.asMap();
-        if (map.isEmpty()) {
-            return Pair.create(List.of(), 0L);
-        }
-        Map.Entry<K, CompletableFuture<V>> next = map.entrySet().iterator().next();
-        V value = null;
-        try {
-            value = next.getValue().getNow(null);
-        } catch (Exception e) {
-            LOG.warn("sample load statistic cache failed", e);
-        }
-        if (value == null) {
-            return Pair.create(List.of(next.getKey()), cache.synchronous().estimatedSize());
-        }
-        return Pair.create(List.of(next.getKey(), value), cache.synchronous().estimatedSize());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return List.of(
-                sampleFromCache(tableStatsCache),
-                sampleFromCache(columnStatistics),
-                sampleFromCache(partitionStatistics),
-                sampleFromCache(histogramCache),
-                sampleFromCache(connectorHistogramCache),
-                sampleFromCache(connectorTableCachedStatistics)
-        );
-    }
-
     private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
         Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder()
                 .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
@@ -732,5 +702,4 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         
         return cacheBuilder.buildAsync(cacheLoader);
     }
-
 }

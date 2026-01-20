@@ -36,9 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
@@ -105,18 +103,5 @@ public class QueryDetailQueue {
             LATEST_MS_CNT.set(0);
             return ms * 1000000;
         }
-    }
-
-    public static List<Object> getSamplesForMemoryTracker() {
-        List<Object> samples = new ArrayList<>();
-        QueryDetail first = TOTAL_QUERIES.peekFirst();
-        if (first != null) {
-            samples.add(first);
-        }
-        QueryDetail last = TOTAL_QUERIES.peekLast();
-        if (last != null) {
-            samples.add(last);
-        }
-        return Lists.newArrayList(Pair.create(samples, TOTAL_QUERIES.size()));
     }
 }

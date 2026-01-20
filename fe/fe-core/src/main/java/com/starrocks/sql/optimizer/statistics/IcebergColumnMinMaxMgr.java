@@ -21,7 +21,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.memory.MemoryTrackable;
@@ -90,11 +89,6 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
     @Override
     public Map<String, Long> estimateCount() {
         return Map.of("IcebergMinMax", (long) cache.asMap().size());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return List.of(Pair.create(List.of(new ColumnMinMax("1", "10000")), (long) cache.asMap().size()));
     }
 
     private static final class CacheLoader implements AsyncCacheLoader<CacheKey, Optional<ColumnMinMax>> {

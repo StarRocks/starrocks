@@ -45,7 +45,6 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
@@ -421,10 +420,5 @@ public class ExportMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("ExportJob", (long) idToJob.size());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return Lists.newArrayList(Pair.create(new ArrayList<>(idToJob.values()), (long) idToJob.size()));
     }
 }

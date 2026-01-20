@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
@@ -39,14 +38,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
 
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
 
 public class CachingDeltaLakeMetastore extends CachingMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(CachingDeltaLakeMetastore.class);
-    private static final int MEMORY_META_SAMPLES = 10;
 
     public final IDeltaLakeMetastore delegate;
     private final Map<DatabaseTableName, Long> lastAccessTimeMap;
@@ -224,23 +221,6 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableSnapshotCache.invalidate(databaseTableName);
         lastAccessTimeMap.remove(databaseTableName);
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> dbSamples = databaseCache.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-        List<Object> tableSamples = tableSnapshotCache.asMap().values()
-                .stream()
-                .limit(MEMORY_META_SAMPLES)
-                .collect(Collectors.toList());
-
-        List<Pair<List<Object>, Long>> samples = delegate.getSamples();
-        samples.add(Pair.create(dbSamples, databaseCache.size()));
-        samples.add(Pair.create(tableSamples, tableSnapshotCache.size()));
-        return samples;
     }
 
     @Override

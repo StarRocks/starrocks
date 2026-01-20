@@ -41,7 +41,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.memory.MemoryTrackable;
@@ -484,21 +483,6 @@ public class TabletInvertedIndex implements MemoryTrackable {
         return ImmutableMap.of("TabletMeta", getTabletCount(),
                                "TabletCount", getTabletCount(),
                                "ReplicateCount", getReplicaCount());
-    }
-
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        readLock();
-        try {
-            List<Object> tabletMetaSamples = tabletMetaMap.values()
-                    .stream()
-                    .limit(1)
-                    .collect(Collectors.toList());
-
-            return Lists.newArrayList(Pair.create(tabletMetaSamples, (long) tabletMetaMap.size()));
-        } finally {
-            readUnlock();
-        }
     }
 
     private static Replica getReplica(Map<Long, Map<Long, Replica>> table, long rowKey, long columnKey) {

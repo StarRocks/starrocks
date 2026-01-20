@@ -34,8 +34,10 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.memory.estimate.ShallowMemory;
 import com.starrocks.thrift.TStorageMedium;
 
+@ShallowMemory
 public class TabletMeta {
     private final long dbId;
     private final long tableId;

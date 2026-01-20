@@ -148,20 +148,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class ReportHandler extends Daemon implements MemoryTrackable {
-    @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
-            List<Pair<List<Object>, Long>> result = new ArrayList<>();
-            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
-                result.add(Pair.create(taskMap.values()
-                        .stream()
-                        .limit(1)
-                        .collect(Collectors.toList()),
-                        (long) taskMap.size()));
-            }
-            return result;
-        }
-    }
 
     @Override
     public Map<String, Long> estimateCount() {
