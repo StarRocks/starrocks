@@ -411,6 +411,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String LOW_CARDINALITY_OPTIMIZE_ON_LAKE = "low_cardinality_optimize_on_lake";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
+    public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
+                    "enable_low_cardinality_optimize_for_union_all";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -1689,6 +1691,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_JOIN)
     private boolean enableLowCardinalityOptimizeForJoin = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL)
+    private boolean enableLowCardinalityOptimizeForUnionAll = true;
 
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
     private boolean useLowCardinalityOptimizeV2 = true;
@@ -4409,6 +4414,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLowCardinalityOptimizeForJoin() {
         return enableLowCardinalityOptimizeForJoin;
+    }
+
+    public boolean isEnableLowCardinalityOptimizeForUnionAll() {
+        return enableLowCardinalityOptimizeForUnionAll;
+    }
+
+    public void setEnableLowCardinalityOptimizeForUnionAll(boolean enableLowCardinalityOptimizeForUnionAll) {
+        this.enableLowCardinalityOptimizeForUnionAll = enableLowCardinalityOptimizeForUnionAll;
     }
 
     public boolean isUseLowCardinalityOptimizeV2() {
