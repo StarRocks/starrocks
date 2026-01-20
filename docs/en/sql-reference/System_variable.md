@@ -484,6 +484,13 @@ Default value: `true`.
 * **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 * **Introduced in**: v3.2.1
 
+### max_unknown_string_meta_length (global)
+
+* **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
+* **Default**: 64
+* **Data Type**: int
+* **Introduced in**: v3.5.13
+
 ### enable_metadata_profile
 
 * **Description**: Whether to enabled Profile for Iceberg Catalog metadata.
