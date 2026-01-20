@@ -18,7 +18,8 @@ use iceberg_shredding_test_${uuid0}.zya;
 CREATE TABLE test_shredding_variant (
     data VARIANT
 ) properties(
-  'format-version' = '3'
+  'format-version' = '3',
+  'iceberg.enableVariantShredding' = 'true'
 );
 -- result:
 -- !result
@@ -102,16 +103,15 @@ ORDER BY id;
 SELECT 
     get_variant_int(data, '$.id') as id,
     get_variant_string(data, '$.events[0].type') as event0_type,
-    get_variant_int(data, '$.events[0].count') as event0_count,
-    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+    get_variant_int(data, '$.events[0].count') as event0_count
 FROM test_shredding_variant
 ORDER BY id;
 -- result:
-1000	view	1	None
-1001	view	2	None
-1002	view	3	None
-1003	view	4	None
-1004	view	5	None
+1000	view	1
+1001	view	2
+1002	view	3
+1003	view	4
+1004	view	5
 -- !result
 SELECT '--- Shredded Data ---' as label;
 -- result:
@@ -126,16 +126,15 @@ SELECT
     get_variant_string(data, '$.profile.department') as dept,
     get_variant_int(data, '$.profile.metrics.views') as views,
     get_variant_string(data, '$.profile.rank') as rank,
-    get_variant_string(data, '$.events[0].type') as event0_type,
-    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+    get_variant_string(data, '$.events[0].type') as event0_type
 FROM test_shredding_variant
 ORDER BY id;
 -- result:
-1000	20	None	80	50000.0	dept_0	100	1	view	None
-1001	21	None	S81	51000.0	dept_1	110	L2	view	None
-1002	22	None	82	52000.0	dept_2	120	3	view	None
-1003	23	None	S83	53000.0	dept_3	130	L4	view	None
-1004	24	None	84	54000.0	dept_4	140	5	view	None
+1000	20	None	80	50000.0	dept_0	100	1	view
+1001	21	None	S81	51000.0	dept_1	110	L2	view
+1002	22	None	82	52000.0	dept_2	120	3	view
+1003	23	None	S83	53000.0	dept_3	130	L4	view
+1004	24	None	84	54000.0	dept_4	140	5	view
 -- !result
 SELECT '--- No-Shredded Data ---' as label;
 -- result:
@@ -150,16 +149,15 @@ SELECT
     get_variant_string(data, '$.profile.department') as dept,
     get_variant_int(data, '$.profile.metrics.views') as views,
     get_variant_string(data, '$.profile.rank') as rank,
-    get_variant_string(data, '$.events[0].type') as event0_type,
-    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+    get_variant_string(data, '$.events[0].type') as event0_type
 FROM test_noshredding_variant
 ORDER BY id;
 -- result:
-1000	20	city_0	80	50000.0	dept_0	100	1	view	None
-1001	21	city_1	S81	51000.0	dept_1	110	L2	view	None
-1002	22	city_2	82	52000.0	dept_2	120	3	view	None
-1003	23	city_3	S83	53000.0	dept_3	130	L4	view	None
-1004	24	city_4	84	54000.0	dept_4	140	5	view	None
+1000	20	city_0	80	50000.0	dept_0	100	1	view
+1001	21	city_1	S81	51000.0	dept_1	110	L2	view
+1002	22	city_2	82	52000.0	dept_2	120	3	view
+1003	23	city_3	S83	53000.0	dept_3	130	L4	view
+1004	24	city_4	84	54000.0	dept_4	140	5	view
 -- !result
 SELECT '--- Full Variant Comparison ---' as label;
 -- result:

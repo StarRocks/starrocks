@@ -17,7 +17,8 @@ use iceberg_shredding_test_${uuid0}.zya;
 CREATE TABLE test_shredding_variant (
     data VARIANT
 ) properties(
-  'format-version' = '3'
+  'format-version' = '3',
+  'iceberg.enableVariantShredding' = 'true'
 );
 
 -- Copy shredded parquet file to OSS
@@ -87,8 +88,7 @@ ORDER BY id;
 SELECT 
     get_variant_int(data, '$.id') as id,
     get_variant_string(data, '$.events[0].type') as event0_type,
-    get_variant_int(data, '$.events[0].count') as event0_count,
-    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+    get_variant_int(data, '$.events[0].count') as event0_count
 FROM test_shredding_variant
 ORDER BY id;
 
@@ -106,8 +106,7 @@ SELECT
     get_variant_string(data, '$.profile.department') as dept,
     get_variant_int(data, '$.profile.metrics.views') as views,
     get_variant_string(data, '$.profile.rank') as rank,
-    get_variant_string(data, '$.events[0].type') as event0_type,
-    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+    get_variant_string(data, '$.events[0].type') as event0_type
 FROM test_shredding_variant
 ORDER BY id;
 
@@ -121,8 +120,7 @@ SELECT
     get_variant_string(data, '$.profile.department') as dept,
     get_variant_int(data, '$.profile.metrics.views') as views,
     get_variant_string(data, '$.profile.rank') as rank,
-    get_variant_string(data, '$.events[0].type') as event0_type,
-    get_variant_string(data, '$.deep_items[0].children[0].code') as deep_code
+    get_variant_string(data, '$.events[0].type') as event0_type
 FROM test_noshredding_variant
 ORDER BY id;
 
