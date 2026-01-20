@@ -286,6 +286,22 @@ public class StarRocksFE {
             journalWriter.stopAndWait();
             Journal journal = GlobalStateMgr.getCurrentState().getJournal();
 
+            // stop star mgr journal writer before bdb env close, to avoid "Unclosed Database: starmgr_*" errors
+            if (RunMode.isSharedDataMode()) {
+                StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
+                if (starMgrServer != null && starMgrServer.getJournalSystem() != null) {
+                    JournalWriter starMgrJournalWriter = starMgrServer.getJournalSystem().getJournalWriter();
+                    if (starMgrJournalWriter != null) {
+                        starMgrJournalWriter.stopAndWait();
+                    } else {
+                        LOG.warn("skip stopping StarMgr journal writer because getJournalWriter() returned null");
+                    }
+                } else {
+                    LOG.warn("skip stopping StarMgr journal writer because StarMgrServer or its journal system " +
+                            "is not initialized");
+                }
+            }
+
             // transfer leader
             if (journal instanceof BDBJEJournal) {
                 BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
@@ -308,6 +324,10 @@ public class StarRocksFE {
                 }
 
                 GlobalStateMgr.getCurrentState().markLeaderTransferred();
+
+                if (RunMode.isSharedDataMode()) {
+                    StarMgrServer.getCurrentState().markLeaderTransferred();
+                }
             }
         }
     }
