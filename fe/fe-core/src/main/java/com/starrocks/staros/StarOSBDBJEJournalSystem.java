@@ -236,5 +236,11 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public JournalWriter getJournalWriter() {
         return journalWriter;
     }
+
+    public void markLeaderTransferred() {
+        if (journalWriter != null) {
+            journalWriter.setLeaderTransferred();
+        }
+    }
 }
 
