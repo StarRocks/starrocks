@@ -47,6 +47,8 @@
 
 namespace starrocks::pipeline {
 
+// only for test
+
 class Counter {
 public:
     void process_prepare() {
