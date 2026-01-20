@@ -500,6 +500,7 @@ private:
                 FileMetaPB file_meta;
                 file_meta.set_name(file.name());
                 file_meta.set_size(file.size());
+                file_meta.set_shared(file.shared());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             // Clear sstable_meta and add to orphan files.
@@ -507,6 +508,7 @@ private:
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
+                file_meta.set_shared(sstable.shared());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
             // Clear dcg_meta and add to orphan files.
@@ -514,6 +516,9 @@ private:
                 for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
                     FileMetaPB file_meta;
                     file_meta.set_name(dcg_ver.column_files(i));
+                    if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
+                        file_meta.set_shared(dcg_ver.shared_files(i));
+                    }
                     _metadata->mutable_orphan_files()->Add(std::move(file_meta));
                 }
             }
