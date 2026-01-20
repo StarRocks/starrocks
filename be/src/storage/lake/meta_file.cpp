@@ -100,12 +100,6 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Put this `.cols` files into orphan files
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
-<<<<<<< HEAD
-=======
-            if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
-                file_meta.set_shared(dcg_ver.shared_files(i));
-            }
->>>>>>> b61f3b8745 ([BugFix] Clear sstable_meta during full replication for PK table with cloud native persistent index (#67954))
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
         }
     }
