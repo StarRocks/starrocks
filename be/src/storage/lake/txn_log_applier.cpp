@@ -375,7 +375,6 @@ private:
 
             // Clear delvec_meta and add to orphan files.
             for (const auto& [version, file] : old_delvec_meta.version_to_file()) {
-                if (new_referenced_files.count(file.name()) > 0) continue;
                 FileMetaPB file_meta;
                 file_meta.set_name(file.name());
                 file_meta.set_size(file.size());
@@ -383,7 +382,6 @@ private:
             }
             // Clear sstable_meta and add to orphan files.
             for (const auto& sstable : old_sstable_meta.sstables()) {
-                if (new_referenced_files.count(sstable.filename()) > 0) continue;
                 FileMetaPB file_meta;
                 file_meta.set_name(sstable.filename());
                 file_meta.set_size(sstable.filesize());
@@ -392,7 +390,6 @@ private:
             // Clear dcg_meta and add to orphan files.
             for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
                 for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
-                    if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
                     FileMetaPB file_meta;
                     file_meta.set_name(dcg_ver.column_files(i));
                     _metadata->mutable_orphan_files()->Add(std::move(file_meta));
