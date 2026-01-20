@@ -658,8 +658,8 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
                             }
 
                             // Add shredded fields from typed_value (these override if there's conflict)
-                            const auto* typed_struct =
-                                    down_cast<const StructColumn*>(ColumnHelper::get_data_column(typed_col).get());
+                            ColumnPtr typed_data = ColumnHelper::get_data_column(typed_col);
+                            const auto* typed_struct = down_cast<const StructColumn*>(typed_data.get());
                             const auto& typed_field_names = !typed_value_type.field_names.empty()
                                                                     ? typed_value_type.field_names
                                                                     : typed_struct->field_names();
