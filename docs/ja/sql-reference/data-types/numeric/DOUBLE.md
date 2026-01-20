@@ -12,12 +12,12 @@ DOUBLE
 
 ## 例
 
-高精度の小数を扱うために`DOUBLE`列（8バイト）を持つテーブルを作成します。
+`DOUBLE`列（8バイト）を持つテーブルを作成します。`DOUBLE`の精度は約15桁の有効数字です。
 
 ```sql
 CREATE TABLE doubleDemo (
     pk BIGINT(20) NOT NULL,
-    income DOUBLE COMMENT "8 bytes, high precision"
+    income DOUBLE COMMENT "8 bytes"
 ) ENGINE=OLAP
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 1;

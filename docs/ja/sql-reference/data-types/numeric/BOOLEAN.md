@@ -16,7 +16,7 @@ TINYINT と同様に、0 は false を表し、1 は true を表します。
 
 ```sql
 CREATE TABLE booleanDemo (
-    pk INT COMMENT "Primary Key",
+    pk INT COMMENT "Sort Key",
     ispass BOOLEAN COMMENT "true/false"
 ) ENGINE=OLAP
 DUPLICATE KEY(pk)

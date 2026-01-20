@@ -15,7 +15,7 @@ displayed_sidebar: docs
 ```sql
 CREATE TABLE floatDemo (
     pk BIGINT(20) NOT NULL,
-    channel FLOAT COMMENT "4 bytes, single precision"
+    channel FLOAT COMMENT "4 bytes"
 ) ENGINE=OLAP
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 1;

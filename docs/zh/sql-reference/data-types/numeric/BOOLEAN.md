@@ -16,7 +16,7 @@ BOOL, BOOLEAN
 
 ```sql
 CREATE TABLE booleanDemo (
-    pk INT COMMENT "Primary Key",
+    pk INT COMMENT "Sort Key",
     ispass BOOLEAN COMMENT "true/false"
 ) ENGINE=OLAP
 DUPLICATE KEY(pk)

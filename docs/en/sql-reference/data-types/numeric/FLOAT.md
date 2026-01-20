@@ -10,12 +10,12 @@ FLOAT
 
 ## Examples
 
-Create a table with a `FLOAT` column (4 bytes). Note that `FLOAT` has lower precision than `DOUBLE` and may round off values.
+Create a table with a `FLOAT` column (4 bytes). `FLOAT` has a precision of approximately 7 significant decimal digits.
 
 ```sql
 CREATE TABLE floatDemo (
     pk BIGINT(20) NOT NULL,
-    channel FLOAT COMMENT "4 bytes, single precision"
+    channel FLOAT COMMENT "4 bytes"
 ) ENGINE=OLAP
 DUPLICATE KEY(pk)
 DISTRIBUTED BY HASH(pk) BUCKETS 1;
