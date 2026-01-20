@@ -10,8 +10,6 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 # Deploy StarRocks with Docker
 
-This tutorial covers:
-
 - Running StarRocks in a single Docker container
 - Loading two public datasets including basic transformation of the data
 - Analyzing the data with SELECT and JOIN
