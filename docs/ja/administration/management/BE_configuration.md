@@ -353,11 +353,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### drop_tablet_worker_count
 
-- デフォルト: 3
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: タブレットを削除するために使用されるスレッドの数。
+- 説明: タブレットを削除するために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
 - 導入バージョン: -
 
 ##### alter_tablet_worker_count
