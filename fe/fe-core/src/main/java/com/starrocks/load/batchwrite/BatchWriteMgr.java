@@ -91,12 +91,13 @@ public class BatchWriteMgr extends FrontendDaemon {
      *
      * @param tableId The ID of the table for which the coordinator backends are requested.
      * @param params The parameters for the stream load.
+     * @param user the user who initiated the load request
      * @return A RequestCoordinatorBackendResult containing the status of the operation and the coordinator backends.
      */
-    public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+    public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params, String user) {
         lock.readLock().lock();
         try {
-            Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params);
+            Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params, user);
             if (result.first.getStatus_code() != TStatusCode.OK) {
                 return new RequestCoordinatorBackendResult(result.first, null);
             }
@@ -120,7 +121,7 @@ public class BatchWriteMgr extends FrontendDaemon {
             TableId tableId, StreamLoadKvParams params, String user, long backendId, String backendHost) {
         lock.readLock().lock();
         try {
-            Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params);
+            Pair<TStatus, MergeCommitJob> result = getOrCreateJob(tableId, params, user);
             if (result.first.getStatus_code() != TStatusCode.OK) {
                 return new RequestLoadResult(result.first, null);
             }
@@ -155,9 +156,10 @@ public class BatchWriteMgr extends FrontendDaemon {
      *
      * @param tableId The ID of the table for which the batch write is requested.
      * @param params The parameters for the stream load.
+     * @param user the user who initiated the load request
      * @return A Pair containing the status of the operation and the MergeCommitJob instance.
      */
-    private Pair<TStatus, MergeCommitJob> getOrCreateJob(TableId tableId, StreamLoadKvParams params) {
+    private Pair<TStatus, MergeCommitJob> getOrCreateJob(TableId tableId, StreamLoadKvParams params, String user) {
         BatchWriteId uniqueId = new BatchWriteId(tableId, params);
         MergeCommitJob load = mergeCommitJobs.get(uniqueId);
         if (load != null) {
@@ -204,7 +206,7 @@ public class BatchWriteMgr extends FrontendDaemon {
                         newLoad.getBatchWriteParallel());
                 return newLoad;
             });
-            LOG.info("Create batch write, id: {}, {}, {}", load.getId(), tableId, params);
+            LOG.info("Create merge commit job, user: {}, id: {}, {}, {}", user, load.getId(), tableId, params);
         } catch (Exception e) {
             TStatus status = new TStatus();
             status.setStatus_code(TStatusCode.INTERNAL_ERROR);
