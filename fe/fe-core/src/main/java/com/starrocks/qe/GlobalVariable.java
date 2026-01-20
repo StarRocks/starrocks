@@ -78,6 +78,26 @@ public final class GlobalVariable {
     public static final String ACTIVATE_ALL_ROLES_ON_LOGIN_V2 = "activate_all_roles_on_login_v2";
     public static final String ENABLE_TDE = "enable_tde";
     public static final String MAX_UNKNOWN_STRING_META_LENGTH = "max_unknown_string_meta_length";
+<<<<<<< HEAD
+=======
+
+    // cngroup
+    public static final String CNGROUP_SCHEDULE_MODE = "cngroup_schedule_mode";
+
+    public static final String ENABLE_QUERY_HISTORY = "enable_query_history";
+
+    public static final String QUERY_HISTORY_KEEP_SECONDS = "query_history_keep_seconds";
+
+    public static final String QUERY_HISTORY_LOAD_INTERVAL_SECONDS = "query_history_load_interval_seconds";
+
+    public static final String ENABLE_SPM_CAPTURE = "enable_plan_capture";
+
+    public static final String SPM_CAPTURE_INTERVAL_SECONDS = "plan_capture_interval_seconds";
+
+    public static final String SPM_CAPTURE_INCLUDE_TABLE_PATTERN = "plan_capture_include_pattern";
+
+    public static final String ENABLE_TABLE_NAME_CASE_INSENSITIVE = "enable_table_name_case_insensitive";
+>>>>>>> 12e5983d66 ([BugFix] change max string length to 1M when unknown (backport #67873) (#68075))
 
 
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
@@ -182,6 +202,34 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
+<<<<<<< HEAD
+=======
+
+    @VariableMgr.VarAttr(name = CNGROUP_SCHEDULE_MODE)
+    private static String cngroupScheduleMode = "standard";
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_HISTORY, flag = VariableMgr.GLOBAL)
+    public static boolean enableQueryHistory = false;
+
+    @VariableMgr.VarAttr(name = QUERY_HISTORY_KEEP_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long queryHistoryKeepSeconds = 86400 * 3; // 3 days
+
+    @VariableMgr.VarAttr(name = QUERY_HISTORY_LOAD_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long queryHistoryLoadIntervalSeconds = 60 * 15; // 15min
+
+    @VariableMgr.VarAttr(name = ENABLE_SPM_CAPTURE, flag = VariableMgr.GLOBAL)
+    public static boolean enableSPMCapture = false;
+
+    @VariableMgr.VarAttr(name = SPM_CAPTURE_INTERVAL_SECONDS, flag = VariableMgr.GLOBAL)
+    public static long spmCaptureIntervalSeconds = 60 * 60 * 3; // 3 hour
+
+    @VariableMgr.VarAttr(name = SPM_CAPTURE_INCLUDE_TABLE_PATTERN, flag = VariableMgr.GLOBAL)
+    public static String spmCaptureIncludeTablePattern = ".*";
+
+    public static boolean isEnableQueryHistory() {
+        return enableQueryHistory;
+    }
+>>>>>>> 12e5983d66 ([BugFix] change max string length to 1M when unknown (backport #67873) (#68075))
 
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
@@ -322,6 +370,17 @@ public final class GlobalVariable {
             return 64;
         }
         return maxUnknownStringMetaLength;
+<<<<<<< HEAD
+=======
+    }
+
+    public static void setCngroupScheduleMode(String mode) {
+        cngroupScheduleMode = mode;
+    }
+
+    public static String getCngroupScheduleMode() {
+        return cngroupScheduleMode;
+>>>>>>> 12e5983d66 ([BugFix] change max string length to 1M when unknown (backport #67873) (#68075))
     }
 
     // Don't allow create instance.
