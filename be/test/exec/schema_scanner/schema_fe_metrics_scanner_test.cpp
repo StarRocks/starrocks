@@ -62,7 +62,7 @@ protected:
     ObjectPool _pool;
 };
 
-TEST_F(SchemaFeMetricsScannerTest, test_patial_json) {
+TEST_F(SchemaFeMetricsScannerTest, test_partial_json) {
     RuntimeState state;
     TFrontend frontend;
     frontend.__set_ip("127.0.0.1");
