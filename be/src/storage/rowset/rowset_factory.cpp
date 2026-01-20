@@ -53,8 +53,12 @@ Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::
         std::vector<std::string> store_paths = StorageEngine::instance()->get_store_paths();
         for (const auto& store_path : store_paths) {
             if (rowset_path.compare(0, store_path.size(), store_path) == 0) {
-                data_dir = StorageEngine::instance()->get_store(store_path);
-                break;
+                // Ensure the match occurs at a path boundary to avoid false matches
+                // e.g., /data1 should not match /data10/tablet/...
+                if (rowset_path.size() == store_path.size() || rowset_path[store_path.size()] == '/') {
+                    data_dir = StorageEngine::instance()->get_store(store_path);
+                    break;
+                }
             }
         }
         if (data_dir != nullptr) {
