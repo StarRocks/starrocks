@@ -170,6 +170,7 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
+import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.meta.SqlDigestBlackList;
 import com.starrocks.metric.MetricRepo;
@@ -282,6 +283,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+@IgnoreMemoryTrack
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
     // 0 ~ 9999 used for qe
