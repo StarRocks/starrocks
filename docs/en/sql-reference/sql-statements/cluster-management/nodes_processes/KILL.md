@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # KILL
 
-Kill terminates a connection or a query currently being performed by threads executing within StarRocks.
+Terminates a connection or a query currently being performed by threads executing within StarRocks.
 
 :::tip
 
@@ -15,7 +15,7 @@ This operation does not require privileges.
 ## Syntax
 
 ```SQL
-KILL [ CONNECTION | QUERY ] <processlist_id>
+KILL [ CONNECTION | QUERY ] { <processlist_id> | <query_id> }
 ```
 
 ## Parameters
@@ -24,6 +24,7 @@ KILL [ CONNECTION | QUERY ] <processlist_id>
 | ------------------------ | ------------------------------------------------------------ |
 | Modifier:<ul><li>CONNECTION</li><li>QUERY</li></ul> | <ul><li>With a `CONNECTION` modifier, the KILL statement terminates the connection associated with the given `processlist_id`, after terminating any statement the connection is executing.</li><li>With a `QUERY` modifier, the KILL statement terminates the statement the connection is currently executing, but leaves the connection itself intact.</li><li>If no modifier is present, the default is `CONNECTION`.</li></ul> |
 | processlist_id           | The ID of the thread you want to terminate. You can get the IDs of the threads that are being executed using [SHOW PROCESSLIST](SHOW_PROCESSLIST.md). |
+| query_id                 | The ID of the query you want to terminate. You can get the IDs of the queries that are pending or being executed using SHOW RUNNING QUERIES or [SHOW PROC](SHOW_PROC.md) with `'/current_queries'` and `'/global_current_queries'`. |
 
 ## Examples
 

@@ -14,8 +14,8 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.thrift.TInfinityType;
 import com.starrocks.thrift.TVariant;
+import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
 
 import java.util.Objects;
@@ -39,7 +39,7 @@ public class MinVariant extends Variant {
     public TVariant toThrift() {
         TVariant variant = new TVariant();
         variant.setType(com.starrocks.type.TypeSerializer.toThrift(type));
-        variant.setInfinity_type(TInfinityType.MINIMUM);
+        variant.setVariant_type(TVariantType.MINIMUM);
         return variant;
     }
 
@@ -65,4 +65,3 @@ public class MinVariant extends Variant {
         return Objects.hash(MinVariant.class, type);
     }
 }
-

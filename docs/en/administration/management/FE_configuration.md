@@ -1817,7 +1817,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_query_queue_v2
 
-- Default: false
+- Default: true
 - Type: boolean
 - Unit: -
 - Is mutable: No
@@ -4010,6 +4010,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: No
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
+
+##### jdbc_connection_timeout_ms
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The timeout in milliseconds for HikariCP connection pool to acquire a connection. If a connection cannot be acquired from the pool within this time, the operation will fail.
+- Introduced in: v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout in milliseconds for JDBC statement query execution. This timeout is applied to all SQL queries executed through JDBC catalogs (e.g., partition metadata queries). The value is converted to seconds when passed to the JDBC driver.
+- Introduced in: v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout in milliseconds for JDBC network operations (socket read). This timeout applies to database metadata calls (e.g., getSchemas(), getTables(), getColumns()) to prevent indefinite blocking when the external database is unresponsive.
+- Introduced in: v3.5.13
 
 ##### jdbc_connection_pool_size
 
