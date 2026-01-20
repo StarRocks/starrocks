@@ -797,7 +797,7 @@ public class Config extends ConfigBase {
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
      */
     @ConfField
-    public static boolean enable_query_queue_v2 = false;
+    public static boolean enable_query_queue_v2 = true;
     /**
      * Used to calculate the total number of slots the system has,
      * which is equal to the configuration value * BE number * BE cores.
