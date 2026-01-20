@@ -346,8 +346,13 @@ private:
                       << ", txn_id: " << txn_id;
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            auto old_delvec_meta = std::move(*_metadata->mutable_delvec_meta());
+            auto old_sstable_meta = std::move(*_metadata->mutable_sstable_meta());
+            auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
             _metadata->mutable_rowsets()->Clear();
             _metadata->mutable_delvec_meta()->Clear();
+            _metadata->mutable_sstable_meta()->Clear();
+            _metadata->mutable_dcg_meta()->Clear();
 
             auto new_next_rowset_id = _metadata->next_rowset_id();
             for (const auto& op_write : op_replication.op_writes()) {
@@ -358,19 +363,40 @@ private:
                 new_next_rowset_id =
                         std::max<uint32_t>(new_next_rowset_id, new_rowset_id + std::max(1, rowset->segments_size()));
             }
-
             for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
                 auto delvec = std::make_shared<DelVector>();
                 RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
                 _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
             }
-
             _metadata->set_next_rowset_id(new_next_rowset_id);
-            _metadata->set_cumulative_point(0);
             old_rowsets.Swap(_metadata->mutable_compaction_inputs());
 
-            _tablet.update_mgr()->unload_primary_index(_tablet.id());
+            _metadata->set_cumulative_point(0);
 
+            // Clear delvec_meta and add to orphan files.
+            for (const auto& [version, file] : old_delvec_meta.version_to_file()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(file.name());
+                file_meta.set_size(file.size());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            // Clear sstable_meta and add to orphan files.
+            for (const auto& sstable : old_sstable_meta.sstables()) {
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesize());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            // Clear dcg_meta and add to orphan files.
+            for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
+                for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+                    FileMetaPB file_meta;
+                    file_meta.set_name(dcg_ver.column_files(i));
+                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+                }
+            }
+
+            _tablet.update_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
