@@ -1627,6 +1627,26 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: -
 - Description: Ratio of internal table scan thread time slices used by each resource group to the total used by all resource groups. This is an average value over the time interval between two metric retrievals.
 
+### mem_pool_mem_limit_bytes
+
+- Unit: Bytes
+- Description: Memory limit for each memory pool, measured in bytes. This is an instantaneous value.
+
+### mem_pool_mem_usage_bytes
+
+- Unit: Bytes
+- Description: Currently used total memory by each memory pool, measured in bytes. This is an instantaneous value. 
+
+### mem_pool_mem_usage_ratio
+
+- Unit: -
+- Description: Ratio of the memory usage of the memory pool to the memory limit of the memory pool. This is an instantaneous value.
+
+### mem_pool_workgroup_count
+
+- Unit: Count
+- Description: Number of resource groups assigned to each memory pool. This is an instantaneous value.
+
 ### pipe_poller_block_queue_len
 
 - Unit: Count
