@@ -11,9 +11,11 @@ StarRocks supports data compression for table and index storage. Data compressio
 
 StarRocks supports four data compression algorithms: LZ4, Zstandard (or zstd), zlib, and Snappy. These data compression algorithms differ in compression ratio and compression/decompression performance. Generally, the compression ratios of these algorithms rank as follows: zlib > Zstandard > LZ4 > Snappy. Among them, zlib has shown relatively high compression ratios. As a result of the highly compressed data, the loading and query performances on tables with the zlib compression algorithm are also affected. LZ4 and Zstandard, especially, have well-balanced compression ratios and decompression performances. You can choose among these compression algorithms to cater to your business needs for less storage space or better performance. We recommend LZ4 or Zstandard if you do not have specific demands for less storage space.
 
-> **NOTE**
->
-> Different data types can affect the compression ratio.
+:::note
+
+Different data types can affect the compression ratio.
+
+:::
 
 ## Specify a data compression algorithm for a table
 
@@ -35,8 +37,10 @@ PROPERTIES (
 );
 ```
 
-> **NOTE**
->
-> If no data compression algorithm is specified, StarRocks uses LZ4 by default.
+:::note
+
+If no data compression algorithm is specified, StarRocks uses LZ4 by default.
+
+:::
 
 You can view the compression algorithm of a table using [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md).
