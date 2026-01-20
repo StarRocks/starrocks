@@ -20,10 +20,10 @@ jobs:
         id: check
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.ORG_READ_TOKEN || github.token }}
+          github-token: ${{ secrets.MEMBERSHIP_TOKEN || github.token }}
           script: |
-            // If TUIST_GITHUB_TOKEN is not available (e.g., from a fork), treat as non-member
-            const token = '${{ secrets.ORG_READ_TOKEN }}';
+            // If MEMBERSHIP_TOKEN is not available (e.g., from a fork), treat as non-member
+            const token = '${{ secrets.MEMBERSHIP_TOKEN }}';
             if (!token || token === '') {
               console.log(`Running from fork - treating ${context.payload.pull_request.user.login} as non-member`);
               core.setOutput('is-member', 'false');
@@ -69,7 +69,7 @@ jobs:
         if: ${{ github.event.pull_request.head.repo.full_name == 'StarRocks/starrocks' }}
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.ORG_READ_TOKEN || github.token }}
+          github-token: ${{ secrets.MEMBERSHIP_TOKEN || github.token }}
           script: |
             const user = context.payload.comment.user.login;
             const org = 'StarRocks';
@@ -94,7 +94,7 @@ jobs:
               if (error.status === 404) {
                 core.setFailed(`❌ User ${user} not found in team ${org}/${team}. Please ensure your membership is public or the token has org-read access.`);
               } else if (error.status === 403) {
-                core.setFailed(`❌ Permission Denied (403). The GITHUB_TOKEN does not have 'members: read' permission or Org settings restrict access.`);
+                core.setFailed(`❌ Permission Denied (403). The MEMBERSHIP_TOKEN does not have 'members: read' permission or Org settings restrict access.`);
               } else {
                 core.setFailed(`❌ Unexpected error (Status ${error.status}): ${error.message}`);
               }
