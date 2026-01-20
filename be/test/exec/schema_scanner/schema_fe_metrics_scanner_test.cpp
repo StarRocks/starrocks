@@ -26,9 +26,9 @@
 
 namespace starrocks {
 
-class HttpClientTestSimpleGetHandler : public HttpHandler {
+class SchemaFeMetricsScannerGetHandler : public HttpHandler {
 public:
-    HttpClientTestSimpleGetHandler() = default;
+    SchemaFeMetricsScannerGetHandler() = default;
     void handle(HttpRequest* req) override {
         std::string resp = R"([{"tags":{"metric":"jvm_young_gc","type":"count"},"unit":"nounit","value:741}])";
         HttpChannel::send_reply(req, resp);
@@ -55,7 +55,7 @@ public:
     }
 
 protected:
-    HttpClientTestSimpleGetHandler _handler;
+    SchemaFeMetricsScannerGetHandler _handler;
     std::unique_ptr<EvHttpServer> _server = nullptr;
     int _port = 0;
     std::string _hostname = "";
