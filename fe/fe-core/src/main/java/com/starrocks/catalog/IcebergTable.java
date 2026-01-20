@@ -286,6 +286,10 @@ public class IcebergTable extends Table {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
     }
 
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
+    }
+
     public String getTableLocation() {
         return getNativeTable().location();
     }

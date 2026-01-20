@@ -17,6 +17,8 @@ package com.starrocks.lake;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -35,6 +37,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
+import io.delta.kernel.engine.Engine;
+import io.delta.kernel.internal.SnapshotImpl;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.reflect.FieldUtils;
@@ -42,7 +46,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -512,5 +518,45 @@ public class CreateLakeTableTest {
                 "\"storage_volume\" = \"builtin_storage_volume\"\n" +
                 ");";
         Assertions.assertTrue(result.get(0).get(1).equals(expect));
+    }
+
+    @Test
+    public void testBasicFieldsCopied() {
+        SnapshotImpl snapshot = Mockito.mock(SnapshotImpl.class);
+        Engine engine = Mockito.mock(Engine.class);
+        io.delta.kernel.internal.actions.Metadata metadata = Mockito.mock(io.delta.kernel.internal.actions.Metadata.class);
+        Mockito.when(snapshot.getMetadata()).thenReturn(metadata);
+        Mockito.when(metadata.getId()).thenReturn("test-id");
+
+        DeltaLakeTable table = new DeltaLakeTable(
+                1L, "cat", "db", "tbl",
+                Collections.emptyList(), Collections.emptyList(),
+                snapshot, "oss://test/file", engine, System.currentTimeMillis());
+
+        LightWeightDeltaLakeTable light = new LightWeightDeltaLakeTable(table);
+
+        Assertions.assertEquals(table.getId(), light.getId());
+        Assertions.assertEquals(table.getName(), light.getName());
+        Assertions.assertEquals(table.getCatalogName(), light.getCatalogName());
+        Assertions.assertEquals(table.getCatalogDBName(), light.getCatalogDBName());
+        Assertions.assertEquals(table.getCatalogTableName(), light.getCatalogTableName());
+        Assertions.assertEquals(table.getTableIdentifier(), light.getTableIdentifier());
+        Assertions.assertTrue(light.getFullSchema().isEmpty(), "schema should be stripped");
+    }
+
+    @Test
+    public void testGetFileStatusThrows() {
+        SnapshotImpl snapshot = Mockito.mock(SnapshotImpl.class);
+        Engine engine = Mockito.mock(Engine.class);
+        io.delta.kernel.internal.actions.Metadata metadata = Mockito.mock(io.delta.kernel.internal.actions.Metadata.class);
+        Mockito.when(snapshot.getMetadata()).thenReturn(metadata);
+        Mockito.when(metadata.getId()).thenReturn("test-id");
+
+        DeltaLakeTable table = new DeltaLakeTable(
+                1L, "cat", "db", "tbl",
+                Collections.emptyList(), Collections.emptyList(),
+                snapshot, "oss://test/file", engine, System.currentTimeMillis());
+        LightWeightDeltaLakeTable light = new LightWeightDeltaLakeTable(table);
+        Assertions.assertThrows(UnsupportedOperationException.class, light::getDeltaSnapshot);
     }
 }
