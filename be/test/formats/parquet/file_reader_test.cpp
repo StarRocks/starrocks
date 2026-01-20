@@ -2868,7 +2868,8 @@ TEST_F(FileReaderTest, bloom_filter_reader) {
     // status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_TRUE(file_reader->get_file_metadata() != nullptr);
-    std::cout << "bloom filter meta info," << " offset is set:"
+    std::cout << "bloom filter meta info,"
+              << " offset is set:"
               << file_reader->get_file_metadata()
                          ->t_metadata()
                          .row_groups[0]
