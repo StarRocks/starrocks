@@ -529,11 +529,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### drop_tablet_worker_count
 
-- Default: 3
+- Default: 0
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The number of threads used to drop a tablet.
+- Description: The number of threads used to drop a tablet. `0` indicates half of the CPU cores in the node.
 - Introduced in: -
 
 ##### alter_tablet_worker_count

@@ -516,11 +516,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### drop_tablet_worker_count
 
-- 默认值：3
+- 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：删除 Tablet 的线程数。
+- 描述：删除 Tablet 的线程数。`0` 表示当前节点的 CPU 核数的一半。
 - 引入版本：-
 
 ##### alter_tablet_worker_count
