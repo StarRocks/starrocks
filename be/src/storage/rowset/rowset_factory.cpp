@@ -49,16 +49,20 @@ namespace starrocks {
 Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset, KVStore* kvstore) {
     if (kvstore == nullptr) {
-        std::filesystem::path schema_hash_path(rowset_path);
-        std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
-        std::string data_dir_string = data_dir_path.string();
-        DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
+        DataDir* data_dir = nullptr;
+        std::vector<std::string> store_paths = StorageEngine::instance()->get_store_paths();
+        for (const auto& store_path : store_paths) {
+            if (rowset_path.compare(0, store_path.size(), store_path) == 0) {
+                data_dir = StorageEngine::instance()->get_store(store_path);
+                break;
+            }
+        }
         if (data_dir != nullptr) {
             kvstore = data_dir->get_meta();
         } else {
 #ifndef BE_TEST
-            LOG(ERROR) << "DataDir not found for path: " << data_dir_string;
-            return Status::InternalError(fmt::format("DataDir not found for path: {}", data_dir_string));
+            LOG(ERROR) << "DataDir not found for path: " << rowset_path;
+            return Status::InternalError(fmt::format("DataDir not found for path: {}", rowset_path));
 #endif
         }
     }
