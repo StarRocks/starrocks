@@ -18,6 +18,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -133,6 +136,14 @@ public class SplitTabletJobTest {
 
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        List<Long> oldTabletIds = new ArrayList<>();
+        for (Tablet tablet : materializedIndex.getTablets()) {
+            oldTabletIds.add(tablet.getId());
+        }
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (Long tabletId : oldTabletIds) {
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId));
+        }
         long oldVersion = physicalPartition.getVisibleVersion();
 
         TabletReshardJob tabletReshardJob = createTabletReshardJob();
@@ -156,6 +167,12 @@ public class SplitTabletJobTest {
         Assertions.assertTrue(newMaterializedIndex != materializedIndex);
 
         Assertions.assertTrue(newMaterializedIndex.getTablets().size() > materializedIndex.getTablets().size());
+        for (Long tabletId : oldTabletIds) {
+            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId));
+        }
+        for (Tablet tablet : newMaterializedIndex.getTablets()) {
+            Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
+        }
     }
 
     @Test

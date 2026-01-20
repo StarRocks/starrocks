@@ -401,6 +401,21 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         idToVisibleIndex.put(mIndex.getId(), mIndex);
     }
 
+    public MaterializedIndex deleteMaterializedIndexByIndexId(long indexId) {
+        MaterializedIndex index = idToVisibleIndex.remove(indexId);
+        if (index == null) {
+            index = idToShadowIndex.remove(indexId);
+        }
+
+        if (index != null) {
+            List<Long> indexIds = indexMetaIdToIndexIds.get(index.getMetaId());
+            Preconditions.checkState(indexIds != null && indexIds.remove(indexId),
+                    String.format("index id %d not found in indexMetaIdToIndexIds", indexId));
+        }
+
+        return index;
+    }
+
     public List<MaterializedIndex> deleteMaterializedIndexByMetaId(long indexMetaId) {
         List<MaterializedIndex> indices = Lists.newArrayList();
         List<Long> indexIds = indexMetaIdToIndexIds.remove(indexMetaId);
