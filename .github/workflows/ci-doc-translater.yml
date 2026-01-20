@@ -12,7 +12,21 @@ jobs:
       pull-requests: write # Required to read/post comments
 
     steps:
+      - name: Get PR Info
+        id: pr_info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('is_fork', pr.head.repo.fork);
+            core.setOutput('head_ref', pr.head.ref);
+            
       - name: Check Team Membership
+        if: steps.pr_info.outputs.is_fork == 'false'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.ORG_READ_TOKEN }}
@@ -68,7 +82,9 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v44
 
+
       - name: Run Translations
+        if: steps.pr_info.outputs.is_fork == 'false'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           BODY: ${{ steps.get_checks.outputs.result }}
@@ -80,18 +96,7 @@ jobs:
           if [[ "$BODY" == *" [x] **Chinese (zh)**"* ]]; then python docs/translation/translate.py -l zh --files "$FILES"; fi
           if [[ "$BODY" == *" [x] **English (en)**"* ]]; then python docs/translation/translate.py -l en --files "$FILES"; fi
 
-      - name: Get PR Info
-        id: pr_info
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: pr } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-            core.setOutput('is_fork', pr.head.repo.fork);
-            core.setOutput('head_ref', pr.head.ref);
+
 
       - name: Commit and Push
         # Only runs if this is a branch of our repo
