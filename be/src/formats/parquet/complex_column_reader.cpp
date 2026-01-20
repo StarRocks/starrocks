@@ -849,8 +849,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                     TypeDescriptor wrapper_type;
                     wrapper_type.type = TYPE_STRUCT;
                     wrapper_type.field_names = {"value", "typed_value"};
-                    wrapper_type.children.push_back(TypeDescriptor(TYPE_VARBINARY));
-                    wrapper_type.children.push_back(_typed_value_type);
+                    wrapper_type.children.emplace_back(TYPE_VARBINARY);
+                    wrapper_type.children.emplace_back(_typed_value_type);
 
                     auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
                     if (!variant.ok()) {
