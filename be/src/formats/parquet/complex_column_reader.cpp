@@ -231,7 +231,7 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
-                ASSIGN_OR_RETURN(auto child_column, struct_column->field_column(field_name));
+                ASSIGN_OR_RETURN(auto& child_column, struct_column->field_column(field_name));
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;
@@ -299,7 +299,7 @@ Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
         DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column = down_cast<StructColumn*>(column_mut);
     }
-    ASSIGN_OR_RETURN(auto field_col, struct_column->field_column(sub_field));
+    ASSIGN_OR_RETURN(auto& field_col, struct_column->field_column(sub_field));
     auto ans = _child_readers[sub_field]->filter_dict_column(field_col, filter, sub_field_path, layer + 1);
     return ans;
 }
@@ -334,8 +334,8 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
                 dst_field->swap_column(*src_field);
             } else {
-                ASSIGN_OR_RETURN(auto dst_field, struct_column_dst->field_column(field_name));
-                ASSIGN_OR_RETURN(auto src_field, struct_column_src->field_column(field_name));
+                ASSIGN_OR_RETURN(auto& dst_field, struct_column_dst->field_column(field_name));
+                ASSIGN_OR_RETURN(auto& src_field, struct_column_src->field_column(field_name));
                 RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field));
             }
         } else {

@@ -160,8 +160,8 @@ public:
     const ColumnPtr& get_column_by_idx(size_t idx) const { return _fields[idx]; }
     ColumnPtr& get_column_by_idx(size_t idx) { return _fields[idx]; }
 
-    StatusOr<ColumnPtr> field_column(const std::string& field_name) const;
-    StatusOr<ColumnPtr> field_column(const std::string& field_name);
+    StatusOr<const ColumnPtr&> field_column(const std::string& field_name) const;
+    StatusOr<ColumnPtr&> field_column(const std::string& field_name);
 
     Column* field_column_raw_ptr(size_t idx) { return _fields[idx].get(); }
     const Column* field_column_raw_ptr(size_t idx) const { return _fields[idx].get(); }

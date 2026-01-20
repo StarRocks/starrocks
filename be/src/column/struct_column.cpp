@@ -521,14 +521,16 @@ StatusOr<size_t> StructColumn::_find_field_idx_by_name(const std::string& field_
     return Status::InternalError("Struct subfield name: " + field_name + " not found!");
 }
 
-StatusOr<ColumnPtr> StructColumn::field_column(const std::string& field_name) const {
+StatusOr<const ColumnPtr&> StructColumn::field_column(const std::string& field_name) const {
     ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
-    return _fields.at(idx);
+    const ColumnPtr& ref = _fields.at(idx);
+    return ref;
 }
 
-StatusOr<ColumnPtr> StructColumn::field_column(const std::string& field_name) {
+StatusOr<ColumnPtr&> StructColumn::field_column(const std::string& field_name) {
     ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
-    return _fields[idx];
+    ColumnPtr& ref = _fields.at(idx);
+    return ref;
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
