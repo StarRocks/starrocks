@@ -131,6 +131,42 @@ public class ExecuteAsExecutorTest {
     }
 
     @Test
+    public void testExecuteAsChainUsesOriginalLoginUserForImpersonateCheck() throws Exception {
+        // Create users
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("admin_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Grant admin_user IMPERSONATE on u1 and u2 (but u1 does NOT have IMPERSONATE on u2)
+        GrantPrivilegeStmt grantU1 = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER u1 TO admin_user", new ConnectContext());
+        authorizationMgr.grant(grantU1);
+        GrantPrivilegeStmt grantU2 = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER u2 TO admin_user", new ConnectContext());
+        authorizationMgr.grant(grantU2);
+
+        // Login as admin_user
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context, "admin_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        // Switch to u1
+        ExecuteAsStmt executeAsU1 = new ExecuteAsStmt(new UserRef("u1", "%"), false);
+        ExecuteAsExecutor.execute(executeAsU1, context);
+        Assertions.assertEquals("u1", context.getAccessControlContext().getCurrentUserIdentity().getUser());
+
+        // Now attempt to switch to u2 on the same session:
+        // permission check should be based on the original login user (admin_user), not current (u1).
+        ExecuteAsStmt executeAsU2 = new ExecuteAsStmt(new UserRef("u2", "%"), false);
+        Assertions.assertDoesNotThrow(() -> Authorizer.check(executeAsU2, context));
+
+        ExecuteAsExecutor.execute(executeAsU2, context);
+        Assertions.assertEquals("u2", context.getAccessControlContext().getCurrentUserIdentity().getUser());
+    }
+
+    @Test
     public void testExecuteAsGroupWithRoles() throws Exception {
         authorizationMgr.createRole(new CreateRoleStmt(List.of("r1"), true, ""));
         authorizationMgr.createRole(new CreateRoleStmt(List.of("r2"), true, ""));

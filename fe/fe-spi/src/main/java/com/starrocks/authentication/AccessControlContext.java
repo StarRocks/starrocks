@@ -16,6 +16,7 @@ package com.starrocks.authentication;
 
 import com.starrocks.catalog.UserIdentity;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -37,6 +38,14 @@ public class AccessControlContext {
     // `currentUserIdentity` and `qualifiedUser` are the same user,
     // but currentUserIdentity may be modified by execute as statement.
     private UserIdentity currentUserIdentity;
+
+    // Original (login) user context snapshot.
+    // This is initialized once right after authentication succeeds and should not change even after EXECUTE AS.
+    // It is used for cases where permission checks (e.g. IMPERSONATE) need to be based on the original login user
+    // instead of the current impersonated user.
+    private UserIdentity originalUserIdentity = null;
+    private Set<String> originalGroups = null;
+    private Set<Long> originalRoleIds = null;
 
     // Distinguished name (DN) used for LDAP authentication and group resolution
     // In LDAP context, this represents the unique identifier of a user in the directory
@@ -89,6 +98,54 @@ public class AccessControlContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    /**
+     * Initialize the original(login) user context once.
+     * This method is idempotent and will only set the original context if it has not been set before.
+     */
+    public void initOriginalUserContext(UserIdentity userIdentity, Set<String> groups, Set<Long> roleIds) {
+        if (this.originalUserIdentity != null) {
+            return;
+        }
+        this.originalUserIdentity = userIdentity;
+        this.originalGroups = groups == null ? new HashSet<>() : new HashSet<>(groups);
+        this.originalRoleIds = roleIds == null ? new HashSet<>() : new HashSet<>(roleIds);
+    }
+
+    /**
+     * Reset the original(login) user context.
+     * This should be called when re-authenticating (e.g., MySQL CHANGE USER) to prevent
+     * the new user from inheriting IMPERSONATE privileges from the previous login user.
+     */
+    public void resetOriginalUserContext() {
+        this.originalUserIdentity = null;
+        this.originalGroups = null;
+        this.originalRoleIds = null;
+    }
+
+    /**
+     * Restore the original(login) user context from a backup.
+     * Used when re-authentication (e.g., CHANGE USER) fails and the session must remain
+     * unchanged; otherwise the original snapshot would be lost and EXECUTE AS chaining
+     * would use the wrong privileges.
+     */
+    public void setOriginalUserContext(UserIdentity userIdentity, Set<String> groups, Set<Long> roleIds) {
+        this.originalUserIdentity = userIdentity;
+        this.originalGroups = groups == null ? null : new HashSet<>(groups);
+        this.originalRoleIds = roleIds == null ? null : new HashSet<>(roleIds);
+    }
+
+    public UserIdentity getOriginalUserIdentity() {
+        return originalUserIdentity;
+    }
+
+    public Set<String> getOriginalGroups() {
+        return originalGroups == null ? Collections.emptySet() : originalGroups;
+    }
+
+    public Set<Long> getOriginalRoleIds() {
+        return originalRoleIds == null ? Collections.emptySet() : originalRoleIds;
     }
 
     public void setDistinguishedName(String distinguishedName) {

@@ -59,6 +59,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -213,6 +214,30 @@ public class MysqlProto {
     }
 
     /**
+     * Helper method to restore previous session state when CHANGE USER fails.
+     * This ensures the session remains unchanged including the original user context
+     * for EXECUTE AS chaining.
+     */
+    private static void restorePreviousSession(
+            ConnectContext context,
+            UserIdentity previousUserIdentity,
+            Set<Long> previousRoleIds,
+            String previousQualifiedUser,
+            String previousResourceGroup,
+            UserIdentity prevOriginalUserIdentity,
+            Set<String> prevOriginalGroups,
+            Set<Long> prevOriginalRoleIds) {
+        context.setCurrentUserIdentity(previousUserIdentity);
+        context.setCurrentRoleIds(previousRoleIds);
+        context.setQualifiedUser(previousQualifiedUser);
+        context.getSessionVariable().setResourceGroup(previousResourceGroup);
+        if (prevOriginalUserIdentity != null) {
+            context.getAccessControlContext().setOriginalUserContext(
+                    prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+        }
+    }
+
+    /**
      * Change user command use MySQL protocol
      * Exception:
      * IOException:
@@ -232,8 +257,20 @@ public class MysqlProto {
         Set<Long> previousRoleIds = context.getCurrentRoleIds();
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
-        // do authenticate again
 
+        // Backup original user context before reset (for restoration on failure)
+        var acc = context.getAccessControlContext();
+        UserIdentity prevOriginalUserIdentity = acc.getOriginalUserIdentity();
+        Set<String> prevOriginalGroups = prevOriginalUserIdentity == null ? null
+                : new HashSet<>(acc.getOriginalGroups());
+        Set<Long> prevOriginalRoleIds = prevOriginalUserIdentity == null ? null
+                : new HashSet<>(acc.getOriginalRoleIds());
+
+        // Reset original user context before re-authentication to prevent security issue:
+        // a new user should not inherit IMPERSONATE privileges from the previous login user.
+        acc.resetOriginalUserContext();
+
+        // do authenticate again
         try {
             AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
                     changeUserPacket.getAuthResponse());
@@ -241,10 +278,9 @@ public class MysqlProto {
             LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
             sendResponsePacket(context);
-            // reconstruct serializer with context capability
             context.getSerializer().setCapability(context.getCapability());
-            // recover from previous user login info
-            context.getSessionVariable().setResourceGroup(previousResourceGroup);
+            restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
+                    previousResourceGroup, prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
             return false;
         }
         // set database
@@ -257,13 +293,9 @@ public class MysqlProto {
                 LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
                         previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
                 sendResponsePacket(context);
-                // reconstruct serializer with context capability
                 context.getSerializer().setCapability(context.getCapability());
-                // recover from previous user login info
-                context.getSessionVariable().setResourceGroup(previousResourceGroup);
-                context.setCurrentUserIdentity(previousUserIdentity);
-                context.setCurrentRoleIds(previousRoleIds);
-                context.setQualifiedUser(previousQualifiedUser);
+                restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
+                        previousResourceGroup, prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
                 return false;
             }
         }
@@ -275,11 +307,8 @@ public class MysqlProto {
             context.getState().setError(userChangeResult.second);
             sendResponsePacket(context);
             context.getSerializer().setCapability(context.getCapability());
-            context.getSessionVariable().setResourceGroup(previousResourceGroup);
-            context.setCurrentUserIdentity(previousUserIdentity);
-            context.setCurrentRoleIds(previousRoleIds);
-            context.setQualifiedUser(previousQualifiedUser);
-
+            restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
+                    previousResourceGroup, prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
             if (!context.getDatabase().equals(originalDb)) {
                 try {
                     context.changeCatalogDb(originalDb);
