@@ -3,7 +3,6 @@ on:
   pull_request:
     paths: ['docs/en/**', 'docs/zh/**', 'docs/ja/**']
 jobs:
-  if: false
   report:
     runs-on: ubuntu-latest
     permissions:
