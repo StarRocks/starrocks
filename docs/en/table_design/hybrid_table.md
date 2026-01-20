@@ -98,7 +98,8 @@ This section uses a point query as an example. Point queries take a short circui
 The following example still uses the above table with hybrid row-column storage. After the table creation and data modification operations mentioned above, the table stores the data as follows:
 
 ```SQL
-MySQL [example_db]> SELECT * FROM users ORDER BY id;
+SELECT * FROM users ORDER BY id;
+
 +------+---------+----------+---------+
 | id   | country | city     | revenue |
 +------+---------+----------+---------+
@@ -132,7 +133,8 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
 3. Check the query plan to verify whether the query can use the short circuit. If the query plan includes `Short Circuit Scan: true`, the query can take the short circuit.
 
       ```SQL
-      MySQL [example_db]> EXPLAIN SELECT * FROM users WHERE id=1;
+      EXPLAIN SELECT * FROM users WHERE id=1;
+
       +---------------------------------------------------------+
       | Explain String                                          |
       +---------------------------------------------------------+
