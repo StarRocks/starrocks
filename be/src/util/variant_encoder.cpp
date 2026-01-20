@@ -615,6 +615,8 @@ static StatusOr<std::string> encode_value_from_column_row(const ColumnPtr& colum
             // - typed_value contains shredded fields (struct columns)
             if (has_typed && has_value) {
                 // Check if typed_value is an object (struct type)
+                // Map column index to type index: in case type.field_names has different ordering than struct_col
+                // (though for our wrapper structs constructed by the reader, they should match)
                 size_t type_typed_idx = typed_idx;
                 if (!type.field_names.empty()) find_struct_field_idx(type.field_names, "typed_value", &type_typed_idx);
                 const TypeDescriptor& typed_value_type = type.children[type_typed_idx];
