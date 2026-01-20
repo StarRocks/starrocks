@@ -6,4 +6,6 @@ displayed_sidebar: docs
 
 import DocCardList from '@theme/DocCardList';
 
+> ヒント：BI ツールが結果セットのメタデータに含まれる文字列最大長に依存し、その値が実際より小さいために空値や切り詰めが発生する場合は、グローバル変数 `max_unknown_string_meta_length`（範囲 1〜1,048,576、デフォルト 64）を大きく設定すると、文字列列のメタデータ長がその値にフォールバックします。
+
 <DocCardList />
