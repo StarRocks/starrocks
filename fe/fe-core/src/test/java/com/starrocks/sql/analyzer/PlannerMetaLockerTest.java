@@ -60,8 +60,8 @@ public class PlannerMetaLockerTest {
         }
         try {
             DDLStmtExecutor.execute(
-                UtFrameUtils.parseStmtWithNewParser("drop resource group test_rg", connectContext),
-                connectContext);
+                    UtFrameUtils.parseStmtWithNewParser("drop resource group test_rg", connectContext),
+                    connectContext);
         } catch (Exception ignored) {
         }
     }
@@ -70,34 +70,34 @@ public class PlannerMetaLockerTest {
     public void testResourceGroupClassifierWithSyncMV() throws Exception {
         // 1. Create base table
         starRocksAssert.withTable("CREATE TABLE test_table (" +
-            "k1 int NOT NULL, " +
-            "k2 int NOT NULL, " +
-            "v1 int SUM) " +
-            "AGGREGATE KEY(k1, k2) " +
-            "DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
-            "PROPERTIES('replication_num' = '1')");
+                "k1 int NOT NULL, " +
+                "k2 int NOT NULL, " +
+                "v1 int SUM) " +
+                "AGGREGATE KEY(k1, k2) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
+                "PROPERTIES('replication_num' = '1')");
 
         // 2. Create sync materialized view
         String createMvSql = "create materialized view test_mv as " +
-            "select k1, sum(v1) from test_table group by k1;";
+                "select k1, sum(v1) from test_table group by k1;";
         CreateMaterializedViewStmt createMvStmt = (CreateMaterializedViewStmt)
-            UtFrameUtils.parseStmtWithNewParser(createMvSql, connectContext);
+                UtFrameUtils.parseStmtWithNewParser(createMvSql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
-            .createMaterializedView(createMvStmt);
+                .createMaterializedView(createMvStmt);
         waitingRollupJobV2Finish();
 
         // 3. Create resource group with database classifier
         String createRgSql = "create resource group test_rg " +
-            "to (`db`='test_db') " +
-            "with (" +
-            "    'cpu_core_limit' = '10'," +
-            "    'mem_limit' = '50%'," +
-            "    'concurrency_limit' = '5'," +
-            "    'type' = 'normal'" +
-            ");";
+                "to (`db`='test_db') " +
+                "with (" +
+                "    'cpu_core_limit' = '10'," +
+                "    'mem_limit' = '50%'," +
+                "    'concurrency_limit' = '5'," +
+                "    'type' = 'normal'" +
+                ");";
         DDLStmtExecutor.execute(
-            UtFrameUtils.parseStmtWithNewParser(createRgSql, connectContext),
-            connectContext);
+                UtFrameUtils.parseStmtWithNewParser(createRgSql, connectContext),
+                connectContext);
 
         // 4. Execute query with [_SYNC_MV_] hint
         // This triggers PlannerMetaLocker.resolveTable() with the sync MV fallback
@@ -107,26 +107,26 @@ public class PlannerMetaLockerTest {
         // 5. Verify database ID was captured in currentSqlDbIds
         Set<Long> dbIds = connectContext.getCurrentSqlDbIds();
         long testDbId = GlobalStateMgr.getCurrentState().getLocalMetastore()
-            .getDb("test_db").getId();
+                .getDb("test_db").getId();
         assertThat(dbIds)
-            .as("Database ID should be registered in currentSqlDbIds after sync MV query")
-            .contains(testDbId);
+                .as("Database ID should be registered in currentSqlDbIds after sync MV query")
+                .contains(testDbId);
 
         // 6. Verify resource group classifier matches
         TWorkGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
-            .chooseResourceGroup(
-                connectContext,
-                ResourceGroupClassifier.QueryType.SELECT,
-                dbIds);
+                .chooseResourceGroup(
+                        connectContext,
+                        ResourceGroupClassifier.QueryType.SELECT,
+                        dbIds);
 
         assertThat(wg)
-            .as("Resource group should not be null")
-            .isNotNull();
+                .as("Resource group should not be null")
+                .isNotNull();
         assertThat(wg.getName())
-            .as("Sync MV query should match database classifier")
-            .isEqualTo("test_rg");
+                .as("Sync MV query should match database classifier")
+                .isEqualTo("test_rg");
         assertThat(wg.getName())
-            .as("Should not fall back to default resource group")
-            .isNotEqualTo(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+                .as("Should not fall back to default resource group")
+                .isNotEqualTo(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
     }
 }

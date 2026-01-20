@@ -127,6 +127,7 @@ public class PlannerMetaLocker implements AutoCloseable {
     public void close() {
         unlock();
     }
+
     /**
      * Collect tables that need to be protected by the PlannerMetaLock
      */
@@ -181,8 +182,8 @@ public class PlannerMetaLocker implements AutoCloseable {
             // This ensures the database is registered in currentSqlDbIds for
             // resource group classifier matching.
             Pair<Table, MaterializedIndexMeta> mvIndex =
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getMaterializedViewIndex(dbName, tbName);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getMaterializedViewIndex(dbName, tbName);
             if (mvIndex != null) {
                 table = mvIndex.first;
             }
@@ -236,7 +237,7 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, 
+            Pair<Database, Table> dbAndTable = resolveTable(session,
                     com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterTableStatement(statement, context);
@@ -244,7 +245,7 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, 
+            Pair<Database, Table> dbAndTable = resolveTable(session,
                     com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterViewStatement(statement, context);
@@ -252,7 +253,7 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, 
+            Pair<Database, Table> dbAndTable = resolveTable(session,
                     com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef()));
             put(dbAndTable);
             return super.visitAlterMaterializedViewStatement(statement, context);
