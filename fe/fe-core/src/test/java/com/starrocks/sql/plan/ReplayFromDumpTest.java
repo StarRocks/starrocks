@@ -808,7 +808,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 + "  |  offset: 0\n"
                 + "  |  limit: 200");
         PlanTestBase.assertContains(replayPair.second, "TOP-N\n"
-                + "  |  order by: <slot 149> 149: expr ASC, <slot 151> 151: cast DESC, <slot 152> 152: cast ASC, <slot 138> 138: cast DESC\n"
+                + "  |  order by: <slot 149> 149: expr ASC, <slot 151> 151: cast DESC, "
+                + "<slot 152> 152: cast ASC, <slot 138> 138: cast DESC\n"
                 + "  |  offset: 0\n"
                 + "  |  limit: 200");
     }
