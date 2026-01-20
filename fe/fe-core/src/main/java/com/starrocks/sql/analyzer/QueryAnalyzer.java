@@ -822,6 +822,11 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitJoin(JoinRelation join, Scope parentScope) {
+            if (join.getLeft() instanceof TableFunctionRelation) {
+                throw unsupportedException("Table function cannot appear on the left side of a join. " +
+                        "Place it on the right side (optionally with LATERAL) or wrap it with TABLE(...).");
+            }
+
             Scope leftScope = process(join.getLeft(), parentScope);
             Scope rightScope;
             if (join.getRight() instanceof TableFunctionRelation || join.isLateral()) {
