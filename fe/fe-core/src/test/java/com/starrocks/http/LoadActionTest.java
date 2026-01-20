@@ -68,6 +68,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE;
@@ -566,8 +567,8 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
         new MockUp<LoadAction>() {
             @Mock
-            public String getUserDefaultWarehouse(BaseRequest request) {
-                return "user_wh";
+            public Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+                return Optional.of("user_wh");
             }
         };
 

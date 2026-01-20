@@ -194,9 +194,9 @@ public class LoadAction extends RestBaseAction {
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         } else {
-            String userWarehouseName = getUserDefaultWarehouse(request);
-            if (warehouseManager.warehouseExists(userWarehouseName)) {
-                warehouseName = userWarehouseName;
+            Optional<String> userWarehouseName = getUserDefaultWarehouse(request);
+            if (userWarehouseName.isPresent() && warehouseManager.warehouseExists(userWarehouseName.get())) {
+                warehouseName = userWarehouseName.get();
             }
         }
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);

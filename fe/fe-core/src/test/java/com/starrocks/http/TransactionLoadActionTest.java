@@ -82,6 +82,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
@@ -575,8 +576,8 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
             new MockUp<RestBaseAction>() {
                 @Mock
-                public String getUserDefaultWarehouse(BaseRequest request) {
-                    return "user_wh";
+                public Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+                    return Optional.of("user_wh");
                 }
             };
 

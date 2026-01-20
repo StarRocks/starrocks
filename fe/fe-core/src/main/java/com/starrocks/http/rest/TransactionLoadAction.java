@@ -334,9 +334,10 @@ public class TransactionLoadAction extends RestBaseAction {
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         } else {
-            String userWarehouseName = getUserDefaultWarehouse(request);
-            if (GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName)) {
-                warehouseName = userWarehouseName;
+            Optional<String> userWarehouseName = getUserDefaultWarehouse(request);
+            if (userWarehouseName.isPresent() &&
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName.get())) {
+                warehouseName = userWarehouseName.get();
             }
         }
 

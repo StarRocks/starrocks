@@ -24,7 +24,6 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -46,6 +45,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -207,8 +207,8 @@ public class RestBaseActionTest {
             }
         };
 
-        String warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertEquals("test_warehouse", warehouse);
+        Optional<String> warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
+        Assertions.assertEquals("test_warehouse", warehouse.get());
 
         new MockUp<AuthenticationMgr>() {
             @Mock
@@ -222,7 +222,7 @@ public class RestBaseActionTest {
             }
         };
         warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, warehouse);
+        Assertions.assertFalse(warehouse.isPresent());
 
         new MockUp<AuthenticationMgr>() {
             @Mock
@@ -231,10 +231,10 @@ public class RestBaseActionTest {
             }
         };
         warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, warehouse);
+        Assertions.assertFalse(warehouse.isPresent());
 
         when(mockRequest.getConnectContext()).thenReturn(null);
         warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_NAME, warehouse);
+        Assertions.assertFalse(warehouse.isPresent());
     }
 }

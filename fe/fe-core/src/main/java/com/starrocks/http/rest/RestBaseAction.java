@@ -61,7 +61,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Frontend;
@@ -415,7 +414,7 @@ public class RestBaseAction extends BaseAction {
                 new RestBaseResultV2<>(status.code(), message));
     }
 
-    public static String getUserDefaultWarehouse(BaseRequest request) {
+    public static Optional<String> getUserDefaultWarehouse(BaseRequest request) {
         ConnectContext ctx = request.getConnectContext();
         if (ctx != null && ctx.getCurrentUserIdentity() != null) {
             UserIdentity userIdentity = ctx.getCurrentUserIdentity();
@@ -425,7 +424,7 @@ public class RestBaseAction extends BaseAction {
                             .getUserProperty(userIdentity.getUser());
                     String userWarehouse = userProperty.getSessionVariables().get(SessionVariable.WAREHOUSE_NAME);
                     if (!Strings.isNullOrEmpty(userWarehouse)) {
-                        return userWarehouse;
+                        return Optional.of(userWarehouse);
                     }
                 } catch (SemanticException e) {
                     // user does not exist, use default warehouse
@@ -433,6 +432,6 @@ public class RestBaseAction extends BaseAction {
                 }
             }
         }
-        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        return Optional.empty();
     }
 }
