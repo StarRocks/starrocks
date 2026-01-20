@@ -221,16 +221,15 @@ public class SetTest extends PlanTestBase {
     public void testSetOpCast() throws Exception {
         String sql = "select * from t0 union all (select * from t1 union all select k1,k7,k8 from  baseall)";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [26, BIGINT, true] | [27, VARCHAR(20), true] | [28, DOUBLE, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR(20), true] | [5: cast, DOUBLE, true]\n" +
-                "  |      [23: v4, BIGINT, true] | [24: cast, VARCHAR(20), true] | [25: cast, DOUBLE, true]");
-        Assertions.assertTrue(plan.contains(
-                "  |  19 <-> [19: k7, VARCHAR, true]\n" +
-                        "  |  20 <-> [20: k8, DOUBLE, true]\n" +
-                        "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
+        assertContains(plan, "  0:UNION\n"
+                + "  |  output exprs:\n"
+                + "  |      [27, BIGINT, true] | [28, VARCHAR, true] | [29, DOUBLE, true]\n"
+                + "  |  child exprs:\n"
+                + "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR, true] | [5: cast, DOUBLE, true]\n"
+                + "  |      [24: v4, BIGINT, true] | [25: cast, VARCHAR, true] | [26: cast, DOUBLE, true]");
+        Assertions.assertTrue(plan.contains("  |  20 <-> [20: k8, DOUBLE, true]\n"
+                        + "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)\n"
+                        + "  |  23 <-> [19: k7, VARCHAR, true]"));
 
         sql = "select * from t0 union all (select cast(v4 as int), v5,v6 " +
                 "from t1 except select cast(v7 as int), v8, v9 from t2)";
@@ -657,23 +656,23 @@ public class SetTest extends PlanTestBase {
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "|  output exprs:\n" +
-                "  |      [13, VARCHAR(32), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [1: k1, VARCHAR, true]\n" +
-                "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [14: k1, VARCHAR(32), true]\n");
+        assertContains(plan, "  |  output exprs:\n"
+                + "  |      [14, VARCHAR, true]\n"
+                + "  |  child exprs:\n"
+                + "  |      [5: cast, VARCHAR, true]\n"
+                + "  |      [13: cast, VARCHAR, false]\n"
+                + "  |      [15: cast, VARCHAR, true]");
 
         sql = "select k1 from db1.tbl6 union all select 1 union" +
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "  |  output exprs:\n" +
-                "  |      [13, VARCHAR(32), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [1: k1, VARCHAR, true]\n" +
-                "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [14: k1, VARCHAR(32), true]");
+        assertContains(plan, "  |  output exprs:\n"
+                + "  |      [14, VARCHAR, true]\n"
+                + "  |  child exprs:\n"
+                + "  |      [5: cast, VARCHAR, true]\n"
+                + "  |      [13: cast, VARCHAR, false]\n"
+                + "  |      [15: cast, VARCHAR, true]");
 
         sql = "select 1 union all select 2 union all select * from (values (1)) t;";
         plan = getVerboseExplain(sql);
