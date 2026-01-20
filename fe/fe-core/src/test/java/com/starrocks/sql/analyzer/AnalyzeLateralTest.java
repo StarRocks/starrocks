@@ -53,6 +53,8 @@ public class AnalyzeLateralTest {
         analyzeFail("select  unnest(split('1,2,3',','))", "Table function cannot be used in expression");
         analyzeFail("select a.* from unnest(split('1,2,3',',')) a",
                 "Table function must be used with lateral join");
+        analyzeFail("select * from unnest(split('1,2,3',',')) a, t0",
+                "Table function cannot appear on the left side of a join");
 
         analyzeFail("select * from t0,unnest(bitmap_to_array(bitmap_union(to_bitmap(v1))))",
                 "Table Function clause cannot contain aggregations");
