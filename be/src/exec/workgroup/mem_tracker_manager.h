@@ -21,16 +21,23 @@
 
 namespace starrocks::workgroup {
 
+struct MemTrackerMetrics {
+    std::unique_ptr<IntGauge> mem_limit = nullptr;
+    std::unique_ptr<IntGauge> mem_usage_bytes = nullptr;
+    std::unique_ptr<DoubleGauge> mem_usage_ratio = nullptr;
+    std::unique_ptr<IntGauge> workgroup_count = nullptr;
+};
+
 using MemTrackerPtr = std::shared_ptr<MemTracker>;
+using MemTrackerMetricsPtr = std::shared_ptr<MemTrackerMetrics>;
 
 struct MemTrackerInfo {
     MemTrackerPtr tracker;
     uint32_t child_count;
 };
 
-struct MemTrackerManager {
+class MemTrackerManager {
 public:
-    std::vector<std::string> list_mem_trackers() const;
     /**
     * Constructs and returns a shared_mem_tracker for the workgroup if one does not already exist.
     * Otherwise, returns the existing instance and increments the number of tracked workgroups by one.
@@ -45,7 +52,22 @@ public:
     */
     void deregister_workgroup(const std::string& mem_pool);
 
+    /**
+     * Returns a list of currently registered non-default memory trackers.
+     */
+    std::vector<std::string> list_mem_trackers() const;
+
 private:
+    using MutexType = std::shared_mutex;
+    using UniqueLockType = std::unique_lock<MutexType>;
+
+    void _add_metrics_unlocked(const std::string& mem_pool, UniqueLockType& lock);
+    void _update_metrics();
+    void _update_metrics_unlocked(UniqueLockType&);
+
+    mutable std::shared_mutex _mutex;
+    std::once_flag _register_metrics_hook_once_flag;
     std::unordered_map<std::string, MemTrackerInfo> _shared_mem_trackers{};
+    std::unordered_map<std::string, MemTrackerMetricsPtr> _shared_mem_trackers_metrics{};
 };
 } // namespace starrocks::workgroup

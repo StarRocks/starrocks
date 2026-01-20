@@ -107,7 +107,7 @@ PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) 
 
         _manager->apply(create_operations);
 
-        EXPECT_EQ(_manager->list_memory_pools().size(), 2);
+        EXPECT_EQ(_manager->list_memory_pools().size(), 1);
 
         // Version must be strictly larger, otherwise workgroup will not be deleted
         twg1.version++;
@@ -117,11 +117,10 @@ PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) 
                                       make_twg_op(twg2, TWorkGroupOpType::WORKGROUP_OP_DELETE)};
 
         _manager->apply(delete_operations);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
         // The expired workgroups will only get erased in the next call to apply
         _manager->apply({});
 
-        EXPECT_EQ(_manager->list_memory_pools().size(), 1);
+        EXPECT_EQ(_manager->list_memory_pools().size(), 0);
     }
     _manager->destroy();
 }
