@@ -45,14 +45,17 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
@@ -143,6 +146,15 @@ public class QueryAnalyzer {
      */
     public void analyzeFilesOnly(StatementBase node) {
         new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+    }
+
+    /**
+     * Pre-resolve external (non-internal catalog) table relations without touching internal table metadata.
+     * This is used to avoid holding PlannerMetaLock while doing potentially slow connector metadata fetch
+     * (e.g. JDBC).
+     */
+    public void analyzeExternalTablesOnly(StatementBase node) {
+        new ExternalTablesOnlyVisitor().process(node);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -668,7 +680,13 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation);
+                Table table = tableRelation.getTable();
+                String catalogName = resolveTableName.getCatalog();
+                // External connector table has been pre-resolved in the unlocked phase.
+                if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+                    table = resolveTable(tableRelation);
+                }
+
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
@@ -1787,6 +1805,61 @@ public class QueryAnalyzer {
             return result;
         }
 
+    }
+
+    /**
+     * A lightweight visitor that pre-resolves only external (non-internal catalog) TableRelation,
+     * so connector metadata fetch is done without holding PlannerMetaLock.
+     */
+    private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
+        public void process(StatementBase node) {
+            visit(node);
+        }
+
+        @Override
+        public Void visitTable(TableRelation tableRelation, Void context) {
+            if (tableRelation.getTable() != null) {
+                return null;
+            }
+            TableName tableName = tableRelation.getName();
+            if (tableName == null) {
+                return null;
+            }
+            // Skip CTE references and other tables without database specification
+            // These will be resolved by the main analyzer
+            if (Strings.isNullOrEmpty(tableName.getDb())) {
+                return null;
+            }
+            // Create a copy for catalog checking to avoid modifying original TableName
+            // This preserves db=null for CTE detection in main visitor
+            TableName tempTableName = new TableName(tableName.getCatalog(),
+                    tableName.getDb(), tableName.getTbl(), tableName.getPos());
+            tempTableName.normalization(session);
+            String catalogName = tempTableName.getCatalog();
+            // Only pre-resolve external tables
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                tableRelation.setTable(resolveTable(tableRelation));
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
     }
 
     /**
