@@ -15,6 +15,7 @@
 #include "formats/json/struct_column.h"
 
 #include "column/struct_column.h"
+#include "common/statusor.h"
 #include "formats/json/nullable_column.h"
 #include "gutil/strings/substitute.h"
 
@@ -36,7 +37,7 @@ Status add_struct_column(Column* column, const TypeDescriptor& type_desc, const 
             const auto& field_name = type_desc.field_names[i];
             const auto& field_type_desc = type_desc.children[i];
 
-            auto* field_column = struct_column->field_column_raw_ptr(field_name);
+            ASSIGN_OR_RETURN(auto* field_column, struct_column->field_column_raw_ptr(field_name));
             simdjson::ondemand::value field_value;
             auto err = obj.find_field_unordered(field_name).get(field_value);
             simdjson::ondemand::value* field_value_ptr = nullptr;
