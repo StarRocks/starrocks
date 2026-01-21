@@ -227,6 +227,7 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCol
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TKeyRange;
 import com.starrocks.thrift.TPartitionType;
@@ -1145,14 +1146,17 @@ public class PlanFragmentBuilder {
                     return List.of();
                 }
 
-                Preconditions.checkState(partitionValuesList.size() == partitionCols.size());
                 for (int i = 0; i < partitionCols.size(); i++) {
                     TKeyRange kr = new TKeyRange();
                     kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
                     kr.setColumn_name(partitionCols.get(i).getName());
-                    kr.setList_values(partitionValuesList.get(i).stream().map(ExprToThrift::treeToThrift).toList());
+                    List<TExpr> l = Lists.newArrayList();
+                    for (var values : partitionValuesList) {
+                        Preconditions.checkState(values.size() == partitionCols.size());
+                        l.add(ExprToThrift.treeToThrift(values.get(i)));
+                    }
+                    kr.setList_values(l);
                     partitionValues *= partitionValuesList.size();
-
                     if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
                         continue;
                     }
