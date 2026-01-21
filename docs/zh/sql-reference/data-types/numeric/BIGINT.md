@@ -14,9 +14,20 @@ displayed_sidebar: docs
 
 ```sql
 CREATE TABLE bigIntDemo (
-    pk BIGINT(20) NOT NULL COMMENT ""
-) ENGINE=OLAP 
+    pk BIGINT(20) NOT NULL COMMENT "Range: -2^63 to 2^63-1"
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO bigIntDemo VALUES (123456789012345), (9223372036854775807);
+```
+
+```Plaintext
+MySQL > SELECT * FROM bigIntDemo;
++---------------------+
+| pk                  |
++---------------------+
+|     123456789012345 |
+| 9223372036854775807 |
++---------------------+
 ```

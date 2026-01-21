@@ -15,9 +15,19 @@ displayed_sidebar: docs
 ```sql
 CREATE TABLE tinyIntDemo (
     pk TINYINT COMMENT "range [-128, 127]",
-    pd_type VARCHAR(20) COMMENT "range char(m),m in (1-255) "
-) ENGINE=OLAP 
+    pd_type VARCHAR(20)
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO tinyIntDemo VALUES (127, 'Max Value');
+```
+
+```Plaintext
+MySQL > SELECT * FROM tinyIntDemo;
++------+-----------+
+| pk   | pd_type   |
++------+-----------+
+|  127 | Max Value |
++------+-----------+
 ```
