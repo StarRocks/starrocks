@@ -1,0 +1,1391 @@
+-- name: test_global_dict_with_union
+CREATE TABLE test_table_1 (
+    id INT,
+    value VARCHAR(10)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE test_table_2 (
+    id INT,
+    value VARCHAR(10)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO test_table_1 VALUES (1, 'a'), (2, 'b'), (3, 'c');
+-- result:
+-- !result
+INSERT INTO test_table_2 VALUES (4, 'd'), (5, 'e'), (6, 'f');
+-- result:
+-- !result
+[UC]analyze full table test_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.test_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table test_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.test_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('value', 'test_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('value', 'test_table_2')
+-- result:
+
+-- !result
+SELECT * 
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t
+WHERE id > 3;
+-- result:
+4	d
+5	e
+6	f
+-- !result
+SELECT id, value FROM test_table_1 WHERE id < 3
+UNION ALL
+SELECT id, value FROM test_table_2 WHERE id > 4;
+-- result:
+2	b
+1	a
+5	e
+6	f
+-- !result
+SELECT value, COUNT(*) AS cnt
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t
+GROUP BY value;
+-- result:
+b	1
+e	1
+a	1
+f	1
+c	1
+d	1
+-- !result
+SELECT value, COUNT(*) AS cnt
+FROM test_table_1
+GROUP BY value
+UNION ALL
+SELECT value, COUNT(*) AS cnt
+FROM test_table_2
+GROUP BY value;
+-- result:
+a	1
+f	1
+b	1
+d	1
+c	1
+e	1
+-- !result
+SELECT id, value
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t
+ORDER BY id DESC
+LIMIT 4;
+-- result:
+6	f
+5	e
+4	d
+3	c
+-- !result
+CREATE TABLE join_table (
+    id INT,
+    detail VARCHAR(10)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO join_table VALUES (1, 'info1'), (5, 'info5');
+-- result:
+-- !result
+[UC]analyze full table join_table;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_table	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('detail', 'join_table')
+-- result:
+
+-- !result
+SELECT t1.id, t1.value, jt.detail
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t1
+JOIN join_table jt
+ON t1.id = jt.id;
+-- result:
+1	a	info1
+5	e	info5
+-- !result
+SELECT a.id, a.value, b.detail 
+FROM test_table_1 a
+JOIN join_table b
+ON a.id = b.id
+UNION ALL
+SELECT c.id, c.value, d.detail 
+FROM test_table_2 c
+JOIN join_table d
+ON c.id = d.id;
+-- result:
+5	e	info5
+1	a	info1
+-- !result
+SELECT id, value
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+    UNION ALL
+    SELECT id, detail FROM join_table
+) t;
+-- result:
+2	b
+5	info5
+4	d
+5	e
+6	f
+1	info1
+1	a
+3	c
+-- !result
+CREATE TABLE alias_table_1 (
+    col1 INT,
+    col2 VARCHAR(10)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE alias_table_2 (
+    col1 INT,
+    col2 VARCHAR(10)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO alias_table_1 VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma');
+-- result:
+-- !result
+INSERT INTO alias_table_2 VALUES (4, 'delta'), (5, 'epsilon');
+-- result:
+-- !result
+[UC]analyze full table alias_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table alias_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('col2', 'alias_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('col2', 'alias_table_2')
+-- result:
+
+-- !result
+SELECT alias_col1, alias_col2 
+FROM (
+    SELECT col1 AS alias_col1, col2 AS alias_col2 FROM alias_table_1
+    UNION ALL
+    SELECT col1 AS alias_col1, col2 AS alias_col2 FROM alias_table_2
+) t
+WHERE alias_col1 > 2;
+-- result:
+3	gamma
+4	delta
+5	epsilon
+-- !result
+CREATE TABLE diff_table_1 (
+    a INT,
+    b VARCHAR(10)
+) DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE diff_table_2 (
+    x INT,
+    y VARCHAR(10)
+) DUPLICATE KEY(x)
+DISTRIBUTED BY HASH(x) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO diff_table_1 VALUES (1, 'one'), (2, 'two');
+-- result:
+-- !result
+INSERT INTO diff_table_2 VALUES (3, 'three'), (4, 'four');
+-- result:
+-- !result
+[UC]analyze full table diff_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.diff_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table diff_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.diff_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('b', 'diff_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('y', 'diff_table_2')
+-- result:
+
+-- !result
+SELECT col1, col2
+FROM (
+    SELECT a AS col1, b AS col2 FROM diff_table_1
+    UNION ALL
+    SELECT x AS col1, y AS col2 FROM diff_table_2
+) t;
+-- result:
+2	two
+1	one
+3	three
+4	four
+-- !result
+SELECT DISTINCT id, value 
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t;
+-- result:
+4	d
+5	e
+2	b
+3	c
+6	f
+1	a
+-- !result
+SELECT id, COUNT(*) AS cnt 
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t
+GROUP BY id
+HAVING cnt > 1;
+-- result:
+-- !result
+SELECT id, value 
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t
+WHERE id > 2 AND value LIKE 'a%' AND (id + 5 < 10 OR value = 'f');
+-- result:
+-- !result
+SELECT id, value 
+FROM (
+    SELECT id, value FROM test_table_1 WHERE value = 'a'
+    UNION ALL
+    SELECT id, value FROM test_table_2 WHERE value = 'b'
+    UNION ALL
+    SELECT id, detail FROM join_table WHERE detail = 'info1'
+) t
+WHERE id < 5;
+-- result:
+1	a
+1	info1
+-- !result
+SELECT t1.id, t1.value, t2.id, t2.detail 
+FROM (
+    SELECT id, value FROM test_table_1
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t1
+CROSS JOIN join_table t2;
+-- result:
+2	b	1	info1
+2	b	5	info5
+1	a	1	info1
+1	a	5	info5
+3	c	1	info1
+3	c	5	info5
+4	d	1	info1
+4	d	5	info5
+5	e	1	info1
+5	e	5	info5
+6	f	1	info1
+6	f	5	info5
+-- !result
+SELECT id, value 
+FROM (
+    SELECT id, value FROM test_table_1 WHERE 1 = 0
+    UNION ALL
+    SELECT id, value FROM test_table_2
+) t;
+-- result:
+4	d
+5	e
+6	f
+-- !result
+SELECT fixed_col, id 
+FROM (
+    SELECT 'Constant1' AS fixed_col, id FROM test_table_1
+    UNION ALL
+    SELECT 'Constant2' AS fixed_col, id FROM test_table_2
+) t;
+-- result:
+Constant1	2
+Constant2	4
+Constant2	5
+Constant2	6
+Constant1	1
+Constant1	3
+-- !result
+SELECT col1, col2 
+FROM (
+    SELECT col1, col2 
+    FROM (
+        SELECT id AS col1, value AS col2 FROM test_table_1
+        UNION ALL
+        SELECT id AS col1, value AS col2 FROM test_table_2 WHERE id > 4
+    ) subquery1
+    UNION ALL
+    SELECT id AS col1, detail AS col2 
+    FROM (
+        SELECT id, detail FROM join_table
+        UNION ALL
+        SELECT id, detail FROM join_table WHERE id = 1
+    ) subquery2
+) t;
+-- result:
+2	b
+1	info1
+1	a
+3	c
+5	e
+6	f
+1	info1
+5	info5
+-- !result
+CREATE TABLE alias_agg_table_1 (
+    c1 INT,
+    c2 VARCHAR(10)
+) DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE alias_agg_table_2 (
+    c1 INT,
+    c2 VARCHAR(10)
+) DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO alias_agg_table_1 VALUES (1, 'x'), (2, 'y'), (3, 'z');
+-- result:
+-- !result
+INSERT INTO alias_agg_table_2 VALUES (4, 'p'), (5, 'q'), (6, 'r');
+-- result:
+-- !result
+[UC]analyze full table alias_agg_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_agg_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table alias_agg_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_agg_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('c2', 'alias_agg_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('c2', 'alias_agg_table_2')
+-- result:
+
+-- !result
+SELECT alias_c1, COUNT(*) AS cnt
+FROM (
+    SELECT c1 AS alias_c1 FROM alias_agg_table_1
+    UNION ALL
+    SELECT c1 AS alias_c1 FROM alias_agg_table_2
+) t
+GROUP BY alias_c1;
+-- result:
+2	1
+3	1
+4	1
+5	1
+1	1
+6	1
+-- !result
+SELECT c1, c2
+FROM (
+    SELECT c1, c2 FROM alias_agg_table_1
+    UNION ALL
+    SELECT c1, c2 FROM alias_agg_table_2
+) t;
+-- result:
+1	x
+3	z
+4	p
+5	q
+6	r
+2	y
+-- !result
+SELECT c1, computed_col 
+FROM (
+    SELECT c1, c2, c1 + 10 AS computed_col FROM alias_agg_table_1
+    UNION ALL
+    SELECT c1, c2, c1 * 2 AS computed_col FROM alias_agg_table_2
+) t;
+-- result:
+4	8
+5	10
+6	12
+1	11
+3	13
+2	12
+-- !result
+SELECT * 
+FROM (
+    SELECT c1, c2 FROM alias_agg_table_1 
+    UNION ALL
+    SELECT c1, c2 FROM alias_agg_table_2 
+) t;
+-- result:
+4	p
+5	q
+6	r
+1	x
+3	z
+2	y
+-- !result
+SELECT c1, c2
+FROM (
+    SELECT c1, c2
+    FROM (
+        SELECT c1, c2 FROM alias_agg_table_1
+        UNION ALL
+        SELECT c1, c2 FROM alias_agg_table_2
+        LIMIT 2
+    ) subquery1
+    UNION ALL
+    SELECT c1, c2
+    FROM (
+        SELECT c1, c2 FROM alias_agg_table_1
+        UNION ALL
+        SELECT c1, c2 FROM alias_agg_table_2 LIMIT 1
+    ) subquery2
+) outer_query
+ORDER BY c1, c2
+LIMIT 4;
+-- result:
+1	x
+2	y
+3	z
+-- !result
+CREATE TABLE exclude_col_table_1 (
+    col1 INT,
+    col2 INT,
+    col3 VARCHAR(10)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE exclude_col_table_2 (
+    col1 INT,
+    col2 INT,
+    col3 VARCHAR(10)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO exclude_col_table_1 VALUES (1, 10, 'foo'), (2, 20, 'bar'), (3, 30, 'baz');
+-- result:
+-- !result
+INSERT INTO exclude_col_table_2 VALUES (4, 40, 'qux'), (5, 50, 'quux'), (6, 60, 'corge');
+-- result:
+-- !result
+[UC]analyze full table exclude_col_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.exclude_col_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table exclude_col_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.exclude_col_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('col3', 'exclude_col_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('col3', 'exclude_col_table_2')
+-- result:
+
+-- !result
+SELECT col1, col3
+FROM (
+    SELECT col1, col3 FROM exclude_col_table_1 WHERE col2 > 15
+    UNION ALL
+    SELECT col1, col3 FROM exclude_col_table_2
+) t;
+-- result:
+2	bar
+3	baz
+4	qux
+5	quux
+6	corge
+-- !result
+CREATE TABLE join_cond_table_1 (
+    id INT,
+    detail VARCHAR(10)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE join_cond_table_2 (
+    id INT,
+    detail VARCHAR(10)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO join_cond_table_1 VALUES (1, 'info1'), (3, 'info3');
+-- result:
+-- !result
+INSERT INTO join_cond_table_2 VALUES (2, 'info2'), (4, 'info4');
+-- result:
+-- !result
+[UC]analyze full table join_cond_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_cond_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table join_cond_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_cond_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('detail', 'join_cond_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('detail', 'join_cond_table_2')
+-- result:
+
+-- !result
+SELECT jt1.id, t.id, jt2.detail
+FROM (
+    SELECT id FROM join_cond_table_1
+    UNION ALL
+    SELECT id FROM join_cond_table_2
+) t
+JOIN join_cond_table_1 jt1 ON t.id = jt1.id
+JOIN join_cond_table_2 jt2 ON t.id = jt2.id;
+-- result:
+-- !result
+CREATE TABLE hash_dist_table (
+    key1 INT,
+    key2 VARCHAR(10)
+) DUPLICATE KEY(key1)
+DISTRIBUTED BY HASH(key1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE broadcast_dist_table (
+    key1 INT,
+    key2 VARCHAR(10)
+) DUPLICATE KEY(key1)
+DISTRIBUTED BY HASH(key1) BUCKETS 1
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO hash_dist_table VALUES (1, 'h1'), (2, 'h2');
+-- result:
+-- !result
+INSERT INTO broadcast_dist_table VALUES (3, 'b1'), (4, 'b2');
+-- result:
+-- !result
+[UC]analyze full table hash_dist_table;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.hash_dist_table	analyze	status	OK
+-- !result
+[UC]analyze full table broadcast_dist_table;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.broadcast_dist_table	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('key2', 'hash_dist_table')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('key2', 'broadcast_dist_table')
+-- result:
+
+-- !result
+SELECT key1, key2
+FROM (
+    SELECT key1, key2 FROM hash_dist_table
+    UNION ALL
+    SELECT key1, key2 FROM broadcast_dist_table
+) t;
+-- result:
+2	h2
+3	b1
+4	b2
+1	h1
+-- !result
+CREATE TABLE func_table_1 (
+    id INT,
+    name VARCHAR(20),
+    value INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE func_table_2 (
+    id INT,
+    name VARCHAR(20),
+    value INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO func_table_1 VALUES (1, 'A', 100), (2, 'B', 200), (3, 'C', NULL);
+-- result:
+-- !result
+INSERT INTO func_table_2 VALUES (4, 'D', 50), (5, 'E', NULL), (6, 'F', 300);
+-- result:
+-- !result
+[UC]analyze full table func_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.func_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table func_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.func_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('name', 'func_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('name', 'func_table_2')
+-- result:
+
+-- !result
+SELECT id, name, value, value + 10 AS adjusted_value
+FROM (
+    SELECT id, name, value FROM func_table_1
+    UNION ALL
+    SELECT id, name, value FROM func_table_2
+) t
+WHERE value IS NOT NULL AND value > 100;
+-- result:
+2	B	200	210
+6	F	300	310
+-- !result
+CREATE TABLE agg_table_1 (
+    id INT,
+    category VARCHAR(20),
+    count INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE agg_table_2 (
+    id INT,
+    category VARCHAR(20),
+    count INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO agg_table_1 VALUES (1, 'A', 10), (2, 'B', 20), (3, 'C', 30);
+-- result:
+-- !result
+INSERT INTO agg_table_2 VALUES (4, 'A', 40), (5, 'B', 50), (6, 'C', 60);
+-- result:
+-- !result
+[UC]analyze full table agg_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table agg_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('category', 'agg_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('category', 'agg_table_2')
+-- result:
+
+-- !result
+SELECT category, SUM(count) AS total_count
+FROM (
+    SELECT id, category, count FROM agg_table_1
+    UNION ALL
+    SELECT id, category, count FROM agg_table_2
+) t
+GROUP BY category;
+-- result:
+C	90
+B	70
+A	50
+-- !result
+CREATE TABLE compute_table_1 (
+    id INT,
+    value INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE compute_table_2 (
+    id INT,
+    value INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO compute_table_1 VALUES (1, 100), (2, 200), (3, 300);
+-- result:
+-- !result
+INSERT INTO compute_table_2 VALUES (4, 400), (5, 500), (6, 600);
+-- result:
+-- !result
+SELECT id, value, value + id AS computed_value
+FROM (
+    SELECT id, value FROM compute_table_1
+    UNION ALL
+    SELECT id, value FROM compute_table_2
+) t
+WHERE value > 200;
+-- result:
+4	400	404
+5	500	505
+6	600	606
+3	300	303
+-- !result
+CREATE TABLE filter_table_1 (
+    id INT,
+    type VARCHAR(20),
+    amount INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE filter_table_2 (
+    id INT,
+    type VARCHAR(20),
+    amount INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO filter_table_1 VALUES (1, 'electronics', 100), (2, 'furniture', 200), (3, 'fashion', 300);
+-- result:
+-- !result
+INSERT INTO filter_table_2 VALUES (4, 'electronics', 400), (5, 'furniture', 500), (6, 'fashion', 600);
+-- result:
+-- !result
+[UC]analyze full table filter_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.filter_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table filter_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.filter_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('type', 'filter_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('type', 'filter_table_2')
+-- result:
+
+-- !result
+SELECT id, type, amount
+FROM (
+    SELECT id, type, amount FROM filter_table_1 WHERE amount < 300
+    UNION ALL
+    SELECT id, type, amount FROM filter_table_2 WHERE amount > 400
+) t;
+-- result:
+2	furniture	200
+5	furniture	500
+6	fashion	600
+1	electronics	100
+-- !result
+CREATE TABLE nested_int_table_1 (
+    id INT,
+    group_id string
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE nested_int_table_2 (
+    id INT,
+    group_id string
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO nested_int_table_1 VALUES (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+INSERT INTO nested_int_table_2 VALUES (4, 40), (5, 50), (6, 60);
+-- result:
+-- !result
+[UC]analyze full table nested_int_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.nested_int_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table nested_int_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.nested_int_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('group_id', 'nested_int_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('group_id', 'nested_int_table_2')
+-- result:
+
+-- !result
+SELECT id, group_id
+FROM (
+    SELECT id, group_id
+    FROM (
+        SELECT id, group_id FROM nested_int_table_1 WHERE group_id < 30
+        UNION ALL
+        SELECT id, group_id FROM nested_int_table_2
+    ) t1
+    UNION ALL
+    SELECT id, group_id
+    FROM (
+        SELECT id, group_id FROM nested_int_table_1
+        UNION ALL
+        SELECT id, group_id FROM nested_int_table_2 WHERE group_id > 30
+    ) t2
+) t;
+-- result:
+1	10
+2	20
+1	10
+3	30
+4	40
+5	50
+6	60
+2	20
+4	40
+5	50
+6	60
+-- !result
+CREATE TABLE cte_table_1 (
+    id INT,
+    value VARCHAR(20)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE cte_table_2 (
+    id INT,
+    value VARCHAR(20)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE join_table_1 (
+    id INT,
+    detail VARCHAR(20)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO cte_table_1 VALUES (1, 'A'), (2, 'B'), (3, 'C');
+-- result:
+-- !result
+INSERT INTO cte_table_2 VALUES (4, 'D'), (5, 'E'), (6, 'F');
+-- result:
+-- !result
+INSERT INTO join_table_1 VALUES (1, 'info1'), (5, 'info5');
+-- result:
+-- !result
+[UC]analyze full table cte_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.cte_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table cte_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.cte_table_2	analyze	status	OK
+-- !result
+[UC]analyze full table join_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_table_1	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('value', 'cte_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('value', 'cte_table_2')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('detail', 'join_table_1')
+-- result:
+
+-- !result
+WITH cte_union AS (
+    SELECT id, value FROM cte_table_1
+    UNION ALL
+    SELECT id, value FROM cte_table_2
+)
+SELECT cte_union.id, cte_union.value, jt.detail
+FROM cte_union
+JOIN join_table_1 jt ON cte_union.id = jt.id;
+-- result:
+1	A	info1
+5	E	info5
+-- !result
+CREATE TABLE source_table_1 (
+    col1 INT,
+    col2 VARCHAR(20)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE source_table_2 (
+    col1 INT,
+    col2 VARCHAR(20)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE join_table_2 (
+    col1 INT,
+    col2 VARCHAR(20)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO source_table_1 VALUES (1, 'X'), (2, 'Y'), (3, 'Z');
+-- result:
+-- !result
+INSERT INTO source_table_2 VALUES (4, 'P'), (5, 'Q'), (6, 'R');
+-- result:
+-- !result
+INSERT INTO join_table_2 VALUES (1, 'J1'), (4, 'J4');
+-- result:
+-- !result
+[UC]analyze full table source_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.source_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table source_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.source_table_2	analyze	status	OK
+-- !result
+[UC]analyze full table join_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('col2', 'source_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('col2', 'source_table_2')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('col2', 'join_table_2')
+-- result:
+
+-- !result
+CREATE TABLE ctas_result
+DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1') AS
+SELECT st1.col1, jt.col2
+FROM (
+    SELECT col1 FROM source_table_1
+    UNION ALL
+    SELECT col1 FROM source_table_2
+) st1
+JOIN join_table_2 jt ON st1.col1 = jt.col1;
+-- result:
+-- !result
+CREATE TABLE agg_cte_table_1 (
+    id INT,
+    category VARCHAR(20),
+    amount INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE agg_cte_table_2 (
+    id INT,
+    category VARCHAR(20),
+    amount INT
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO agg_cte_table_1 VALUES (1, 'Electronics', 300), (2, 'Furniture', 200), (3, 'Fashion', 700);
+-- result:
+-- !result
+INSERT INTO agg_cte_table_2 VALUES (4, 'Electronics', 500), (5, 'Furniture', 100), (6, 'Fashion', 300);
+-- result:
+-- !result
+[UC]analyze full table agg_cte_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_cte_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table agg_cte_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_cte_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('category', 'agg_cte_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('category', 'agg_cte_table_2')
+-- result:
+
+-- !result
+WITH aggregated_union AS (
+    SELECT id, category, amount FROM agg_cte_table_1
+    UNION ALL
+    SELECT id, category, amount FROM agg_cte_table_2
+)
+SELECT category, SUM(amount) AS total_amount
+FROM aggregated_union
+GROUP BY category;
+-- result:
+Electronics	800
+Furniture	300
+Fashion	1000
+-- !result
+CREATE TABLE multi_union_table_1 (
+    col1 INT,
+    col2 VARCHAR(20)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE multi_union_table_2 (
+    col1 INT,
+    col2 VARCHAR(20)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE multi_union_table_3 (
+    col1 INT,
+    col2 VARCHAR(20)
+) DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO multi_union_table_1 VALUES (1, 'Alpha'), (2, 'Beta');
+-- result:
+-- !result
+INSERT INTO multi_union_table_2 VALUES (3, 'Gamma'), (4, 'Delta');
+-- result:
+-- !result
+INSERT INTO multi_union_table_3 VALUES (5, 'Epsilon'), (6, 'Zeta');
+-- result:
+-- !result
+[UC]analyze full table multi_union_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.multi_union_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table multi_union_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.multi_union_table_2	analyze	status	OK
+-- !result
+[UC]analyze full table multi_union_table_3;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.multi_union_table_3	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('col2', 'multi_union_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('col2', 'multi_union_table_2')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('col2', 'multi_union_table_3')
+-- result:
+
+-- !result
+CREATE TABLE ctas_result_2
+DUPLICATE KEY(col1)
+DISTRIBUTED BY HASH(col1) BUCKETS 3
+PROPERTIES('replication_num' = '1') AS
+SELECT col1, col2 FROM (
+    SELECT col1, col2 FROM multi_union_table_1
+    UNION ALL
+    SELECT col1, col2 FROM multi_union_table_2
+    UNION ALL
+    SELECT col1, col2 FROM multi_union_table_3
+) t;
+-- result:
+-- !result
+CREATE TABLE large_table_1 (
+    id INT,
+    value VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE large_table_2 (
+    id INT,
+    value VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO large_table_1 VALUES
+(1, 'val1'), (2, 'val2'), (3, 'val3'),
+(4, 'val4'), (5, 'val5'), (6, 'val6'),
+(7, 'val7'), (8, 'val8'), (9, 'val9'),
+(10, 'val10'), (11, 'val11'), (12, 'val12'),
+(13, 'val13'), (14, 'val14'), (15, 'val15');
+-- result:
+-- !result
+INSERT INTO large_table_1
+SELECT id + 15, CONCAT('val', id + 15) FROM large_table_1;
+-- result:
+-- !result
+INSERT INTO large_table_2
+SELECT id + 30, CONCAT('str', id + 30) FROM large_table_1;
+-- result:
+-- !result
+[UC]analyze full table large_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.large_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table large_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.large_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('value', 'large_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('value', 'large_table_2')
+-- result:
+
+-- !result
+SELECT id, COUNT(*) AS cnt
+FROM (
+    SELECT id, value FROM large_table_1
+    UNION ALL
+    SELECT id, value FROM large_table_2
+) t
+GROUP BY id
+HAVING cnt > 1;
+-- result:
+-- !result
+CREATE TABLE broadcast_table_1 (
+    id INT,
+    `key` VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE broadcast_table_2 (
+    id INT,
+    `key` VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO broadcast_table_1
+SELECT id, CONCAT('dict_broad_', id) FROM large_table_1;
+-- result:
+-- !result
+INSERT INTO broadcast_table_2
+SELECT id + 300, CONCAT('dict_broad_', id + 300) FROM large_table_1;
+-- result:
+-- !result
+[UC]analyze full table broadcast_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.broadcast_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table broadcast_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.broadcast_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('`key`', 'broadcast_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('`key`', 'broadcast_table_2')
+-- result:
+
+-- !result
+WITH union_broadcast AS (
+    SELECT id, `key` FROM broadcast_table_1
+    UNION ALL
+    SELECT id, `key` FROM broadcast_table_2
+)
+SELECT `key`, COUNT(*) AS appearances
+FROM union_broadcast
+GROUP BY `key`
+HAVING appearances > 1;
+-- result:
+-- !result
+CREATE TABLE dict_filter_table_1 (
+    id INT,
+    `text` VARCHAR(100)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE dict_filter_table_2 (
+    id INT,
+    `text` VARCHAR(100)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO dict_filter_table_1
+SELECT id, CONCAT('filter_case_', id) FROM large_table_1;
+-- result:
+-- !result
+INSERT INTO dict_filter_table_2
+SELECT id + 150, CONCAT('filter_case_', id + 150) FROM large_table_1;
+-- result:
+-- !result
+[UC]analyze full table dict_filter_table_1;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.dict_filter_table_1	analyze	status	OK
+-- !result
+[UC]analyze full table dict_filter_table_2;
+-- result:
+test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.dict_filter_table_2	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('`text`', 'dict_filter_table_1')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('`text`', 'dict_filter_table_2')
+-- result:
+
+-- !result
+SELECT *
+FROM (
+    SELECT id, `text` FROM dict_filter_table_1
+    UNION ALL
+    SELECT id, `text` FROM dict_filter_table_2
+) t
+WHERE LENGTH(`text`) > 10;
+-- result:
+2	filter_case_2
+9	filter_case_9
+10	filter_case_10
+11	filter_case_11
+12	filter_case_12
+15	filter_case_15
+18	filter_case_18
+21	filter_case_21
+24	filter_case_24
+28	filter_case_28
+29	filter_case_29
+151	filter_case_151
+154	filter_case_154
+155	filter_case_155
+158	filter_case_158
+160	filter_case_160
+162	filter_case_162
+165	filter_case_165
+167	filter_case_167
+170	filter_case_170
+173	filter_case_173
+176	filter_case_176
+178	filter_case_178
+4	filter_case_4
+5	filter_case_5
+6	filter_case_6
+7	filter_case_7
+14	filter_case_14
+16	filter_case_16
+19	filter_case_19
+20	filter_case_20
+23	filter_case_23
+25	filter_case_25
+152	filter_case_152
+157	filter_case_157
+161	filter_case_161
+163	filter_case_163
+166	filter_case_166
+172	filter_case_172
+174	filter_case_174
+177	filter_case_177
+1	filter_case_1
+3	filter_case_3
+8	filter_case_8
+13	filter_case_13
+17	filter_case_17
+22	filter_case_22
+26	filter_case_26
+27	filter_case_27
+30	filter_case_30
+153	filter_case_153
+156	filter_case_156
+159	filter_case_159
+164	filter_case_164
+168	filter_case_168
+169	filter_case_169
+171	filter_case_171
+175	filter_case_175
+179	filter_case_179
+180	filter_case_180
+-- !result
