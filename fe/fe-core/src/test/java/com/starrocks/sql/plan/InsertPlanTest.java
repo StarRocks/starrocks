@@ -23,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -852,6 +853,9 @@ public class InsertPlanTest extends PlanTestBase {
 
                 icebergTable.getPartitionColumnNames();
                 result = new ArrayList<>();
+
+                icebergTable.getPartitionColumns();
+                result = new ArrayList<>();
             }
         };
 
@@ -998,8 +1002,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         new MockUp<SessionVariable>() {
             @Mock
-            public boolean isEnableIcebergSinkGlobalShuffle() {
-                return true;
+            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+                return ConnectorSinkShuffleMode.FORCE;
             }
         };
 
