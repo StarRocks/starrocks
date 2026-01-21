@@ -16,8 +16,16 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
 #include "block_cache/block_cache.h"
+=======
+#include "agent/agent_server.h"
+#include "cache/datacache.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
+>>>>>>> b045fd1856 ([Enhancement] Add dynamic config for update tablet meta info thread pool (#68166))
 #include "fs/fs_util.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
@@ -80,4 +88,49 @@ TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
     ASSERT_EQ(16, load_pool->max_threads());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* executor =
+            static_cast<bthreads::ThreadPoolExecutor*>(StorageEngine::instance()->async_delta_writer_executor());
+    auto* pool = executor->get_thread_pool();
+
+    {
+        auto st = action.update_config("number_tablet_writer_threads", "8");
+        CHECK_OK(st);
+        ASSERT_EQ(8, pool->max_threads());
+    }
+
+    {
+        auto st = action.update_config("number_tablet_writer_threads", "0");
+        CHECK_OK(st);
+        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+    }
+}
+
+TEST_F(UpdateConfigActionTest, test_update_transaction_publish_version_worker_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto st = action.update_config("transaction_publish_version_worker_count", "8");
+    CHECK_OK(st);
+    ASSERT_EQ(8, ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+    ASSERT_NE(nullptr, thread_pool);
+
+    auto st = action.update_config("update_tablet_meta_info_worker_count", "4");
+    CHECK_OK(st);
+    ASSERT_EQ(4, thread_pool->max_threads());
+
+    st = action.update_config("update_tablet_meta_info_worker_count", "0");
+    CHECK_OK(st);
+    ASSERT_EQ(1, thread_pool->max_threads());
+}
+
+>>>>>>> b045fd1856 ([Enhancement] Add dynamic config for update tablet meta info thread pool (#68166))
 } // namespace starrocks
