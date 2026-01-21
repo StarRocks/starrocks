@@ -172,6 +172,7 @@ private:
 
     Status _prune_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges,
                               std::vector<TScanRangeParams>* pruned_scan_ranges);
+
 private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
