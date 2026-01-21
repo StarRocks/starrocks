@@ -536,11 +536,11 @@ public class SplitTabletJob extends TabletReshardJob {
 
                 physicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
 
-                // Temporary code, ignore, will be replaced later
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    physicalPartition.addMaterializedIndex(newIndex, newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
+                    physicalPartition.addMaterializedIndex(newIndex,
+                            newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
         }
@@ -559,17 +559,15 @@ public class SplitTabletJob extends TabletReshardJob {
 
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+                    MaterializedIndex oldIndex = physicalPartition
+                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
                     if (oldIndex == null) {
                         continue;
                     }
-
-                    /*
-                     * To do later
-                     * for (Tablet tablet : oldIndex.getTablets()) {
-                     * invertedIndex.deleteTablet(tablet.getId());
-                     * }
-                     */
+                    // Remove old tablets from inverted index
+                    for (Tablet tablet : oldIndex.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
                 }
             }
         }
