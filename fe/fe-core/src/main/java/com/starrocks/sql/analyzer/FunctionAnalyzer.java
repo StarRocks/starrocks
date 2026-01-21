@@ -828,9 +828,10 @@ public class FunctionAnalyzer {
 
             expr = SqlParser.parseExpression(fn.getSql(), context.getSessionVariable());
             ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
-                if (argsMap.containsKey(slotRef.getColName())) {
-                    slotRef.setType(argsMap.get(slotRef.getColName()));
+                if (!argsMap.containsKey(slotRef.getColName())) {
+                    throw new SemanticException("Cannot find argument %s in function args", slotRef.getColName());
                 }
+                slotRef.setType(argsMap.get(slotRef.getColName()));
             });
         } catch (Exception e) {
             throw new SemanticException("Failed to parse view definition: " + fn.getSql());

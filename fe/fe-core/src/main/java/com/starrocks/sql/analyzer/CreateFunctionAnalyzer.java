@@ -97,6 +97,9 @@ public class CreateFunctionAnalyzer {
         Map<String, Type> argsMap = Maps.newHashMap();
         for (int i = 0; i < def.getArgNames().size(); i++) {
             String name = def.getArgNames().get(i);
+            if (argsMap.containsKey(name)) {
+                throw new SemanticException("Duplicate argument name %s in function args", name);
+            }
             argsMap.put(name, def.getArgTypes()[i]);
         }
         ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {

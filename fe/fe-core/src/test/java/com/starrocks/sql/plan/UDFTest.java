@@ -22,6 +22,9 @@ import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
 import com.starrocks.sql.analyzer.DropStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -217,4 +220,11 @@ public class UDFTest extends PlanTestBase {
             Config.enable_udf = false;
         }
     }
+
+    @Test
+    public void testSqlFunctionDuplicate() {
+        AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string, y string) RETURNS concat('Name_', lower(y));");
+        AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(z));");
+    }
+
 }

@@ -100,6 +100,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.StringVariant;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
@@ -393,7 +394,8 @@ public class RuntimeTypeAdapterTypes {
                 RuntimeTypeAdapterFactory.of(Function.class, "clazz")
                         .registerSubtype(ScalarFunction.class, "ScalarFunction")
                         .registerSubtype(AggregateFunction.class, "AggregateFunction")
-                        .registerSubtype(TableFunction.class, "TableFunction");
+                        .registerSubtype(TableFunction.class, "TableFunction")
+                        .registerSubtype(SqlFunction.class, "SqlFunction");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(Function.class, function_type_runtime_adapter_factory);
 
         final RuntimeTypeAdapterFactory<StorageVolumeMgr> storage_volume_mgr_type_runtime_adapter_factory =

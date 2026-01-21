@@ -17,6 +17,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.expression.Expr;
@@ -63,8 +64,15 @@ public class SqlFunction extends Function {
         if (ifNotExists) {
             sb.append("IF NOT EXISTS ");
         }
-        sb.append(dbName()).append(".").append(signatureString()).append(" \n")
-                .append(sql);
+        sb.append(dbName()).append(".").append(getFunctionName().getFunction()).append("(");
+
+        for (int i = 0; i < getArgs().length; i++) {
+            if (i != 0) {
+                sb.append(", ");
+            }
+            sb.append(getArgNames()[i]).append(" ").append(getArgs()[i].toSql());
+        }
+        sb.append(") RETURNS ").append(sql);
         return sb.toString();
     }
 
