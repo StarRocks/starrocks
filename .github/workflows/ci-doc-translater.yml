@@ -15,7 +15,7 @@ jobs:
       - name: Check Team Membership
         uses: actions/github-script@v7
         with:
-          token: ${{ secrets.DOC_MEMBERSHIP_PAT || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.DOC_MEMBERSHIP_PAT || secrets.GITHUB_TOKEN }}
           script: |
             const user = context.payload.comment.user.login;
             const org = 'StarRocks';
