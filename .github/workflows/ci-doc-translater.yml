@@ -10,7 +10,6 @@ jobs:
     permissions:
       contents: write      # Required to push the translations
       pull-requests: write # Required to read/post comments
-      members: read        # Required to check StarRocks org team membership
 
     steps:
       - name: Check Team Membership
