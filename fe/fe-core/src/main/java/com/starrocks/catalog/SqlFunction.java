@@ -17,7 +17,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.expression.Expr;
