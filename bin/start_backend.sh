@@ -162,6 +162,7 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
     elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
         export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
     else
+<<<<<<< HEAD
         # Normal mode: take the value from the `jemalloc_conf` config in be.conf/cn.conf so it is
         # observable via information_schema.be_configs. Fall back to the built-in default when unset.
         # NOTE: keep this default in sync with CONF_String(jemalloc_conf, ...) in be/src/common/config.h.
@@ -172,6 +173,9 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
             read_var_from_conf jemalloc_conf $STARROCKS_HOME/conf/cn.conf
         fi
         export JEMALLOC_CONF="$jemalloc_conf"
+=======
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+>>>>>>> 2e10a486ac ([Enhancement] Use LD_LIBRARY_PATH for jemalloc selection with dedicated directories (#67667))
     fi
 fi
 
