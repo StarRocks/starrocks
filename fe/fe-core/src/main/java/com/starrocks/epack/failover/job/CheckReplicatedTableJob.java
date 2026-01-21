@@ -2,6 +2,7 @@
 
 package com.starrocks.epack.failover.job;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -25,7 +26,10 @@ import com.starrocks.replication.ReplicationJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class CheckReplicatedTableJob extends FailoverGroupJob {
     private static final Logger LOG = LogManager.getLogger(CheckReplicatedTableJob.class);
@@ -50,46 +54,8 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         locker.lockDatabase(localDatabase.getId(), LockType.READ);
 
         try {
-            Table localTable = localDatabase.getTable(remoteTable.getName());
+            OlapTable localTable = checkTable();
             if (localTable == null) {
-                CreateReplicatedTableJob job = new CreateReplicatedTableJob(failoverGroup,
-                        remoteDatabase, remoteTable, localDatabase, isIncludeObject);
-                job.start();
-                return;
-            }
-
-            if (!localTable.isOlapTable()) {
-                LOG.warn("Local table {}.{} with type {} is not olap table in failover group {}",
-                        localDatabase.getFullName(), localTable.getName(), localTable.getType(),
-                        failoverGroup.getName());
-                if (Config.failover_group_allow_drop_inconsistent_table) {
-                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                            remoteTable, localDatabase, localTable, isIncludeObject, true);
-                    job.start();
-                } else {
-                    LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
-                            localDatabase.getFullName(), localTable.getName());
-                }
-                return;
-            }
-
-            OlapTable localOlapTable = (OlapTable) localTable;
-            OlapTable remoteOlapTable = remoteTable;
-            if (!checkTableConsistency(localOlapTable)) {
-                if (Config.failover_group_allow_drop_inconsistent_table) {
-                    if (localTable.getCreateTime() < failoverGroup.getSchedule().getRoundScheduledTimeMs() / 1000) {
-                        // If local table is created in previous replication round, drop and create it
-                        DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
-                                remoteTable, localDatabase, localTable, isIncludeObject, true);
-                        job.start();
-                    } else {
-                        LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
-                                localDatabase.getFullName(), localTable.getName());
-                    }
-                } else {
-                    LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
-                            localDatabase.getFullName(), localTable.getName());
-                }
                 return;
             }
 
@@ -105,22 +71,34 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                 if (remotePartition.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                     continue;
                 }
-                Partition localPartition = checkPartition(localOlapTable, remotePartition);
+                Partition localPartition = checkPartition(localTable, remotePartition);
                 if (localPartition == null) {
                     return;
                 }
-                if (localPartition.getDefaultPhysicalPartition().getCommittedVersion()
-                        < remotePartition.getDefaultPhysicalPartition().getVisibleVersion()) {
-                    needReplication = true;
+
+                Map<PhysicalPartition, PhysicalPartition> localToRemotePhysicalPartitions = checkPhysicalPartitions(
+                        localTable, localPartition, remotePartition);
+                if (localToRemotePhysicalPartitions == null) {
+                    return;
+                }
+
+                for (Map.Entry<PhysicalPartition, PhysicalPartition> entry : localToRemotePhysicalPartitions
+                        .entrySet()) {
+                    PhysicalPartition localPhysicalPartition = entry.getKey();
+                    PhysicalPartition remotePhysicalPartition = entry.getValue();
+                    if (localPhysicalPartition.getCommittedVersion() < remotePhysicalPartition.getVisibleVersion()) {
+                        needReplication = true;
+                        break;
+                    }
                 }
             }
 
             if (needReplication) {
                 String jobId = String.format("FAILOVER_GROUP_%s-%d-%d-%d", failoverGroup.getName(),
-                        localDatabase.getId(), localOlapTable.getId(), System.currentTimeMillis());
+                        localDatabase.getId(), localTable.getId(), System.currentTimeMillis());
                 ReplicationJob job = new ReplicationJob(jobId,
                         failoverGroup.getObjectMeta().getClusterToken(),
-                        localDatabase.getId(), localOlapTable, remoteOlapTable,
+                        localDatabase.getId(), localTable, remoteTable,
                         failoverGroup.getObjectMeta().getSystemInfoService());
                 if (failoverGroup.getJobExecutor().addReplicationJob(job)) {
                     LOG.info("Succeed to create replication job for {}.{} in failover group {}",
@@ -133,16 +111,62 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             }
 
             // Drop extra partitions
-            for (Partition localPartition : localOlapTable.getPartitions()) {
-                if (remoteOlapTable.getPartition(localPartition.getName(), false) == null) {
+            for (Partition localPartition : localTable.getPartitions()) {
+                if (remoteTable.getPartition(localPartition.getName(), false) == null) {
                     DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup, null,
-                            null, localDatabase, localOlapTable, localPartition.getName(), false, true);
+                            null, localDatabase, localTable, localPartition.getName(), false, true);
                     job.start();
                 }
             }
         } finally {
             locker.unLockDatabase(localDatabase.getId(), LockType.READ);
         }
+    }
+
+    private OlapTable checkTable() {
+        Table localTable = localDatabase.getTable(remoteTable.getName());
+        if (localTable == null) {
+            CreateReplicatedTableJob job = new CreateReplicatedTableJob(failoverGroup,
+                    remoteDatabase, remoteTable, localDatabase, isIncludeObject);
+            job.start();
+            return null;
+        }
+
+        if (!localTable.isOlapTable()) {
+            LOG.warn("Local table {}.{} with type {} is not olap table in failover group {}",
+                    localDatabase.getFullName(), localTable.getName(), localTable.getType(),
+                    failoverGroup.getName());
+            if (Config.failover_group_allow_drop_inconsistent_table) {
+                DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                        remoteTable, localDatabase, localTable, isIncludeObject, true);
+                job.start();
+            } else {
+                LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
+                        localDatabase.getFullName(), localTable.getName());
+            }
+            return null;
+        }
+
+        OlapTable localOlapTable = (OlapTable) localTable;
+        if (!checkTableConsistency(localOlapTable)) {
+            if (Config.failover_group_allow_drop_inconsistent_table) {
+                if (localTable.getCreateTime() < failoverGroup.getSchedule().getRoundScheduledTimeMs() / 1000) {
+                    // If local table is created in previous replication round, drop and create it
+                    DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                            remoteTable, localDatabase, localTable, isIncludeObject, true);
+                    job.start();
+                } else {
+                    LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
+                            localDatabase.getFullName(), localTable.getName());
+                }
+            } else {
+                LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_table = false",
+                        localDatabase.getFullName(), localTable.getName());
+            }
+            return null;
+        }
+
+        return localOlapTable;
     }
 
     private Partition checkPartition(OlapTable localTable, Partition remotePartition) {
@@ -157,8 +181,8 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
         if (!checkPartitionConsistency(localTable, localPartition, remotePartition)) {
             if (Config.failover_group_allow_drop_inconsistent_partition) {
                 if (localTable.getPartitionInfo().isPartitioned()) {
-                    if (localPartition.getDefaultPhysicalPartition().getVisibleVersionTime() < failoverGroup.getSchedule()
-                            .getRoundScheduledTimeMs()) {
+                    if (localPartition.getDefaultPhysicalPartition().getVisibleVersionTime() < failoverGroup
+                            .getSchedule().getRoundScheduledTimeMs()) {
                         // If local partition is created in previous replication round, drop and create
                         DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
                                 remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
@@ -186,17 +210,17 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             return null;
         }
 
-        if (!checkPhysicalPartitions(localTable, localPartition, remotePartition)) {
-            return null;
-        }
-
         return localPartition;
     }
 
-    private boolean checkPhysicalPartitions(OlapTable localTable, Partition localPartition,
-            Partition remotePartition) {
-        List<PhysicalPartition> remotePhysicalPartitions = getOrderedPhysicalPartitions(remotePartition);
+    // Return local to remote physical partitions
+    private Map<PhysicalPartition, PhysicalPartition> checkPhysicalPartitions(OlapTable localTable,
+            Partition localPartition, Partition remotePartition) {
         List<PhysicalPartition> localPhysicalPartitions = getOrderedPhysicalPartitions(localPartition);
+        List<PhysicalPartition> remotePhysicalPartitions = getOrderedPhysicalPartitions(remotePartition);
+        Preconditions.checkState(localPhysicalPartitions.size() <= remotePhysicalPartitions.size());
+        Map<PhysicalPartition, PhysicalPartition> localToRemotePhysicalPartitions = new HashMap<>(
+                remotePhysicalPartitions.size());
         for (int i = 0; i < remotePhysicalPartitions.size(); i++) {
             PhysicalPartition remotePhysicalPartition = remotePhysicalPartitions.get(i);
             if (i >= localPhysicalPartitions.size()) {
@@ -204,28 +228,45 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
                         remoteDatabase, remoteTable, remotePhysicalPartition, localDatabase, localTable,
                         localPartition, isIncludeObject);
                 job.start();
-                return false;
+                return null;
             }
 
             PhysicalPartition localPhysicalPartition = localPhysicalPartitions.get(i);
-            if (!checkPhysicalPartition(localTable, localPartition, remotePhysicalPartition, localPhysicalPartition)) {
-                return false;
+            if (!checkPhysicalPartitionConsistency(localTable, localPartition, remotePhysicalPartition,
+                    localPhysicalPartition)) {
+                if (Config.failover_group_allow_drop_inconsistent_partition) {
+                    if (localTable.getPartitionInfo().isPartitioned()) {
+                        if (localPhysicalPartition.getVisibleVersionTime() < failoverGroup
+                                .getSchedule().getRoundScheduledTimeMs()) {
+                            // If local partition is created in previous replication round, drop and create
+                            DropReplicatedPartitionJob job = new DropReplicatedPartitionJob(failoverGroup,
+                                    remoteDatabase, remoteTable, localDatabase, localTable, localPartition.getName(),
+                                    isIncludeObject, true);
+                            job.start();
+                        } else {
+                            LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
+                                    localDatabase.getFullName(), localTable.getName());
+                        }
+                    } else {
+                        if (localTable.getCreateTime() < failoverGroup.getSchedule().getRoundScheduledTimeMs() / 1000) {
+                            // If local table is created in previous replication round, drop and create it
+                            DropReplicatedTableJob job = new DropReplicatedTableJob(failoverGroup, remoteDatabase,
+                                    remoteTable, localDatabase, localTable, isIncludeObject, true);
+                            job.start();
+                        } else {
+                            LOG.error("Ignore inconsistent table {}.{} to avoid an infinite loop of drop and create",
+                                    localDatabase.getFullName(), localTable.getName());
+                        }
+                    }
+                } else {
+                    LOG.warn("Ignore table {}.{} due to failover_group_allow_drop_inconsistent_partition = false",
+                            localDatabase.getFullName(), localTable.getName());
+                }
+                return null;
             }
+            localToRemotePhysicalPartitions.put(localPhysicalPartition, remotePhysicalPartition);
         }
-        return true;
-    }
-
-    private boolean checkPhysicalPartition(OlapTable localTable, Partition localPartition,
-            PhysicalPartition remotePhysicalPartition, PhysicalPartition localPhysicalPartition) {
-        // Do not support rollup index now, so only check base index
-        return remotePhysicalPartition.getLatestBaseIndex().getTablets().size() == localPhysicalPartition.getLatestBaseIndex()
-                .getTablets().size();
-    }
-
-    private List<PhysicalPartition> getOrderedPhysicalPartitions(Partition partition) {
-        return partition.getSubPartitions().stream()
-                .sorted((left, right) -> Long.compare(left.getId(), right.getId()))
-                .collect(java.util.stream.Collectors.toList());
+        return localToRemotePhysicalPartitions;
     }
 
     private boolean checkTableConsistency(OlapTable localTable) {
@@ -381,26 +422,58 @@ public class CheckReplicatedTableJob extends FailoverGroupJob {
             }
         }
 
-        if (localPartition.getDefaultPhysicalPartition().getCommittedVersion()
-                > remotePartition.getDefaultPhysicalPartition().getVisibleVersion()) {
-            LOG.warn("Local partition {}.{}.{} has greater committed version {} than remote visible version {}",
+        if (localPartition.getSubPartitions().size() > remotePartition.getSubPartitions().size()) {
+            LOG.warn("Local partition {}.{}.{} has more sub partition num {} than remote sub partition num {}",
                     localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
-                    localPartition.getDefaultPhysicalPartition().getCommittedVersion(),
-                    remotePartition.getDefaultPhysicalPartition().getVisibleVersion());
-            return false;
-        }
-
-        if (localPartition.hasData() && localPartition.getDefaultPhysicalPartition().getVersionEpoch()
-                != remotePartition.getDefaultPhysicalPartition().getVersionEpoch()) {
-            LOG.warn("Local partition {}.{}.{} has different version epoch {}:{} with remote version epoch {}:{}",
-                    localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
-                    localPartition.getDefaultPhysicalPartition().getVisibleVersion(),
-                    localPartition.getDefaultPhysicalPartition().getVersionEpoch(),
-                    remotePartition.getDefaultPhysicalPartition().getVisibleVersion(),
-                    remotePartition.getDefaultPhysicalPartition().getVersionEpoch());
+                    localPartition.getSubPartitions().size(), remotePartition.getSubPartitions().size());
             return false;
         }
 
         return true;
+    }
+
+    private boolean checkPhysicalPartitionConsistency(OlapTable localTable, Partition localPartition,
+            PhysicalPartition remotePhysicalPartition, PhysicalPartition localPhysicalPartition) {
+        // Do not support rollup index now, so only check base index
+        if (localPhysicalPartition.getLatestBaseIndex().getTablets().size() != remotePhysicalPartition
+                .getLatestBaseIndex().getTablets().size()) {
+            LOG.warn("Local physical partition {}.{}.{}.{} has different tablet num {} than remote tablet num {}",
+                    localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
+                    localPhysicalPartition.getId(),
+                    localPhysicalPartition.getLatestBaseIndex().getTablets().size(),
+                    remotePhysicalPartition.getLatestBaseIndex().getTablets().size());
+            return false;
+        }
+
+        if (localPhysicalPartition.getCommittedVersion() > remotePhysicalPartition.getVisibleVersion()) {
+            LOG.warn("Local physical partition {}.{}.{}.{} "
+                    + "has greater committed version {} than remote visible version {}",
+                    localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
+                    localPhysicalPartition.getId(),
+                    localPhysicalPartition.getCommittedVersion(), remotePhysicalPartition.getVisibleVersion());
+            return false;
+        }
+
+        if (localPhysicalPartition.hasStorageData()
+                && localPhysicalPartition.getVersionEpoch() != remotePhysicalPartition.getVersionEpoch()) {
+            LOG.warn("Local physical partition {}.{}.{}.{} "
+                    + "has different version epoch {}:{} with remote version epoch {}:{}",
+                    localDatabase.getFullName(), localTable.getName(), localPartition.getName(),
+                    localPhysicalPartition.getId(),
+                    localPhysicalPartition.getVisibleVersion(), localPhysicalPartition.getVersionEpoch(),
+                    remotePhysicalPartition.getVisibleVersion(), remotePhysicalPartition.getVersionEpoch());
+            return false;
+        }
+
+        return true;
+    }
+
+    private static List<PhysicalPartition> getOrderedPhysicalPartitions(Partition partition) {
+        List<PhysicalPartition> physicalPartitions = partition.getSubPartitions().stream()
+                .sorted((left, right) -> Long.compare(left.getId(), right.getId()))
+                .collect(Collectors.toList());
+        Preconditions.checkState(!physicalPartitions.isEmpty()
+                && physicalPartitions.get(0).getId() == partition.getDefaultPhysicalPartition().getId());
+        return physicalPartitions;
     }
 }
