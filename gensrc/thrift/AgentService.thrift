@@ -466,15 +466,15 @@ struct TExternalClusterSnapshotRequest {
     11: optional list<TComputeNodeTablets> compute_node_tablets
 }
 
-struct TRestoreTabletRequest {
-    1: optional list<TRestoreTabletInfo> tablet_infos
-    2: optional i64 source_visible_version
-}
-
 struct TRestoreTabletInfo {
     1: optional Types.TTabletId source_tablet_id
     2: optional Types.TTabletId target_tablet_id
     3: optional i64 target_schema_id
+}
+
+struct TRestoreTabletRequest {
+    1: optional list<TRestoreTabletInfo> tablet_infos
+    2: optional i64 source_visible_version
 }
 
 struct TRestoreTabletResult {
