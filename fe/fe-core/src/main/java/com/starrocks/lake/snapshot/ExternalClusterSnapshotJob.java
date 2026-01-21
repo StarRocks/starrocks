@@ -66,6 +66,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         super(id, snapshotName, storageVolumeName, createdTimeMs);
     }
 
+    public ExternalClusterSnapshotJob(ExternalClusterSnapshotJob other) {
+        super(other);
+        this.snapshotDiff = other.snapshotDiff;
+    }
+
     @Override
     protected ClusterSnapshot createClusterSnapshot(long id, String snapshotName, String storageVolumeName,
             long createdTimeMs) {
@@ -103,8 +108,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
 
         // create data snapshot tasks
         createUploadClusterSnapshotTasks();
-        setState(ClusterSnapshotJobState.UPLOADING);
-        logJob();
+        persistStateChange(ClusterSnapshotJobState.UPLOADING);
     }
 
     @Override
@@ -143,8 +147,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         ClusterSnapshot snapshot = getSnapshot();
         GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                 .setLastSuccFullSnapshotInfo(snapshot.getClusterSnapshotInfo());
-        setState(ClusterSnapshotJobState.CLEANING);
-        logJob();
+        persistStateChange(ClusterSnapshotJobState.CLEANING);
         LOG.info("Finish upload snapshot meta file for Cluster Snapshot, job: {}", getId());
     }
 
@@ -152,13 +155,10 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
     protected void runCleaningJob(SnapshotJobContext context) throws StarRocksException {
         try {
             createDeleteClusterSnasphotTasks();
-            setState(ClusterSnapshotJobState.FINISHED);
-            logJob();
+            persistStateChange(ClusterSnapshotJobState.FINISHED);
         } catch (StarRocksException e) {
             LOG.warn("failed to create delete cluster snapshot tasks when run finished job {}", getId(), e);
-            setState(ClusterSnapshotJobState.ERROR);
-            logJob();
-            return;
+            persistStateChange(ClusterSnapshotJobState.ERROR);
         }
     }
 
@@ -543,6 +543,11 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
         for (Map.Entry<PartitionKey, PartitionVersionInfo> entry : partitionVersions.entrySet()) {
             partitionList.add(entry.getValue());
         }
+    }
+
+    @Override
+    public ClusterSnapshotJob copyForPersist() {
+        return new ExternalClusterSnapshotJob(this);
     }
 
     /**

@@ -220,9 +220,10 @@ public class MaterializedViewHandler extends AlterHandler {
                 addMVClause.getWhereClause(), addMVClause.getProperties(), olapTable, db, baseIndexMetaId,
                 addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
 
-        addAlterJobV2(rollupJobV2);
-        olapTable.setState(OlapTableState.ROLLUP);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2, wal -> {
+            olapTable.setState(OlapTableState.ROLLUP);
+            addAlterJobV2(rollupJobV2);
+        });
 
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
@@ -294,18 +295,17 @@ public class MaterializedViewHandler extends AlterHandler {
             throw e;
         }
 
-        // set table' state to ROLLUP before adding rollup jobs.
-        // so that when the AlterHandler thread run the jobs, it will see the expected table's state.
-        // ATTN: This order is not mandatory, because database lock will protect us,
-        // but this order is more reasonable
-        olapTable.setState(OlapTableState.ROLLUP);
-
         // 2 batch submit rollup job
         List<AlterJobV2> rollupJobV2List = new ArrayList<>(rollupNameJobMap.values());
-        batchAddAlterJobV2(rollupJobV2List);
-
         BatchAlterJobPersistInfo batchAlterJobV2 = new BatchAlterJobPersistInfo(rollupJobV2List);
-        GlobalStateMgr.getCurrentState().getEditLog().logBatchAlterJob(batchAlterJobV2);
+        GlobalStateMgr.getCurrentState().getEditLog().logBatchAlterJob(batchAlterJobV2, wal -> {
+            // set table' state to ROLLUP before adding rollup jobs.
+            // so that when the AlterHandler thread run the jobs, it will see the expected table's state.
+            // ATTN: This order is not mandatory, because database lock will protect us,
+            // but this order is more reasonable
+            olapTable.setState(OlapTableState.ROLLUP);
+            batchAddAlterJobV2(rollupJobV2List);
+        });
         LOG.info("finished to create materialized view job: {}", logJobIdSet);
     }
 

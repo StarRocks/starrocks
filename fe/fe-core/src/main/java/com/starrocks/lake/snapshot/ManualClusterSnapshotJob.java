@@ -23,6 +23,10 @@ public class ManualClusterSnapshotJob extends ClusterSnapshotJob {
         super(id, snapshotName, storageVolumeName, createdTimeMs);
     }
 
+    public ManualClusterSnapshotJob(ClusterSnapshotJob other) {
+        super(other);
+    }
+
     @Override
     protected ClusterSnapshot createClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         return new ManualClusterSnapshot(id, snapshotName, ClusterSnapshot.ClusterSnapshotType.MANUAL,
@@ -35,10 +39,19 @@ public class ManualClusterSnapshotJob extends ClusterSnapshotJob {
     }
 
     @Override
-    public void logJob() {
+    public ClusterSnapshotJob copyForPersist() {
+        return new ManualClusterSnapshotJob(this);
+    }
+
+    @Override
+    public void persistStateChange(ClusterSnapshotJobState newState) {
+        ManualClusterSnapshotJob persistJob = (ManualClusterSnapshotJob) this.copyForPersist();
+        persistJob.setState(newState);
         ManualClusterSnapshotLog log = new ManualClusterSnapshotLog();
-        log.setSnapshotJob(this);
+        log.setSnapshotJob(persistJob);
         EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-        editLogEPack.logManualClusterSnapshotLog(log);
+        editLogEPack.logManualClusterSnapshotLog(log, wal -> {
+            this.setState(newState);
+        });
     }
 }

@@ -65,13 +65,12 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         }
 
         ManualClusterSnapshotRequest request = new ManualClusterSnapshotRequest(snapshotName, storageVolumeName);
-        addManualClusterSnapshotRequest(request);
-
         ManualClusterSnapshotLog log = new ManualClusterSnapshotLog();
         log.setAddManualRequest(request);
-
         EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-        editLogEPack.logManualClusterSnapshotLog(log);
+        editLogEPack.logManualClusterSnapshotLog(log, wal -> {
+            addManualClusterSnapshotRequest(request);
+        });
 
         LOG.info("Add manual cluster snapshot request successfully, snapshot name: {}", stmt.getClusterSnapshotName());
     }
@@ -100,7 +99,6 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
 
         try {
             ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
-            removeClusterSnapshotJobByName(snapshotName);
         } catch (StarRocksException e) {
             LOG.warn("Cluster Snapshot delete failed, ", e);
             return;
@@ -110,7 +108,9 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
         ManualClusterSnapshotLog log = new ManualClusterSnapshotLog();
         log.setDropManualJob(snapshotName);
         EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-        editLogEPack.logManualClusterSnapshotLog(log);
+        editLogEPack.logManualClusterSnapshotLog(log, wal -> {
+            removeClusterSnapshotJobByName(snapshotName);
+        });
 
         LOG.info("Drop cluster snapshot successfully, snapshot name: {}", snapshotName);
     }
@@ -242,7 +242,7 @@ public class ClusterSnapshotMgrEPack extends ClusterSnapshotMgr {
     public ClusterSnapshotJob getNextCluterSnapshotJob() {
         if (!manualClusterSnapshotRequestQueue.isEmpty()) {
             ManualClusterSnapshotJob manualJob = manualClusterSnapshotRequestQueue.poll().toManualClusterSnapshotJob();
-            manualJob.logJob();
+            manualJob.persistStateChange(manualJob.getState());
             addManualClusterSnapshotJob(manualJob);
             return manualJob;
         }

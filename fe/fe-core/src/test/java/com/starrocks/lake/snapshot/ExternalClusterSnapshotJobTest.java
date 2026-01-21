@@ -17,6 +17,7 @@ package com.starrocks.lake.snapshot;
 import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -29,7 +30,6 @@ import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
-import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -48,8 +48,6 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import mockit.Delegate;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -87,21 +85,12 @@ public class ExternalClusterSnapshotJobTest {
 
     @BeforeEach
     public void setUp() throws Exception {
+        new FakeEditLog();
+
         try {
             initStorageVolume();
         } catch (Exception ignore) {
         }
-
-        new Expectations() {
-            {
-                editLog.logClusterSnapshotLog((ClusterSnapshotLog) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logClusterSnapshotLog(ClusterSnapshotLog log) {
-                    }
-                };
-            }
-        };
 
         new MockUp<GlobalStateMgr>() {
             @Mock

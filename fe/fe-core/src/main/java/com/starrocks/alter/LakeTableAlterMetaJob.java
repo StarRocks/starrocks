@@ -67,6 +67,15 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = compactionStrategy;
     }
 
+    protected LakeTableAlterMetaJob(LakeTableAlterMetaJob job) {
+        super(job);
+        this.metaType = job.metaType;
+        this.metaValue = job.metaValue;
+        this.persistentIndexType = job.persistentIndexType;
+        this.enableFileBundling = job.enableFileBundling;
+        this.compactionStrategy = job.compactionStrategy;
+    }
+
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
             MaterializedIndex index, long nodeId, Set<Long> tablets) {
@@ -126,6 +135,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = other.compactionStrategy;
     }
 
-
-
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new LakeTableAlterMetaJob(this);
+    }
 }

@@ -56,11 +56,21 @@ public class ClusterSnapshotJob implements Writable {
     @SerializedName(value = "detailInfo")
     private String detailInfo;
 
+    private ClusterSnapshotJob() {
+    }
+
     public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         this.snapshot = createClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs);
         this.state = ClusterSnapshotJobState.INITIALIZING;
         this.errMsg = "";
         this.detailInfo = "";
+    }
+
+    protected ClusterSnapshotJob(ClusterSnapshotJob job) {
+        this.snapshot = job.snapshot == null ? null : job.snapshot.copyForPersist();
+        this.state = job.state;
+        this.errMsg = job.errMsg;
+        this.detailInfo = job.detailInfo;
     }
 
     protected ClusterSnapshot createClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
@@ -174,12 +184,6 @@ public class ClusterSnapshotJob implements Writable {
         snapshot.setClusterSnapshotInfo(clusterSnapshotInfo);
     }
 
-    public void logJob() {
-        ClusterSnapshotLog log = new ClusterSnapshotLog();
-        log.setSnapshotJob(this);
-        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
-    }
-
     public TClusterSnapshotJobsItem getInfo() {
         TClusterSnapshotJobsItem item = new TClusterSnapshotJobsItem();
         item.setSnapshot_name(getSnapshotName());
@@ -192,6 +196,14 @@ public class ClusterSnapshotJob implements Writable {
         return item;
     }
 
+    public ClusterSnapshotJob copyForPersist() {
+        return new ClusterSnapshotJob(this);
+    }
+
+    /**
+     * Default implementation for meta-only snapshot jobs (ClusterSnapshotJob and ManualClusterSnapshotJob).
+     * FullClusterSnapshotJob should override this method if it needs different initialization logic.
+     */
     protected void runInitializingJob(SnapshotJobContext context) throws StarRocksException {
         Preconditions.checkState(state == ClusterSnapshotJobState.INITIALIZING, state);
         LOG.info("begin to initialize cluster snapshot job. job: {}", getId());
@@ -205,8 +217,7 @@ public class ClusterSnapshotJob implements Writable {
                 "Successful capture consistent journal id, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                 consistentIds.first, consistentIds.second);
 
-        setState(ClusterSnapshotJobState.SNAPSHOTING);
-        logJob();
+        persistStateChange(ClusterSnapshotJobState.SNAPSHOTING);
     }
 
     protected void runSnapshottingJob(SnapshotJobContext context) throws StarRocksException {
@@ -214,8 +225,7 @@ public class ClusterSnapshotJob implements Writable {
 
         ClusterSnapshotInfo clusterSnapshotInfo = createImagesAndGetSnapshotInfo(context);
         setClusterSnapshotInfo(clusterSnapshotInfo);
-        setState(ClusterSnapshotJobState.UPLOADING);
-        logJob();
+        persistStateChange(ClusterSnapshotJobState.UPLOADING);
     }
 
     protected ClusterSnapshotInfo createImagesAndGetSnapshotInfo(SnapshotJobContext context)
@@ -252,6 +262,8 @@ public class ClusterSnapshotJob implements Writable {
 
         ClusterSnapshotInfo snapshotInfo = feController.getClusterSnapshotInfo();
 
+        setClusterSnapshotInfo(feController.getClusterSnapshotInfo());
+        persistStateChange(ClusterSnapshotJobState.UPLOADING);
         LOG.info("Finished create image for starMgr image, version: {}", starMgrCheckpointJournalId);
         return snapshotInfo;
     }
@@ -265,8 +277,7 @@ public class ClusterSnapshotJob implements Writable {
         } catch (StarRocksException e) {
             throw new StarRocksException("upload image failed, err msg: " + e.getMessage());
         }
-        setState(ClusterSnapshotJobState.FINISHED);
-        logJob();
+        persistStateChange(ClusterSnapshotJobState.FINISHED);
         LOG.info(
                 "Finish upload image for Cluster Snapshot, FE checkpoint journal Id: {}, StarMgr checkpoint journal Id: {}",
                 getFeJournalId(), getStarMgrJournalId());
@@ -307,10 +318,8 @@ public class ClusterSnapshotJob implements Writable {
             }
         } catch (Exception e) {
             LOG.warn("failed to run cluster snapshot job {}", getId(), e);
-            setState(ClusterSnapshotJobState.ERROR);
             setErrMsg(e.getMessage());
-            logJob();
-            return;
+            persistStateChange(ClusterSnapshotJobState.ERROR);
         }
     }
 
@@ -322,4 +331,13 @@ public class ClusterSnapshotJob implements Writable {
         // Default implementation: do nothing
     }
 
+    public void persistStateChange(ClusterSnapshotJobState newState) {
+        ClusterSnapshotJob persistJob = this.copyForPersist();
+        persistJob.setState(newState);
+        ClusterSnapshotLog log = new ClusterSnapshotLog();
+        log.setSnapshotJob(persistJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log, wal -> {
+            this.setState(newState);
+        });
+    }
 }

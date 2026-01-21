@@ -231,18 +231,6 @@ public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
 
         new Expectations() {
             {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        logSysInfo("log backup job: " + job);
-                    }
-                };
-            }
-        };
-
-        new Expectations() {
-            {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;

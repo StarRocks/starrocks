@@ -163,9 +163,9 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 partitions(t1) select * from t2";
         cluster.runSql("insert_overwrite_test", sql);
 
-        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit(false));
+        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit());
         insertOverwriteJob.setSourcePartitionNames(Lists.newArrayList("t1"));
-        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit(false));
+        Assertions.assertThrows(DmlException.class, () -> runner.testDoCommit());
     }
 
     @Test

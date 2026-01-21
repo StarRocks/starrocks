@@ -566,9 +566,8 @@ public class ClusterSnapshotTest {
         ManualClusterSnapshotJob manualJob =
                 new ManualClusterSnapshotJob(1, "testSnapshot", "default_sv", System.currentTimeMillis());
         Assertions.assertTrue(manualJob instanceof ManualClusterSnapshotJob);
-        manualJob.setState(ClusterSnapshotJobState.FINISHED);
+        manualJob.persistStateChange(ClusterSnapshotJobState.FINISHED);
         Assertions.assertTrue(manualJob.getCreatedTimeMs() <= manualJob.getFinishedTimeMs());
-        manualJob.logJob();
 
         ManualClusterSnapshotRequest req = new ManualClusterSnapshotRequest("snapshotName", "sv");
         Assertions.assertTrue(req.getSnapshotName().equals("snapshotName"));

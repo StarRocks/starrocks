@@ -72,8 +72,8 @@ public class EditLogEPack extends EditLog {
         logJsonObject(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, unsetPasswordPolicyLog);
     }
 
-    public void logManualClusterSnapshotLog(ManualClusterSnapshotLog info) {
-        logJsonObject(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, info);
+    public void logManualClusterSnapshotLog(ManualClusterSnapshotLog info, WALApplier walApplier) {
+        logJsonObject(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, info, walApplier);
     }
 
     public void logInitSystemInfo(SystemInfo info, WALApplier applier) {

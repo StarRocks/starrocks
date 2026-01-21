@@ -59,6 +59,17 @@ public class ClusterSnapshot {
         this.starMgrJournalId = starMgrJournalId;
     }
 
+    private ClusterSnapshot(ClusterSnapshot snapshot) {
+        this.id = snapshot.id;
+        this.snapshotName = snapshot.snapshotName;
+        this.type = snapshot.type;
+        this.storageVolumeName = snapshot.storageVolumeName;
+        this.createdTimeMs = snapshot.createdTimeMs;
+        this.finishedTimeMs = snapshot.finishedTimeMs;
+        this.feJournalId = snapshot.feJournalId;
+        this.starMgrJournalId = snapshot.starMgrJournalId;
+    }
+
     public void setJournalIds(long feJournalId, long starMgrJournalId) {
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
@@ -106,6 +117,10 @@ public class ClusterSnapshot {
 
     public void setClusterSnapshotInfo(ClusterSnapshotInfo clusterSnapshotInfo) {
         this.clusterSnapshotInfo = clusterSnapshotInfo;
+    }
+
+    public ClusterSnapshot copyForPersist() {
+        return new ClusterSnapshot(this);
     }
 
     public TClusterSnapshotsItem getInfo() {
