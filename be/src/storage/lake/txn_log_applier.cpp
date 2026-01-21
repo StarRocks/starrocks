@@ -218,6 +218,11 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        // Tablet id check for cross publish
+        if (log.tablet_id() != _metadata->id()) {
+            return Status::InternalError("Tablet id in txn log and metadata are not the same");
+        }
+
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
@@ -258,6 +263,11 @@ public:
 
         // Pre-check: only accept op_write operations
         for (const auto& log : txn_logs) {
+            // Tablet id check for cross publish
+            if (log->tablet_id() != _metadata->id()) {
+                return Status::InternalError("Tablet id in txn log and metadata are not the same");
+            }
+
             _max_txn_id = std::max(_max_txn_id, log->txn_id());
 
             // Ensure this log has op_write
@@ -642,6 +652,11 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        // Tablet id check for cross publish
+        if (log.tablet_id() != _metadata->id()) {
+            return Status::InternalError("Tablet id in txn log and metadata are not the same");
+        }
+
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
@@ -681,6 +696,11 @@ public:
         // Traverse all transaction logs and collect op_write information
         VLOG(2) << "Collecting op_write information from transaction logs for tablet " << _tablet.id();
         for (const auto& log : txn_logs) {
+            // Tablet id check for cross publish
+            if (log->tablet_id() != _metadata->id()) {
+                return Status::InternalError("Tablet id in txn log and metadata are not the same");
+            }
+
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
                 RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
