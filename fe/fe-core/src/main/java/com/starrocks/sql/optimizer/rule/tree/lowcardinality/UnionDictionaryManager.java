@@ -53,7 +53,7 @@ public class UnionDictionaryManager {
     private static ImmutableMap<ByteBuffer, Integer> mergeDictionaryData(List<ImmutableMap<ByteBuffer, Integer>> dicts) {
         Set<ByteBuffer> uniques = Sets.newHashSet();
         dicts.forEach(d -> uniques.addAll(d.keySet()));
-        int totalDictSize = uniques.stream().map(b -> b.limit() - b.position() + 4).reduce(0, Integer::sum);
+        int totalDictSize = uniques.stream().map(b -> b.remaining() + 4).reduce(0, Integer::sum);
         // TODO(farhad-celo): This constant is hardcoded in other places, refactor to a config.
         final int DICT_PAGE_MAX_SIZE = 1024 * 1024;
         if (uniques.size() > Config.low_cardinality_threshold || totalDictSize > DICT_PAGE_MAX_SIZE - 32) {

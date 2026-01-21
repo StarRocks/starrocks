@@ -489,6 +489,7 @@ FROM (
         SELECT c1, c2 FROM alias_agg_table_1
         UNION ALL
         SELECT c1, c2 FROM alias_agg_table_2
+        ORDER BY c1, c2
         LIMIT 2
     ) subquery1
     UNION ALL
