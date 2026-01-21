@@ -4437,16 +4437,17 @@ TEST_F(FileReaderTest, test_read_variant_shredding_age) {
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
     ASSERT_EQ(chunk->num_rows(), 5);
+    const Column* data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0));
+    const auto* data_struct_col = down_cast<const StructColumn*>(data_col);
+    const Column* typed_value_col =
+            ColumnHelper::get_data_column(data_struct_col->field_column_raw_ptr("typed_value").value());
+    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col);
+    const Column* age_col = ColumnHelper::get_data_column(typed_value_struct_col->field_column_raw_ptr("age").value());
+    const auto* age_struct_col = down_cast<const StructColumn*>(age_col);
+    const Column* age_typed_col =
+            ColumnHelper::get_data_column(age_struct_col->field_column_raw_ptr("typed_value").value());
 
-    ColumnPtr data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0));
-    const auto* data_struct_col = down_cast<const StructColumn*>(data_col.get());
-    ColumnPtr typed_value_col = ColumnHelper::get_data_column(data_struct_col->field_column("typed_value"));
-    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col.get());
-    ColumnPtr age_col = ColumnHelper::get_data_column(typed_value_struct_col->field_column("age"));
-    const auto* age_struct_col = down_cast<const StructColumn*>(age_col.get());
-    ColumnPtr age_typed_col = ColumnHelper::get_data_column(age_struct_col->field_column("typed_value"));
-
-    const auto* age_values = down_cast<const FixedLengthColumn<int32_t>*>(age_typed_col.get());
+    const auto* age_values = down_cast<const FixedLengthColumn<int32_t>*>(age_typed_col);
     ASSERT_EQ(age_values->size(), chunk->num_rows());
     for (size_t i = 0; i < age_values->size(); ++i) {
         EXPECT_EQ(20 + static_cast<int32_t>(i), age_values->get_data()[i]);
@@ -4484,21 +4485,24 @@ TEST_F(FileReaderTest, test_read_variant_shredding_profile_rank_partial) {
     ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
     ASSERT_EQ(chunk->num_rows(), 5);
 
-    ColumnPtr data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0));
-    const auto* data_struct_col = down_cast<const StructColumn*>(data_col.get());
-    ColumnPtr typed_value_col = ColumnHelper::get_data_column(data_struct_col->field_column("typed_value"));
-    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col.get());
-    ColumnPtr profile_col = ColumnHelper::get_data_column(typed_value_struct_col->field_column("profile"));
-    const auto* profile_struct_col = down_cast<const StructColumn*>(profile_col.get());
-    ColumnPtr profile_typed_col = ColumnHelper::get_data_column(profile_struct_col->field_column("typed_value"));
-    const auto* profile_typed_struct_col = down_cast<const StructColumn*>(profile_typed_col.get());
-    ColumnPtr rank_col = profile_typed_struct_col->field_column("rank");
-    const auto* rank_struct_col = down_cast<const StructColumn*>(ColumnHelper::get_data_column(rank_col.get()));
+    const Column* data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0).get());
+    const auto* data_struct_col = down_cast<const StructColumn*>(data_col);
+    const Column* typed_value_col =
+            ColumnHelper::get_data_column(data_struct_col->field_column_raw_ptr("typed_value").value());
+    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col);
+    const Column* profile_col =
+            ColumnHelper::get_data_column(typed_value_struct_col->field_column_raw_ptr("profile").value());
+    const auto* profile_struct_col = down_cast<const StructColumn*>(profile_col);
+    const Column* profile_typed_col =
+            ColumnHelper::get_data_column(profile_struct_col->field_column_raw_ptr("typed_value").value());
+    const auto* profile_typed_struct_col = down_cast<const StructColumn*>(profile_typed_col);
+    const Column* rank_col = profile_typed_struct_col->field_column_raw_ptr("rank").value();
+    const auto* rank_struct_col = down_cast<const StructColumn*>(ColumnHelper::get_data_column(rank_col));
 
-    ColumnPtr rank_typed_col = rank_struct_col->field_column("typed_value");
+    const Column* rank_typed_col = rank_struct_col->field_column_raw_ptr("typed_value").value();
     ASSERT_TRUE(rank_typed_col->is_nullable());
 
-    const auto* rank_typed_nullable = down_cast<const NullableColumn*>(rank_typed_col.get());
+    const auto* rank_typed_nullable = down_cast<const NullableColumn*>(rank_typed_col);
     const auto* rank_typed_data =
             down_cast<const FixedLengthColumn<int32_t>*>(rank_typed_nullable->data_column().get());
 
