@@ -1587,6 +1587,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ヒストグラムのサンプリング比率。
 - 導入バージョン: -
 
+##### create_table_max_serial_replicas
+
+- デフォルト: 200
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスター内での並列タブレットメタデータ変更時における、バックエンド（BE）あたりの最大保留レプリカ数。
+- 導入バージョン: -
+
 ##### http_slow_request_threshold_ms
 
 - デフォルト: 5000

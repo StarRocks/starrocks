@@ -1553,6 +1553,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：直方图默认采样比例。
 - 引入版本：-
 
+##### tablet_meta_update_max_pending_replicas_per_be
+
+- 默认值：200
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群并行alter tablet的元数据时,每台BE节点最大待处理副本数。
+- 引入版本：-
+
 ##### http_slow_request_threshold_ms
 
 - 默认值：5000

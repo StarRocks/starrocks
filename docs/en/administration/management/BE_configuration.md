@@ -798,6 +798,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The maximum number of threads used for query.
 - Introduced in: -
 
+##### update_tablet_meta_info_worker_count
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: The number of threads for altering tablet metadata in shared-data cluster.
+
 ##### fragment_pool_thread_num_min
 
 - Default: 64
