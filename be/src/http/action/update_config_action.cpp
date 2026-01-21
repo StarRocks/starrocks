@@ -240,6 +240,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
             return Status::OK();
         });
+        _config_callback.emplace("update_tablet_meta_info_worker_count", [&]() -> Status {
+            _exec_env->agent_server()->update_max_thread_by_type(
+                    TTaskType::UPDATE_TABLET_META_INFO, std::max(1, config::update_tablet_meta_info_worker_count));
+            return Status::OK();
+        });
         _config_callback.emplace("lake_metadata_cache_limit", [&]() -> Status {
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
