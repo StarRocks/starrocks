@@ -959,65 +959,6 @@ public class PlanFragmentBuilder {
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
             currentExecGroup.add(scanNode);
-            // set tablet
-            try {
-                scanNode.updateScanInfo(node.getSelectedPartitionId(),
-                        node.getSelectedTabletId(),
-                        node.getHintsReplicaId());
-                long selectedIndexMetaId = node.getSelectedIndexMetaId();
-                long totalTabletsNum = 0;
-                // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
-                // we can remove code when refactor tablet select
-                long localBeId = -1;
-                if (Config.enable_local_replica_selection) {
-                    localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                            .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
-                }
-
-                // Filter out empty partitions from all selected partitions, original selected partition ids may be
-                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
-                // eg:
-                // partition        : 10001 -> (tablet_1)
-                //  subpartition1   : 10002 -> (tablet_2)
-                //  subpartition2   : 10004 -> (tablet_3)
-                // original selected partition id with tablet ids: 10001 -> (tablet_2)
-                // after:
-                // selected partition ids   : 10002
-                // selected tablet ids      : tablet_2
-                // total tablets num        : 1
-                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
-                for (Long partitionId : scanNode.getSelectedPartitionIds()) {
-                    final Partition partition = referenceTable.getPartition(partitionId);
-                    List<TKeyRange> partitionRange =
-                            computePartitionRange(referenceTable, partition, context.getConnectContext().getSessionVariable());
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
-                                .get(physicalPartition.getId());
-                        if (CollectionUtils.isEmpty(selectTabletIds)) {
-                            continue;
-                        }
-                        selectedNonEmptyPartitionIds.add(partitionId);
-                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-                        Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
-                        final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
-                        totalTabletsNum += selectedIndex.getTablets().size();
-                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        for (int i = 0; i < allTabletIds.size(); i++) {
-                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
-                        }
-                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
-                        List<Tablet> tablets =
-                                selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
-                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
-                                localBeId);
-                    }
-                }
-                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
-                scanNode.setTotalTabletsNum(totalTabletsNum);
-            } catch (StarRocksException e) {
-                throw new StarRocksPlannerException(
-                        "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
-            }
 
             // set slot
             ColumnRefSet partitionRefs = new ColumnRefSet();
@@ -1060,6 +1001,69 @@ public class PlanFragmentBuilder {
             for (ScalarOperator predicate : node.getPrunedPartitionPredicates()) {
                 scanNode.getPrunedPartitionPredicates()
                         .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            // set tablet
+            try {
+                scanNode.updateScanInfo(node.getSelectedPartitionId(),
+                        node.getSelectedTabletId(),
+                        node.getHintsReplicaId());
+                long selectedIndexMetaId = node.getSelectedIndexMetaId();
+                long totalTabletsNum = 0;
+                // Compatible with old tablet selected, copy from "OlapScanNode::computeTabletInfo"
+                // we can remove code when refactor tablet select
+                long localBeId = -1;
+                if (Config.enable_local_replica_selection) {
+                    localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+                }
+
+                // Filter out empty partitions from all selected partitions, original selected partition ids may be
+                // only parent partition ids if table contains subpartitions, use the real sub partition ids instead.
+                // eg:
+                // partition        : 10001 -> (tablet_1)
+                //  subpartition1   : 10002 -> (tablet_2)
+                //  subpartition2   : 10004 -> (tablet_3)
+                // original selected partition id with tablet ids: 10001 -> (tablet_2)
+                // after:
+                // selected partition ids   : 10002
+                // selected tablet ids      : tablet_2
+                // total tablets num        : 1
+                List<Long> selectedNonEmptyPartitionIds = Lists.newArrayList();
+                for (Long partitionId : scanNode.getSelectedPartitionIds()) {
+                    final Partition partition = referenceTable.getPartition(partitionId);
+                    List<TKeyRange> partitionRange = List.of();
+                    if (!scanNode.getPartitionConjuncts().isEmpty()) {
+                         partitionRange = computePartitionRange(referenceTable, partition,
+                                 context.getConnectContext().getSessionVariable());
+                    }
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
+                                .get(physicalPartition.getId());
+                        if (CollectionUtils.isEmpty(selectTabletIds)) {
+                            continue;
+                        }
+                        selectedNonEmptyPartitionIds.add(partitionId);
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                        Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
+                        final MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(selectedIndexMetaId);
+                        totalTabletsNum += selectedIndex.getTablets().size();
+                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
+                        for (int i = 0; i < allTabletIds.size(); i++) {
+                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                        }
+                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                        List<Tablet> tablets =
+                                selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
+                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
+                                localBeId);
+                    }
+                }
+                scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
+                scanNode.setTotalTabletsNum(totalTabletsNum);
+            } catch (StarRocksException e) {
+                throw new StarRocksPlannerException(
+                        "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
             }
 
             tupleDescriptor.computeMemLayout();
@@ -1109,11 +1113,12 @@ public class PlanFragmentBuilder {
                 for (int i = 0; i < partitionCols.size(); i++) {
                     TKeyRange kr;
                     if (partitionCols.get(i).getType().isDate()) {
+                        LiteralExpr lowerExpr = keyRange.lowerEndpoint().getKeys().get(i);
+                        LiteralExpr upperExpr = keyRange.upperEndpoint().getKeys().get(i);
+                        if (!(lowerExpr instanceof DateLiteral lower) || !(upperExpr instanceof DateLiteral upper)) {
+                            continue;
+                        }
                         kr = new TKeyRange();
-                        Preconditions.checkState(keyRange.lowerEndpoint().getKeys().get(i) instanceof DateLiteral);
-                        Preconditions.checkState(keyRange.upperEndpoint().getKeys().get(i) instanceof DateLiteral);
-                        DateLiteral lower = (DateLiteral) keyRange.lowerEndpoint().getKeys().get(i);
-                        DateLiteral upper = (DateLiteral) keyRange.upperEndpoint().getKeys().get(i);
                         kr.setBegin_key(lower.getYear() * 10000 + lower.getMonth() * 100 + lower.getDay());
                         kr.setEnd_key(upper.getYear() * 10000 + upper.getMonth() * 100 + upper.getDay());
                         partitionValues *= upper.toLocalDateTime().toLocalDate().toEpochDay() -
