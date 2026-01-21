@@ -1137,30 +1137,42 @@ public class PlanFragmentBuilder {
                 }
             } else if (partitionInfo.isListPartition()) {
                 ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
-                List<List<LiteralExpr>> partitionValuesList;
                 if (listInfo.getLiteralExprValues().containsKey(partition.getId())) {
-                    partitionValuesList = List.of(listInfo.getLiteralExprValues().get(partition.getId()));
+                    Preconditions.checkState(partitionCols.size() == 1);
+                    List<LiteralExpr> partitionValuesList = listInfo.getLiteralExprValues().get(partition.getId());
+                    for (Column partitionCol : partitionCols) {
+                        TKeyRange kr = new TKeyRange();
+                        kr.setColumn_type(TypeSerializer.toThrift(partitionCol.getType().getPrimitiveType()));
+                        kr.setColumn_name(partitionCol.getName());
+                        List<TExpr> l = Lists.newArrayList();
+                        partitionValuesList.forEach(v -> l.add(ExprToThrift.treeToThrift(v)));
+                        kr.setList_values(l);
+                        partitionValues *= partitionValuesList.size();
+                        if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
+                            continue;
+                        }
+                        result.add(kr);
+                    }
                 } else if (listInfo.getMultiLiteralExprValues().containsKey(partition.getId())) {
-                    partitionValuesList = listInfo.getMultiLiteralExprValues().get(partition.getId());
+                    List<List<LiteralExpr>> partitionValuesList = listInfo.getMultiLiteralExprValues().get(partition.getId());
+                    for (int i = 0; i < partitionCols.size(); i++) {
+                        TKeyRange kr = new TKeyRange();
+                        kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
+                        kr.setColumn_name(partitionCols.get(i).getName());
+                        List<TExpr> l = Lists.newArrayList();
+                        for (var values : partitionValuesList) {
+                            Preconditions.checkState(values.size() == partitionCols.size());
+                            l.add(ExprToThrift.treeToThrift(values.get(i)));
+                        }
+                        kr.setList_values(l);
+                        partitionValues *= partitionValuesList.size();
+                        if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
+                            continue;
+                        }
+                        result.add(kr);
+                    }
                 } else {
                     return List.of();
-                }
-
-                for (int i = 0; i < partitionCols.size(); i++) {
-                    TKeyRange kr = new TKeyRange();
-                    kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
-                    kr.setColumn_name(partitionCols.get(i).getName());
-                    List<TExpr> l = Lists.newArrayList();
-                    for (var values : partitionValuesList) {
-                        Preconditions.checkState(values.size() == partitionCols.size());
-                        l.add(ExprToThrift.treeToThrift(values.get(i)));
-                    }
-                    kr.setList_values(l);
-                    partitionValues *= partitionValuesList.size();
-                    if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
-                        continue;
-                    }
-                    result.add(kr);
                 }
             }
 
