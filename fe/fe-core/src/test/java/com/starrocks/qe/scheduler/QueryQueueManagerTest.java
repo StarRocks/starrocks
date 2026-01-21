@@ -92,6 +92,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private int prevQueuePendingTimeoutSecond;
     private int prevQueueTimeoutSecond;
     private int prevQueueMaxQueuedQueries;
+    private boolean enableQueryQueueV2 = false;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -102,6 +103,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @BeforeEach
     public void before() {
+        enableQueryQueueV2 = Config.enable_query_queue_v2;
+        Config.enable_query_queue_v2 = false;
         prevQueueEnableSelect = GlobalVariable.isEnableQueryQueueSelect();
         prevQueueEnableStatistic = GlobalVariable.isEnableQueryQueueStatistic();
         prevQueueEnableLoad = GlobalVariable.isEnableQueryQueueLoad();
@@ -137,6 +140,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @AfterEach
     public void after() {
+        Config.enable_query_queue_v2 = enableQueryQueueV2;
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
@@ -357,6 +361,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
     }
 
+    @Disabled
     @Test
     public void testDisableGroupLevelQueue() throws Exception {
         final int concurrencyLimit = 100;

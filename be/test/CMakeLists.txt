@@ -92,6 +92,7 @@ set(EXEC_FILES
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
         ./exec/schema_scanner/schema_scanner_test.cpp
+        ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -490,6 +491,7 @@ SET(DW_TEST_FILES
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
+    ./storage/datum_variant_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
@@ -530,6 +532,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/schema_change_test.cpp

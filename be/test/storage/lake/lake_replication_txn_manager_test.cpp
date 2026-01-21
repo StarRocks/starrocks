@@ -37,6 +37,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
@@ -209,8 +210,8 @@ protected:
             txn_info.set_combined_txn_log(false);
             txn_info.set_commit_time(0);
             auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
-            ASSERT_OK(lake::publish_version(_tablet_mgr.get(), _src_tablet_id, version, version + 1, txn_info_span,
-                                            false));
+            ASSERT_OK(lake::publish_version(_tablet_mgr.get(), PublishTabletInfo(_src_tablet_id), version, version + 1,
+                                            txn_info_span, false));
             version++;
         }
         ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(_src_tablet_id, version));
@@ -313,11 +314,147 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_normal) {
     txn_info.set_combined_txn_log(false);
     txn_info.set_commit_time(0);
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
-    auto status_or =
-            lake::publish_version(_tablet_mgr.get(), _target_tablet_id, _version, _src_version, txn_info_span, false);
+    auto status_or = lake::publish_version(_tablet_mgr.get(), PublishTabletInfo(_target_tablet_id), _version,
+                                           _src_version, txn_info_span, false);
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());
+    // Verify compaction_inputs: since target tablet was empty before replication,
+    // old_rowsets is empty, so compaction_inputs should also be empty.
+    EXPECT_EQ(0, status_or.value()->compaction_inputs_size());
+}
+
+TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_continuous_same_rowset_id) {
+    // This test verifies that when performing continuous lake replication,
+    // rowsets with the same ID as new rowsets are NOT added to compaction_inputs.
+    // This is critical because lake replication preserves rowset IDs from source,
+    // and files referenced by both old and new rowsets should not be deleted by vacuum.
+
+    // Step 1: Write data to source tablet (creates 3 rowsets with versions 2, 3, 4)
+    write_src_tablet_data();
+    // Now _src_version = 4, source tablet has 3 rowsets
+
+    // Step 2: First replication from v1 to v4
+    TReplicateSnapshotRequest request1;
+    request1.__set_transaction_id(_transaction_id);
+    request1.__set_table_id(_table_id);
+    request1.__set_partition_id(_partition_id);
+    request1.__set_tablet_id(_target_tablet_id);
+    request1.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    request1.__set_schema_hash(_schema_hash);
+    request1.__set_visible_version(_version);
+    request1.__set_data_version(_version);
+    request1.__set_src_tablet_id(_src_tablet_id);
+    request1.__set_src_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    request1.__set_src_visible_version(_src_version);
+    request1.__set_src_db_id(_src_db_id);
+    request1.__set_src_table_id(_src_table_id);
+    request1.__set_src_partition_id(_src_partition_id);
+    request1.__set_virtual_tablet_id(_virtual_tablet_id);
+
+    ASSERT_TRUE(_replication_txn_manager->replicate_lake_remote_storage(request1).ok());
+
+    auto txn_info1 = TxnInfoPB();
+    txn_info1.set_txn_id(_transaction_id);
+    txn_info1.set_combined_txn_log(false);
+    txn_info1.set_commit_time(0);
+    auto txn_info_span1 = std::span<const TxnInfoPB>(&txn_info1, 1);
+    auto status_or1 =
+            lake::publish_version(_tablet_mgr.get(), _target_tablet_id, _version, _src_version, txn_info_span1, false);
+    ASSERT_TRUE(status_or1.ok()) << status_or1.status();
+    EXPECT_EQ(_src_version, status_or1.value()->version());
+    EXPECT_EQ(3, status_or1.value()->rowsets_size());
+    // First replication: target was empty, so compaction_inputs should be empty
+    EXPECT_EQ(0, status_or1.value()->compaction_inputs_size());
+
+    // Collect rowset IDs from first replication
+    std::unordered_set<uint32_t> first_replication_rowset_ids;
+    for (const auto& rowset : status_or1.value()->rowsets()) {
+        first_replication_rowset_ids.insert(rowset.id());
+    }
+
+    // Step 3: Second replication with the same source version (simulates incremental sync
+    // where new metadata still contains some of the same rowset IDs)
+    // In this case, we replicate again from v4 to v4 (same snapshot)
+    auto new_txn_id = _transaction_id + 1;
+    TReplicateSnapshotRequest request2;
+    request2.__set_transaction_id(new_txn_id);
+    request2.__set_table_id(_table_id);
+    request2.__set_partition_id(_partition_id);
+    request2.__set_tablet_id(_target_tablet_id);
+    request2.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    request2.__set_schema_hash(_schema_hash);
+    request2.__set_visible_version(_src_version); // target is now at v4
+    request2.__set_data_version(_src_version);    // data version is v4
+    request2.__set_src_tablet_id(_src_tablet_id);
+    request2.__set_src_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+    request2.__set_src_visible_version(_src_version); // source is still at v4
+    request2.__set_src_db_id(_src_db_id);
+    request2.__set_src_table_id(_src_table_id);
+    request2.__set_src_partition_id(_src_partition_id);
+    request2.__set_virtual_tablet_id(_virtual_tablet_id);
+
+    // This should fail because there are no missing versions (v4 -> v4)
+    // So we need a different approach: write more data to source and then replicate
+    // Let's write one more version to source tablet
+    auto chunk0 = generate_data(kChunkSize, 10, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    auto write_txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, lake::DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(_src_tablet_id)
+                                               .set_txn_id(write_txn_id)
+                                               .set_partition_id(_src_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_src_tablet_metadata->schema().id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    auto write_txn_info = TxnInfoPB();
+    write_txn_info.set_txn_id(write_txn_id);
+    write_txn_info.set_combined_txn_log(false);
+    write_txn_info.set_commit_time(0);
+    auto write_txn_info_span = std::span<const TxnInfoPB>(&write_txn_info, 1);
+    ASSERT_OK(lake::publish_version(_tablet_mgr.get(), _src_tablet_id, _src_version, _src_version + 1,
+                                    write_txn_info_span, false));
+    auto new_src_version = _src_version + 1; // v5
+
+    // Step 4: Second replication from v4 to v5
+    request2.__set_visible_version(_src_version);        // target visible version is v4
+    request2.__set_data_version(_src_version);           // data version is v4
+    request2.__set_src_visible_version(new_src_version); // source is now at v5
+
+    ASSERT_TRUE(_replication_txn_manager->replicate_lake_remote_storage(request2).ok());
+
+    auto txn_info2 = TxnInfoPB();
+    txn_info2.set_txn_id(new_txn_id);
+    txn_info2.set_combined_txn_log(false);
+    txn_info2.set_commit_time(0);
+    auto txn_info_span2 = std::span<const TxnInfoPB>(&txn_info2, 1);
+    auto status_or2 = lake::publish_version(_tablet_mgr.get(), _target_tablet_id, _src_version, new_src_version,
+                                            txn_info_span2, false);
+    ASSERT_TRUE(status_or2.ok()) << status_or2.status();
+    EXPECT_EQ(new_src_version, status_or2.value()->version());
+    EXPECT_EQ(4, status_or2.value()->rowsets_size());
+
+    // Verify compaction_inputs: since all old rowset IDs (from v4) are still present in new rowsets (v5),
+    // the compaction_inputs should be empty - no rowsets should be marked for garbage collection
+    EXPECT_EQ(0, status_or2.value()->compaction_inputs_size())
+            << "compaction_inputs should be empty because all old rowset IDs are still present in new metadata";
+
+    // Also verify that the rowset IDs from first replication are still in the new metadata
+    for (const auto& rowset : status_or2.value()->rowsets()) {
+        if (first_replication_rowset_ids.count(rowset.id()) > 0) {
+            first_replication_rowset_ids.erase(rowset.id());
+        }
+    }
+    EXPECT_TRUE(first_replication_rowset_ids.empty())
+            << "All rowset IDs from first replication should still be present in new metadata";
 }
 
 TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_normal_encrypted) {
@@ -368,11 +505,14 @@ TEST_P(SharedDataReplicationTxnManagerTest, test_replicate_normal_encrypted) {
     txn_info.set_combined_txn_log(false);
     txn_info.set_commit_time(0);
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
-    auto status_or =
-            lake::publish_version(_tablet_mgr.get(), _target_tablet_id, _version, _src_version, txn_info_span, false);
+    auto status_or = lake::publish_version(_tablet_mgr.get(), PublishTabletInfo(_target_tablet_id), _version,
+                                           _src_version, txn_info_span, false);
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());
+    // Verify compaction_inputs: since target tablet was empty before replication,
+    // old_rowsets is empty, so compaction_inputs should also be empty.
+    EXPECT_EQ(0, status_or.value()->compaction_inputs_size());
 }
 
 INSTANTIATE_TEST_SUITE_P(SharedDataReplicationTxnManagerTest, SharedDataReplicationTxnManagerTest,
