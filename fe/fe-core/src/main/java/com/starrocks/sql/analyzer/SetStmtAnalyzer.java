@@ -28,6 +28,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -345,6 +346,30 @@ public class SetStmtAnalyzer {
         // check populate datacache mode
         if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
             DataCachePopulateMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        // check connector sink shuffle mode
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_MODE)) {
+            ConnectorSinkShuffleMode.fromName(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD, 1L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO)) {
+            String val = resolvedExpression.getStringValue();
+            double ratio;
+            try {
+                ratio = Double.parseDouble(val);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("failed to parse %s value %s",
+                        SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, val));
+            }
+            if (Double.isNaN(ratio) || Double.isInfinite(ratio) || ratio <= 0) {
+                throw new SemanticException(String.format("%s should be a positive finite number, got %s",
+                        SessionVariable.CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, val));
+            }
         }
 
         // count_distinct_implementation
