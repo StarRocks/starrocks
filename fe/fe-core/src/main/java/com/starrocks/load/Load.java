@@ -39,7 +39,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -595,20 +594,7 @@ public class Load {
         }
 
         if (dbName != null && !dbName.isEmpty()) {
-            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
-                if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
-                    if (ConnectContext.get() == null) {
-                        ConnectContext context = new ConnectContext();
-                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                        context.setCurrentUserIdentity(UserIdentity.ROOT);
-                        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                        context.setQualifiedUser(UserIdentity.ROOT.getUser());
-                        context.setThreadLocalInfo();
-                    }
-                    ConnectContext.get().setDatabase(dbName);
-                    break;
-                }
-            }
+            ConnectContext.get().setDatabase(dbName);
         }
 
         LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);

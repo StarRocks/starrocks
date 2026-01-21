@@ -43,6 +43,8 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
@@ -189,6 +191,7 @@ import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TAnalyzeStatusRes;
+import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
@@ -1495,6 +1498,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 clientAddr);
         LOG.debug("stream load put request: {}", request);
 
+        ConnectContext context = new ConnectContext();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        AuthenticationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        final Map.Entry<UserIdentity, UserAuthenticationInfo> res =
+                authMgr.getBestMatchedUserIdentity(request.getUser(), request.getUser_ip());
+        if (res != null) {
+            context.setCurrentUserIdentity(res.getKey());
+            context.setCurrentRoleIds(res.getKey());
+        } else {
+            TAuthInfo auth = new TAuthInfo();
+            auth.setUser(request.getUser());
+            auth.setUser_ip(request.getUser_ip());
+            UserIdentityUtils.setAuthInfoFromThrift(context, auth);
+        }
+        context.setThreadLocalInfo();
+
         TStreamLoadPutResult result = new TStreamLoadPutResult();
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
@@ -1513,6 +1533,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setStatus_code(TStatusCode.INTERNAL_ERROR);
             status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
             return result;
+        } finally {
+            ConnectContext.remove();
         }
         return result;
     }
