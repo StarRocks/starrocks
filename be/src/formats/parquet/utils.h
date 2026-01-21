@@ -16,6 +16,7 @@
 
 #include "gen_cpp/parquet_types.h"
 #include "gen_cpp/types.pb.h"
+#include "runtime/types.h"
 #include "util/raw_container.h"
 
 namespace parquet {
@@ -23,6 +24,8 @@ class FileMetaData;
 } // namespace parquet
 
 namespace starrocks::parquet {
+
+struct ParquetField;
 
 enum ColumnContentType { VALUE, DICT_CODE };
 
@@ -33,6 +36,8 @@ using ColumnIOTypeFlags = int32_t;
 
 class ParquetUtils {
 public:
+    static TypeDescriptor to_type_desc(const ParquetField& field);
+
     static CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type parquet_codec);
 
     static int decimal_precision_to_byte_count(int precision);

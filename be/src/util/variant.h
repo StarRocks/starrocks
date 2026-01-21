@@ -20,11 +20,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "common/status.h"
 #include "util/decimal_types.h"
 
 namespace starrocks {
+
+struct VariantEncodingContext;
 
 enum class VariantType : uint8_t {
     // Primitive types
@@ -149,6 +154,7 @@ public:
     bool operator==(const VariantMetadata& other) const { return _metadata == other._metadata; }
 
 private:
+    friend struct VariantEncodingContext;
     static constexpr uint8_t kVersionMask = 0b1111;
     static constexpr uint8_t kSupportedVersion = 1;
     static constexpr size_t kHeaderSizeBytes = 1;
@@ -187,6 +193,16 @@ private:
     };
 
     mutable LookupIndex _lookup_index;
+};
+
+struct VariantEncodingContext {
+    std::unordered_set<std::string> keys;
+    std::unordered_map<std::string_view, uint32_t> key_to_id;
+    std::string_view metadata_raw;
+    bool metadata_built = false;
+
+    void reset();
+    Status use_metadata(const VariantMetadata& meta);
 };
 
 // Representing the details of a Variant of Object
