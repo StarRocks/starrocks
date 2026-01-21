@@ -42,6 +42,7 @@
 #include <cstring>
 #include <random>
 #include <string>
+#include <thread>
 
 namespace starrocks {
 
