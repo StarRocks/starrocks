@@ -83,14 +83,14 @@ The first-time compilation will automatically complete the following steps:
 2. Compile third-party dependencies (protobuf, thrift, brpc, etc.)
 3. Generate code (Thrift/Protobuf)
 4. Compile BE code
-5. Install to `be/output/` directory
+5. Install to `output/be/` directory
 
 ### Compilation Output
 
 After compilation, BE artifacts are located in:
 
 ```
-be/output/
+output/be/
 ├── bin/              # Startup scripts
 ├── conf/             # Configuration files
 ├── lib/              # starrocks_be binary file
@@ -102,25 +102,13 @@ be/output/
 
 ### Configure FE
 
-Edit the `output/fe/conf/fe.conf` file:
-
-```properties
-# Network configuration - Specify the network range for FE to listen on
-# Adjust according to your local network configuration
-priority_networks = 10.10.10.0/24;192.168.0.0/16
-
-# Set default replica count to 1 (for single-machine development environment)
-default_replication_num = 1
-
-# Reset election group (IP changes during compilation affect FE leader election)
-bdbje_reset_election_group = true
-```
+`build-mac/start_fe.sh` writes the required defaults (e.g., `priority_networks`, `default_replication_num`, `bdbje_reset_election_group`). For custom values, edit `output/fe/conf/fe.conf`.
 
 ### Start FE
 
 ```bash
-cd output/fe
-./bin/start_fe.sh --daemon
+cd build-mac
+./start_fe.sh --daemon
 ```
 
 ### View FE Logs
@@ -133,47 +121,19 @@ tail -f output/fe/log/fe.log
 
 ### Configure BE
 
-Edit the `be/output/conf/be.conf` file:
-
-```properties
-# Network configuration - Must match FE configuration
-priority_networks = 10.10.10.0/24;192.168.0.0/16
-
-# Disable datacache (not supported on macOS)
-datacache_enable = false
-
-# Disable system metrics collection (some features not supported on macOS)
-enable_system_metrics = false
-enable_table_metrics = false
-enable_collect_table_metrics = false
-
-# Verbose logging mode (for debugging)
-sys_log_verbose_modules = *
-```
+`build-mac/start_be.sh` sets required runtime env vars and writes required defaults (e.g., `priority_networks`, `datacache_enable`, `enable_system_metrics`, `sys_log_verbose_modules`). For custom values, edit `output/be/conf/be.conf`.
 
 ### Start BE
 
-On macOS, starting BE requires setting some environment variables:
-
 ```bash
-cd be/output
-
-# Set environment variables and start BE
-export ASAN_OPTIONS=detect_container_overflow=0
-export STARROCKS_HOME=/Users/kks/git/starrocks/be/output
-export PID_DIR=/Users/kks/git/starrocks/be/output/bin
-export UDF_RUNTIME_DIR=/Users/kks/git/starrocks/be/output/lib
-
-# Start BE in background
-./lib/starrocks_be &
+cd build-mac
+./start_be.sh
 ```
-
-> **Note**: Replace the path `/Users/kks/git/starrocks` with your actual StarRocks code path.
 
 ### View BE Logs
 
 ```bash
-tail -f be/output/log/be.INFO
+tail -f output/be/log/be.INFO
 ```
 
 ### Stop BE

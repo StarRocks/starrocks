@@ -208,7 +208,7 @@ export CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}"
 # ============================================================================
 export ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:replace_str=0:replace_intrin=0:detect_odr_violation=0:fast_unwind_on_malloc=0:intercept_strlen=0:intercept_strchr=0:intercept_strndup=0"
 export MallocNanoZone=0
-export STARROCKS_HOME_RUNTIME="$STARROCKS_BE_HOME/output"
+export STARROCKS_HOME_RUNTIME="$STARROCKS_HOME/output/be"
 export PID_DIR="$STARROCKS_HOME_RUNTIME/bin"
 export UDF_RUNTIME_DIR="$STARROCKS_HOME_RUNTIME/lib"
 
