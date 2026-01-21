@@ -552,6 +552,10 @@ public class ExternalOlapTable extends OlapTable {
         properties.put(PROPERTIES_PASSWORD, getSourceTablePassword());
         properties.put(PROPERTIES_DATABASE, getSourceTableDbName());
         properties.put(PROPERTIES_TABLE, getSourceTableName());
+        
+        // Include parent properties (including flat_json properties)
+        properties.putAll(super.getUniqueProperties());
+        
         return properties;
     }
 }
