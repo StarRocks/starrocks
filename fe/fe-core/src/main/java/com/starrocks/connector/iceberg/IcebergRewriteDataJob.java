@@ -209,34 +209,37 @@ public class IcebergRewriteDataJob {
                 }
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
-    
-                    IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-                    ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
-    
-                    List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
-                            .flatMap(f -> f.collectScanNodes().values().stream())
-                            .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
-                            .map(s -> (IcebergScanNode) s)
-                            .collect(Collectors.toList());
-    
-                    if (localScanNodes.isEmpty()) {
-                        LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
-                        return null;
-                    }
-                    for (IcebergScanNode sn : localScanNodes) {
-                        sn.rebuildScanRange(res);
-                    }
-    
-                    StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
-                    if (context.getExecutor() != null) {
-                        context.getExecutor().registerSubStmtExecutor(exec);
-                    }
                     try {
-                        exec.handleDMLStmt(localPlan, localStmt);
+                        IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
+                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
+        
+                        List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
+                                .flatMap(f -> f.collectScanNodes().values().stream())
+                                .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .map(s -> (IcebergScanNode) s)
+                                .collect(Collectors.toList());
+        
+                        if (localScanNodes.isEmpty()) {
+                            LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                            return null;
+                        }
+                        for (IcebergScanNode sn : localScanNodes) {
+                            sn.rebuildScanRange(res);
+                        }
+        
+                        StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
+                        if (context.getExecutor() != null) {
+                            context.getExecutor().registerSubStmtExecutor(exec);
+                        }
+                        try {
+                            exec.handleDMLStmt(localPlan, localStmt);
+                        } finally {
+                            exec.addFinishedQueryDetail();
+                        }
+                        return null;
                     } finally {
-                        exec.addFinishedQueryDetail();
+                        ConnectContext.remove();
                     }
-                    return null;
                 }));
             }
             

@@ -143,44 +143,48 @@ public class QueryHistoryMgr {
             }
 
             ConnectContext ctx = StatisticUtils.buildConnectContext();
-            ctx.setThreadLocalInfo();
-            for (QueryHistory query : list) {
-                try {
-                    buffer.append(query.toJSON()).append(",");
-                } catch (Exception e) {
-                    LOG.warn("Failed to convert query history {}", query.getOriginSQL(), e);
-                }
-            }
             try {
-                batchSize += list.size();
-
-                if (buffer.isEmpty()) {
-                    return;
+                ctx.setThreadLocalInfo();
+                for (QueryHistory query : list) {
+                    try {
+                        buffer.append(query.toJSON()).append(",");
+                    } catch (Exception e) {
+                        LOG.warn("Failed to convert query history {}", query.getOriginSQL(), e);
+                    }
                 }
-                if (buffer.length() < MAX_MEMORY_SIZE && lastLoadTime.plusSeconds(
-                        GlobalVariable.queryHistoryLoadIntervalSeconds).isAfter(LocalDateTime.now())) {
-                    return;
-                }
-                buffer.setLength(buffer.length() - 1);
-                buffer.append("]");
-                StreamLoader loader = new StreamLoader(StatsConstants.STATISTICS_DB_NAME,
-                        StatsConstants.QUERY_HISTORY_TABLE_NAME,
-                        List.of("dt", "frontend", "db", "sql_digest", "sql", "plan", "plan_costs", "query_ms",
-                                "other"));
-                StreamLoader.Response response = loader.loadBatch("query_history", buffer.toString());
+                try {
+                    batchSize += list.size();
 
-                if (response != null && response.status() == HttpStatus.SC_OK) {
-                    LOG.debug("load query history success, batch size[{}], response[{}]", batchSize, response);
-                } else {
-                    LOG.warn("load query history failed, batch size[{}], response[{}]", batchSize, response);
-                }
+                    if (buffer.isEmpty()) {
+                        return;
+                    }
+                    if (buffer.length() < MAX_MEMORY_SIZE && lastLoadTime.plusSeconds(
+                            GlobalVariable.queryHistoryLoadIntervalSeconds).isAfter(LocalDateTime.now())) {
+                        return;
+                    }
+                    buffer.setLength(buffer.length() - 1);
+                    buffer.append("]");
+                    StreamLoader loader = new StreamLoader(StatsConstants.STATISTICS_DB_NAME,
+                            StatsConstants.QUERY_HISTORY_TABLE_NAME,
+                            List.of("dt", "frontend", "db", "sql_digest", "sql", "plan", "plan_costs", "query_ms",
+                                    "other"));
+                    StreamLoader.Response response = loader.loadBatch("query_history", buffer.toString());
 
-                buffer = new StringBuffer();
-                buffer.append("[");
-                lastLoadTime = LocalDateTime.now();
-                batchSize = 0;
-            } catch (Exception e) {
-                LOG.warn("Failed to load query history.", e);
+                    if (response != null && response.status() == HttpStatus.SC_OK) {
+                        LOG.debug("load query history success, batch size[{}], response[{}]", batchSize, response);
+                    } else {
+                        LOG.warn("load query history failed, batch size[{}], response[{}]", batchSize, response);
+                    }
+
+                    buffer = new StringBuffer();
+                    buffer.append("[");
+                    lastLoadTime = LocalDateTime.now();
+                    batchSize = 0;
+                } catch (Exception e) {
+                    LOG.warn("Failed to load query history.", e);
+                }
+            } finally {
+                ConnectContext.remove();
             }
         });
     }

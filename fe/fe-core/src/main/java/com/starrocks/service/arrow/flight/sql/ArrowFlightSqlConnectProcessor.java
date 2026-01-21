@@ -236,6 +236,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
                     deploymentFinished.completeExceptionally(e);
                     processorFinished.completeExceptionally(e);
                 } finally {
+                    ConnectContext.remove();
                     ctx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(prevUseLowCardinalityOptimizeOnLake);
                 }
             });

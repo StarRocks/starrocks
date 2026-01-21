@@ -797,35 +797,43 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     protected void executeSql(String sql) throws Exception {
         LOG.info("execute sql : {}", sql);
         ConnectContext context = ConnectContext.get();
-        if (context == null) {
-            context = ConnectContext.buildInner();
-            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            context.setCurrentUserIdentity(UserIdentity.ROOT);
-            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-            context.setQualifiedUser(UserIdentity.ROOT.getUser());
-            context.setThreadLocalInfo();
-        }
-        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-        if (parsedStmt instanceof InsertStmt) {
-            ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
-        }
-        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
+        boolean contextCreated = false;
+        try {
+            if (context == null) {
+                context = ConnectContext.buildInner();
+                context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                context.setCurrentUserIdentity(UserIdentity.ROOT);
+                context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+                context.setQualifiedUser(UserIdentity.ROOT.getUser());
+                context.setThreadLocalInfo();
+                contextCreated = true;
+            }
+            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            if (parsedStmt instanceof InsertStmt) {
+                ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
+            }
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
-        // set default session variables for stats context
-        SessionVariable sessionVariable = context.getSessionVariable();
-        sessionVariable.setUsePageCache(false);
-        sessionVariable.setEnableMaterializedViewRewrite(false);
-        sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
+            // set default session variables for stats context
+            SessionVariable sessionVariable = context.getSessionVariable();
+            sessionVariable.setUsePageCache(false);
+            sessionVariable.setEnableMaterializedViewRewrite(false);
+            sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
 
-        context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
-        context.setStartTime();
-        executor.execute();
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setStartTime();
+            executor.execute();
 
-        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            LOG.warn("Execute sql fail | Error Message [{}] | {} | SQL [{}]",
-                        context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
-            throw new AlterCancelException(context.getState().getErrorMessage());
+            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                LOG.warn("Execute sql fail | Error Message [{}] | {} | SQL [{}]",
+                            context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
+                throw new AlterCancelException(context.getState().getErrorMessage());
+            }
+        } finally {
+            if (contextCreated) {
+                ConnectContext.remove();
+            }
         }
     }
 

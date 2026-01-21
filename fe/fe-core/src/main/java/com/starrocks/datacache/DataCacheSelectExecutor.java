@@ -61,26 +61,30 @@ public class DataCacheSelectExecutor {
             }
 
             ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
-            subContext.setCurrentComputeResource(computeResource);
-            StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
-            isFirstSubContext = false;
-            // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
-            // If DataCacheSelect is forward to leader, connectContext's Executor is null
-            if (connectContext.getExecutor() != null) {
-                connectContext.getExecutor().registerSubStmtExecutor(subStmtExecutor);
-            }
-            subStmtExecutor.addRunningQueryDetail(insertStmt);
             try {
-                subStmtExecutor.execute();
-            } finally {
-                subStmtExecutor.addFinishedQueryDetail();
-            }
+                subContext.setCurrentComputeResource(computeResource);
+                StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
+                isFirstSubContext = false;
+                // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
+                // If DataCacheSelect is forward to leader, connectContext's Executor is null
+                if (connectContext.getExecutor() != null) {
+                    connectContext.getExecutor().registerSubStmtExecutor(subStmtExecutor);
+                }
+                subStmtExecutor.addRunningQueryDetail(insertStmt);
+                try {
+                    subStmtExecutor.execute();
+                } finally {
+                    subStmtExecutor.addFinishedQueryDetail();
+                }
 
-            if (subContext.getState().isError()) {
-                // throw exception if StmtExecutor execute failed
-                throw new StarRocksException(subContext.getState().getErrorMessage());
+                if (subContext.getState().isError()) {
+                    // throw exception if StmtExecutor execute failed
+                    throw new StarRocksException(subContext.getState().getErrorMessage());
+                }
+                subStmtExecutors.add(subStmtExecutor);
+            } finally {
+                ConnectContext.remove();
             }
-            subStmtExecutors.add(subStmtExecutor);
         }
 
         DataCacheSelectMetrics metrics = null;

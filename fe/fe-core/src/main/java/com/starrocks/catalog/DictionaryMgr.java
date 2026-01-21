@@ -713,18 +713,21 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
             // 1. context for plan
             ConnectContext context = buildConnectContext();
-
-            // 2. get statement througth sql string
-            QueryStatement stmt = getStatement(dictionary.buildQuery(), context);
-
-            // 3. get the exec plan with dictionary cache sink
-            ExecPlan execPlan = plan(stmt, context);
-
-            // 4. exec the query plan
             try {
-                execute(execPlan, context);
+                // 2. get statement througth sql string
+                QueryStatement stmt = getStatement(dictionary.buildQuery(), context);
+
+                // 3. get the exec plan with dictionary cache sink
+                ExecPlan execPlan = plan(stmt, context);
+
+                // 4. exec the query plan
+                try {
+                    execute(execPlan, context);
+                } finally {
+                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                }
             } finally {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                ConnectContext.remove();
             }
         }
 

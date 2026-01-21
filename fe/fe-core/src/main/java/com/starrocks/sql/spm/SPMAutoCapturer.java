@@ -150,6 +150,8 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 plans.put(queryHistory.getSqlDigest(), base);
             } catch (Exception e) {
                 LOG.warn("sql plan capture failed. sql: {}", queryHistory.getOriginSQL(), e);
+            } finally {
+                ConnectContext.remove();
             }
         }
 
