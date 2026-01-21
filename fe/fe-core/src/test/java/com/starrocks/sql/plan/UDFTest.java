@@ -221,6 +221,8 @@ public class UDFTest extends PlanTestBase {
 
     @Test
     public void testSqlFunctionDuplicate() {
+        AnalyzeTestUtil.connectContext = connectContext;
+        AnalyzeTestUtil.starRocksAssert = starRocksAssert;
         AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string, y string) RETURNS concat('Name_', lower(y));");
         AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(z));");
     }
