@@ -34,6 +34,11 @@ PROPERTIES(
 -- result:
 [REGEX]OK
 -- !result
+shell: sleep 5
+-- result:
+0
+
+-- !result
 SET enable_split_window_skew_to_union = true;
 -- result:
 -- !result
