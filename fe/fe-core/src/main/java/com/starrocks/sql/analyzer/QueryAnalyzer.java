@@ -46,14 +46,17 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
@@ -144,6 +147,15 @@ public class QueryAnalyzer {
      */
     public void analyzeFilesOnly(StatementBase node) {
         new FilesOnlyVisitor().process(node, new Scope(RelationId.anonymous(), new RelationFields()));
+    }
+
+    /**
+     * Pre-resolve external (non-internal catalog) table relations without touching internal table metadata.
+     * This is used to avoid holding PlannerMetaLock while doing potentially slow connector metadata fetch
+     * (e.g. JDBC).
+     */
+    public void analyzeExternalTablesOnly(StatementBase node) {
+        new ExternalTablesOnlyVisitor().process(node);
     }
 
     public void analyze(StatementBase node, Scope parent) {
@@ -669,7 +681,13 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation);
+                Table table = tableRelation.getTable();
+                String catalogName = resolveTableName.getCatalog();
+                // External connector table has been pre-resolved in the unlocked phase.
+                if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
+                    table = resolveTable(tableRelation);
+                }
+
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
@@ -1816,6 +1834,72 @@ public class QueryAnalyzer {
             return result;
         }
 
+    }
+
+    /**
+     * A lightweight visitor that pre-resolves only external (non-internal catalog) TableRelation,
+     * so connector metadata fetch is done without holding PlannerMetaLock.
+     */
+    private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
+        private final Set<String> cteNames = new HashSet<>();
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            if (node.getName() != null) {
+                cteNames.add(node.getName());
+            }
+            return super.visitCTE(node, context);
+        }
+
+        public void process(StatementBase node) {
+            visit(node);
+        }
+
+        @Override
+        public Void visitTable(TableRelation tableRelation, Void context) {
+            if (tableRelation.getTable() != null) {
+                return null;
+            }
+            TableName tableName = tableRelation.getName();
+            if (tableName == null) {
+                return null;
+            }
+            if (Strings.isNullOrEmpty(tableName.getDb()) && cteNames.contains(tableName.getTbl())) {
+                return null;
+            }
+            TableName tempTableName = new TableName(tableName.getCatalog(),
+                    tableName.getDb(), tableName.getTbl(), tableName.getPos());
+            tempTableName.normalization(session);
+            String catalogName = tempTableName.getCatalog();
+            if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+                return null;
+            }
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                tableRelation.setTable(resolveTable(tableRelation));
+            }
+            // Do NOT catch exceptions here. If pre-resolution fails (e.g., JDBC timeout),
+            // we want the entire query to fail rather than fallback to main analyzer
+            // which would hold meta lock while doing RPC.
+            return null;
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, Void context) {
+            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            if (statement.getQueryStatement() != null) {
+                visit(statement.getQueryStatement());
+            }
+            return null;
+        }
     }
 
     /**
