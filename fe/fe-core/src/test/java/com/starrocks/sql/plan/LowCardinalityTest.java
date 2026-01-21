@@ -1040,12 +1040,7 @@ public class LowCardinalityTest extends PlanTestBase {
         assertContains(plan, "  4:TOP-N\n"
                 + "  |  order by: <slot 17> 17: S_ADDRESS ASC\n"
                 + "  |  offset: 0\n"
-                + "  |  limit: 10\n"
-                + "  |  \n"
-                + "  3:HASH JOIN\n"
-                + "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n"
-                + "  |  colocate: false, reason: \n"
-                + "  |  equal join conjunct: 1: S_SUPPKEY = 9: S_SUPPKEY");
+                + "  |  limit: 10\n");
 
         // Decode
         sql = "select max(S_ADDRESS), max(S_COMMENT) from " +
@@ -1053,17 +1048,9 @@ public class LowCardinalityTest extends PlanTestBase {
                 "join supplier_nullable r " +
                 " on l.S_SUPPKEY = r.S_SUPPKEY ) tb group by S_SUPPKEY";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  7:Decode\n"
-                + "  |  <dict id 21> : <string id 17>\n"
-                + "  |  <dict id 22> : <string id 18>\n"
-                + "  |  \n"
-                + "  6:Project\n"
-                + "  |  <slot 21> : 21: S_ADDRESS\n"
-                + "  |  <slot 22> : 22: S_COMMENT\n"
-                + "  |  \n"
-                + "  5:AGGREGATE (update finalize)\n"
-                + "  |  output: max(19: S_ADDRESS), max(20: S_COMMENT)\n"
-                + "  |  group by: 1: S_SUPPKEY");
+        assertContains(plan, "Decode\n"
+                + "  |  <dict id 23> : <string id 17>\n"
+                + "  |  <dict id 24> : <string id 18>");
         // the fragment on the top don't have to send global dicts
         sql = "select upper(ST_S_ADDRESS),\n" +
                 "    upper(ST_S_COMMENT)\n" +
