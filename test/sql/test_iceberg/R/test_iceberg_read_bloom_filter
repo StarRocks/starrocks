@@ -1,4 +1,4 @@
--- name: test_iceberg_read_bloom_filter
+-- name: test_iceberg_read_bloom_filter @sequential
 set enable_dynamic_prune_scan_range=false;
 -- result:
 -- !result
