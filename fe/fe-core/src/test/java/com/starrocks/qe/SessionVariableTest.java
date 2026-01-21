@@ -93,4 +93,23 @@ public class SessionVariableTest {
         sessionVariable.setEnableInsertPartialUpdate(false);
         Assertions.assertFalse(sessionVariable.isEnableInsertPartialUpdate());
     }
+
+    @Test
+    public void testConnectorSinkShuffleModeBackwardCompatibility() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        // Default mode is AUTO
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.AUTO,
+                sessionVariable.getConnectorSinkShuffleMode());
+
+        // Backward compatibility: enableIcebergSinkGlobalShuffle implies FORCE when mode stays at default AUTO.
+        com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "enableIcebergSinkGlobalShuffle", true);
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.FORCE,
+                sessionVariable.getConnectorSinkShuffleMode());
+
+        // Explicitly set mode to NEVER should not be affected by legacy boolean.
+        com.starrocks.common.jmockit.Deencapsulation.setField(sessionVariable, "connectorSinkShuffleMode", "never");
+        Assertions.assertEquals(com.starrocks.connector.ConnectorSinkShuffleMode.NEVER,
+                sessionVariable.getConnectorSinkShuffleMode());
+    }
 }
