@@ -29,6 +29,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
@@ -98,8 +99,13 @@ protected:
         TxnInfoPB txn_info;
         txn_info.set_txn_id(txn_id);
         txn_info.set_combined_txn_log(false);
+<<<<<<< HEAD
         txn_info.set_commit_time(time(NULL));
         return publish_version(_tablet_manager.get(), tablet_id, 1, new_version,
+=======
+        txn_info.set_commit_time(time(nullptr));
+        return publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), 1, new_version,
+>>>>>>> 9d7b316a72 ([Feature] Implement publish version in BE for tablet splitting (#66672))
                                std::span<const TxnInfoPB>(&txn_info, 1), false)
                 .status();
     }
