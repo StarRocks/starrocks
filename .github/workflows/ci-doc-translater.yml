@@ -3,7 +3,6 @@ on:
   issue_comment:
     types: [created]
 jobs:
-  if: false
   execute:
     if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/translate')
     runs-on: ubuntu-latest
@@ -17,6 +16,7 @@ jobs:
       - name: Check Team Membership
         uses: actions/github-script@v7
         with:
+          token: ${{ secrets.DOC_MEMBERSHIP_PAT || secrets.GITHUB_TOKEN }}
           script: |
             const user = context.payload.comment.user.login;
             const org = 'StarRocks';
