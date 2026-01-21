@@ -108,13 +108,17 @@ TEST_F(ThreadLocalUUIDGeneratorTest, TestUUIDv7Generation) {
     ASSERT_EQ(NUM_UUIDS, uuid_strings.size()) << "Duplicate UUID v7 generated";
 
     // Verify all UUIDs have version 7
+    // Extract version from byte 6, high nibble (bits 4-7)
     for (const auto& uuid : uuids) {
-        ASSERT_EQ(7, uuid.version()) << "UUID version should be 7";
+        uint8_t version = (uuid.data[6] >> 4) & 0x0F;
+        ASSERT_EQ(7, version) << "UUID version should be 7";
     }
 
     // Verify all UUIDs have RFC 4122 variant
+    // Extract variant from byte 8, high 2 bits
     for (const auto& uuid : uuids) {
-        ASSERT_LE(uuid.variant(), 2) << "UUID variant should be RFC 4122";
+        uint8_t variant = (uuid.data[8] >> 6) & 0x03;
+        ASSERT_EQ(2, variant) << "UUID variant should be RFC 4122 (10 binary = 2)";
     }
 }
 
