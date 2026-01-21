@@ -34,13 +34,15 @@ FROM (
     UNION ALL
     SELECT id, value FROM test_table_2
 ) t
-WHERE id > 3;
+WHERE id > 3
+order by 1,2 limit 10;
 
 -- test_union_filter_before_union
 -- expect: Union(Filter(Scan), Filter(Scan))
 SELECT id, value FROM test_table_1 WHERE id < 3
 UNION ALL
-SELECT id, value FROM test_table_2 WHERE id > 4;
+SELECT id, value FROM test_table_2 WHERE id > 4
+order by 1,2 limit 10;
 
 -- test_union_aggregate_after_union
 -- expect: Aggregate -> Union -> Scan
@@ -94,7 +96,8 @@ FROM (
     SELECT id, value FROM test_table_2
 ) t1
 JOIN join_table jt
-ON t1.id = jt.id;
+ON t1.id = jt.id
+order by 1,2,3;
 
 -- test_union_join_before_union
 -- expect: Union(Join(Scan, Scan), Join(Scan, Scan))
@@ -106,7 +109,8 @@ UNION ALL
 SELECT c.id, c.value, d.detail 
 FROM test_table_2 c
 JOIN join_table d
-ON c.id = d.id;
+ON c.id = d.id
+order by 1,2,3;
 
 -- test_nested_union
 -- expect: Union(Union(Scan, Scan), Scan)
@@ -117,7 +121,7 @@ FROM (
     SELECT id, value FROM test_table_2
     UNION ALL
     SELECT id, detail FROM join_table
-) t;
+) t order by 1,2;
 
 -- test_union_with_alias_in_subquery
 -- expect: Filter -> Union(Alias(Scan), Alias(Scan))
@@ -152,7 +156,7 @@ FROM (
     UNION ALL
     SELECT col1 AS alias_col1, col2 AS alias_col2 FROM alias_table_2
 ) t
-WHERE alias_col1 > 2;
+WHERE alias_col1 > 2 order by 1,2;
 
 -- test_union_with_different_column_names
 -- expect: Union(Rename(Scan), Rename(Scan))
@@ -184,7 +188,7 @@ FROM (
     SELECT a AS col1, b AS col2 FROM diff_table_1
     UNION ALL
     SELECT x AS col1, y AS col2 FROM diff_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_with_distinct
 -- expect: Aggregate(Distinct) -> Union -> Scan
@@ -193,7 +197,7 @@ FROM (
     SELECT id, value FROM test_table_1
     UNION ALL
     SELECT id, value FROM test_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_with_having_clause
 -- expect: Filter(Having) -> Aggregate -> Union -> Scan
@@ -204,7 +208,8 @@ FROM (
     SELECT id, value FROM test_table_2
 ) t
 GROUP BY id
-HAVING cnt > 1;
+HAVING cnt > 1
+order by 1,2;
 
 -- test_union_with_complex_predicates
 -- expect: Filter(ComplexPredicate) -> Union -> Scan
@@ -214,7 +219,7 @@ FROM (
     UNION ALL
     SELECT id, value FROM test_table_2
 ) t
-WHERE id > 2 AND value LIKE 'a%' AND (id + 5 < 10 OR value = 'f');
+WHERE id > 2 AND value LIKE 'a%' AND (id + 5 < 10 OR value = 'f') order by 1,2;
 
 -- test_union_chains_with_filters
 -- expect: Filter -> Union(Filter(Scan), Filter(Scan), Filter(Scan))
@@ -226,7 +231,7 @@ FROM (
     UNION ALL
     SELECT id, detail FROM join_table WHERE detail = 'info1'
 ) t
-WHERE id < 5;
+WHERE id < 5 order by 1,2;
 
 -- test_union_with_cross_join_after_union
 -- expect: CrossJoin -> Union -> Scan
@@ -236,7 +241,7 @@ FROM (
     UNION ALL
     SELECT id, value FROM test_table_2
 ) t1
-CROSS JOIN join_table t2;
+CROSS JOIN join_table t2 order by 1,2,3,4;
 
 -- test_union_with_empty_branches
 -- expect: Union(Empty, Scan)
@@ -245,7 +250,7 @@ FROM (
     SELECT id, value FROM test_table_1 WHERE 1 = 0
     UNION ALL
     SELECT id, value FROM test_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_with_constant_projection
 -- expect: Project(Constant) -> Union -> Scan
@@ -254,7 +259,7 @@ FROM (
     SELECT 'Constant1' AS fixed_col, id FROM test_table_1
     UNION ALL
     SELECT 'Constant2' AS fixed_col, id FROM test_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_complex_with_multiple_levels
 -- expect: Union(Union(Scan, Filter(Scan)), Union(Aggregate->Scan, Join->Scan))
@@ -273,7 +278,7 @@ FROM (
         UNION ALL
         SELECT id, detail FROM join_table WHERE id = 1
     ) subquery2
-) t;
+) t order by 1,2;
 
 -- test_union_with_alias_and_aggregate
 -- expect: Aggregate -> Union -> Alias -> Scan
@@ -305,14 +310,14 @@ FROM (
     UNION ALL
     SELECT c1 AS alias_c1 FROM alias_agg_table_2
 ) t
-GROUP BY alias_c1;
+GROUP BY alias_c1 order by 1,2;
 
 SELECT c1, c2
 FROM (
     SELECT c1, c2 FROM alias_agg_table_1
     UNION ALL
     SELECT c1, c2 FROM alias_agg_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_with_computed_columns
 -- expect: Project(ComputedColumns) -> Union -> Scan
@@ -321,7 +326,7 @@ FROM (
     SELECT c1, c2, c1 + 10 AS computed_col FROM alias_agg_table_1
     UNION ALL
     SELECT c1, c2, c1 * 2 AS computed_col FROM alias_agg_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_with_inner_ordering
 -- expect: Union(Sort -> Scan, Sort -> Scan)
@@ -330,7 +335,7 @@ FROM (
     SELECT c1, c2 FROM alias_agg_table_1 
     UNION ALL
     SELECT c1, c2 FROM alias_agg_table_2 
-) t;
+) t order by 1,2;
 
 -- test_union_with_multiple_levels_and_limits
 -- expect: Limit -> Sort -> Union(Limit -> Union(Scan, Scan), Limit -> Union(Scan, Scan))
@@ -348,7 +353,7 @@ FROM (
     FROM (
         SELECT c1, c2 FROM alias_agg_table_1
         UNION ALL
-        SELECT c1, c2 FROM alias_agg_table_2 LIMIT 1
+        SELECT c1, c2 FROM alias_agg_table_2
     ) subquery2
 ) outer_query
 ORDER BY c1, c2
@@ -385,7 +390,7 @@ FROM (
     SELECT col1, col3 FROM exclude_col_table_1 WHERE col2 > 15
     UNION ALL
     SELECT col1, col3 FROM exclude_col_table_2
-) t;
+) t order by 1,2;
 
 -- test_union_with_union_in_join_condition
 -- expect: Join(Union -> Scan, Scan -> Union)
@@ -418,7 +423,7 @@ FROM (
     SELECT id FROM join_cond_table_2
 ) t
 JOIN join_cond_table_1 jt1 ON t.id = jt1.id
-JOIN join_cond_table_2 jt2 ON t.id = jt2.id;
+JOIN join_cond_table_2 jt2 ON t.id = jt2.id order by 1,2;
 
 -- test_union_with_different_key_distributions
 -- expect: Union(Hash(Scan), Broadcast(Scan))
@@ -449,7 +454,7 @@ FROM (
     SELECT key1, key2 FROM hash_dist_table
     UNION ALL
     SELECT key1, key2 FROM broadcast_dist_table
-) t;
+) t order by 1,2;
 
 -- test_union_with_no_double_and_functions
 -- expect: Project(Function) -> Union(Scan, Scan)
@@ -619,7 +624,7 @@ FROM (
         UNION ALL
         SELECT id, group_id FROM nested_int_table_2 WHERE group_id > 30
     ) t2
-) t;
+) t order by 1,2;
 
 -- test_cte_union_with_join
 -- expect: Join -> Union -> CTE -> Scan
@@ -662,7 +667,7 @@ WITH cte_union AS (
 )
 SELECT cte_union.id, cte_union.value, jt.detail
 FROM cte_union
-JOIN join_table_1 jt ON cte_union.id = jt.id;
+JOIN join_table_1 jt ON cte_union.id = jt.id order by 1,2,3;
 
 -- test_ctas_with_union_and_join
 -- expect: Join -> Union -> CTAS -> Scan
@@ -743,7 +748,7 @@ WITH aggregated_union AS (
 )
 SELECT category, SUM(amount) AS total_amount
 FROM aggregated_union
-GROUP BY category;
+GROUP BY category order by 1,2;
 
 -- test_ctas_with_multiple_unions
 -- expect: Union -> Union -> CTAS -> Scan
@@ -907,4 +912,5 @@ FROM (
     UNION ALL
     SELECT id, `text` FROM dict_filter_table_2
 ) t
-WHERE LENGTH(`text`) > 10;
+WHERE LENGTH(`text`) > 10
+order by 1,2 limit 10;

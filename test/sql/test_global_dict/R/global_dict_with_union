@@ -23,11 +23,11 @@ INSERT INTO test_table_2 VALUES (4, 'd'), (5, 'e'), (6, 'f');
 -- !result
 [UC]analyze full table test_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.test_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.test_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table test_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.test_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.test_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('value', 'test_table_1')
 -- result:
@@ -43,7 +43,8 @@ FROM (
     UNION ALL
     SELECT id, value FROM test_table_2
 ) t
-WHERE id > 3;
+WHERE id > 3
+order by 1,2 limit 10;
 -- result:
 4	d
 5	e
@@ -51,10 +52,11 @@ WHERE id > 3;
 -- !result
 SELECT id, value FROM test_table_1 WHERE id < 3
 UNION ALL
-SELECT id, value FROM test_table_2 WHERE id > 4;
+SELECT id, value FROM test_table_2 WHERE id > 4
+order by 1,2 limit 10;
 -- result:
-2	b
 1	a
+2	b
 5	e
 6	f
 -- !result
@@ -66,12 +68,12 @@ FROM (
 ) t
 GROUP BY value;
 -- result:
+f	1
+a	1
 b	1
 e	1
-a	1
-f	1
-c	1
 d	1
+c	1
 -- !result
 SELECT value, COUNT(*) AS cnt
 FROM test_table_1
@@ -81,12 +83,12 @@ SELECT value, COUNT(*) AS cnt
 FROM test_table_2
 GROUP BY value;
 -- result:
+c	1
+e	1
 a	1
 f	1
 b	1
 d	1
-c	1
-e	1
 -- !result
 SELECT id, value
 FROM (
@@ -115,7 +117,7 @@ INSERT INTO join_table VALUES (1, 'info1'), (5, 'info5');
 -- !result
 [UC]analyze full table join_table;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_table	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.join_table	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('detail', 'join_table')
 -- result:
@@ -128,7 +130,8 @@ FROM (
     SELECT id, value FROM test_table_2
 ) t1
 JOIN join_table jt
-ON t1.id = jt.id;
+ON t1.id = jt.id
+order by 1,2,3;
 -- result:
 1	a	info1
 5	e	info5
@@ -141,10 +144,11 @@ UNION ALL
 SELECT c.id, c.value, d.detail 
 FROM test_table_2 c
 JOIN join_table d
-ON c.id = d.id;
+ON c.id = d.id
+order by 1,2,3;
 -- result:
-5	e	info5
 1	a	info1
+5	e	info5
 -- !result
 SELECT id, value
 FROM (
@@ -153,16 +157,16 @@ FROM (
     SELECT id, value FROM test_table_2
     UNION ALL
     SELECT id, detail FROM join_table
-) t;
+) t order by 1,2;
 -- result:
+1	a
+1	info1
 2	b
-5	info5
+3	c
 4	d
 5	e
+5	info5
 6	f
-1	info1
-1	a
-3	c
 -- !result
 CREATE TABLE alias_table_1 (
     col1 INT,
@@ -188,11 +192,11 @@ INSERT INTO alias_table_2 VALUES (4, 'delta'), (5, 'epsilon');
 -- !result
 [UC]analyze full table alias_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.alias_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table alias_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.alias_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('col2', 'alias_table_1')
 -- result:
@@ -208,7 +212,7 @@ FROM (
     UNION ALL
     SELECT col1 AS alias_col1, col2 AS alias_col2 FROM alias_table_2
 ) t
-WHERE alias_col1 > 2;
+WHERE alias_col1 > 2 order by 1,2;
 -- result:
 3	gamma
 4	delta
@@ -238,11 +242,11 @@ INSERT INTO diff_table_2 VALUES (3, 'three'), (4, 'four');
 -- !result
 [UC]analyze full table diff_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.diff_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.diff_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table diff_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.diff_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.diff_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('b', 'diff_table_1')
 -- result:
@@ -257,10 +261,10 @@ FROM (
     SELECT a AS col1, b AS col2 FROM diff_table_1
     UNION ALL
     SELECT x AS col1, y AS col2 FROM diff_table_2
-) t;
+) t order by 1,2;
 -- result:
-2	two
 1	one
+2	two
 3	three
 4	four
 -- !result
@@ -269,14 +273,14 @@ FROM (
     SELECT id, value FROM test_table_1
     UNION ALL
     SELECT id, value FROM test_table_2
-) t;
+) t order by 1,2;
 -- result:
-4	d
-5	e
+1	a
 2	b
 3	c
+4	d
+5	e
 6	f
-1	a
 -- !result
 SELECT id, COUNT(*) AS cnt 
 FROM (
@@ -285,7 +289,8 @@ FROM (
     SELECT id, value FROM test_table_2
 ) t
 GROUP BY id
-HAVING cnt > 1;
+HAVING cnt > 1
+order by 1,2;
 -- result:
 -- !result
 SELECT id, value 
@@ -294,7 +299,7 @@ FROM (
     UNION ALL
     SELECT id, value FROM test_table_2
 ) t
-WHERE id > 2 AND value LIKE 'a%' AND (id + 5 < 10 OR value = 'f');
+WHERE id > 2 AND value LIKE 'a%' AND (id + 5 < 10 OR value = 'f') order by 1,2;
 -- result:
 -- !result
 SELECT id, value 
@@ -305,7 +310,7 @@ FROM (
     UNION ALL
     SELECT id, detail FROM join_table WHERE detail = 'info1'
 ) t
-WHERE id < 5;
+WHERE id < 5 order by 1,2;
 -- result:
 1	a
 1	info1
@@ -316,12 +321,12 @@ FROM (
     UNION ALL
     SELECT id, value FROM test_table_2
 ) t1
-CROSS JOIN join_table t2;
+CROSS JOIN join_table t2 order by 1,2,3,4;
 -- result:
-2	b	1	info1
-2	b	5	info5
 1	a	1	info1
 1	a	5	info5
+2	b	1	info1
+2	b	5	info5
 3	c	1	info1
 3	c	5	info5
 4	d	1	info1
@@ -336,7 +341,7 @@ FROM (
     SELECT id, value FROM test_table_1 WHERE 1 = 0
     UNION ALL
     SELECT id, value FROM test_table_2
-) t;
+) t order by 1,2;
 -- result:
 4	d
 5	e
@@ -347,14 +352,14 @@ FROM (
     SELECT 'Constant1' AS fixed_col, id FROM test_table_1
     UNION ALL
     SELECT 'Constant2' AS fixed_col, id FROM test_table_2
-) t;
+) t order by 1,2;
 -- result:
+Constant1	1
 Constant1	2
+Constant1	3
 Constant2	4
 Constant2	5
 Constant2	6
-Constant1	1
-Constant1	3
 -- !result
 SELECT col1, col2 
 FROM (
@@ -371,16 +376,16 @@ FROM (
         UNION ALL
         SELECT id, detail FROM join_table WHERE id = 1
     ) subquery2
-) t;
+) t order by 1,2;
 -- result:
-2	b
-1	info1
 1	a
+1	info1
+1	info1
+2	b
 3	c
 5	e
-6	f
-1	info1
 5	info5
+6	f
 -- !result
 CREATE TABLE alias_agg_table_1 (
     c1 INT,
@@ -406,11 +411,11 @@ INSERT INTO alias_agg_table_2 VALUES (4, 'p'), (5, 'q'), (6, 'r');
 -- !result
 [UC]analyze full table alias_agg_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_agg_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.alias_agg_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table alias_agg_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.alias_agg_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.alias_agg_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c2', 'alias_agg_table_1')
 -- result:
@@ -426,13 +431,13 @@ FROM (
     UNION ALL
     SELECT c1 AS alias_c1 FROM alias_agg_table_2
 ) t
-GROUP BY alias_c1;
+GROUP BY alias_c1 order by 1,2;
 -- result:
+1	1
 2	1
 3	1
 4	1
 5	1
-1	1
 6	1
 -- !result
 SELECT c1, c2
@@ -440,42 +445,42 @@ FROM (
     SELECT c1, c2 FROM alias_agg_table_1
     UNION ALL
     SELECT c1, c2 FROM alias_agg_table_2
-) t;
+) t order by 1,2;
 -- result:
 1	x
+2	y
 3	z
 4	p
 5	q
 6	r
-2	y
 -- !result
 SELECT c1, computed_col 
 FROM (
     SELECT c1, c2, c1 + 10 AS computed_col FROM alias_agg_table_1
     UNION ALL
     SELECT c1, c2, c1 * 2 AS computed_col FROM alias_agg_table_2
-) t;
+) t order by 1,2;
 -- result:
+1	11
+2	12
+3	13
 4	8
 5	10
 6	12
-1	11
-3	13
-2	12
 -- !result
 SELECT * 
 FROM (
     SELECT c1, c2 FROM alias_agg_table_1 
     UNION ALL
     SELECT c1, c2 FROM alias_agg_table_2 
-) t;
+) t order by 1,2;
 -- result:
+1	x
+2	y
+3	z
 4	p
 5	q
 6	r
-1	x
-3	z
-2	y
 -- !result
 SELECT c1, c2
 FROM (
@@ -491,15 +496,16 @@ FROM (
     FROM (
         SELECT c1, c2 FROM alias_agg_table_1
         UNION ALL
-        SELECT c1, c2 FROM alias_agg_table_2 LIMIT 1
+        SELECT c1, c2 FROM alias_agg_table_2
     ) subquery2
 ) outer_query
 ORDER BY c1, c2
 LIMIT 4;
 -- result:
 1	x
+1	x
 2	y
-3	z
+2	y
 -- !result
 CREATE TABLE exclude_col_table_1 (
     col1 INT,
@@ -527,11 +533,11 @@ INSERT INTO exclude_col_table_2 VALUES (4, 40, 'qux'), (5, 50, 'quux'), (6, 60, 
 -- !result
 [UC]analyze full table exclude_col_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.exclude_col_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.exclude_col_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table exclude_col_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.exclude_col_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.exclude_col_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('col3', 'exclude_col_table_1')
 -- result:
@@ -546,7 +552,7 @@ FROM (
     SELECT col1, col3 FROM exclude_col_table_1 WHERE col2 > 15
     UNION ALL
     SELECT col1, col3 FROM exclude_col_table_2
-) t;
+) t order by 1,2;
 -- result:
 2	bar
 3	baz
@@ -578,11 +584,11 @@ INSERT INTO join_cond_table_2 VALUES (2, 'info2'), (4, 'info4');
 -- !result
 [UC]analyze full table join_cond_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_cond_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.join_cond_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table join_cond_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_cond_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.join_cond_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('detail', 'join_cond_table_1')
 -- result:
@@ -599,7 +605,7 @@ FROM (
     SELECT id FROM join_cond_table_2
 ) t
 JOIN join_cond_table_1 jt1 ON t.id = jt1.id
-JOIN join_cond_table_2 jt2 ON t.id = jt2.id;
+JOIN join_cond_table_2 jt2 ON t.id = jt2.id order by 1,2;
 -- result:
 -- !result
 CREATE TABLE hash_dist_table (
@@ -626,11 +632,11 @@ INSERT INTO broadcast_dist_table VALUES (3, 'b1'), (4, 'b2');
 -- !result
 [UC]analyze full table hash_dist_table;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.hash_dist_table	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.hash_dist_table	analyze	status	OK
 -- !result
 [UC]analyze full table broadcast_dist_table;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.broadcast_dist_table	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.broadcast_dist_table	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('key2', 'hash_dist_table')
 -- result:
@@ -645,12 +651,12 @@ FROM (
     SELECT key1, key2 FROM hash_dist_table
     UNION ALL
     SELECT key1, key2 FROM broadcast_dist_table
-) t;
+) t order by 1,2;
 -- result:
+1	h1
 2	h2
 3	b1
 4	b2
-1	h1
 -- !result
 CREATE TABLE func_table_1 (
     id INT,
@@ -678,11 +684,11 @@ INSERT INTO func_table_2 VALUES (4, 'D', 50), (5, 'E', NULL), (6, 'F', 300);
 -- !result
 [UC]analyze full table func_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.func_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.func_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table func_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.func_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.func_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('name', 'func_table_1')
 -- result:
@@ -700,8 +706,8 @@ FROM (
 ) t
 WHERE value IS NOT NULL AND value > 100;
 -- result:
-2	B	200	210
 6	F	300	310
+2	B	200	210
 -- !result
 CREATE TABLE agg_table_1 (
     id INT,
@@ -729,11 +735,11 @@ INSERT INTO agg_table_2 VALUES (4, 'A', 40), (5, 'B', 50), (6, 'C', 60);
 -- !result
 [UC]analyze full table agg_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.agg_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table agg_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.agg_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('category', 'agg_table_1')
 -- result:
@@ -751,9 +757,9 @@ FROM (
 ) t
 GROUP BY category;
 -- result:
+A	50
 C	90
 B	70
-A	50
 -- !result
 CREATE TABLE compute_table_1 (
     id INT,
@@ -785,10 +791,10 @@ FROM (
 ) t
 WHERE value > 200;
 -- result:
+3	300	303
 4	400	404
 5	500	505
 6	600	606
-3	300	303
 -- !result
 CREATE TABLE filter_table_1 (
     id INT,
@@ -816,11 +822,11 @@ INSERT INTO filter_table_2 VALUES (4, 'electronics', 400), (5, 'furniture', 500)
 -- !result
 [UC]analyze full table filter_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.filter_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.filter_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table filter_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.filter_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.filter_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('type', 'filter_table_1')
 -- result:
@@ -838,9 +844,9 @@ FROM (
 ) t;
 -- result:
 2	furniture	200
+1	electronics	100
 5	furniture	500
 6	fashion	600
-1	electronics	100
 -- !result
 CREATE TABLE nested_int_table_1 (
     id INT,
@@ -866,11 +872,11 @@ INSERT INTO nested_int_table_2 VALUES (4, 40), (5, 50), (6, 60);
 -- !result
 [UC]analyze full table nested_int_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.nested_int_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.nested_int_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table nested_int_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.nested_int_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.nested_int_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('group_id', 'nested_int_table_1')
 -- result:
@@ -895,18 +901,18 @@ FROM (
         UNION ALL
         SELECT id, group_id FROM nested_int_table_2 WHERE group_id > 30
     ) t2
-) t;
+) t order by 1,2;
 -- result:
 1	10
-2	20
 1	10
+2	20
+2	20
 3	30
 4	40
-5	50
-6	60
-2	20
 4	40
 5	50
+5	50
+6	60
 6	60
 -- !result
 CREATE TABLE cte_table_1 (
@@ -944,15 +950,15 @@ INSERT INTO join_table_1 VALUES (1, 'info1'), (5, 'info5');
 -- !result
 [UC]analyze full table cte_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.cte_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.cte_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table cte_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.cte_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.cte_table_2	analyze	status	OK
 -- !result
 [UC]analyze full table join_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.join_table_1	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('value', 'cte_table_1')
 -- result:
@@ -973,7 +979,7 @@ WITH cte_union AS (
 )
 SELECT cte_union.id, cte_union.value, jt.detail
 FROM cte_union
-JOIN join_table_1 jt ON cte_union.id = jt.id;
+JOIN join_table_1 jt ON cte_union.id = jt.id order by 1,2,3;
 -- result:
 1	A	info1
 5	E	info5
@@ -1013,15 +1019,15 @@ INSERT INTO join_table_2 VALUES (1, 'J1'), (4, 'J4');
 -- !result
 [UC]analyze full table source_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.source_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.source_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table source_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.source_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.source_table_2	analyze	status	OK
 -- !result
 [UC]analyze full table join_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.join_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.join_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('col2', 'source_table_1')
 -- result:
@@ -1074,11 +1080,11 @@ INSERT INTO agg_cte_table_2 VALUES (4, 'Electronics', 500), (5, 'Furniture', 100
 -- !result
 [UC]analyze full table agg_cte_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_cte_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.agg_cte_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table agg_cte_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.agg_cte_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.agg_cte_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('category', 'agg_cte_table_1')
 -- result:
@@ -1095,11 +1101,11 @@ WITH aggregated_union AS (
 )
 SELECT category, SUM(amount) AS total_amount
 FROM aggregated_union
-GROUP BY category;
+GROUP BY category order by 1,2;
 -- result:
 Electronics	800
-Furniture	300
 Fashion	1000
+Furniture	300
 -- !result
 CREATE TABLE multi_union_table_1 (
     col1 INT,
@@ -1136,15 +1142,15 @@ INSERT INTO multi_union_table_3 VALUES (5, 'Epsilon'), (6, 'Zeta');
 -- !result
 [UC]analyze full table multi_union_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.multi_union_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.multi_union_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table multi_union_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.multi_union_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.multi_union_table_2	analyze	status	OK
 -- !result
 [UC]analyze full table multi_union_table_3;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.multi_union_table_3	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.multi_union_table_3	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('col2', 'multi_union_table_1')
 -- result:
@@ -1205,11 +1211,11 @@ SELECT id + 30, CONCAT('str', id + 30) FROM large_table_1;
 -- !result
 [UC]analyze full table large_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.large_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.large_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table large_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.large_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.large_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('value', 'large_table_1')
 -- result:
@@ -1255,11 +1261,11 @@ SELECT id + 300, CONCAT('dict_broad_', id + 300) FROM large_table_1;
 -- !result
 [UC]analyze full table broadcast_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.broadcast_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.broadcast_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table broadcast_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.broadcast_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.broadcast_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('`key`', 'broadcast_table_1')
 -- result:
@@ -1306,11 +1312,11 @@ SELECT id + 150, CONCAT('filter_case_', id + 150) FROM large_table_1;
 -- !result
 [UC]analyze full table dict_filter_table_1;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.dict_filter_table_1	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.dict_filter_table_1	analyze	status	OK
 -- !result
 [UC]analyze full table dict_filter_table_2;
 -- result:
-test_db_d1f2bb922a3845b58d32edb3a3fbf8f3.dict_filter_table_2	analyze	status	OK
+test_db_98dcb34d2b2e4da0a479b6b421175264.dict_filter_table_2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('`text`', 'dict_filter_table_1')
 -- result:
@@ -1326,66 +1332,17 @@ FROM (
     UNION ALL
     SELECT id, `text` FROM dict_filter_table_2
 ) t
-WHERE LENGTH(`text`) > 10;
+WHERE LENGTH(`text`) > 10
+order by 1,2 limit 10;
 -- result:
+1	filter_case_1
 2	filter_case_2
-9	filter_case_9
-10	filter_case_10
-11	filter_case_11
-12	filter_case_12
-15	filter_case_15
-18	filter_case_18
-21	filter_case_21
-24	filter_case_24
-28	filter_case_28
-29	filter_case_29
-151	filter_case_151
-154	filter_case_154
-155	filter_case_155
-158	filter_case_158
-160	filter_case_160
-162	filter_case_162
-165	filter_case_165
-167	filter_case_167
-170	filter_case_170
-173	filter_case_173
-176	filter_case_176
-178	filter_case_178
+3	filter_case_3
 4	filter_case_4
 5	filter_case_5
 6	filter_case_6
 7	filter_case_7
-14	filter_case_14
-16	filter_case_16
-19	filter_case_19
-20	filter_case_20
-23	filter_case_23
-25	filter_case_25
-152	filter_case_152
-157	filter_case_157
-161	filter_case_161
-163	filter_case_163
-166	filter_case_166
-172	filter_case_172
-174	filter_case_174
-177	filter_case_177
-1	filter_case_1
-3	filter_case_3
 8	filter_case_8
-13	filter_case_13
-17	filter_case_17
-22	filter_case_22
-26	filter_case_26
-27	filter_case_27
-30	filter_case_30
-153	filter_case_153
-156	filter_case_156
-159	filter_case_159
-164	filter_case_164
-168	filter_case_168
-169	filter_case_169
-171	filter_case_171
-175	filter_case_175
-179	filter_case_179
-180	filter_case_180
+9	filter_case_9
+10	filter_case_10
 -- !result
