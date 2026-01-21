@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -239,10 +240,9 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
         Map<ColumnRefOperator, ColumnRefOperator> mapping = Maps.newHashMap();
 
         LogicalWindowOperator.Builder windowBuilder = new LogicalWindowOperator.Builder()
-                .setAnalyticWindow(originalWindow.getAnalyticWindow())
+                .withOperator(originalWindow)
                 .setUseHashBasedPartition(partitionExprs.isEmpty() && originalWindow.isUseHashBasedPartition())
-                .setIsSkewed(partitionExprs.isEmpty() && originalWindow.isSkewed())
-                .setInputIsBinary(originalWindow.isInputIsBinary());
+                .setIsSkewed(partitionExprs.isEmpty() && originalWindow.isSkewed());
 
         if (needsDuplication) {
             OptExpressionDuplicator duplicator = new OptExpressionDuplicator(context.getColumnRefFactory(), context);
@@ -262,7 +262,6 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                 CallOperator newCall = (CallOperator) duplicator.rewriteAfterDuplicate(originalCall);
                 // Create a new output column for the duplicated window function
                 ColumnRefOperator newCol = factory.create(newCall.toString(), originalCol.getType(), originalCol.isNullable());
-
                 newWindowCalls.put(newCol, newCall);
                 mapping.put(originalCol, newCol);
             }
@@ -271,9 +270,6 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             mapping.putAll(duplicator.getColumnMapping());
         } else {
             windowBuilder.setPartitionExpressions(partitionExprs);
-            windowBuilder.setOrderByElements(originalWindow.getOrderByElements());
-            windowBuilder.setEnforceSortColumns(originalWindow.getEnforceSortColumns());
-            windowBuilder.setWindowCall(originalWindow.getWindowCall());
         }
 
         return new BranchResult(OptExpression.create(windowBuilder.build(), filterExpr), mapping);
@@ -281,7 +277,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
     private List<ScalarOperator> rewriteExpressions(List<ScalarOperator> exprs, OptExpressionDuplicator duplicator) {
         if (exprs == null) {
-            return null;
+            return Collections.emptyList();
         }
         return exprs.stream()
                 .map(duplicator::rewriteAfterDuplicate)
@@ -290,7 +286,7 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
     private List<Ordering> rewriteOrderings(List<Ordering> orderings, OptExpressionDuplicator duplicator) {
         if (orderings == null) {
-            return null;
+            return Collections.emptyList();
         }
         return orderings.stream()
                 .map(o -> new Ordering(
@@ -329,10 +325,9 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
                 if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
                     return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
                 }
-                if (skewInfo.maybeMcvs().isPresent()) {
-                    return skewInfo.maybeMcvs().get().stream().map(p -> (new SkewedInfo(col,
-                            ConstantOperator.createVarchar(p.first)))).toList();
-                }
+
+                return skewInfo.maybeMcvs().stream().flatMap(Collection::stream).map(p -> (new SkewedInfo(col,
+                        ConstantOperator.createVarchar(p.first)))).toList();
             }
         }
         return Collections.emptyList();

@@ -1,0 +1,42 @@
+-- name: test_window_skew_rewrite_with_null
+DROP TABLE IF EXISTS window_skew_t1;
+
+CREATE TABLE window_skew_t1 (
+    id BIGINT AUTO_INCREMENT ,
+    pk INT,
+    v1 INT,
+    v2 INT
+   
+)
+PRIMARY KEY(id)
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Prepare data
+INSERT INTO window_skew_t1 (pk, v1,v2 ) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+INSERT INTO window_skew_t1 (pk, v1,v2 ) VALUES (NULL, 4, 4),(NULL, 5, 5), (NULL, 6, 6), (NULL, 7, 7),
+                                            (NULL, 8, 8), (NULL, 9, 9), ( NULL, 10, 10),
+                                            (NULL, 11, 11), (NULL, 12, 12), (NULL, 13, 13);
+
+-- Trigger basic stats collection (for NULL skew)
+ANALYZE FULL TABLE window_skew_t1;
+ANALYZE TABLE window_skew_t1 UPDATE HISTOGRAM ON pk
+PROPERTIES(
+   "histogram_sample_ratio" = "1.0"
+);
+
+-- Plan should contain UNION and two branches
+SET enable_split_window_skew_to_union = true;
+
+function: assert_explain_costs_contains('SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1', 'UNION', 'ANALYTIC', 'pk, INT, true] IS NOT NULL', 'pk, INT, true] IS NULL')
+SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+
+-- Optimization disabled
+SET enable_split_window_skew_to_union = false;
+
+function: assert_explain_costs_contains('SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1', 'ANALYTIC', 'partition by', 'pk', 'OlapScanNode')
+SELECT pk, v1, row_number() OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_t1 ORDER BY pk, v1;
+
+-- DROP TABLE window_skew_t1;
+DROP TABLE IF EXISTS window_skew_t1;

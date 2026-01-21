@@ -1,0 +1,85 @@
+-- name: test_window_skew_rewrite_with_mcv
+DROP TABLE IF EXISTS window_skew_mvc_t1;
+-- result:
+-- !result
+CREATE TABLE window_skew_mvc_t1 (
+    id BIGINT AUTO_INCREMENT ,
+    pk INT,
+    v1 INT,
+    v2 INT
+   
+)
+PRIMARY KEY(id)
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO window_skew_mvc_t1 (pk, v1,v2 ) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+-- result:
+-- !result
+INSERT INTO window_skew_mvc_t1 (pk, v1,v2 ) VALUES (100, 4, 4),(100, 5, 5), (100, 6, 6), (100, 7, 7),
+                                            (100, 8, 8), (100, 9, 9), ( 100, 10, 10),
+                                            (100, 11, 11), (100, 12, 12), (100, 13, 13);
+-- result:
+-- !result
+ANALYZE FULL TABLE window_skew_mvc_t1;
+-- result:
+[REGEX]OK
+-- !result
+ANALYZE TABLE window_skew_mvc_t1 UPDATE HISTOGRAM ON pk
+PROPERTIES(
+   "histogram_sample_ratio" = "1.0"
+);
+-- result:
+[REGEX]OK
+-- !result
+SET enable_split_window_skew_to_union = true;
+-- result:
+-- !result
+function: assert_explain_costs_contains('SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_mvc_t1', 'UNION', 'ANALYTIC', 'pk, INT, true] = 100', 'pk, INT, true] != 100')
+-- result:
+None
+-- !result
+SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_mvc_t1 ORDER BY pk, v1;
+-- result:
+1	1	1
+2	2	2
+3	3	3
+100	4	4
+100	5	9
+100	6	15
+100	7	22
+100	8	30
+100	9	39
+100	10	49
+100	11	60
+100	12	72
+100	13	85
+-- !result
+SET enable_split_window_skew_to_union = false;
+-- result:
+-- !result
+function: assert_explain_costs_contains('SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_mvc_t1', 'ANALYTIC', 'partition by', 'pk', 'OlapScanNode')
+-- result:
+None
+-- !result
+SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_mvc_t1 ORDER BY pk, v1;
+-- result:
+1	1	1
+2	2	2
+3	3	3
+100	4	4
+100	5	9
+100	6	15
+100	7	22
+100	8	30
+100	9	39
+100	10	49
+100	11	60
+100	12	72
+100	13	85
+-- !result
+DROP TABLE IF EXISTS window_skew_mvc_t1;
+-- result:
+-- !result

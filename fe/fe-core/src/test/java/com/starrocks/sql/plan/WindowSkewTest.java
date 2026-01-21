@@ -36,9 +36,20 @@ class WindowSkewTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         connectContext.getGlobalStateMgr().setStatisticStorage(new CachedStatisticStorage());
         starRocksAssert.withTable(
-                "CREATE TABLE `window_skew_table` (\n" + "  `p` int NULL,\n" + "  `s` int NULL,\n" + "  `x` int NULL\n" +
-                        ") ENGINE=OLAP\n" + "DUPLICATE KEY(`p`, `s`, `x`)\n" + "DISTRIBUTED BY HASH(`p`) BUCKETS 3\n" +
-                        "PROPERTIES (\n" + "\"replication_num\" = \"1\",\n" + "\"in_memory\" = \"false\"\n" + ");");
+                """
+                        CREATE TABLE `window_skew_table` (
+                          `p` int NULL,
+                          `s` int NULL,
+                          `x` int NULL
+                        ) ENGINE=OLAP
+                        DUPLICATE KEY(`p`, `s`, `x`)
+                        DISTRIBUTED BY HASH(`p`) BUCKETS 3
+                        PROPERTIES (
+                          "replication_num" = "1",
+                          "in_memory" = "false"
+                        );
+                        """
+        );
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
@@ -163,7 +174,7 @@ class WindowSkewTest extends PlanTestBase {
 
         String sql = "select p, s, sum(x) over (partition by p order by s) from window_skew_table";
         String plan = getFragmentPlan(sql, TExplainLevel.COSTS, "");
-
+        System.out.println(plan);
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
