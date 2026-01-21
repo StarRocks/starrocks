@@ -7,8 +7,10 @@ displayed_sidebar: docs
 This topic describes how to enable and visualize the Jemalloc Heap Profile for StarRocks.
 
 :::note
+
 - Enabling Jemalloc Heap Profiling may have an impact on StarRocks' performance.
 - This solution is available only for StarRocks v3.1.6 and later.
+
 :::
 
 ## Enable Jemalloc Heap Profile
