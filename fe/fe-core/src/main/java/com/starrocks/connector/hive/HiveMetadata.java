@@ -369,12 +369,13 @@ public class HiveMetadata implements ConnectorMetadata {
             return;
         }
         HiveTable table = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
 
         List<PartitionUpdate> partitionUpdates = commitInfos.stream()
                 .map(TSinkCommitInfo::getHive_file_info)
-                .map(fileInfo -> PartitionUpdate.get(fileInfo, stagingDir, table.getTableLocation()))
+                .map(fileInfo -> PartitionUpdate.get(fileInfo, stagingDir, table.getTableLocation(), partitionColumnNames))
                 .collect(Collectors.collectingAndThen(Collectors.toList(), PartitionUpdate::merge));
 
         List<String> partitionColNames = table.getPartitionColumnNames();
