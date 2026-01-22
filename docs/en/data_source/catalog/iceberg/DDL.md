@@ -1,13 +1,16 @@
 ---
 displayed_sidebar: docs
+toc_max_heading_level: 5
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
 ---
 
 # Iceberg DDL operations
 
-StarRocks Iceberg Catalog supports a variety of Data Definition Language (DDL) operations, including creating and managing databases, tables, and views.
+This document describes Data Definition Language (DDL) operations for Iceberg catalogs in StarRocks, including creating and managing databases, tables, and views.
 
 You must have the appropriate privileges to perform DDL operations. For more information about privileges, see [Privileges](../../../administration/user_privs/authorization/privilege_item.md).
+
+---
 
 ## CREATE DATABASE
 
@@ -22,7 +25,7 @@ CREATE DATABASE [IF NOT EXISTS] <database_name>
 
 ### Parameters
 
-`location`: Specifies the file path where the database will be created. Both HDFS and cloud storage are supported. If not specified, the database is created in the default file path of the Iceberg catalog.
+- `location`: Specifies the file path where the database will be created. Both HDFS and cloud storage are supported. If not specified, the database is created in the default file path of the Iceberg catalog.
 
 The `prefix` varies based on the storage system:
 - HDFS: `hdfs`
@@ -41,12 +44,14 @@ CREATE DATABASE iceberg_db
 PROPERTIES ("location" = "s3://my_bucket/iceberg_db/");
 ```
 
+---
+
 ## DROP DATABASE
 
 Drops an empty database from an Iceberg catalog. This feature is supported from v3.1 onwards.
 
 :::note
-Only empty databases can be dropped. When you drop a database, the file path in the remote storage is not deleted.
+Only empty databases can be dropped. When you drop a database, the file path on storage is not deleted.
 :::
 
 ### Syntax
@@ -60,6 +65,8 @@ DROP DATABASE [IF EXISTS] <database_name>
 ```SQL
 DROP DATABASE iceberg_db;
 ```
+
+---
 
 ## CREATE TABLE
 
@@ -81,7 +88,7 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 
 ### Parameters
 
-#### `column_definition`
+#### column_definition
 
 ```SQL
 col_name col_type [COMMENT 'comment']
@@ -91,7 +98,7 @@ col_name col_type [COMMENT 'comment']
 All non-partition columns must use `NULL` as the default value. Partition columns must be defined after non-partition columns and cannot use `NULL` as the default value.
 :::
 
-#### `partition_desc`
+#### partition_desc
 
 ```SQL
 PARTITION BY (partition_expr[, partition_expr...])
@@ -108,25 +115,25 @@ StarRocks supports partition transformation expressions defined in the Apache Ic
 Partition columns support all data types except FLOAT, DOUBLE, DECIMAL, and DATETIME.
 :::
 
-#### `ORDER BY`
+#### ORDER BY (v4.0+)
 
-Specifies sort keys for the Iceberg table. This feature is supported from v4.0 onwards.
+Specifies sort keys for the Iceberg table:
 
 ```SQL
 ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 ```
 
-#### `PROPERTIES`
+#### PROPERTIES
 
 Key table properties:
 
 - `location`: File path for the table. Required when using AWS Glue without database-level location.
-- `file_format`: File format. Only `parquet` (Default) is supported.
-- `compression_codec`: Compression algorithm. Options: SNAPPY, GZIP, ZSTD, LZ4 (Default: `zstd`).
+- `file_format`: File format. Only `parquet` is supported (default).
+- `compression_codec`: Compression algorithm. Options: SNAPPY, GZIP, ZSTD, LZ4 (default: `zstd`).
 
 ### Examples
 
-- **Create a non-partitioned table:**
+**Create a non-partitioned table:**
 
 ```SQL
 CREATE TABLE unpartition_tbl
@@ -136,7 +143,7 @@ CREATE TABLE unpartition_tbl
 );
 ```
 
-- **Create a partitioned table:**
+**Create a partitioned table:**
 
 ```SQL
 CREATE TABLE partition_tbl
@@ -148,7 +155,7 @@ CREATE TABLE partition_tbl
 PARTITION BY (id, dt);
 ```
 
-- **Create a table with hidden partitions:**
+**Create a table with hidden partitions:**
 
 ```SQL
 CREATE TABLE hidden_partition_tbl
@@ -160,7 +167,7 @@ CREATE TABLE hidden_partition_tbl
 PARTITION BY bucket(id, 10), year(dt);
 ```
 
-- **CREATE TABLE AS SELECT:**
+**Create table as select:**
 
 ```SQL
 CREATE TABLE new_tbl
@@ -168,7 +175,9 @@ PARTITION BY (id, dt)
 AS SELECT * FROM existing_tbl;
 ```
 
-## ALTER TABLE to evolve partition spec
+---
+
+## ALTER TABLE (Evolve partition spec)
 
 Modifies an Iceberg table's partition spec by adding or dropping partition columns.
 
@@ -188,25 +197,27 @@ Supported `partition_expr` formats:
 
 ### Examples
 
-- **Add partition columns:**
+**Add partition columns:**
 
 ```SQL
 ALTER TABLE sales_data
 ADD PARTITION COLUMN month(sale_date), bucket(customer_id, 10);
 ```
 
-- **Drop partition column:**
+**Drop partition column:**
 
 ```SQL
 ALTER TABLE sales_data
 DROP PARTITION COLUMN day(sale_date);
 ```
 
+---
+
 ## DROP TABLE
 
 Drops an Iceberg table. This feature is supported from v3.1 onwards.
 
-When you drop a table, the file path and data in the remote storage are not deleted by default.
+When you drop a table, the file path and data on storage are not deleted by default.
 
 ### Syntax
 
@@ -216,20 +227,22 @@ DROP TABLE [IF EXISTS] <table_name> [FORCE]
 
 ### Parameters
 
-- `FORCE`: When specified, the table data in the remote storage is deleted, while the file path is retained.
+- `FORCE`: When specified, deletes the table's data on storage while retaining the file path.
 
 ### Example
 
 ```SQL
 DROP TABLE iceberg_db.sales_data;
 
--- Force drop the table with its data
+-- Force drop with data deletion
 DROP TABLE iceberg_db.temp_data FORCE;
 ```
 
+---
+
 ## CREATE VIEW
 
-Creates an Iceberg view. This feature is supported from v3.5 onwards. Creating an Iceberg view with PROPERTIES is supported from v4.0.3 onwards.
+Creates an Iceberg view. This feature is supported from v3.5 onwards.
 
 ### Syntax
 
@@ -247,8 +260,6 @@ AS <query_statement>
 
 ### Example
 
-- **Create a regular Iceberg view:**
-
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg_db.sales_summary AS
 SELECT region, SUM(amount) as total_sales
@@ -256,7 +267,7 @@ FROM iceberg_db.sales
 GROUP BY region;
 ```
 
-- **Create an Iceberg view with properties:**
+**With properties (v4.0.3+):**
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg_db.sales_summary
@@ -269,7 +280,9 @@ FROM iceberg_db.sales
 GROUP BY region;
 ```
 
-## ALTER VIEW to update StarRocks dialect
+---
+
+## ALTER VIEW
 
 Adds or modifies StarRocks dialect for an existing Iceberg view. This feature is supported from v3.5 onwards.
 
@@ -290,14 +303,14 @@ ALTER VIEW [<catalog>.<database>.]<view_name>
 
 ### Examples
 
-- **Add StarRocks dialect:**
+**Add StarRocks dialect:**
 
 ```SQL
 ALTER VIEW iceberg_db.spark_view ADD DIALECT
 SELECT k1, k2 FROM iceberg_db.source_table;
 ```
 
-- **Modify StarRocks dialect:**
+**Modify StarRocks dialect:**
 
 ```SQL
 ALTER VIEW iceberg_db.spark_view MODIFY DIALECT
