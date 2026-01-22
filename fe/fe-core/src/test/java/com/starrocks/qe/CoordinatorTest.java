@@ -26,12 +26,8 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.planner.AggregateInfo;
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -47,12 +43,8 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ValuesRelation;
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
