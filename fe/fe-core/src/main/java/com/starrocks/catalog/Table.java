@@ -79,7 +79,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     //   1.2 Cloud native: LAKE, LAKE_MATERIALIZED_VIEW
     // 2. System table: SCHEMA
     // 3. View: INLINE_VIEW, VIEW
-    // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
+    // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC, BENCHMARK
     public enum TableType {
         @SerializedName("MYSQL")
         MYSQL,
@@ -127,6 +127,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         METADATA,
         @SerializedName("KUDU")
         KUDU,
+        @SerializedName("BENCHMARK")
+        BENCHMARK,
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
         @SerializedName("ICEBERG_VIEW")
@@ -417,6 +419,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public boolean isKuduTable() {
         return type == TableType.KUDU;
+    }
+
+    public boolean isBenchmarkTable() {
+        return type == TableType.BENCHMARK;
     }
 
     public boolean isHMSTable() {

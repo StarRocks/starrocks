@@ -88,6 +88,7 @@ enum TPlanNodeType {
   RAW_VALUES_NODE,
   FETCH_NODE,
   LOOKUP_NODE,
+  BENCHMARK_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -451,6 +452,11 @@ struct TBinlogScanRange {
   11: optional Types.TBinlogOffset offset
 }
 
+struct TBenchmarkScanRange {
+  1: optional i64 start_row
+  2: optional i64 row_count
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -464,6 +470,8 @@ struct TScanRange {
   20: optional THdfsScanRange hdfs_scan_range
 
   30: optional TBinlogScanRange binlog_scan_range
+
+  40: optional TBenchmarkScanRange benchmark_scan_range
 }
 
 struct TMySQLScanNode {
@@ -473,6 +481,13 @@ struct TMySQLScanNode {
   4: required list<string> filters
   5: optional i64 limit
   6: optional string temporal_clause
+}
+
+struct TBenchmarkScanNode {
+  1: optional Types.TTupleId tuple_id
+  2: optional string db_name
+  3: optional string table_name
+  4: optional double scale_factor
 }
 
 struct TFileScanNode {
@@ -1472,6 +1487,8 @@ struct TPlanNode {
   81: optional TSelectNode select_node; 
   82: optional TFetchNode fetch_node;
   83: optional TLookUpNode look_up_node;
+  // Scan node for benchmark
+  84: optional TBenchmarkScanNode benchmark_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
