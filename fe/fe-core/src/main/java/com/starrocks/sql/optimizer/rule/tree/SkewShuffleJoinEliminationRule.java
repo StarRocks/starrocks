@@ -65,7 +65,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /* rewrite the tree top down
  * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
@@ -98,7 +97,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         return root.getOp().accept(handler, root, null);
     }
 
-    class SkewColumnAndValues {
+    static class SkewColumnAndValues {
         List<ScalarOperator> skewValues;
         Pair<ScalarOperator, ScalarOperator> skewColumns;
 
@@ -108,7 +107,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
     }
 
-    class SplitProducerAndConsumer {
+    static class SplitProducerAndConsumer {
         OptExpression splitProducer;
         OptExpression splitConsumerOptForShuffleJoin;
         OptExpression splitConsumerOptForBroadcastJoin;
@@ -299,8 +298,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             if (!eq.getChild(0).isColumnRef() || !eq.getChild(1).isColumnRef()) {
                 return Optional.empty();
             }
-            ColumnRefOperator c0 = (ColumnRefOperator) eq.getChild(0);
-            ColumnRefOperator c1 = (ColumnRefOperator) eq.getChild(1);
+            ColumnRefOperator c0 = eq.getChild(0).cast();
+            ColumnRefOperator c1 = eq.getChild(1).cast();
 
             ColumnRefOperator leftKey = leftOutputColumns.contains(c0.getId()) ? c0 :
                     (leftOutputColumns.contains(c1.getId()) ? c1 : null);
@@ -503,12 +502,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private boolean canOptimize(PhysicalHashJoinOperator joinOp, OptExpression opt) {
-            // Gate conditions:
-            // - join type is supported
-            // - the original join is a shuffle join (we will split it into shuffle + broadcast branches)
-            //
-            // NOTE: Do NOT require `isSkew(opt)` here. `isSkew` is hint-only today and should only decide
-            // whether we use hint-provided skew values or auto-detect them from statistics (MCV).
             return isValidJoinType(joinOp) && isShuffleJoin(opt);
         }
 
@@ -581,8 +574,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return List.of();
         }
 
-        final double H = histogram.getTotalRows();
-        if (H <= 0) {
+        final double histogramTotalRows = histogram.getTotalRows();
+        if (histogramTotalRows <= 0) {
             return List.of();
         }
         final double nonNullFraction = 1.0 - nullFraction;
@@ -597,14 +590,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                         .toList();
 
         long sumTopK = top.stream().mapToLong(Map.Entry::getValue).sum();
-        double pTopKTotal = (sumTopK / H) * nonNullFraction;
+        double pTopKTotal = (sumTopK / histogramTotalRows) * nonNullFraction;
         if (pTopKTotal < topKTotalThreshold) {
             return List.of();
         }
 
         List<ScalarOperator> result = new ArrayList<>();
         for (Map.Entry<String, Long> e : top) {
-            double pSingleTotal = (e.getValue() / H) * nonNullFraction;
+            double pSingleTotal = (e.getValue() / histogramTotalRows) * nonNullFraction;
             if (pSingleTotal < singleTotalThreshold) {
                 continue;
             }
@@ -615,7 +608,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
     }
 
     private static Optional<ConstantOperator> mcvKeyToTypedConstant(String mcvKey, Type targetType) {
-        // Parse MCV key string via ConstantOperator.castTo to produce typed constant (last stage wants typed values).
         return ConstantOperator.createVarchar(mcvKey).castTo(targetType);
     }
 }

@@ -190,3 +190,53 @@ select sum(t1.c_key), t1.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 
 
 -- two phase agg,so broadcast and shuffle join is in same fragment because local agg has no requiremnt for input
 select sum(t1.c_key), t2.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+
+-- ---------------------------------------------------------------------------
+-- MCV-based auto detection for skew join v2 (no manual skew hint)
+-- ---------------------------------------------------------------------------
+
+drop table if exists t_mcv_l;
+drop table if exists t_mcv_r;
+
+create table t_mcv_l (
+    k bigint null,
+    v int null
+)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num"="1");
+
+create table t_mcv_r (
+    k bigint null,
+    v int null
+)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num"="1");
+
+set enable_stats_to_optimize_skew_join = true;
+set skew_join_use_mcv_count = 5;
+set skew_join_data_skew_threshold = 0.1;
+set skew_join_mcv_single_threshold = 0.05;
+set skew_join_mcv_min_input_rows = 1000;
+set broadcast_row_limit = 0;
+
+insert into t_mcv_l select 1, 1 from table(generate_series(1, 5000));
+insert into t_mcv_l select 2, 1 from table(generate_series(1, 2500));
+insert into t_mcv_l select generate_series + 2, 1 from table(generate_series(1, 2500));
+
+insert into t_mcv_r select (generate_series % 2502) + 1, 1 from table(generate_series(1, 20000));
+
+-- collect histogram with MCV for join key
+[UC] analyze table t_mcv_l;
+[UC] analyze table t_mcv_r;
+[UC] analyze table t_mcv_l update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
+[UC] analyze table t_mcv_r update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
+
+-- plan check: should auto-detect skew values from MCV and apply v2 skew join rewrite
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
+function: assert_explain_contains('select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k', 'SplitCastDataSink')
+
+-- expression join key (MCV propagation through semantics-safe expression stats)
+with l as (select (cast(k as bigint) + 10) as k2 from t_mcv_l), r as (select (cast(k as bigint) + 10) as k2 from t_mcv_r) select count(*) from l join[shuffle] r on l.k2 = r.k2;
+function: assert_explain_contains('with l as (select (cast(k as bigint) + 10) as k2 from t_mcv_l), r as (select (cast(k as bigint) + 10) as k2 from t_mcv_r) select count(*) from l join[shuffle] r on l.k2 = r.k2', 'SplitCastDataSink')
