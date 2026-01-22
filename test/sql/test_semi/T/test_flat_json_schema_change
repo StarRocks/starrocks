@@ -4,7 +4,7 @@
 -- where extended columns (flat JSON subfields) could get the same
 -- unique_id as existing columns after schema changes.
 
-CREATE DATABASE IF NOT EXISTS test_flat_json_schema_change;
+CREATE DATABASE IF NOT EXISTS test_flat_json_${uuid0};
 USE test_flat_json_schema_change;
 
 CREATE TABLE `t_json_schema_change` (
