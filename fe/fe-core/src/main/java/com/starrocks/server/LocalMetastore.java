@@ -3725,6 +3725,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info);
     }
 
+    private void alterTableQueryTimeout(OlapTable table,
+                                       Map<String, String> properties,
+                                       List<Runnable> appliers) throws DdlException {
+        try {
+            int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+            appliers.add(() -> table.setTableQueryTimeout(tableQueryTimeout));
+        } catch (AnalysisException ex) {
+            throw new DdlException(ex.getMessage());
+        }
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3915,6 +3926,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             boolean enable = PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
             results.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, enable);
             properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            alterTableQueryTimeout(table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

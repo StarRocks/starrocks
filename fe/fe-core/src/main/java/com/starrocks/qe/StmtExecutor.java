@@ -322,6 +322,10 @@ public class StmtExecutor {
     private HttpResultSender httpResultSender;
     private PrepareStmtContext prepareStmtContext = null;
     private boolean isInternalStmt = false;
+    
+    // Store table query timeout info for error message
+    private String tableQueryTimeoutTableName = null;
+    private int tableQueryTimeoutValue = -1;
 
     private final CompletableFuture<ArrowFlightSqlResultDescriptor> deploymentFinished;
 
@@ -562,12 +566,86 @@ public class StmtExecutor {
 
     /**
      * The execution timeout varies among different statements:
-     * 1. SELECT: use query_timeout
+     * 1. SELECT:
+     *    - If session query_timeout is not explicitly overridden, table_query_timeout (if set) can take effect.
+     *    - If session query_timeout is explicitly overridden, always use session query_timeout.
      * 2. DML: use insert_timeout or statement-specified timeout
      * 3. ANALYZE: use fe_conf.statistic_collect_query_timeout
      */
     public int getExecTimeout() {
+<<<<<<< HEAD
         return parsedStmt.getTimeout();
+=======
+        if (parsedStmt instanceof CreateTableAsSelectStmt ctas) {
+            Map<String, String> properties = ctas.getInsertStmt().getProperties();
+            if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+                try {
+                    return Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+                } catch (NumberFormatException e) {
+                    // ignore
+                }
+            }
+            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+        } else if (parsedStmt instanceof DmlStmt) {
+            Map<String, String> properties = ((DmlStmt) parsedStmt).getProperties();
+            if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+                try {
+                    return Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+                } catch (NumberFormatException e) {
+                    // ignore
+                }
+            }
+            return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+        } else if (parsedStmt instanceof AnalyzeStmt) {
+            return (int) Config.statistic_collect_query_timeout;
+        } else {
+            // For SELECT queries:
+            // session query_timeout is authoritative if explicitly overridden
+            ConnectContext ctx = ConnectContext.get();
+            int sessionQueryTimeout = ctx.getSessionVariable().getQueryTimeoutS();
+            boolean sessionTimeoutOverridden = ctx.isSessionQueryTimeoutOverridden();
+            if (parsedStmt instanceof QueryStatement) {
+                try {
+                    Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(parsedStmt);
+                    int minTableTimeout = -1;
+                    String tableName = null;
+
+                    // get minimum timeout among all tables
+                    for (Map.Entry<TableName, Table> entry : tables.entrySet()) {
+                        Table table = entry.getValue();
+                        if (table instanceof OlapTable) {
+                            OlapTable olapTable = (OlapTable) table;
+                            int tableTimeout = olapTable.getTableQueryTimeout();
+                            if (tableTimeout > 0) {
+                                if (minTableTimeout < 0 || tableTimeout < minTableTimeout) {
+                                    minTableTimeout = tableTimeout;
+                                    tableName = entry.getKey() != null ? entry.getKey().toString() : table.getName();
+                                }
+                            }
+                        }
+                    }
+
+                    // If table timeout is set, use it when session timeout is not explicitly overridden.
+                    if (minTableTimeout > 0) {
+                        tableQueryTimeoutTableName = tableName;
+                        tableQueryTimeoutValue = minTableTimeout;
+                        if (!sessionTimeoutOverridden) {
+                            return minTableTimeout;
+                        }
+                        return sessionQueryTimeout;
+                    } else {
+                        tableQueryTimeoutTableName = null;
+                        tableQueryTimeoutValue = -1;
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Cannot collect tables for table_query_timeout check, use cluster timeout", e);
+                    tableQueryTimeoutTableName = null;
+                    tableQueryTimeoutValue = -1;
+                }
+            }
+            return sessionQueryTimeout;
+        }
+>>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
     }
 
     public String getExecType() {
@@ -584,6 +662,13 @@ public class StmtExecutor {
 
     public boolean isExecLoadType() {
         return parsedStmt instanceof DmlStmt || parsedStmt instanceof CreateTableAsSelectStmt;
+    }
+
+    public Pair<String, Integer> getTableQueryTimeoutInfo() {
+        if (tableQueryTimeoutTableName != null && tableQueryTimeoutValue > 0) {
+            return Pair.create(tableQueryTimeoutTableName, tableQueryTimeoutValue);
+        }
+        return null;
     }
 
     private ExecPlan generateExecPlan() throws Exception {

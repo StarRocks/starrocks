@@ -34,8 +34,14 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
+>>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -45,6 +51,11 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.TableRef;
+>>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -52,6 +63,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -62,6 +74,7 @@ import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 import java.util.List;
+import java.util.Map;
 
 public class ConnectContextTest {
     @Mocked
@@ -226,6 +239,130 @@ public class ConnectContextTest {
         Assertions.assertTrue(ctx.isKilled());
 
         // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+    public void testQueryTimeoutErrorMessageUsesTableQueryTimeoutHint() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        // Cover ConnectContext.isSessionQueryTimeoutOverridden() exception path (ConnectContext.java:596-598).
+        // Make VariableMgr.getDefaultSessionVariable() throw, then isSessionQueryTimeoutOverridden() should return false.
+        new MockUp<VariableMgr>() {
+            @Mock
+            public SessionVariable getDefaultSessionVariable() {
+                throw new RuntimeException("mock default session variable failure");
+            }
+        };
+        Assertions.assertFalse(ctx.isSessionQueryTimeoutOverridden());
+
+        // Prepare an executor with table_query_timeout info, so ConnectContext.checkTimeout() builds the table hint
+        // (ConnectContext.java:1376-1381).
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        // Manually set table timeout info so getTableQueryTimeoutInfo() returns non-null
+        Deencapsulation.setField(executor, "tableQueryTimeoutTableName", "test.t1");
+        Deencapsulation.setField(executor, "tableQueryTimeoutValue", 120);
+        ctx.setExecutor(executor);
+        
+        // Mock getExecTimeout() and getTableQueryTimeoutInfo() for this specific executor instance
+        // This is needed because getExecTimeout() resets the fields when no tables are found,
+        // but we want to test the case where table timeout info is available
+        final Pair<String, Integer> mockTableTimeoutInfo = Pair.create("test.t1", 120);
+        new Expectations(executor) {
+            {
+                // Mock getExecTimeout() to return 1 second (session timeout) without resetting fields
+                executor.getExecTimeout();
+                result = 1; // Return 1 second to match session timeout
+                minTimes = 0;
+                
+                // Mock getTableQueryTimeoutInfo() to always return table timeout info
+                executor.getTableQueryTimeoutInfo();
+                result = mockTableTimeoutInfo;
+                minTimes = 0;
+                
+                // Mock cancel() to set error message in context state
+                executor.cancel(anyString);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void cancel(String cancelledMessage) {
+                        ctx.getState().setError(cancelledMessage);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+        
+        // Ensure pendingTimeSecond is 0 so getExecTimeout() returns exactly 1
+        ctx.setPendingTimeSecond(0);
+        
+        // Verify that getExecTimeout() returns the expected value
+        int execTimeout = ctx.getExecTimeout();
+        Assertions.assertEquals(1, execTimeout, "getExecTimeout() should return 1 (session timeout + pending time)");
+
+        // Ensure modifiedSessionVariables doesn't contain QUERY_TIMEOUT so isSessionQueryTimeoutOverridden() returns false
+        // (unless getDefaultSessionVariable() throws, which we've mocked)
+        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
+        modifiedVars.remove(SessionVariable.QUERY_TIMEOUT);
+        
+        // Set session timeout to 1 second to make the query timeout quickly.
+        // Since the statement has no tables, executor.getExecTimeout() will return session timeout (1).
+        ctx.getSessionVariable().setQueryTimeoutS(1);
+        // Verify isSessionQueryTimeoutOverridden() still returns false after setting timeout
+        Assertions.assertFalse(ctx.isSessionQueryTimeoutOverridden(), 
+                "isSessionQueryTimeoutOverridden() should return false even after setting timeout");
+        // Verify getTableQueryTimeoutInfo() returns non-null
+        Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+        Assertions.assertNotNull(tableTimeoutInfo, "getTableQueryTimeoutInfo() should return non-null");
+        Assertions.assertEquals("test.t1", tableTimeoutInfo.first);
+        Assertions.assertEquals(120, tableTimeoutInfo.second.intValue());
+        
+        // Verify conditions are met BEFORE checkTimeout() is called
+        // (Note: getExecTimeout() will reset table timeout info when no tables are found,
+        //  but checkTimeout() uses the info at the time it's called)
+        Assertions.assertFalse(ctx.isSessionQueryTimeoutOverridden(), 
+                "isSessionQueryTimeoutOverridden() should return false before checkTimeout()");
+        Assertions.assertNotNull(executor.getTableQueryTimeoutInfo(), 
+                "getTableQueryTimeoutInfo() should return non-null before checkTimeout()");
+        
+        ctx.setStartTime();
+        // Wait 2 seconds to exceed the 1 second timeout
+        long now = ctx.getStartTime() + 2_000L;
+        
+        // Verify conditions before calling checkTimeout()
+        boolean isOverridden = ctx.isSessionQueryTimeoutOverridden();
+        Pair<String, Integer> timeoutInfo = executor.getTableQueryTimeoutInfo();
+        int execTimeoutValue = ctx.getExecTimeout();
+        long delta = now - ctx.getStartTime();
+        
+        Assertions.assertFalse(isOverridden, "isSessionQueryTimeoutOverridden() should be false");
+        Assertions.assertNotNull(timeoutInfo, "getTableQueryTimeoutInfo() should return non-null");
+        Assertions.assertNotNull(ctx.getExecutor(), "executor should not be null");
+        Assertions.assertEquals(1, execTimeoutValue, "getExecTimeout() should return 1");
+        Assertions.assertTrue(delta > execTimeoutValue * 1000L, 
+                "delta (" + delta + ") should be greater than timeout (" + execTimeoutValue * 1000L + ")");
+        
+        boolean killed = ctx.checkTimeout(now);
+
+        // The query should be killed because 2 seconds > 1 second timeout
+        // Note: For query timeouts, killConnection is false, so isKilled() won't be set to true.
+        // We check the return value of checkTimeout() instead.
+        Assertions.assertTrue(killed, "checkTimeout() should return true when query times out");
+        Assertions.assertNotNull(ctx.getState().getErrorMessage());
+        
+        // Since isSessionQueryTimeoutOverridden() returned false and getTableQueryTimeoutInfo() returned non-null
+        // at the time checkTimeout() was called, the error message should contain the table timeout hint
+        // (ConnectContext.java:1375-1381)
+        String errorMsg = ctx.getState().getErrorMessage();
+        // The error message should contain either "table_query_timeout" or the table name "test.t1"
+        // Note: The actual format is "the table test.t1 table_query_timeout is 120s, pending time:0"
+        Assertions.assertTrue(errorMsg != null && (errorMsg.contains("table_query_timeout") || errorMsg.contains("test.t1")),
+                "Error message should contain table_query_timeout hint. " +
+                "isOverridden=" + isOverridden + ", timeoutInfo=" + timeoutInfo + ", " +
+                "executor=" + ctx.getExecutor() + ", " +
+                "Actual error: " + (errorMsg != null ? errorMsg : "null"));
+
         ctx.cleanup();
     }
 

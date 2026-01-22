@@ -48,6 +48,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
@@ -55,6 +56,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -950,10 +952,27 @@ public class DefaultCoordinator extends Coordinator {
                         status.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
                 } else if (status.isTimeout()) {
-                    ErrorReport.reportTimeoutException(
-                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
-                            String.format("please increase the '%s' session variable and retry",
-                                    SessionVariable.QUERY_TIMEOUT));
+                    int timeoutS = jobSpec.getQueryOptions().query_timeout;
+                    String hint = null;
+                    try {
+                        StmtExecutor executor = connectContext != null ? connectContext.getExecutor() : null;
+                        if (executor != null && !connectContext.isSessionQueryTimeoutOverridden()) {
+                            Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+                            if (tableTimeoutInfo != null && tableTimeoutInfo.second != null &&
+                                    tableTimeoutInfo.second > 0 && tableTimeoutInfo.second == timeoutS) {
+                                hint = String.format("please increase the '%s' and retry",
+                                        PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+                            }
+                        }
+                    } catch (Exception e) {
+                        LOG.error("Fail to get hint.", e);
+                        hint = null;
+                    }
+                    if (hint == null) {
+                        hint = String.format("please increase the '%s' session variable and retry",
+                                SessionVariable.QUERY_TIMEOUT);
+                    }
+                    ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, "Query", timeoutS, hint);
                 }
                 throw new StarRocksException(ec, errMsg);
             }
