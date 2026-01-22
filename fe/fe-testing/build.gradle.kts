@@ -36,7 +36,7 @@ tasks.withType<JavaCompile> {
 }
 
 checkstyle {
-    toolVersion = project.findProperty("puppycrawl.version") as String? ?: "10.21.1"
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 
@@ -44,4 +44,9 @@ tasks.withType<Checkstyle> {
     exclude("**/jmockit/**/*")
     isShowViolations = true
     ignoreFailures = false
+}
+
+tasks.named<Checkstyle>("checkstyleTest") {
+    // Maven does not check test sources for this module.
+    enabled = false
 }
