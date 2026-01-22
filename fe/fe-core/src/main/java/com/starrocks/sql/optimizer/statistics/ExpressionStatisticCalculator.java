@@ -722,17 +722,17 @@ public class ExpressionStatisticCalculator {
 
         /**
          * Only do histogram/MCV propagation when the transformation is definitely correct for value domain.
-         *
+         * <p>
          * NOTE: This code path must be semantics-safe because MCV keys may be used as exact constant values
          * (e.g. as IN-list values in skew join elimination v2). Therefore we only support a small whitelist of
          * transformations that we can prove to be correct. If you need to support more functions in the future,
          * add them here with strict guards and "fail closed" (return Optional.empty()) on any ambiguity.
-         *
+         * <p>
          * Current supported cases:
          * - POSITIVE(x): identity
          * - NEGATIVE(x): exact -x, fixed-point only
          * - ABS(x): exact abs(x), fixed-point only (with collision merge)
-         *
+         * <p>
          * For unsupported functions we return empty to keep current behavior (no histogram for expression stats).
          */
         private Optional<Histogram> transformHistogramForUnary(CallOperator callOperator, ColumnStatistic childStats) {
@@ -781,16 +781,16 @@ public class ExpressionStatisticCalculator {
 
         /**
          * Only do histogram/MCV propagation for binary expressions when it is definitely correct.
-         *
+         * <p>
          * NOTE: This code path must be semantics-safe because MCV keys may be used as exact constant values
          * (e.g. as IN-list values in skew join elimination v2). Therefore we only support a small whitelist of
          * transformations that we can prove to be correct. If you need to support more functions in the future,
          * add them here with strict guards and "fail closed" (return Optional.empty()) on any ambiguity.
-         *
+         * <p>
          * Current supported cases (fixed-point only):
          * - ADD(x, const) / ADD(const, x)
          * - SUBTRACT(x, const) / SUBTRACT(const, x)
-         *
+         * <p>
          * For x +/- const we will:
          * - transform MCV keys by applying the exact operation
          * - shift bucket bounds for x +/- const when the mapping is monotonic (x +/- const)

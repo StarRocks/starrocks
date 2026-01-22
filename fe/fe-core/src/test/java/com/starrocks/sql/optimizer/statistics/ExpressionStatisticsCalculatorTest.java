@@ -821,7 +821,8 @@ public class ExpressionStatisticsCalculatorTest {
                 .build();
 
         // expr type is DOUBLE => should not propagate histogram/MCV
-        CallOperator add = new CallOperator(FunctionSet.ADD, FloatType.DOUBLE, Lists.newArrayList(k, ConstantOperator.createInt(1)));
+        CallOperator add = new CallOperator(FunctionSet.ADD, FloatType.DOUBLE,
+                Lists.newArrayList(k, ConstantOperator.createInt(1)));
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
         Assertions.assertNull(exprStats.getHistogram());
     }
