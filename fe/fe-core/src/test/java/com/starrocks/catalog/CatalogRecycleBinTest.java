@@ -1183,7 +1183,19 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testAsyncDeleteForTablesMemoryLeak() {
+    public void testAsyncDeleteForTablesMemoryLeak(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+                editLog.logEraseMultiTables((List<Long>) any);
+                minTimes = 0;
+            }
+        };
         // This test verifies the fix for memory leak in asyncDeleteForTables map
         // Non-retryable tables should not be added to asyncDeleteForTables to prevent memory leak
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
