@@ -137,6 +137,8 @@ public class BenchmarkConnectorTest {
 
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> BenchmarkRowCountCalculator.estimateRowCount("tpcds", "store_sales", 0.0));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> BenchmarkRowCountCalculator.estimateRowCount("store_sales", 0.0));
     }
 
     @Test

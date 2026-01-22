@@ -71,11 +71,12 @@ public class BenchmarkMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
         String normalizedDbName = BenchmarkNameUtils.normalizeDbName(dbName);
-        List<Column> columns = tableSchemas.getTableSchema(normalizedDbName, tblName);
+        String normalizedTableName = BenchmarkNameUtils.normalizeTableName(tblName);
+        List<Column> columns = tableSchemas.getTableSchema(normalizedDbName, normalizedTableName);
         if (columns == null) {
             return null;
         }
-        return new BenchmarkTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, normalizedDbName, tblName,
-                columns, config);
+        return new BenchmarkTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, normalizedDbName,
+                normalizedTableName, columns, config);
     }
 }

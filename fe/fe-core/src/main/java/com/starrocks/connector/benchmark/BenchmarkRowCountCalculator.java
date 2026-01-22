@@ -27,6 +27,7 @@ public final class BenchmarkRowCountCalculator {
     }
 
     public static long estimateRowCount(String tableName, double scaleFactor) {
+        Preconditions.checkArgument(scaleFactor > 0, "scale factor must be positive");
         return BenchmarkSuiteFactory.getDefaultSuite().estimateRowCount(tableName, scaleFactor).getRowCount();
     }
 }
