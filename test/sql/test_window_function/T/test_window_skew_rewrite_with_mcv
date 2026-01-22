@@ -26,7 +26,7 @@ PROPERTIES(
    "histogram_sample_ratio" = "1.0"
 );
 -- Need to sleep to wait for stats to be visible
-shell: sleep 5
+shell: sleep 100
 SET enable_split_window_skew_to_union = true;
 function: assert_explain_costs_contains('SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_mvc_t1', 'UNION', 'ANALYTIC', 'pk, INT, true] = 100', 'pk, INT, true] != 100')
 SELECT pk, v1, sum(v2) OVER (PARTITION BY pk ORDER BY v1) FROM window_skew_mvc_t1 ORDER BY pk, v1;

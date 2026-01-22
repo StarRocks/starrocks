@@ -34,7 +34,7 @@ PROPERTIES(
 -- result:
 [REGEX]OK
 -- !result
-shell: sleep 5
+shell: sleep 100
 -- result:
 0
 
