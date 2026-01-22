@@ -287,25 +287,15 @@ ALTER SECURITY INTEGRATION LDAP SET
 );
 ```
 
-## Grant role or privilege to a user group
+## Grant role to a user group
 
-You can grant roles or privileges to a user group via [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
+You can grant roles to a user group via [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
 
-- Grant a role to a user group.
+The following example grants the role `example_role` to the user group `analysts`:
 
-  The following example grants the role `example_role` to the user group `analysts`:
-
-  ```SQL
-  GRANT example_role TO EXTERNAL GROUP analysts;
-  ```
-
-- Grant a privilege to a user group.
-
-  The following example grants the SELECT privilege on the table `sr_member` to the user group `analysts`:
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
+```SQL
+GRANT example_role TO EXTERNAL GROUP analysts;
+```
 
 ## Combine group provider with external authorization system (Apache Ranger)
 

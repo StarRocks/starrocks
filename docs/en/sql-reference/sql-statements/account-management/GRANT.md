@@ -29,7 +29,7 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 ## Syntax
 
-### Grant privileges to roles, users, or external groups
+### Grant privileges to roles or users
 
 #### System
 
@@ -41,7 +41,7 @@ Before a GRANT operation is performed, make sure that the related user or role h
 GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_group_name> [, <resource_group_name >,...] ｜ ALL RESOURCE GROUPS} 
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### Resource
@@ -50,7 +50,7 @@ GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### Global UDF
@@ -60,7 +60,7 @@ GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 Example: `GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
@@ -71,7 +71,7 @@ Example: `GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
 GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### External catalog
@@ -80,7 +80,7 @@ GRANT
 GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-   TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+   TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### Database
@@ -89,7 +89,7 @@ GRANT
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * You must first run SET CATALOG before you run this command.
@@ -102,13 +102,13 @@ GRANT
   GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
     ON TABLE <table_name> [, < table_name >,...]
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 
 -- Grant privileges on ALL TABLES in a specific database or all databases.
   GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
     ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * You must first run SET CATALOG before you run this command.
@@ -116,7 +116,7 @@ GRANT
 * You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive and Iceberg Catalogs, you can grant the INSERT privilege to write data into such tables (supported since v3.1 for Iceberg and v3.2 for Hive)
 
   ```SQL
-  GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### View
@@ -127,7 +127,7 @@ GRANT
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * You must first run SET CATALOG before you run this command.
@@ -135,7 +135,7 @@ GRANT
 * For tables in an External Catalog, you can only grant the SELECT privilege on Hive table views (since v3.1).
 
   ```SQL
-  GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### Materialized view
@@ -146,14 +146,14 @@ GRANT
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<mv_name>` to represent an mv.
 
   ```SQL
-  GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### Function
@@ -164,14 +164,14 @@ GRANT
     ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 - You must first run SET CATALOG before you run this command.
 - You can also use `<db_name>.<function_name>` to represent a function.
 
   ```SQL
-  GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### User
@@ -188,7 +188,7 @@ TO USER <user_identity_1> [ WITH GRANT OPTION ]
 GRANT  
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 <GrantWarehouse />
