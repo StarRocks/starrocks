@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
+import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
+
 ## 説明
 
 マテリアライズドビューを作成します。マテリアライズドビューの使用方法については、[同期マテリアライズドビュー](../../../using_starrocks/Materialized_view-single_table.md)および[非同期マテリアライズドビュー](../../../using_starrocks/async_mv/Materialized_view.md)を参照してください。
@@ -410,6 +412,8 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `AUTO`: 可能な限り増分リフレッシュを試みます。マテリアライズドビューのクエリ定義が増分リフレッシュをサポートしていない場合、その操作について自動的に`PCT`モードへフォールバックします。PCTリフレッシュの後、条件が整えば次回以降は再び増分リフレッシュに戻る場合もあります。
   - `INCREMENTAL`: 増分リフレッシュのみを行うことを保証します。マテリアライズドビューの定義で増分リフレッシュがサポートされていない場合や、非増分データに遭遇した場合、作成やリフレッシュが失敗します。
   - `FULL`: マテリアライズドビューが増分やパーティション単位のリフレッシュをサポートしているかどうかに関係なく、毎回全データのフルリフレッシュを強制します。
+
+<MVWarehouse />
 
 **query_statement** (必須)
 
