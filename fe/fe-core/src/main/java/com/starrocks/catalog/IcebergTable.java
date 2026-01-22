@@ -31,6 +31,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -211,15 +212,25 @@ public class IcebergTable extends Table {
     public List<Integer> getSortKeyIndexes() {
         List<Integer> indexes = new ArrayList<>();
         org.apache.iceberg.Table nativeTable = getNativeTable();
-        List<Types.NestedField> fields = nativeTable.schema().asStruct().fields();
-        List<Integer> sortFieldSourceIds = nativeTable.sortOrder().fields().stream()
-                .map(SortField::sourceId)
-                .collect(Collectors.toList());
+        SortOrder sortOrder = nativeTable.sortOrder();
+        if (sortOrder == null || sortOrder.fields().isEmpty()) {
+            return indexes;
+        }
 
+        List<Types.NestedField> fields = nativeTable.schema().asStruct().fields();
+        // The Iceberg table's sort order may differs from schema column order, e.g., sorting by [B, A] when
+        // schema is [A, B]), So we need to build a mapping from fieldId to schema index first, and then get
+        // the correct index according to sort order.
+        Map<Integer, Integer> fieldIdToIndex = Maps.newHashMap();
         for (int i = 0; i < fields.size(); i++) {
-            Types.NestedField field = fields.get(i);
-            if (sortFieldSourceIds.contains(field.fieldId())) {
-                indexes.add(i);
+            fieldIdToIndex.put(fields.get(i).fieldId(), i);
+        }
+
+        // Keep the returned indexes aligned with sortOrder.fields() order.
+        for (SortField sortField : sortOrder.fields()) {
+            Integer idx = fieldIdToIndex.get(sortField.sourceId());
+            if (idx != null) {
+                indexes.add(idx);
             }
         }
 
@@ -480,19 +491,34 @@ public class IcebergTable extends Table {
 
         SortOrder sortOrder = nativeTable.sortOrder();
         if (sortOrder != null && sortOrder.isSorted()) {
-            TSortOrder tSortOrder = new TSortOrder();
-            List<Integer> sortKeyIndexes = getSortKeyIndexes();
-            for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
-                int sortKeyIndex = sortKeyIndexes.get(idx);
-                SortField sortField = sortOrder.fields().get(idx);
-                if (!sortField.transform().isIdentity()) {
-                    continue;
+            // Check if we should skip sort_order for host-level sorting
+            boolean shouldSkipSortOrder = false;
+            ConnectContext context = ConnectContext.get();
+            if (context != null) {
+                ConnectorSinkSortScope sortScope = ConnectorSinkSortScope.fromName(
+                        context.getSessionVariable().getConnectorSinkSortScope());
+                // When using host-level sorting, FE ensures data is sorted before reaching BE,
+                // so we don't need to pass sort_order to BE to avoid duplicate sorting
+                if (sortScope == ConnectorSinkSortScope.NONE || sortScope == ConnectorSinkSortScope.HOST) {
+                    shouldSkipSortOrder = true;
                 }
-                tSortOrder.addToSort_key_idxes(sortKeyIndex);
-                tSortOrder.addToIs_ascs(sortField.direction() == SortDirection.ASC);
-                tSortOrder.addToIs_null_firsts(sortField.nullOrder() == NullOrder.NULLS_FIRST);
             }
-            tIcebergTable.setSort_order(tSortOrder);
+
+            if (!shouldSkipSortOrder) {
+                TSortOrder tSortOrder = new TSortOrder();
+                List<Integer> sortKeyIndexes = getSortKeyIndexes();
+                for (int idx = 0; idx < sortKeyIndexes.size(); ++idx) {
+                    int sortKeyIndex = sortKeyIndexes.get(idx);
+                    SortField sortField = sortOrder.fields().get(idx);
+                    if (!sortField.transform().isIdentity()) {
+                        continue;
+                    }
+                    tSortOrder.addToSort_key_idxes(sortKeyIndex);
+                    tSortOrder.addToIs_ascs(sortField.direction() == SortDirection.ASC);
+                    tSortOrder.addToIs_null_firsts(sortField.nullOrder() == NullOrder.NULLS_FIRST);
+                }
+                tIcebergTable.setSort_order(tSortOrder);
+            }
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
