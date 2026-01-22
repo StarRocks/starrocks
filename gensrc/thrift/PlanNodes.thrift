@@ -453,9 +453,8 @@ struct TBinlogScanRange {
 }
 
 struct TBenchmarkScanRange {
-  1: optional string db_name
-  2: optional i64 start_row
-  3: optional i64 row_count
+  1: optional i64 start_row
+  2: optional i64 row_count
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -486,11 +485,9 @@ struct TMySQLScanNode {
 
 struct TBenchmarkScanNode {
   1: optional Types.TTupleId tuple_id
-  2: optional string table_name
-  3: optional double scale_factor
-  4: optional i64 start_row
-  5: optional i64 row_count
-  8: optional string db_name
+  2: optional string db_name
+  3: optional string table_name
+  4: optional double scale_factor
 }
 
 struct TFileScanNode {

@@ -68,7 +68,6 @@ public class BenchmarkScanNode extends ScanNode {
             locations.addToLocations(location);
 
             TBenchmarkScanRange benchmarkRange = new TBenchmarkScanRange();
-            benchmarkRange.setDb_name(table.getCatalogDBName());
             benchmarkRange.setStart_row(0L);
             benchmarkRange.setRow_count(-1L);
 
@@ -94,7 +93,6 @@ public class BenchmarkScanNode extends ScanNode {
             locations.addToLocations(location);
 
             TBenchmarkScanRange benchmarkRange = new TBenchmarkScanRange();
-            benchmarkRange.setDb_name(table.getCatalogDBName());
             benchmarkRange.setStart_row(start);
             benchmarkRange.setRow_count(rowCount);
 
@@ -123,8 +121,6 @@ public class BenchmarkScanNode extends ScanNode {
         benchmarkScanNode.setTable_name(table.getName());
         benchmarkScanNode.setDb_name(table.getCatalogDBName());
         benchmarkScanNode.setScale_factor(table.getScaleFactor());
-        benchmarkScanNode.setStart_row(0L);
-        benchmarkScanNode.setRow_count(resolveTotalRows());
         msg.benchmark_scan_node = benchmarkScanNode;
     }
 
