@@ -119,7 +119,7 @@ PROPERTIES
     "type"="jdbc",
     "user"="default",
     "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
-    "driver_url"="file:///path/to/clickhouse-jdbc-0.4.6.jar",
+    "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
     "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
 );
 ```
