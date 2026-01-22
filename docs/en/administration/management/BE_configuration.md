@@ -407,6 +407,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: The strategy for flushing logs. The default value indicates that logs are buffered in memory. Valid values are `-1` and `0`. `-1` indicates that logs are not buffered in memory.
 - Introduced in: -
 
+##### update_tablet_meta_info_worker_count
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Sets the maximum number of worker threads in the backend thread pool that handles tablet metadata update tasks. The thread pool is created during backend startup with a minimum of 0 threads (it can scale down to zero when idle) and a max equal to this setting (clamped to at least 1). Updating this value at runtime adjusts the pool's max threads. Increase it to allow more concurrent metadata-update tasks, or lower it to limit concurrency.
+- Introduced in: v4.1.0, v4.0.6, v3.5.13
+
 ### Statistic report
 
 ##### report_task_interval_seconds
