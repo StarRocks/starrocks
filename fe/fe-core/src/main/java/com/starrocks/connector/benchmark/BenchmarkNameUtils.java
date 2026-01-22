@@ -14,22 +14,23 @@
 
 package com.starrocks.connector.benchmark;
 
-public interface BenchmarkSuite {
-    String SCHEMA_RESOURCE_BASE = "/connector/benchmark/schema/";
+import java.util.Locale;
 
-    String getName();
-
-    long getDbId();
-
-    RowCountEstimate estimateRowCount(String tableName, double scaleFactor);
-
-    String getSchemaFileName();
-
-    default String getSchemaResourcePath() {
-        return SCHEMA_RESOURCE_BASE + getSchemaFileName();
+final class BenchmarkNameUtils {
+    private BenchmarkNameUtils() {
     }
 
-    default String normalizeTableName(String tableName) {
-        return BenchmarkNameUtils.normalizeTableName(tableName);
+    static String normalizeDbName(String dbName) {
+        if (dbName == null) {
+            return "";
+        }
+        return dbName.toLowerCase(Locale.ROOT);
+    }
+
+    static String normalizeTableName(String tableName) {
+        if (tableName == null) {
+            return "";
+        }
+        return tableName.toLowerCase(Locale.ROOT);
     }
 }

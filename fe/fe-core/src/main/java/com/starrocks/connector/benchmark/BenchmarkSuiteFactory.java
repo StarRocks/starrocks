@@ -21,7 +21,6 @@ import com.starrocks.connector.benchmark.tpcds.TpcdsBenchmarkSuite;
 import com.starrocks.connector.benchmark.tpch.TpchBenchmarkSuite;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 public final class BenchmarkSuiteFactory {
@@ -37,7 +36,7 @@ public final class BenchmarkSuiteFactory {
     }
 
     public static BenchmarkSuite getSuite(String dbName) {
-        BenchmarkSuite suite = SUITES.get(normalizeDbName(dbName));
+        BenchmarkSuite suite = SUITES.get(BenchmarkNameUtils.normalizeDbName(dbName));
         if (suite == null) {
             throw new IllegalArgumentException("Unknown benchmark database: " + dbName);
         }
@@ -45,7 +44,7 @@ public final class BenchmarkSuiteFactory {
     }
 
     public static BenchmarkSuite getSuiteIfExists(String dbName) {
-        return SUITES.get(normalizeDbName(dbName));
+        return SUITES.get(BenchmarkNameUtils.normalizeDbName(dbName));
     }
 
     public static BenchmarkSuite getDefaultSuite() {
@@ -56,10 +55,4 @@ public final class BenchmarkSuiteFactory {
         return ImmutableList.copyOf(SUITES.values());
     }
 
-    private static String normalizeDbName(String dbName) {
-        if (dbName == null) {
-            return "";
-        }
-        return dbName.toLowerCase(Locale.ROOT);
-    }
 }

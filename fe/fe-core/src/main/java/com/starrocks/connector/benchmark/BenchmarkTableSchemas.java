@@ -54,13 +54,13 @@ public final class BenchmarkTableSchemas {
     public List<String> getDbNames() {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         for (BenchmarkSuite suite : BenchmarkSuiteFactory.getSuites()) {
-            builder.add(normalizeDbName(suite.getName()));
+            builder.add(BenchmarkNameUtils.normalizeDbName(suite.getName()));
         }
         return builder.build();
     }
 
     public List<String> getTableNames(String dbName) {
-        Map<String, List<Column>> tables = schemasByDb.get(normalizeDbName(dbName));
+        Map<String, List<Column>> tables = schemasByDb.get(BenchmarkNameUtils.normalizeDbName(dbName));
         if (tables == null) {
             return ImmutableList.of();
         }
@@ -68,11 +68,11 @@ public final class BenchmarkTableSchemas {
     }
 
     public List<Column> getTableSchema(String dbName, String tableName) {
-        Map<String, List<Column>> tables = schemasByDb.get(normalizeDbName(dbName));
+        Map<String, List<Column>> tables = schemasByDb.get(BenchmarkNameUtils.normalizeDbName(dbName));
         if (tables == null) {
             return null;
         }
-        return tables.get(normalizeTableName(tableName));
+        return tables.get(BenchmarkNameUtils.normalizeTableName(tableName));
     }
 
     private static Map<String, Map<String, List<Column>>> loadSchemas(String schemaDir) {
@@ -82,7 +82,7 @@ public final class BenchmarkTableSchemas {
         Path basePath = Paths.get(schemaDir);
         Map<String, Map<String, List<Column>>> schemas = new LinkedHashMap<>();
         for (BenchmarkSuite suite : BenchmarkSuiteFactory.getSuites()) {
-            String suiteName = normalizeDbName(suite.getName());
+            String suiteName = BenchmarkNameUtils.normalizeDbName(suite.getName());
             schemas.put(suiteName, loadSuiteSchemaFromPath(basePath.resolve(suite.getSchemaFileName()), suiteName));
         }
         return Collections.unmodifiableMap(schemas);
@@ -91,7 +91,7 @@ public final class BenchmarkTableSchemas {
     private static Map<String, Map<String, List<Column>>> loadSchemasFromResources() {
         Map<String, Map<String, List<Column>>> schemas = new LinkedHashMap<>();
         for (BenchmarkSuite suite : BenchmarkSuiteFactory.getSuites()) {
-            String suiteName = normalizeDbName(suite.getName());
+            String suiteName = BenchmarkNameUtils.normalizeDbName(suite.getName());
             schemas.put(suiteName, loadSuiteSchemaFromResource(suite.getSchemaResourcePath(), suiteName));
         }
         return Collections.unmodifiableMap(schemas);
@@ -135,7 +135,7 @@ public final class BenchmarkTableSchemas {
             if (table == null || table.name == null || table.columns == null) {
                 continue;
             }
-            String tableName = normalizeTableName(table.name);
+            String tableName = BenchmarkNameUtils.normalizeTableName(table.name);
             List<Column> columns = new ArrayList<>();
             for (ColumnDef column : table.columns) {
                 if (column == null || column.name == null || column.type == null) {
@@ -174,20 +174,6 @@ public final class BenchmarkTableSchemas {
                 }
                 throw new StarRocksConnectorException("Unsupported benchmark type: " + rawType);
         }
-    }
-
-    private static String normalizeDbName(String dbName) {
-        if (dbName == null) {
-            return "";
-        }
-        return dbName.toLowerCase(Locale.ROOT);
-    }
-
-    private static String normalizeTableName(String tableName) {
-        if (tableName == null) {
-            return "";
-        }
-        return tableName.toLowerCase(Locale.ROOT);
     }
 
     private static final class SchemaFile {

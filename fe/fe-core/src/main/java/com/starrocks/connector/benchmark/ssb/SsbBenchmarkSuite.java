@@ -30,6 +30,7 @@ public final class SsbBenchmarkSuite implements BenchmarkSuite {
     private static final long LINEORDER_SCALE1 = 6001215L;
     private static final long LINEORDER_SCALE5 = 29999795L;
     private static final long LINEORDER_SCALE10 = 59986052L;
+    private static final double INTEGER_SCALE_EPSILON = 1e-9;
 
     @Override
     public String getName() {
@@ -66,11 +67,8 @@ public final class SsbBenchmarkSuite implements BenchmarkSuite {
     }
 
     private static long scaleLinear(long base, double scaleFactor) {
-        if (scaleFactor < 1.0) {
-            double scaled = (double) base * scaleFactor;
-            return scaled < 1.0 ? 1 : (long) scaled;
-        }
-        return base * (long) scaleFactor;
+        double scaled = (double) base * scaleFactor;
+        return scaled < 1.0 ? 1 : (long) scaled;
     }
 
     private static long scalePart(long base, double scaleFactor) {
@@ -92,7 +90,18 @@ public final class SsbBenchmarkSuite implements BenchmarkSuite {
         if (scaleFactor < 1.0) {
             return scaleLinear(LINEORDER_SCALE1, scaleFactor);
         }
-        long scale = (long) scaleFactor;
+        long rounded = Math.round(scaleFactor);
+        if (Math.abs(scaleFactor - rounded) < INTEGER_SCALE_EPSILON) {
+            return lineorderCountForScale(rounded);
+        }
+        long lowerScale = (long) Math.floor(scaleFactor);
+        long lowerCount = lineorderCountForScale(lowerScale);
+        long upperCount = lineorderCountForScale(lowerScale + 1);
+        double fraction = scaleFactor - lowerScale;
+        return (long) (lowerCount + (upperCount - lowerCount) * fraction);
+    }
+
+    private static long lineorderCountForScale(long scale) {
         if (scale <= 0) {
             return 0;
         }

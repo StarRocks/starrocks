@@ -76,8 +76,10 @@ public class BenchmarkSuiteTest {
         assertKnownRowCount(suite.estimateRowCount("nation", 2.0), 25L);
         assertKnownRowCount(suite.estimateRowCount("region", 2.0), 5L);
 
+        assertKnownRowCount(suite.estimateRowCount("part", 1.5), 300_000L);
         assertKnownRowCount(suite.estimateRowCount("part", 0.0005), 1L);
         assertKnownRowCount(suite.estimateRowCount("lineitem", 0.5), 3_000_607L);
+        assertKnownRowCount(suite.estimateRowCount("lineitem", 1.5), 9_001_037L);
         assertKnownRowCount(suite.estimateRowCount("lineitem", 2.0), 12_000_860L);
         assertKnownRowCount(suite.estimateRowCount("lineitem", 5.0), LINEITEM_SCALE5);
         assertKnownRowCount(suite.estimateRowCount("lineitem", 10.0), LINEITEM_SCALE10);
@@ -92,11 +94,13 @@ public class BenchmarkSuiteTest {
 
         assertKnownRowCount(suite.estimateRowCount("customer", 2.0), 60_000L);
         assertKnownRowCount(suite.estimateRowCount("supplier", 0.0001), 1L);
+        assertKnownRowCount(suite.estimateRowCount("supplier", 1.5), 3_000L);
         assertKnownRowCount(suite.estimateRowCount("part", 4.0), 600_000L);
         assertKnownRowCount(suite.estimateRowCount("part", 0.5), 100_000L);
         assertKnownRowCount(suite.estimateRowCount("date", 0.5), 1_278L);
 
         assertKnownRowCount(suite.estimateRowCount("lineorder", 0.5), 3_000_607L);
+        assertKnownRowCount(suite.estimateRowCount("lineorder", 1.5), 9_001_037L);
         assertKnownRowCount(suite.estimateRowCount("lineorder", 2.0), 12_000_860L);
         assertKnownRowCount(suite.estimateRowCount("lineorder", 5.0), LINEITEM_SCALE5);
         assertKnownRowCount(suite.estimateRowCount("lineorder", 10.0), LINEITEM_SCALE10);

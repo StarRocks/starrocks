@@ -23,8 +23,6 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 
 import java.util.List;
-import java.util.Locale;
-
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class BenchmarkMetadata implements ConnectorMetadata {
@@ -47,7 +45,7 @@ public class BenchmarkMetadata implements ConnectorMetadata {
     public List<String> listDbNames(ConnectContext context) {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         for (BenchmarkSuite suite : BenchmarkSuiteFactory.getSuites()) {
-            builder.add(normalizeDbName(suite.getName()));
+            builder.add(BenchmarkNameUtils.normalizeDbName(suite.getName()));
         }
         return builder.build();
     }
@@ -58,7 +56,7 @@ public class BenchmarkMetadata implements ConnectorMetadata {
         if (suite == null) {
             return null;
         }
-        String normalizedName = normalizeDbName(suite.getName());
+        String normalizedName = BenchmarkNameUtils.normalizeDbName(suite.getName());
         Database db = new Database(suite.getDbId(), normalizedName);
         db.setCatalogName(catalogName);
         return db;
@@ -71,19 +69,12 @@ public class BenchmarkMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        String normalizedDbName = normalizeDbName(dbName);
+        String normalizedDbName = BenchmarkNameUtils.normalizeDbName(dbName);
         List<Column> columns = tableSchemas.getTableSchema(normalizedDbName, tblName);
         if (columns == null) {
             return null;
         }
         return new BenchmarkTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, normalizedDbName, tblName,
                 columns, config);
-    }
-
-    private static String normalizeDbName(String dbName) {
-        if (dbName == null) {
-            return "";
-        }
-        return dbName.toLowerCase(Locale.ROOT);
     }
 }

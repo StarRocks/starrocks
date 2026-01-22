@@ -32,6 +32,7 @@ public final class TpchBenchmarkSuite implements BenchmarkSuite {
     private static final long LINEITEM_SCALE1 = 6001215L;
     private static final long LINEITEM_SCALE5 = 29999795L;
     private static final long LINEITEM_SCALE10 = 59986052L;
+    private static final double INTEGER_SCALE_EPSILON = 1e-9;
 
     @Override
     public String getName() {
@@ -79,14 +80,26 @@ public final class TpchBenchmarkSuite implements BenchmarkSuite {
             long scaled = (intScale * base) / 1000;
             return scaled < 1 ? 1 : scaled;
         }
-        return base * (long) scaleFactor;
+        double scaled = base * scaleFactor;
+        return (long) scaled;
     }
 
     private static long lineitemCount(double scaleFactor) {
         if (scaleFactor < 1.0) {
             return scaleLinear(LINEITEM_SCALE1, scaleFactor);
         }
-        long scale = (long) scaleFactor;
+        long rounded = Math.round(scaleFactor);
+        if (Math.abs(scaleFactor - rounded) < INTEGER_SCALE_EPSILON) {
+            return lineitemCountForScale(rounded);
+        }
+        long lowerScale = (long) Math.floor(scaleFactor);
+        long lowerCount = lineitemCountForScale(lowerScale);
+        long upperCount = lineitemCountForScale(lowerScale + 1);
+        double fraction = scaleFactor - lowerScale;
+        return (long) (lowerCount + (upperCount - lowerCount) * fraction);
+    }
+
+    private static long lineitemCountForScale(long scale) {
         if (scale <= 0) {
             return 0;
         }
