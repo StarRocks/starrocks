@@ -23,6 +23,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 
 import java.util.List;
+
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class BenchmarkMetadata implements ConnectorMetadata {
