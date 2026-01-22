@@ -5,6 +5,7 @@ displayed_sidebar: docs
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
 import WarehouseExample from '../../../../_assets/sql-reference/sql-statements/loading_unloading/routine_load/_routine_load_warehouse_example.mdx';
 import WarehouseProperty from '../../../../_assets/sql-reference/sql-statements/loading_unloading/routine_load/_routine_load_warehouse_property.mdx';
+import LoadWarehouse from '../../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 # CREATE ROUTINE LOAD
 
