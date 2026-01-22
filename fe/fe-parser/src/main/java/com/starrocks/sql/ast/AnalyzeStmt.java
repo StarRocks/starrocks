@@ -59,6 +59,9 @@ public class AnalyzeStmt extends StatementBase {
     }
 
     public List<Type> getColumnTypes() {
+        if (columns == null || columns.isEmpty()) {
+            return Lists.newArrayList();
+        }
         return columns.stream().map(Expr::getType).collect(Collectors.toList());
     }
 
