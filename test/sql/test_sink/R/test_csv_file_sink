@@ -1,6 +1,9 @@
 -- name: testCsvFilesSink1
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSink1/${uuid0}/", 
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "csv", 
 	"compression" = "uncompressed",
 	"csv.column_separator" = ",",
@@ -11,6 +14,9 @@ select 1 as k1, "A" as k2 union select 2 as k1, "B" as k2;
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSink1/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "csv",
 	"csv.column_separator" = ",",
 	"csv.row_delimiter" = "\n"
@@ -27,6 +33,9 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testCsvFilesSink1/${uuid0}
 -- name: testCsvFilesSink2
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSink2/${uuid0}/", 
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "csv", 
 	"compression" = "uncompressed"
 )
@@ -35,6 +44,9 @@ select 1 as k1, "A" as k2 union select 2 as k1, "B" as k2;
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/testCsvFilesSink2/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "csv"
 );
 -- result:

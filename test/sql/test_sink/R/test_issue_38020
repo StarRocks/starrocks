@@ -5,7 +5,11 @@ create table t3 (c1 int, c2 int);
 insert into t3 values (1, 1);
 -- result:
 -- !result
-select c1, c1, c2 from t3 into outfile "oss://${oss_bucket}/test_sink/test_issue_38020/${uuid0}/";
+select c1, c1, c2 from t3 into outfile "oss://${oss_bucket}/test_sink/test_issue_38020/${uuid0}/" properties(
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}"
+);
 -- result:
 -- !result
 shell: ossutil64 cat oss://${oss_bucket}/test_sink/test_issue_38020/${uuid0}/0.csv |head -1
