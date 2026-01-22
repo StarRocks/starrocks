@@ -179,6 +179,7 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.filterManifest
 import static com.starrocks.connector.iceberg.IcebergApiConverter.mayHaveEqualityDeletes;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
+import static com.starrocks.connector.iceberg.IcebergUtil.checkFileFormatSupportedDelete;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
@@ -926,7 +927,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PredicateSearchKey predicateSearchKey = PredicateSearchKey.of(dbName, tableName, params);
         RemoteFileInfoSource baseSource;
         if (splitTasks.containsKey(predicateSearchKey)) {
-            baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey));
+            baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
             ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(
@@ -971,7 +972,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
-                return new IcebergRemoteFileInfo(iterator.next());
+                FileScanTask fileScanTask = iterator.next();
+                checkFileFormatSupportedDelete(fileScanTask, params.usdForDelete());
+                return new IcebergRemoteFileInfo(fileScanTask);
             }
 
             @Override
@@ -981,12 +984,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
-    private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks) {
+    private RemoteFileInfoSource buildRemoteInfoSource(List<FileScanTask> tasks, GetRemoteFilesParams params) {
         Iterator<FileScanTask> iterator = tasks.iterator();
         return new RemoteFileInfoSource() {
             @Override
             public RemoteFileInfo getOutput() {
-                return new IcebergRemoteFileInfo(iterator.next());
+                FileScanTask fileScanTask = iterator.next();
+                checkFileFormatSupportedDelete(fileScanTask, params.usdForDelete());
+                return new IcebergRemoteFileInfo(fileScanTask);
             }
 
             @Override
