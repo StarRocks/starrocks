@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
+import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
+
 ## 功能
 
 创建物化视图。关于物化视图适用的场景请参考[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/async_mv/Materialized_view.md)。
@@ -404,6 +406,18 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 
   有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
+<<<<<<< HEAD
+=======
+- `refresh_mode`：控制物化视图的刷新方式。StarRocks v4.1 中引入。有效值：
+
+  - `PCT`：（默认）对于分区物化视图，当基表数据发生变化时，仅刷新受影响的分区，保证该分区的数据一致性。对于非分区物化视图，基表任何数据变化都会触发全量刷新。
+  - `AUTO`：如果可能，会尝试使用增量刷新。如果物化视图的查询定义不支持增量刷新，则会自动回退到 `PCT` 模式进行本次操作。在进行了一次 PCT 刷新后，如果条件允许，后续刷新有可能再次回到增量刷新模式。
+  - `INCREMENTAL`：仅允许进行增量刷新。如果根据定义物化视图不支持增量刷新，或遇到无法增量处理的数据，则创建或刷新的操作会失败。
+  - `FULL`：每次都强制进行全量刷新，无论物化视图是否支持增量刷新或分区级刷新。
+
+<MVWarehouse />
+
+>>>>>>> 5fed358303 ([Doc] Add wh Property to SQL (#68268))
 **query_statement**（必填）
 
 创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。从 v3.1.6 版本开始，StarRocks 支持使用 Common Table Expression (CTE) 创建异步物化视图。
