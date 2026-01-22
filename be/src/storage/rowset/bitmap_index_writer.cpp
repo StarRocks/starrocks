@@ -37,6 +37,7 @@
 #include <map>
 #include <memory>
 #include <roaring/roaring.hh>
+#include <type_traits>
 #include <utility>
 
 #include "fs/fs.h"
@@ -51,6 +52,7 @@
 #include "util/phmap/btree.h"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
+#include "util/utf8.h"
 #include "util/xxh3.h"
 
 namespace starrocks {
@@ -226,14 +228,12 @@ struct BitmapIndexSliceHash {
 template <typename CppType>
 struct BitmapIndexTraits {
     using UnorderedMemoryIndexType = phmap::flat_hash_map<CppType, BitmapUpdateContextRefOrSingleValue>;
-    using OrderedMemoryIndexType = std::map<CppType, BitmapUpdateContextRefOrSingleValue>;
 };
 
 template <>
 struct BitmapIndexTraits<Slice> {
     using UnorderedMemoryIndexType = phmap::flat_hash_map<Slice, BitmapUpdateContextRefOrSingleValue,
                                                           BitmapIndexSliceHash, std::equal_to<Slice>>;
-    using OrderedMemoryIndexType = std::map<Slice, BitmapUpdateContextRefOrSingleValue, Slice::Comparator>;
 };
 
 // Builder for bitmap index. Bitmap index is comprised of two parts
@@ -254,9 +254,9 @@ class BitmapIndexWriterImpl : public BitmapIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
-    using OrderedMemoryIndexType = typename BitmapIndexTraits<CppType>::OrderedMemoryIndexType;
 
-    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)) {}
+    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info, int32_t gram_num)
+            : _gram_num(gram_num), _typeinfo(std::move(type_info)) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
@@ -304,82 +304,43 @@ public:
         meta->set_bitmap_type(BitmapIndexPB::ROARING_BITMAP);
         meta->set_has_null(!_null_bitmap.isEmpty());
 
-        OrderedMemoryIndexType ordered_mem_index;
+        std::vector<CppType> sorted_dicts;
+        sorted_dicts.reserve(_mem_index.size());
         for (auto& p : _mem_index) {
             p.second.flush_pending_adds();
-            ordered_mem_index.insert(std::move(p));
+            sorted_dicts.emplace_back(p.first);
         }
+        std::sort(sorted_dicts.begin(), sorted_dicts.end());
 
-        { // write dictionary
-            IndexedColumnWriterOptions options;
-            options.write_ordinal_index = false;
-            options.write_value_index = true;
-            options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
-            options.compression = _dictionary_compression;
+        // write dictionary
+        RETURN_IF_ERROR(_write_dictionary(sorted_dicts, wfile, meta->mutable_dict_column()));
+        // write bitmap
+        RETURN_IF_ERROR(_write_bitmap(_mem_index, sorted_dicts, wfile, meta->mutable_bitmap_column()));
 
-            IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
-            RETURN_IF_ERROR(dict_column_writer.init());
-            for (auto const& it : ordered_mem_index) {
-                RETURN_IF_ERROR(dict_column_writer.add(&(it.first)));
-            }
-            RETURN_IF_ERROR(dict_column_writer.finish(meta->mutable_dict_column()));
-        }
-        { // write bitmaps
-            std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
-            for (auto& it : ordered_mem_index) {
-                bitmaps.push_back(&(it.second));
-            }
-
-            uint32_t max_bitmap_size = 0;
-            std::vector<uint32_t> bitmap_sizes;
-            for (auto& bitmap : bitmaps) {
-                uint32_t bitmap_size = 0;
-                if (bitmap->is_context()) {
-                    bitmap->context()->roaring()->runOptimize();
-                    bitmap_size = bitmap->context()->roaring()->getSizeInBytes(false);
-                    if (max_bitmap_size < bitmap_size) {
-                        max_bitmap_size = bitmap_size;
-                    }
+        if (_gram_num > 0) {
+            if constexpr (field_type == TYPE_VARCHAR || field_type == TYPE_CHAR) {
+                size_t offset = 0;
+                UnorderedMemoryIndexType ngram_index;
+                std::vector<size_t> index_buffer; // use for ngram index calculation
+                for (const auto& dict : sorted_dicts) {
+                    RETURN_IF_ERROR(_build_ngram(ngram_index, &dict, offset++, index_buffer));
                 }
-                bitmap_sizes.push_back(bitmap_size);
-            }
 
-            TypeInfoPtr bitmap_typeinfo = get_type_info(TYPE_OBJECT);
-
-            IndexedColumnWriterOptions options;
-            options.write_ordinal_index = true;
-            options.write_value_index = false;
-            options.encoding = EncodingInfo::get_default_encoding(bitmap_typeinfo->type(), false);
-            // we already store compressed bitmap, use NO_COMPRESSION to save some cpu
-            options.compression = NO_COMPRESSION;
-
-            IndexedColumnWriter bitmap_column_writer(options, bitmap_typeinfo, wfile);
-            RETURN_IF_ERROR(bitmap_column_writer.init());
-
-            faststring buf;
-            buf.reserve(max_bitmap_size);
-            for (size_t i = 0; i < bitmaps.size(); ++i) {
-                if (bitmaps[i]->is_context()) {
-                    buf.resize(bitmap_sizes[i]); // so that buf[0..size) can be read and written
-                    bitmaps[i]->context()->roaring()->write(reinterpret_cast<char*>(buf.data()), false);
-                } else {
-                    Roaring roar({bitmaps[i]->value()});
-                    roar.runOptimize();
-                    auto sz = roar.getSizeInBytes(false);
-                    buf.resize(sz);
-                    roar.write(reinterpret_cast<char*>(buf.data()), false);
+                for (auto& it : ngram_index) {
+                    it.second.flush_pending_adds();
                 }
-                Slice buf_slice(buf);
-                RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
+
+                std::vector<Slice> sorted_ngram_dicts;
+                sorted_ngram_dicts.reserve(ngram_index.size());
+                for (const auto& it : ngram_index) {
+                    sorted_ngram_dicts.emplace_back(it.first);
+                }
+                std::ranges::sort(sorted_ngram_dicts);
+
+                RETURN_IF_ERROR(_write_dictionary(sorted_ngram_dicts, wfile, meta->mutable_ngram_dict_column()));
+                RETURN_IF_ERROR(_write_bitmap(ngram_index, sorted_ngram_dicts, wfile,
+                                              meta->mutable_ngram_bitmap_column(), false));
             }
-            if (!_null_bitmap.isEmpty()) {
-                _null_bitmap.runOptimize();
-                buf.resize(_null_bitmap.getSizeInBytes(false)); // so that buf[0..size) can be read and written
-                _null_bitmap.write(reinterpret_cast<char*>(buf.data()), false);
-                Slice buf_slice(buf);
-                RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
-            }
-            RETURN_IF_ERROR(bitmap_column_writer.finish(meta->mutable_bitmap_column()));
         }
         _mem_index.clear();
         _null_bitmap.clear();
@@ -403,6 +364,124 @@ public:
     inline void incre_rowid() override { _rid++; }
 
 private:
+    Status _build_ngram(UnorderedMemoryIndexType& ngram_index, const Slice* cur_slice, const size_t offset,
+                        std::vector<size_t>& index) {
+        if (_gram_num <= 0) {
+            return Status::InvalidArgument(
+                    "Invalid gram num while building ngram index for inverted index dictionary.");
+        }
+
+        index.clear();
+        if (index.capacity() < cur_slice->get_size()) {
+            index.reserve(cur_slice->get_size());
+        }
+        const size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
+
+        for (size_t j = 0; j + _gram_num <= slice_gram_num; ++j) {
+            // find next ngram
+            size_t cur_ngram_length =
+                    j + _gram_num < slice_gram_num ? index[j + _gram_num] - index[j] : cur_slice->get_size() - index[j];
+            Slice cur_ngram(cur_slice->data + index[j], cur_ngram_length);
+
+            // Use Slice pointing into dictionary memory as key; dictionary values are already deep-copied
+            // into `_pool` when building `_mem_index`, so this Slice remains valid for the lifetime of
+            // the bitmap index writer. This avoids an extra deep copy per distinct ngram.
+            auto [it, inserted] = ngram_index.try_emplace(cur_ngram, static_cast<uint32_t>(offset));
+            if (!inserted) {
+                it->second.add(static_cast<uint32_t>(offset), &_pool);
+            }
+        }
+        return Status::OK();
+    }
+
+    Status _write_dictionary(const std::vector<CppType>& sorted_dicts, WritableFile* wfile, IndexedColumnMetaPB* meta) {
+        IndexedColumnWriterOptions options;
+        options.write_ordinal_index = _gram_num > 0;
+        options.write_value_index = true;
+        options.encoding = EncodingInfo::get_default_encoding(_typeinfo->type(), true);
+        options.compression = _dictionary_compression;
+
+        IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
+        RETURN_IF_ERROR(dict_column_writer.init());
+        for (auto const& dict : sorted_dicts) {
+            if constexpr (std::is_same_v<CppType, bool>) {
+                bool value = static_cast<bool>(dict);
+                RETURN_IF_ERROR(dict_column_writer.add(&value));
+            } else {
+                RETURN_IF_ERROR(dict_column_writer.add(&dict));
+            }
+        }
+        return dict_column_writer.finish(meta);
+    }
+
+    Status _write_bitmap(UnorderedMemoryIndexType& ordered_mem_index, const std::vector<CppType>& sorted_dicts,
+                         WritableFile* wfile, IndexedColumnMetaPB* meta, bool write_null = true) {
+        std::vector<BitmapUpdateContextRefOrSingleValue*> bitmaps;
+        bitmaps.reserve(sorted_dicts.size());
+        for (const auto& dict : sorted_dicts) {
+            auto it = ordered_mem_index.find(dict);
+            if (it == ordered_mem_index.end()) {
+                // should never happen
+                return Status::InternalError("No bitmap found for dict");
+            }
+            bitmaps.push_back(&(it->second));
+        }
+
+        uint32_t max_bitmap_size = 0;
+        std::vector<uint32_t> bitmap_sizes;
+        bitmap_sizes.reserve(bitmaps.size());
+        for (auto& bitmap : bitmaps) {
+            uint32_t bitmap_size = 0;
+            if (bitmap->is_context()) {
+                bitmap->context()->roaring()->runOptimize();
+                bitmap_size = bitmap->context()->roaring()->getSizeInBytes(false);
+                if (max_bitmap_size < bitmap_size) {
+                    max_bitmap_size = bitmap_size;
+                }
+            }
+            bitmap_sizes.push_back(bitmap_size);
+        }
+
+        TypeInfoPtr bitmap_typeinfo = get_type_info(TYPE_OBJECT);
+
+        IndexedColumnWriterOptions options;
+        options.write_ordinal_index = true;
+        options.write_value_index = false;
+        options.encoding = EncodingInfo::get_default_encoding(bitmap_typeinfo->type(), false);
+        // we already store compressed bitmap, use NO_COMPRESSION to save some cpu
+        options.compression = NO_COMPRESSION;
+
+        IndexedColumnWriter bitmap_column_writer(options, bitmap_typeinfo, wfile);
+        RETURN_IF_ERROR(bitmap_column_writer.init());
+
+        faststring buf;
+        buf.reserve(max_bitmap_size);
+        for (size_t i = 0; i < bitmaps.size(); ++i) {
+            if (bitmaps[i]->is_context()) {
+                buf.resize(bitmap_sizes[i]); // so that buf[0..size) can be read and written
+                bitmaps[i]->context()->roaring()->write(reinterpret_cast<char*>(buf.data()), false);
+            } else {
+                Roaring roar({bitmaps[i]->value()});
+                roar.runOptimize();
+                auto sz = roar.getSizeInBytes(false);
+                buf.resize(sz);
+                roar.write(reinterpret_cast<char*>(buf.data()), false);
+            }
+            Slice buf_slice(buf);
+            RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
+        }
+        if (write_null && !_null_bitmap.isEmpty()) {
+            _null_bitmap.runOptimize();
+            buf.resize(_null_bitmap.getSizeInBytes(false)); // so that buf[0..size) can be read and written
+            _null_bitmap.write(reinterpret_cast<char*>(buf.data()), false);
+            Slice buf_slice(buf);
+            RETURN_IF_ERROR(bitmap_column_writer.add(&buf_slice));
+        }
+        return bitmap_column_writer.finish(meta);
+    }
+
+    int32_t _gram_num;
+
     TypeInfoPtr _typeinfo;
     rowid_t _rid = 0;
 
@@ -421,14 +500,15 @@ private:
 
 struct BitmapIndexWriterBuilder {
     template <LogicalType ftype>
-    std::unique_ptr<BitmapIndexWriter> operator()(const TypeInfoPtr& typeinfo) {
-        return std::make_unique<BitmapIndexWriterImpl<ftype>>(typeinfo);
+    std::unique_ptr<BitmapIndexWriter> operator()(const TypeInfoPtr& typeinfo, int32_t gram_num) {
+        return std::make_unique<BitmapIndexWriterImpl<ftype>>(typeinfo, gram_num);
     }
 };
 
-Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<BitmapIndexWriter>* res) {
+Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<BitmapIndexWriter>* res,
+                                 int32_t gram_num) {
     LogicalType type = typeinfo->type();
-    *res = field_type_dispatch_bitmap_index(type, BitmapIndexWriterBuilder(), typeinfo);
+    *res = field_type_dispatch_bitmap_index(type, BitmapIndexWriterBuilder(), typeinfo, gram_num);
 
     return Status::OK();
 }

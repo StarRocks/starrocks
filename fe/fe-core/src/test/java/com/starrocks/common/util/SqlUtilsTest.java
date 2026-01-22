@@ -54,4 +54,15 @@ public class SqlUtilsTest {
         Assertions.assertTrue(SqlUtils.isPreQuerySQL(
                 SqlParser.parseSingleStatement("select session_id()", SqlModeHelper.MODE_DEFAULT)));
     }
+
+    @Test
+    public void testIsInformationQuery() {
+        Assertions.assertTrue(SqlUtils.isInformationQuery(
+                SqlParser.parseSingleStatement("select * from information_schema.tables",
+                        SqlModeHelper.MODE_DEFAULT)));
+
+        Assertions.assertFalse(SqlUtils.isInformationQuery(
+                SqlParser.parseSingleStatement("select * from test_db.test_tbl",
+                        SqlModeHelper.MODE_DEFAULT)));
+    }
 }

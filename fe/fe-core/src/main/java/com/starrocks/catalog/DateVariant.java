@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.thrift.TVariant;
+import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -62,11 +63,12 @@ public class DateVariant extends Variant {
         TVariant variant = new TVariant();
         variant.setType(TypeSerializer.toThrift(type));
         variant.setValue(getStringValue());
+        variant.setVariant_type(TVariantType.NORMAL_VALUE);
         return variant;
     }
 
     @Override
-    public int compareTo(Variant other) {
+    protected int compareToImpl(Variant other) {
         Preconditions.checkArgument(other instanceof DateVariant, other);
         DateVariant otherDateTime = (DateVariant) other;
 

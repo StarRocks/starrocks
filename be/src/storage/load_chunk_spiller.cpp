@@ -24,6 +24,7 @@
 #include "storage/load_spill_block_manager.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -78,9 +79,18 @@ Status LoadSpillOutputDataStream::_freeze_current_block() {
         return Status::OK();
     }
     RETURN_IF_ERROR(_block->flush());
+    if (_block->is_remote()) {
+        // Update remote block write metric
+        StarRocksMetrics::instance()->load_spill_remote_blocks_write_total.increment(1);
+        StarRocksMetrics::instance()->load_spill_remote_bytes_write_total.increment(_block->size());
+    } else {
+        // Update local block write metric
+        StarRocksMetrics::instance()->load_spill_local_blocks_write_total.increment(1);
+        StarRocksMetrics::instance()->load_spill_local_bytes_write_total.increment(_block->size());
+    }
     RETURN_IF_ERROR(_block_manager->release_block(_block));
-    // Save this block into block container.
-    _block_manager->block_container()->append_block(_block);
+    // Save this block into the block group, which is tagged with slot_idx for ordering
+    _block_manager->block_container()->append_block(_block_group, _block);
     _block = nullptr;
     return Status::OK();
 }
@@ -107,11 +117,17 @@ LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, Runtime
     _spiller_factory = spill::make_spilled_factory();
 }
 
-StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk) {
+// Spill a chunk to temporary storage for later merge
+// @param chunk: data chunk to spill
+// @param slot_idx: slot index assigned by flush token, used to track the original flush order.
+//                  This is critical for maintaining data order during parallel flush:
+//                  when multiple memtables flush concurrently, slot_idx preserves their
+//                  original submission order for correct merge sequence.
+StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
     if (chunk.num_rows() == 0) return 0;
-    // 1. create new block group
-    _block_manager->block_container()->create_block_group();
-    auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager);
+    // 1. create new block group tagged with slot_idx
+    auto block_group = _block_manager->block_container()->create_block_group(slot_idx);
+    auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager, block_group);
     // 2. spill
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
@@ -174,6 +190,20 @@ public:
             if (!_reader) {
                 _reader = _blocks[_block_idx]->get_reader(_options);
                 RETURN_IF_UNLIKELY(!_reader, Status::InternalError("Failed to get reader"));
+                // Update block count metric
+                auto& metrics = _serde.parent()->metrics();
+                COUNTER_UPDATE(metrics.block_count, 1);
+                if (_blocks[_block_idx]->is_remote()) {
+                    COUNTER_UPDATE(metrics.remote_block_count, 1);
+                    StarRocksMetrics::instance()->load_spill_remote_blocks_read_total.increment(1);
+                    StarRocksMetrics::instance()->load_spill_remote_bytes_read_total.increment(
+                            _blocks[_block_idx]->size());
+                } else {
+                    COUNTER_UPDATE(metrics.local_block_count, 1);
+                    StarRocksMetrics::instance()->load_spill_local_blocks_read_total.increment(1);
+                    StarRocksMetrics::instance()->load_spill_local_bytes_read_total.increment(
+                            _blocks[_block_idx]->size());
+                }
             }
             auto st = _serde.deserialize(_ctx, _reader.get());
             if (st.ok()) {
@@ -213,11 +243,18 @@ StatusOr<SpillBlockInputTasks> LoadChunkSpiller::generate_spill_block_input_task
     result.group_count = groups.size();
     std::vector<ChunkIteratorPtr> merge_inputs;
     size_t current_input_bytes = 0;
+    // Sort groups by slot_idx to restore original memtable flush order
+    // CORRECTNESS: When parallel flush is enabled, block groups are created out of order.
+    // Sorting by slot_idx ensures we merge blocks in the same order as they were originally
+    // flushed from memtables, which is critical for maintaining data consistency and version order.
+    std::sort(groups.begin(), groups.end(),
+              [](const BlockGroupPtrWithSlot& a, const BlockGroupPtrWithSlot& b) { return a.slot_idx < b.slot_idx; });
     for (auto& group : groups) {
-        merge_inputs.push_back(std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.blocks()));
-        current_input_bytes += group.data_size();
-        result.total_block_bytes += group.data_size();
-        result.total_blocks += group.blocks().size();
+        merge_inputs.push_back(
+                std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.block_group->blocks()));
+        current_input_bytes += group.block_group->data_size();
+        result.total_block_bytes += group.block_group->data_size();
+        result.total_blocks += group.block_group->blocks().size();
         // We need to stop merging if:
         // 1. The current input block group size exceed the target_size,
         //    because we don't want to generate too large segment file.
@@ -301,7 +338,6 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeInputBytes", TUnit::BYTES),
                    spill_block_iterator_tasks.total_block_bytes);
     COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeCount", TUnit::UNIT), total_merges);
-    COUNTER_UPDATE(ADD_COUNTER(_profile, "SpillMergeDurationNs", TUnit::TIME_NS), duration_ms * 1000000);
     return Status::OK();
 }
 

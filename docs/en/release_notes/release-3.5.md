@@ -6,10 +6,91 @@ displayed_sidebar: docs
 
 :::warning
 
+**Upgrade Notes**
+
+- JDK 17 or later is required from StarRocks v3.5.0 onwards.
+  - To upgrade a cluster from v3.4 or earlier, you must upgrade the version of JDK that StarRocks depends, and remove the options that are incompatible with JDK 17 in the configuration item `JAVA_OPTS` in the FE configuration file **fe.conf**, for example, options that involve CMS and GC. The default value of `JAVA_OPTS` in the v3.5 configuration file is recommended.
+  - For clusters using external catalogs, you need to add `--add-opens=java.base/java.util=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
+  - For clusters using Java UDFs, you need to add `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
+  - In addition, as of v3.5.0, StarRocks no longer provides JVM configurations for specific JDK versions. All versions of JDK use `JAVA_OPTS`.
+- It is recommended to upgrade the cluster to v3.4.10 or later before upgrading it to v3.5. Otherwise, you must manually disable low cardinality optimization during the gray-scale upgrade by executing the following statement:
+
+  ```SQL
+  SET GLOBAL cbo_enable_low_cardinality_optimize=false;
+  ```
+
+**Downgrade Notes**
+
 - After upgrading StarRocks to v3.5, DO NOT downgrade it directly to v3.4.0 ～ v3.4.5, otherwise it will cause metadata incompatibility. You must downgrade the cluster to v3.4.6 or later to prevent the issue.
 - After upgrading StarRocks to v3.5.2 or later, DO NOT downgrade it to v3.5.0 & v3.5.1, otherwise it will cause FE crash.
 
 :::
+
+## 3.5.11
+
+Release date: January 5, 2026
+
+### Improvements
+
+- Supports Arrow Flight data retrieval from inaccessible nodes. [#66348](https://github.com/StarRocks/starrocks/pull/66348)
+- Logs the cause (including the triggering process information) in the SIGTERM handler. [#66737](https://github.com/StarRocks/starrocks/pull/66737)
+- Added an FE configuration `enable_statistic_collect_on_update` to control whether UPDATE statements can trigger automatic statistics collection. [#66794](https://github.com/StarRocks/starrocks/pull/66794)
+- Supports configuring `networkaddress.cache.ttl`. [#66723](https://github.com/StarRocks/starrocks/pull/66723)
+- Improve the “no rows imported” error message. [#66624](https://github.com/StarRocks/starrocks/pull/66624) [#66535](https://github.com/StarRocks/starrocks/pull/66535)
+- Optimized `deltaRows` with lazy evaluation for large partition tables. [#66381](https://github.com/StarRocks/starrocks/pull/66381)
+- Optimized materialized view rewrite performance. [#66623](https://github.com/StarRocks/starrocks/pull/66623)
+- Supports single-tablet `ResultSink` optimization in shared-data clusters. [#66517](https://github.com/StarRocks/starrocks/pull/66517)
+- `rewrite``_``simple``_``agg``_``to``_``meta``_``scan` is enabled by default. [#64698](https://github.com/StarRocks/starrocks/pull/64698)
+- Supports pushing down GROUP BY expressions and materialized view rewrite. [#66507](https://github.com/StarRocks/starrocks/pull/66507)
+- Add overloaded `newMessage` methods to improve materialized view logs. [#66367](https://github.com/StarRocks/starrocks/pull/66367)
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- A Publish Compaction crash when the input rowset is not found. [#67154](https://github.com/StarRocks/starrocks/pull/67154)
+- Significant CPU overhead and lock contention caused by repetitive invocation of `update_segment_cache_size` when querying tables with a large number of columns. [#66714](https://github.com/StarRocks/starrocks/pull/66714)
+- `MulticastSinkOperator` stuck in the `OUTPUT_FULL` state. [#67153](https://github.com/StarRocks/starrocks/pull/67153)
+- A “column not found” issue in the skew join hint. [#66929](https://github.com/StarRocks/starrocks/pull/66929)
+- The growth of all tablets continues unabated, and the sum of pending and running tablets is not the total number of tablets. [#66718](https://github.com/StarRocks/starrocks/pull/66718)
+- Transactions in the Compaction map built during Leader startup cannot be accessed by CompactionScheduler and will never be removed from the map. [#66533](https://github.com/StarRocks/starrocks/pull/66533)
+- Delta Lake table refresh does not take effect. [#67156](https://github.com/StarRocks/starrocks/pull/67156)
+- CN crash at queries against non-partitioned Iceberg tables with DATE predicates. [#66864](https://github.com/StarRocks/starrocks/pull/66864)
+- Statements in Profiles cannot be correctly displayed when multiple statements are submitted. [#67097](https://github.com/StarRocks/starrocks/pull/67097)
+- Missing dictionary information during collection because Meta Reader does not support reading from Delta column group files. [#66995](https://github.com/StarRocks/starrocks/pull/66995)
+- Potential Java heap OOM in Java UDAF. [#67025](https://github.com/StarRocks/starrocks/pull/67025)
+- BE crash due to the incorrect logic of ranking window optimization without PARTITION BY and ORDER BY. [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- Misleading log level for timezone cache miss. [#66817](https://github.com/StarRocks/starrocks/pull/66817)
+- Crash and incorrect results caused by the incorrect `can_use_bf` checking when merging runtime filters. [#67021](https://github.com/StarRocks/starrocks/pull/67021)
+- Issue about pushing down runtime bitset filter with other OR predicates. [#66996](https://github.com/StarRocks/starrocks/pull/66996)
+- Patch critical fix from lz4. [#67053](https://github.com/StarRocks/starrocks/pull/67053)
+- AsyncTaskQueue deadlock issue. [#66791](https://github.com/StarRocks/starrocks/pull/66791)
+- Cache inconsistency in ObjectColumn. [#66957](https://github.com/StarRocks/starrocks/pull/66957)
+- RewriteUnnestBitmapRule causes wrong output column types. [#66855](https://github.com/StarRocks/starrocks/pull/66855)
+- Data races and data loss when there are WRITE or FLUSH tasks after FINISH tasks in the Delta Writer. [#66943](https://github.com/StarRocks/starrocks/pull/66943)
+- Invalid load channel and misleading internal errors caused by reopened load channels that were previously aborted. [#66793](https://github.com/StarRocks/starrocks/pull/66793)
+- Bugs of Arrow Flight SQL. [#65889](https://github.com/StarRocks/starrocks/pull/65889)
+- Issues when querying renamed columns with MetaScan. [#66819](https://github.com/StarRocks/starrocks/pull/66819)
+- Hash column is not removed before flushing chunk in partitionwise spillable aggregation when skew elimination is off. [#66839](https://github.com/StarRocks/starrocks/pull/66839)
+- BOOLEAN type default values were not correctly handled when stored as string literals. [#66818](https://github.com/StarRocks/starrocks/pull/66818)
+- decimal2decimal cast unexpectedly returns the input column as the result directly. [#66773](https://github.com/StarRocks/starrocks/pull/66773)
+- NPE in query planning during schema change. [#66811](https://github.com/StarRocks/starrocks/pull/66811)
+- LocalTabletsChannel and LakeTabletsChannel deadlock. [#66748](https://github.com/StarRocks/starrocks/pull/66748)
+- `publish_version` log shows empty `txn_ids` with new FE. [#66732](https://github.com/StarRocks/starrocks/pull/66732)
+- Incorrect behavior of the FE configuration `statistic_collect_query_timeout`. [#66363](https://github.com/StarRocks/starrocks/pull/66363)
+- UPDATE statements do not support statistics collection. [#66443](https://github.com/StarRocks/starrocks/pull/66443)
+- Case rewrite errors related to low cardinality. [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+- Statistics query failure when the column list is empty. [#66138](https://github.com/StarRocks/starrocks/pull/66138)
+- Usage/record mismatch when switching warehouse via hint. [#66677](https://github.com/StarRocks/starrocks/pull/66677)
+- `ANALYZE TABLE` statements lack ExecTimeout. [#66361](https://github.com/StarRocks/starrocks/pull/66361)
+- `array_map` returns wrong results from constant unary expressions. [#66514](https://github.com/StarRocks/starrocks/pull/66514)
+- Foreign key constraints are lost after FE restart. [#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- `max(not null string)` on empty table throws `std::length_error`. [#66554](https://github.com/StarRocks/starrocks/pull/66554)
+- Concurrency issue between Primary Key index Compaction and Apply. [#66282](https://github.com/StarRocks/starrocks/pull/66282)
+- Improper behavior of `EXPLAIN <query>`. [#66542](https://github.com/StarRocks/starrocks/pull/66542)
+- Issue when sinking DECIMAL128 to Iceberg table column. [#66071](https://github.com/StarRocks/starrocks/pull/66071)
+- JSON length check issue for JSON → CHAR/VARCHAR when the target length equals the minimum. [#66628](https://github.com/StarRocks/starrocks/pull/66628)
+- An expression children count error. [#66511](https://github.com/StarRocks/starrocks/pull/66511)
 
 ## 3.5.10
 
@@ -486,14 +567,6 @@ Fixed the following issues:
 ## 3.5.0
 
 Release Date: June 13, 2025
-
-### Upgrade Notes
-
-- JDK 17 or later is required from StarRocks v3.5.0 onwards.
-  - To upgrade a cluster from v3.4 or earlier, you must upgrade the version of JDK that StarRocks depends, and remove the options that are incompatible with JDK 17 in the configuration item `JAVA_OPTS` in the FE configuration file **fe.conf**, for example, options that involve CMS and GC. The default value of `JAVA_OPTS` in the v3.5 configuration file is recommended.
-  - For clusters using external catalogs, you need to add `--add-opens=java.base/java.util=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
-  - For clusters using Java UDFs, you need to add `--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED` to the `JAVA_OPTS` configuration item in the BE configuration file **be.conf**.
-  - In addition, as of v3.5.0, StarRocks no longer provides JVM configurations for specific JDK versions. All versions of JDK use `JAVA_OPTS`.
 
 ### Shared-data Enhancement
 

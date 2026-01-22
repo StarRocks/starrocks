@@ -180,7 +180,7 @@ public class SplitTabletJob extends TabletReshardJob {
         // 1. Publish the split transaction, update new tablet ranges
         boolean allPartitionFinished = true;
         ThreadPoolExecutor publishThreadPool = GlobalStateMgr.getCurrentState().getPublishVersionDaemon()
-                .getLakeTaskExecutor();
+                .getTaskExecutor();
 
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
             OlapTable olapTable = lockedTable.get();
@@ -205,7 +205,7 @@ public class SplitTabletJob extends TabletReshardJob {
                     allPartitionFinished = false;
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
@@ -224,11 +224,25 @@ public class SplitTabletJob extends TabletReshardJob {
                         for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
                             SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
                             if (splittingTablet != null) {
-                                for (Long tabletId : splittingTablet.getNewTabletIds()) {
+                                List<Long> newTabletIds = splittingTablet.getNewTabletIds();
+                                for (Long tabletId : newTabletIds) {
                                     TabletRange tabletRange = tabletRanges.get(tabletId);
-                                    Preconditions.checkNotNull(tabletRange,
-                                            "Range of tablet " + tabletId + " not found");
-                                    newIndex.getTablet(tabletId).setRange(tabletRange);
+                                    if (tabletRange != null) {
+                                        Tablet newTablet = newIndex.getTablet(tabletId);
+                                        Preconditions.checkNotNull(newTablet, "Not found tablet " + tabletId);
+                                        newTablet.setRange(tabletRange);
+                                    } else {
+                                        // If splitting tablet failed, will fallback to identical tablet,
+                                        // in this case, BE will only return the range of the first tablet
+                                        List<Long> toRemoveTabletIds = newTabletIds.subList(1, newTabletIds.size());
+                                        Preconditions.checkState(tabletId == toRemoveTabletIds.get(0),
+                                                "Range of tablet " + tabletId + " not found");
+                                        for (long toRemoveTabletId : toRemoveTabletIds) {
+                                            newIndex.removeTablet(toRemoveTabletId);
+                                        }
+                                        splittingTablet.fallbackToIdenticalTablet();
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -522,15 +536,11 @@ public class SplitTabletJob extends TabletReshardJob {
 
                 physicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
 
-                // Temporary code, ignore, will be replaced later
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    if (newIndex.getId() == olapTable.getBaseIndexMetaId()) {
-                        physicalPartition.setBaseIndex(newIndex);
-                    } else {
-                        physicalPartition.createRollupIndex(newIndex);
-                    }
+                    physicalPartition.addMaterializedIndex(newIndex,
+                            newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
         }
@@ -549,17 +559,15 @@ public class SplitTabletJob extends TabletReshardJob {
 
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+                    MaterializedIndex oldIndex = physicalPartition
+                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
                     if (oldIndex == null) {
                         continue;
                     }
-
-                    /*
-                     * To do later
-                     * for (Tablet tablet : oldIndex.getTablets()) {
-                     * invertedIndex.deleteTablet(tablet.getId());
-                     * }
-                     */
+                    // Remove old tablets from inverted index
+                    for (Tablet tablet : oldIndex.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
                 }
             }
         }

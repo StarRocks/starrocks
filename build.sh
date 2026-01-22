@@ -52,6 +52,10 @@ if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
 fi
 
+if [ -z $CMAKE_BUILD_PREFIX ]; then
+    CMAKE_BUILD_PREFIX=${STARROCKS_HOME}/be
+fi
+
 cd $STARROCKS_HOME
 if [ -z $STARROCKS_VERSION ]; then
     tag_name=$(git describe --tags --exact-match 2>/dev/null)
@@ -266,7 +270,7 @@ if [ -e /proc/cpuinfo ] ; then
 fi
 
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
-	ENABLE_QUERY_DEBUG_TRACE=OFF
+    ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
 if [[ -z ${ENABLE_FAULT_INJECTION} ]]; then
@@ -452,12 +456,12 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
 
     CMAKE_BUILD_TYPE=$BUILD_TYPE
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
-    CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}
+    CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/build_${CMAKE_BUILD_TYPE}
     if [ "${WITH_GCOV}" = "ON" ]; then
-        CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_gcov
+        CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/build_${CMAKE_BUILD_TYPE}_gcov
     fi
     if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
-        CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_format-lib
+        CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/build_${CMAKE_BUILD_TYPE}_format-lib
     fi
 
     if [ ${CLEAN} -eq 1 ]; then
@@ -512,7 +516,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
                   -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
-                  ..
+                  ${STARROCKS_HOME}/be
 
     if [ "${BUILD_BE_MODULE}" != "all" ] ; then
         echo "build Backend module: ${BUILD_BE_MODULE}"
@@ -657,6 +661,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j2.properties ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/core-site.xml ${STARROCKS_OUTPUT}/be/conf/
+    cp -r -p ${STARROCKS_HOME}/be/output/conf/type_checker_config.xml ${STARROCKS_OUTPUT}/be/conf/
 
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
@@ -665,9 +670,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.* ${STARROCKS_OUTPUT}/be/lib/ 2>/dev/null || true
     mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so.2
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc-dbg.so.2
-    ln -s ./libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/libjemalloc.so
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shared/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc/libjemalloc.so.2
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc-debug/lib/libjemalloc.so.2 ${STARROCKS_OUTPUT}/be/lib/jemalloc-dbg/libjemalloc.so.2
 
     # Copy pprof and FlameGraph tools
     if [ -d "${STARROCKS_THIRDPARTY}/installed/flamegraph" ]; then

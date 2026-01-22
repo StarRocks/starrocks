@@ -460,12 +460,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             // db erase should be control by cluster snapshot backup if it is avaliable
             // to prevent the incorrect deletion by the StarMgrMetaSyncer
             if (canEraseDatabase(dbInfo, currentTimeMs)) {
-                // erase db
-                dbIter.remove();
-                removeRecycleMarkers(entry.getKey());
-
-                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
-                GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
+                GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId(), wal -> {
+                    // erase db
+                    dbIter.remove();
+                    removeRecycleMarkers(entry.getKey());
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
+                });
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
@@ -520,17 +520,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
         }
         if (!l1.isEmpty()) {
-            List<Long> tableIds = l1.stream()
+            List<RecycleTableInfo> tableInfos = l1.stream()
                     .filter(RecycleTableInfo::isRecoverable)
-                    .peek(i -> i.setRecoverable(false))
-                    .map(i -> i.getTable().getId())
-                    .collect(Collectors.toList());
-            logDisableTableRecovery(tableIds);
+                    .toList();
+            if (!tableInfos.isEmpty()) {
+                List<Long> tableIds = tableInfos.stream()
+                        .map(info -> info.getTable().getId())
+                        .collect(Collectors.toList());
+                GlobalStateMgr.getCurrentState().getEditLog().logDisableTableRecovery(tableIds, wal -> {
+                    for (RecycleTableInfo info : tableInfos) {
+                        info.setRecoverable(false);
+                    }
+                });
+                LOG.info("Finished log disable table recovery of tables: {}", StringUtils.join(tableIds, ","));
+            }
         }
         if (!l2.isEmpty()) {
             List<Long> tableIds = l2.stream().map(i -> i.getTable().getId()).collect(Collectors.toList());
-            removeTableFromRecycleBin(tableIds);
-            logEraseTables(tableIds);
+            logAddApplyEraseTables(tableIds);
         }
         return ListUtils.union(l1, l2);
     }
@@ -551,19 +558,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
     }
 
-    static void logDisableTableRecovery(List<Long> tableIds) {
+    void logAddApplyEraseTables(List<Long> tableIds) {
         if (tableIds.isEmpty()) {
             return;
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logDisableTableRecovery(tableIds);
-        LOG.info("Finished log disable table recovery of tables: {}", StringUtils.join(tableIds, ","));
-    }
-
-    static void logEraseTables(List<Long> tableIds) {
-        if (tableIds.isEmpty()) {
-            return;
-        }
-        GlobalStateMgr.getCurrentState().getEditLog().logEraseMultiTables(tableIds);
+        GlobalStateMgr.getCurrentState().getEditLog().logEraseMultiTables(tableIds, wal -> {
+            removeTableFromRecycleBin(tableIds);
+        });
         LOG.info("Finished log erase tables: {}", StringUtils.join(tableIds, ","));
     }
 
@@ -636,8 +637,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
         }
 
-        removeTableFromRecycleBin(finishedTables);
-        logEraseTables(finishedTables);
+        logAddApplyEraseTables(finishedTables);
     }
 
     public synchronized void replayDisablePartitionRecovery(long partitionId) {
@@ -674,9 +674,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             boolean finished = false;
             CompletableFuture<Boolean> future = asyncDeleteForPartitions.get(partitionInfo);
             if (future == null) {
-                asyncDeleteForPartitions.put(partitionInfo, CompletableFuture.supplyAsync(() -> {
-                    return partitionInfo.delete();
-                }, ASYNC_REMOVE_PARTITION_EXECUTOR));
+                asyncDeleteForPartitions.put(partitionInfo,
+                        CompletableFuture.supplyAsync(partitionInfo::delete, ASYNC_REMOVE_PARTITION_EXECUTOR));
             } else if (future.isDone()) {
                 try {
                     finished = future.get();
@@ -694,11 +693,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
 
             if (finished) {
-                iterator.remove();
-                asyncDeleteForPartitions.remove(partitionInfo);
-                removeRecycleMarkers(partitionId);
-
-                GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
+                GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId, wal -> {
+                    iterator.remove();
+                    asyncDeleteForPartitions.remove(partitionInfo);
+                    removeRecycleMarkers(partitionId);
+                });
 
                 LOG.info("Removed partition '{}' from recycle bin. dbId: {} tableId: {} partitionId: {}",
                         partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
@@ -828,14 +827,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
 
         Table table = recycleTableInfo.getTable();
-        db.registerTableUnlocked(table);
-        nameToTableInfoDbLevel.remove(tableName);
-        idToTableInfo.row(dbId).remove(table.getId());
-        removeRecycleMarkers(table.getId());
 
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), -1L);
-        GlobalStateMgr.getCurrentState().getEditLog().logRecoverTable(recoverInfo);
+        GlobalStateMgr.getCurrentState().getEditLog().logRecoverTable(recoverInfo, wal -> {
+            db.registerTableUnlocked(table);
+            nameToTableInfoDbLevel.remove(tableName);
+            idToTableInfo.row(dbId).remove(table.getId());
+            removeRecycleMarkers(table.getId());
+        });
         LOG.info("recover db[{}] with table[{}]: {}", dbId, table.getId(), table.getName());
         return true;
     }
@@ -883,17 +883,19 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                     partitionName, table.getName()));
         }
 
-        recoverPartitionInfo.recover(table);
+        // check recoverable
+        recoverPartitionInfo.checkRecoverable(table);
 
         long partitionId = recoverPartitionInfo.getPartition().getId();
-
-        // remove from recycle bin
-        idToPartition.remove(partitionId);
-        removeRecycleMarkers(partitionId);
-
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), partitionId);
-        GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartition(recoverInfo);
+        final RecyclePartitionInfo finalRecoverPartitionInfo = recoverPartitionInfo;
+        GlobalStateMgr.getCurrentState().getEditLog().logRecoverPartition(recoverInfo, wal -> {
+            finalRecoverPartitionInfo.recover(table);
+            // remove from recycle bin
+            idToPartition.remove(partitionId);
+            removeRecycleMarkers(partitionId);
+        });
         LOG.info("Recovered partition '{}' of table '{}'. dbId={} tableId={} partitionId={}", partitionName,
                 table.getName(), dbId, table.getId(), partitionId);
     }
@@ -955,9 +957,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 TStorageMedium medium = dataProperty.getStorageMedium();
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     long physicalPartitionId = physicalPartition.getId();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                         long indexId = index.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium,
                                 table.isCloudNativeTable());
                         for (Tablet tablet : index.getTablets()) {
@@ -1013,9 +1014,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             TStorageMedium medium = partitionInfo.getDataProperty().getStorageMedium();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                     long indexId = index.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
                     TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, medium,
                             olapTable.isCloudNativeTable());
                     for (Tablet tablet : index.getTablets()) {
@@ -1345,5 +1345,34 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
     public static long getMinEraseLatency() {
         return MIN_ERASE_LATENCY;
+    }
+
+    // for test
+    protected void clear() {
+        idToDatabase.clear();
+        idToTableInfo.clear();
+        nameToTableInfo.clear();
+        idToPartition.clear();
+        idToRecycleTime.clear();
+        enableEraseLater.clear();
+        asyncDeleteForPartitions.clear();
+        asyncDeleteForTables.clear();
+    }
+
+    // for test
+    protected void setPartitionInfo(long partitionId, RecyclePartitionInfo partitionInfo) {
+        idToPartition.put(partitionId, partitionInfo);
+    }
+
+    // for test
+    protected void setDeleteFutureForPartition(RecyclePartitionInfo partitionInfo, CompletableFuture<Boolean> future) {
+        asyncDeleteForPartitions.put(partitionInfo, future);
+    }
+
+    // for test
+    public void removePartitionFromRecycleBin(long partitionId) {
+        idToPartition.remove(partitionId);
+        idToRecycleTime.remove(partitionId);
+        enableEraseLater.remove(partitionId);
     }
 }

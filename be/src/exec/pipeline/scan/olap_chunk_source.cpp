@@ -42,14 +42,15 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/vector/vector_search_option.h"
+#include "storage/metadata_util.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
-#include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/runtime_profile.h"
+#include "util/string_parser.hpp"
 #include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
@@ -166,8 +167,20 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
             ADD_CHILD_TIMER(_runtime_profile, "ProcessVectorDistanceAndIdTime", segment_init_name);
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
-    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, segment_init_name);
-    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, "GinFilter", segment_init_name);
+
+    const std::string gin_filter_name = "GinFilter";
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
+    _gin_prefix_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinPrefixFilter", gin_filter_name);
+    _gin_ngram_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinNgramDictFilter", gin_filter_name);
+    _gin_predicate_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinDictFilter", gin_filter_name);
+    _gin_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinNGramDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinNGramFilteredDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_predicate_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
+
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
                                            _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
@@ -243,6 +256,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
+    _params.enable_predicate_col_late_materialize =
+            _runtime_state->query_options().enable_predicate_col_late_materialize;
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
     _params.sample_options = thrift_olap_scan_node.sample_options;
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
@@ -528,35 +543,63 @@ void OlapChunkSource::_inherit_default_value_from_json(TabletColumn* column, con
 
     vpack::Builder builder;
     vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
-    if (extracted.isNone()) {
+    if (extracted.isNone() || extracted.isNull()) {
         return;
     }
 
+    const LogicalType value_type = column->type();
     std::string default_value_str;
-    LogicalType value_type = column->type();
 
-    // For string types (VARCHAR/CHAR), extract the raw string value without JSON quotes
-    // For other types (INT/DOUBLE/BOOLEAN/etc), use JSON representation
     if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
         if (extracted.isString()) {
             default_value_str = extracted.copyString();
         } else {
-            JsonValue extracted_value(extracted);
-            auto result_or = extracted_value.to_string();
-            if (result_or.ok()) {
-                default_value_str = *result_or;
-            } else {
-                return;
-            }
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
         }
-    } else {
-        JsonValue extracted_value(extracted);
-        auto result_or = extracted_value.to_string();
-        if (result_or.ok()) {
-            default_value_str = *result_or;
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (value_type == TYPE_BOOLEAN) {
+        if (extracted.isString()) {
+            vpack::ValueLength len;
+            const char* str = extracted.getStringUnchecked(len);
+            StringParser::ParseResult parse_result;
+            auto as_int = StringParser::string_to_int<int32_t>(str, len, &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                default_value_str = (as_int != 0) ? "1" : "0";
+            } else {
+                bool b = StringParser::string_to_bool(str, len, &parse_result);
+                if (parse_result != StringParser::PARSE_SUCCESS) {
+                    return;
+                }
+                default_value_str = b ? "1" : "0";
+            }
+        } else if (extracted.isBool()) {
+            default_value_str = extracted.getBool() ? "1" : "0";
+        } else if (extracted.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
         } else {
             return;
         }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (extracted.isString()) {
+        default_value_str = extracted.copyString();
+    } else if (extracted.isBool()) {
+        default_value_str = extracted.getBool() ? "1" : "0";
+    } else if (extracted.isNumber()) {
+        vpack::Options options = vpack::Options::Defaults;
+        options.singleLinePrettyPrint = true;
+        default_value_str = extracted.toJson(&options);
+    } else {
+        return;
     }
 
     column->set_default_value(default_value_str);
@@ -635,8 +678,13 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         if (_scan_node->thrift_olap_scan_node().__isset.columns_desc &&
             !_scan_node->thrift_olap_scan_node().columns_desc.empty() &&
             _scan_node->thrift_olap_scan_node().columns_desc[0].col_unique_id >= 0) {
-            _tablet_schema =
-                    TabletSchema::copy(*_tablet->tablet_schema(), _scan_node->thrift_olap_scan_node().columns_desc);
+            auto columns_desc_copy = _scan_node->thrift_olap_scan_node().columns_desc;
+            Status preprocess_status = preprocess_default_expr_for_tcolumns(columns_desc_copy);
+            if (!preprocess_status.ok()) {
+                LOG(WARNING) << "Failed to preprocess default_expr in olap_chunk_source: "
+                             << preprocess_status.to_string();
+            }
+            _tablet_schema = TabletSchema::copy(*_tablet->tablet_schema(), columns_desc_copy);
         } else {
             _tablet_schema = _tablet->tablet_schema();
         }
@@ -863,12 +911,20 @@ void OlapChunkSource::_update_counter() {
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
-    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
-    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
     COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
     COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
     COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_counter, _reader->stats().gin_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);

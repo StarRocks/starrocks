@@ -183,6 +183,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### array_low_cardinality_optimize
+
+* **スコープ**: Session
+* **説明**: オプティマイザが array&lt;varchar&gt; カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array&lt;varchar&gt;` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array&lt;varchar&gt;` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
+* **デフォルト**: `true`
+* **タイプ**: boolean
+* **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
+
 ### auto_increment_increment
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
@@ -250,6 +258,22 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **データ型**: Boolean
 
+### cbo_max_reorder_node_use_dp
+
+* **説明**: コストベースオプティマイザ（CBO）が DP（動的計画法）join-reorder アルゴリズムを含めるかを制御するセッションスコープの上限です。オプティマイザは join 入力数（MultiJoinNode.atoms.size()）をこの値と比較し、`multiJoinNode.getAtoms().size() <= cbo_max_reorder_node_use_dp` かつ `cbo_enable_dp_join_reorder` が有効な場合にのみ DP reorder を実行または追加します。JoinReorderFactory.createJoinReorderAdaptive（候補アルゴリズムに JoinReorderDP を追加するため）および ReorderJoinRule.transform/rewrite（メモにプランをコピーするときに JoinReorderDP を実行するか決定するため）で使用されます。デフォルト値の 10 は実用的な性能のカットオフを反映しています（コード内コメント: "10 table join reorder takes more than 100ms"）。この設定はオプティマイザの実行時間（DP は高コスト）と大規模な multi-join クエリに対するプラン品質のトレードオフを調整するためにチューニングしてください。`cbo_enable_dp_join_reorder` および 貪欲法の閾値 `cbo_max_reorder_node_use_greedy` と相互作用します。比較は包含比較（`<=`）です。
+* **スコープ**: セッション
+* **デフォルト**: `10`
+* **データタイプ**: long
+* **導入バージョン**: `v3.2.0`
+
+### cbo_max_reorder_node_use_exhaustive
+
+* **スコープ**: セッション
+* **説明**: CBO における join-reorder アルゴリズム選択の閾値を制御します。オプティマイザはクエリ内の inner/cross join ノードをカウントし、その数がこの値より大きい場合、プランナは transform ベースの（より積極的な）reorder パスを取ります：CTE 統計の収集を強制し、ReorderJoinRule.transform および関連する可換性ルールを呼び出します。カウントがこの値以下の場合、プランナはより安価な join-transformation ルールを適用します（特定の semi/anti-join ケースでは INNER_JOIN_LEFT_ASSCOM_RULE を追加することがあります）。このセッション変数はオプティマイザ（`SPMOptimizer`, `QueryOptimizer`）で参照され、セッションレベルでは `setMaxTransformReorderJoins` を介して設定できます。
+* **デフォルト**: `4`
+* **データタイプ**: int
+* **導入バージョン**: v3.2.0
+
 ### cbo_max_reorder_node_use_greedy
 
 * **説明**: コストベースオプティマイザが greedy join-reorder アルゴリズムを検討するマルチジョイン内の結合入力（アトム）の最大数。オプティマイザは候補となるリオーダーアルゴリズムのリストを構築する際にこの制限（`cbo_enable_greedy_join_reorder` と併せて）をチェックします：もし `multiJoinNode.getAtoms().size()` がこの値以下であれば、`JoinReorderGreedy` のインスタンスが追加され実行されます。この変数は `JoinReorderFactory.createJoinReorderAdaptive()` と `ReorderJoinRule` によって、ジョインリオーダー段階での greedy リオーダリングの適用可否を制御するために使用されます。セッションごとに適用され、統計情報が利用可能でかつ greedy が有効な場合に greedy リオーダリングが試行されるかに影響します。多数の結合されたリレーションを含むクエリに対するオプティマイザの時間/複雑度のトレードオフを制御するために調整してください。
@@ -300,7 +324,10 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### connector_sink_compression_codec
 
-* **説明**: Hive テーブルまたは Iceberg テーブルにデータを書き込む際、または Files() でデータをエクスポートする際に使用される圧縮アルゴリズムを指定します。
+* **説明**: Hive テーブルまたは Iceberg テーブルにデータを書き込む際、または Files() でデータをエクスポートする際に使用される圧縮アルゴリズムを指定します。このパラメータは、以下の状況でのみ有効になります：
+  * Hive テーブルに `compression_codec` プロパティが存在しない場合。
+  * Iceberg テーブルに `write.parquet.compression-codec` プロパティが存在しない場合。
+  * `INSERT INTO FILES` に対して `compression` プロパティが設定されていない場合。
 * **有効な値**: `uncompressed`, `snappy`, `lz4`, `zstd`, および `gzip`。
 * **デフォルト**: uncompressed
 * **データ型**: 文字列
@@ -334,6 +361,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: Seconds
 * **導入バージョン**: v3.5.1
 
+### default_authentication_plugin
+
+* **スコープ**: Session
+* **説明**: このセッションのデフォルトの MySQL 認証プラグイン名を指定するセッションスコープの変数です。SessionVariable.defaultAuthenticationPlugin として格納され、サーバーがデフォルトの認証プラグインを告知または使用する必要がある場合（ハンドシェイク時やプラグインが指定されていない場合など）に、StarRocks の MySQL プロトコル互換レイヤーで使用されます。サーバーがサポートする標準的な MySQL 認証プラグイン識別子（例: `mysql_native_password`, `caching_sha2_password`）を受け付けます。この変数はセッション動作にのみ影響し、永続的なユーザーアカウントの認証構成は別途管理されます。関連するセッション変数 `authentication_policy` を参照してください。
+* **デフォルト**: `mysql_native_password`
+* **データタイプ**: String
+* **導入バージョン**: -
+
 ### default_rowset_type (global)
 
 コンピューティングノードのストレージエンジンで使用されるデフォルトのストレージ形式を設定するために使用されます。現在サポートされているストレージ形式は `alpha` と `beta` です。
@@ -347,6 +382,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: lz4_frame
 * **導入バージョン**: v3.0
 
+### default_tmp_storage_engine
+
+* **説明**: セッション変数で、テンポラリテーブル（明示的な `CREATE TEMPORARY TABLE` およびエンジンによって作成される内部/暗黙のテンポラリテーブル）のデフォルトのストレージエンジンを制御します。`SessionVariable.java` に `@VariableMgr.VarAttr` アノテーションで宣言されており、主に MySQL 8.0 互換性のために存在し、MySQL ライクな動作を期待するクライアントやツールがセッションごとに一時テーブルのエンジンを確認または変更できるようにします。この値を変更すると、メモリバックエンドとディスクバックエンドなど、異なるエンジンを尊重するストレージ層でのテンポラリテーブルデータの保存/管理方法に影響します。
+* **スコープ**: Session
+* **デフォルト**: `InnoDB`
+* **データタイプ**: String
+* **導入バージョン**: v3.4.2, v3.5.0
+
 ### disable_colocate_join
 
 * **説明**: Colocation Join を有効にするかどうかを制御するために使用されます。デフォルト値は `false` で、機能が有効です。この機能が無効になっている場合、クエリプランニングは Colocation Join を実行しようとしません。
@@ -359,6 +402,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: `false`
 * **データタイプ**: boolean
 * **導入バージョン**: v3.2.0
+
+### disable_spill_to_local_disk
+
+* **説明**: セッションで `true` に設定すると、FE は BE に対してローカルディスクへのスピルを無効にし、代わりにリモートストレージへのスピルに依存するよう指示します（リモートスピルが構成されている場合）。このフラグは `enable_spill` = `true`、`enable_spill_to_remote_storage` = `true`、かつ有効な `spill_storage_volume` が FE によって検出されている場合にのみ意味を持ちます。値は TSpillToRemoteStorageOptions（BE に送信）に `disable_spill_to_local_disk` としてシリアライズされます。リモートスピルが構成されていないか、指定されたストレージボリュームが解決できない場合、この設定は効果を持ちません。注意して使用してください：ローカルディスクへのスピルを無効化するとネットワーク I/O とレイテンシが増加し、信頼性・高性能なリモートストレージを必要とします。
+* **スコープ**: Session
+* **デフォルト**: false
+* **データ型**: boolean
+* **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
 
 ### div_precision_increment
 
@@ -489,6 +540,14 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
 
+### enable_incremental_mv
+
+* **説明**: セッションフラグで、サーバーが増分リフレッシュを使用するマテリアライズドビューに対してプランを生成し、インメモリのプランを保持するかを制御します。有効にすると、`MaterializedViewAnalyzer.planMVQuery` はリフレッシュスキームが `IncrementalRefreshSchemeDesc` である create-MV ステートメントに対して処理を行います：ビュークエリの論理・物理プランを構築し、セッションの `enableMVPlanner` フラグを設定します（`setMVPlanner(true)`）。無効にすると、増分リフレッシュ MV のプラン作成はスキップされます。`SessionVariable` の `isEnableIncrementalRefreshMV()` および `setEnableIncrementalRefreshMv(boolean)` からアクセス可能です。
+* **スコープ**: セッション（接続ごと）
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
 ### enable_insert_partial_update
 
 * **説明**：主キーテーブルに対するINSERTステートメントの部分更新を有効化するかどうか。この項目が `true`（デフォルト）に設定されている場合、INSERT ステートメントで指定された列がサブセット（テーブル内のすべての非生成列の数より少ない）であるとき、システムは部分更新を実行し、指定された列のみを更新しながら他の列の既存値を保持します。`false` に設定すると、システムは既存の値を保持する代わりに、指定されていない列に対してデフォルト値を使用します。この機能は、主キーテーブルの特定の列を更新する際に他の列の値に影響を与えない場合に特に有用です。
@@ -499,6 +558,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 * **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/load_concept/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
 * **デフォルト**: true
+
+### max_unknown_string_meta_length (global)
+
+* **説明**: 文字列列の最大長が不明な場合にメタデータで使用するフォールバック長。メタデータの長さが実際より小さいと、一部の BI ツールで空値や切り詰めが発生する可能性があります。`0` 以下は `64` にフォールバックします。有効範囲は `1` ～ `1048576`。
+* **デフォルト**: 64
+* **データ型**: Int
+* **導入バージョン**: v3.5.12
 
 ### enable_lake_tablet_internal_parallel
 
@@ -512,6 +578,17 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **スコープ**: Session
 * **説明**: 有効にすると、FE はロードジョブのランタイムプロファイルの収集を要求し、ロード完了後にロードコーディネータがプロファイルを収集/エクスポートします。ストリームロードの場合、FE は `TQueryOptions.enable_profile = true` を設定し、`stream_load_profile_collect_threshold_second` からの `load_profile_collect_second` をバックエンドに渡します。コーディネータは条件に応じてプロファイル収集を呼び出します（StreamLoadTask.collectProfile() を参照）。実際の振る舞いは、このセッション変数と宛先テーブルのテーブルレベルプロパティ `enable_load_profile` の論理 OR です。収集はさらに `load_profile_collect_interval_second`（FE 側のサンプリング間隔）によって制御され、頻繁な収集を回避します。セッションフラグは `SessionVariable.isEnableLoadProfile()` を介して読み取られ、`setEnableLoadProfile(...)` で接続ごとに設定できます。
 * **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v3.2.0
+
+### enable_local_shuffle_agg
+
+* **説明**: プランナーとコストモデルが、二相／グローバルシャッフル集約の代わりにローカルシャッフルを用いた単一フェーズのローカル集約プラン（Scan -> LocalShuffle -> OnePhaseAgg）を生成することを許可するかを制御します。有効（デフォルト）の場合、オプティマイザとコストモデルは次を行います：
+  - Scan と Global Agg の間の SHUFFLE 交換を、単一バックエンド兼コンピュートノードのクラスタでローカルシャッフル + ワンフェーズ集約に置き換えることを許可する（`PruneShuffleDistributionNodeRule` と `EnforceAndCostTask` を参照）、
+  - その単一ノードのケースでネットワークコストを無視してワンフェーズプランを優先させる（`CostModel`）。
+  置換は `enable_pipeline_engine` が有効でクラスタが単一のバックエンド＋コンピュートノードである場合にのみ検討されます。プランナーは安全でないケース（例：DISTINCT 集約、検出されたデータスキュー、欠落または不明なカラム統計、結合のような複数入力オペレータ、その他のセマンティック制約）ではローカルシャッフル変換を却下します。いくつかのコードパス（INSERT/UPDATE/DELETE のプランナーや MaterializedViewOptimizer）は、一時的にこのセッションフラグを無効化します。これは非クエリシンクや特定のリライトが driver 単位の scan アサインを要求し、ローカルシャッフルでは利用できないためです。
+* **スコープ**: セッション
+* **デフォルト**: `true`
 * **データ型**: boolean
 * **導入バージョン**: v3.2.0
 
@@ -873,12 +950,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
 
-### interpolate_passthrough
-
-* **説明**: 特定の演算子に対して local-exchange-passthrough を追加するかどうか。現在サポートされている演算子には streaming aggregates などがある。local-exchange を追加すると、データの偏りが計算に与える影響を軽減できるが、メモリ使用量がわずかに増加する。
-* **デフォルト**: true
-* **導入バージョン**: v3.2
-
 ### io_tasks_per_scan_operator
 
 * **説明**: スキャンオペレーターによって発行される同時 I/O タスクの数。この値を増やすと、HDFS や S3 などのリモートストレージシステムにアクセスする際のレイテンシーが高い場合に役立ちます。ただし、値が大きいとメモリ消費が増加します。
@@ -940,6 +1011,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
   * `false`：データレイクのクエリで低基数最適化を無効にします。
 * **導入バージョン**: v3.5.0
 
+### low_cardinality_optimize_v2
+
+* **スコープ**: Session
+* **説明**: オプティマイザが適用する low-cardinality 最適化のどのリライトを選択するかを制御するセッションレベルの boolean。`true` の場合、オプティマイザは `LowCardinalityRewriteRule` によって実装された新しい V2 リライト（`DecodeCollector` / `DecodeRewriter` を使用して low-cardinality な VARCHAR カラムをエンコード/デコード）を試行します。`false` の場合、オプティマイザは `AddDecodeNodeForDictStringRule` によって実装されたレガシーなリライトにフォールバックします。どちらのリライトを実行する場合でも `enableLowCardinalityOptimize` が有効である必要があり、`enableLowCardinalityOptimize` が無効な場合は low-cardinality のリライトは実行されません。この変数は適切な変換を選択するためにオプティマイザのツリー書き換え経路でチェックされます。
+* **デフォルト**: `true`
+* **タイプ**: boolean
+* **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
+
 ### lower_case_table_names (global)
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。StarRocks のテーブル名は大文字小文字を区別します。
@@ -966,6 +1045,18 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 33554432 (32 MB)。クライアントが "PacketTooBigException" を報告する場合、この値を増やすことができます。
 * **単位**: バイト
 * **データ型**: Int
+
+### max_pipeline_dop
+
+* **スコープ**: Session
+* **説明**: パイプラインエンジンの degree-of-parallelism (DOP) に対するセッションごとの上限。動作:
+  * `enable_pipeline_engine` が有効で `pipeline_dop` が明示的に設定されていない（0 以下ではない）場合にのみ適用されます。`pipeline_dop` が 0 より大きい場合、この変数は無視され `pipeline_dop` が直接使用されます。
+  * `pipeline_dop` が 0 以下（アダプティブ/デフォルトモード）のとき、実際の実行 DOP は min(`max_pipeline_dop`, BackendResourceStat が返すバックエンドのデフォルト DOP) として計算されます。パイプラインの sink に対しては同じロジックで sink のデフォルト DOP が使用されます。
+  * `max_pipeline_dop` が 0 以下の場合、追加の上限は適用されずバックエンドのデフォルト DOP が使用されます。
+  * 目的: コア数が非常に多いマシンでスケジューリングによる負荷増を回避するため、自動計算された並列度に上限をかけること。
+* **デフォルト**: `64`
+* **データ型**: int
+* **導入バージョン**: v3.2.0
 
 ### max_pushdown_conditions_per_column
 
@@ -1352,6 +1443,14 @@ GROUP BY の最初のフェーズの事前集計モードを指定するため�
 ### tx_isolation
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。エイリアスは `transaction_isolation` です。
+
+### tx_visible_wait_timeout
+
+* **説明**: コミット済みトランザクションが可視（公開）になるまでサーバが待機する時間（秒単位）を制御するセッションスコープのタイムアウトです。`StmtExecutor` および `TransactionStmtExecutor` のコミットフローで使用されるミリ秒単位の publish 待機時間はこの値に1000を掛けて算出されます。可視待機が期限切れになると、トランザクションは COMMITTED と扱われますがまだ VISIBLE ではないと見なされます。マテリアライズドビューのリフレッシュロジック（`MVTaskRunProcessor`）は、可視性を事実上無期限に待つために一時的にこの変数を `Long.MAX_VALUE / 1000` に設定し、リフレッシュ後に元の値を復元します。`enable_sync_publish` が有効な場合、この変数は無視され、publish 待機はジョブのデッドラインから派生されます。
+* **スコープ**: Session
+* **デフォルト**: `10`
+* **データ型**: long
+* **導入バージョン**: v3.2.0
 
 ### use_compute_nodes
 

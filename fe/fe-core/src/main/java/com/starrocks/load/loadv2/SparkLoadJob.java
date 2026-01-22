@@ -173,8 +173,8 @@ public class SparkLoadJob extends BulkLoadJob {
     protected long sparkLoadSubmitTimeoutSecond = Config.spark_load_submit_timeout_second;
     // below for push task
     private final Map<Long, Set<Long>> tableToLoadPartitions = Maps.newHashMap();
-    private final Map<Long, PushBrokerReaderParams> indexToPushBrokerReaderParams = Maps.newHashMap();
-    private final Map<Long, Integer> indexToSchemaHash = Maps.newHashMap();
+    private final Map<Long, PushBrokerReaderParams> indexMetaIdToPushBrokerReaderParams = Maps.newHashMap();
+    private final Map<Long, Integer> indexMetaIdToSchemaHash = Maps.newHashMap();
     private final Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask = Maps.newHashMap();
     private final Set<Long> finishedReplicas = Sets.newHashSet();
     private final Set<Long> quorumTablets = Sets.newHashSet();
@@ -296,9 +296,12 @@ public class SparkLoadJob extends BulkLoadJob {
             appId = attachment.getAppId();
             etlOutputPath = attachment.getOutputPath();
 
-            executeEtl();
             // log etl state
-            unprotectedLogUpdateStateInfo();
+            long curTimestamp = System.currentTimeMillis();
+            SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
+                    id, JobState.ETL, transactionId, sparkLoadAppHandle, curTimestamp, appId, etlOutputPath,
+                    loadStartTimestamp, tabletMetaToFileInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info, wal -> executeEtl(curTimestamp));
         } finally {
             writeUnlock();
         }
@@ -307,8 +310,8 @@ public class SparkLoadJob extends BulkLoadJob {
     /**
      * update etl start time and state in spark load job
      */
-    private void executeEtl() {
-        etlStartTimestamp = System.currentTimeMillis();
+    private void executeEtl(long etlStartTimestamp) {
+        this.etlStartTimestamp = etlStartTimestamp;
         state = JobState.ETL;
         LOG.info("update to {} state success. job id: {}", state, id);
     }
@@ -415,8 +418,6 @@ public class SparkLoadJob extends BulkLoadJob {
         // get etl output files and update loading state
         BrokerDesc runtimeBrokerDescForPaths = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
         unprotectedUpdateToLoadingState(etlStatus, handler.getEtlFilePaths(etlOutputPath, runtimeBrokerDescForPaths));
-        // log loading statedppResult
-        unprotectedLogUpdateStateInfo();
         // prepare loading infos
         unprotectedPrepareLoadingInfos();
     }
@@ -435,9 +436,13 @@ public class SparkLoadJob extends BulkLoadJob {
 
             loadingStatus = etlStatus;
             progress = 0;
-            unprotectedUpdateState(JobState.LOADING);
             loadStartTimestamp = System.currentTimeMillis();
             startLoad = true;
+            SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
+                    id, JobState.LOADING, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
+                    loadStartTimestamp, tabletMetaToFileInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(
+                    info, wal -> unprotectedUpdateState(JobState.LOADING));
             LOG.info("update to {} state success. job id: {}", state, id);
         } catch (Exception e) {
             LOG.warn("update to {} state failed. job id: {}", state, id, e);
@@ -448,11 +453,11 @@ public class SparkLoadJob extends BulkLoadJob {
     private void unprotectedPrepareLoadingInfos() {
         for (String tabletMetaStr : tabletMetaToFileInfo.keySet()) {
             String[] fileNameArr = tabletMetaStr.split("\\.");
-            // tableId.partitionId.indexId.bucket.schemaHash
+            // tableId.partitionId.indexMetaId.bucket.schemaHash
             Preconditions.checkState(fileNameArr.length == 5);
             long tableId = Long.parseLong(fileNameArr[0]);
             long partitionId = Long.parseLong(fileNameArr[1]);
-            long indexId = Long.parseLong(fileNameArr[2]);
+            long indexMetaId = Long.parseLong(fileNameArr[2]);
             int schemaHash = Integer.parseInt(fileNameArr[4]);
 
             if (!tableToLoadPartitions.containsKey(tableId)) {
@@ -460,18 +465,18 @@ public class SparkLoadJob extends BulkLoadJob {
             }
             tableToLoadPartitions.get(tableId).add(partitionId);
 
-            indexToSchemaHash.put(indexId, schemaHash);
+            indexMetaIdToSchemaHash.put(indexMetaId, schemaHash);
         }
     }
 
-    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
-        if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
+    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexMetaId) throws StarRocksException {
+        if (!indexMetaIdToPushBrokerReaderParams.containsKey(indexMetaId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
-            pushBrokerReaderParams.init(table.getSchemaByIndexMetaId(indexId),
+            pushBrokerReaderParams.init(table.getSchemaByIndexMetaId(indexMetaId),
                     new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
-            indexToPushBrokerReaderParams.put(indexId, pushBrokerReaderParams);
+            indexMetaIdToPushBrokerReaderParams.put(indexMetaId, pushBrokerReaderParams);
         }
-        return indexToPushBrokerReaderParams.get(indexId);
+        return indexMetaIdToPushBrokerReaderParams.get(indexMetaId);
     }
 
     private Set<Long> submitPushTasks() throws StarRocksException {
@@ -527,13 +532,13 @@ public class SparkLoadJob extends BulkLoadJob {
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
-                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {
-                            long indexId = index.getId();
-                            int schemaHash = indexToSchemaHash.get(indexId);
+                            long indexMetaId = index.getMetaId();
+                            int schemaHash = indexMetaIdToSchemaHash.get(indexMetaId);
 
                             List<TColumn> columnsDesc = new ArrayList<TColumn>();
-                            for (Column column : table.getSchemaByIndexMetaId(indexId)) {
+                            for (Column column : table.getSchemaByIndexMetaId(indexMetaId)) {
                                 columnsDesc.add(column.toThrift());
                             }
 
@@ -542,11 +547,11 @@ public class SparkLoadJob extends BulkLoadJob {
                                 long tabletId = tablet.getId();
                                 totalTablets.add(tabletId);
                                 String tabletMetaStr = String.format("%d.%d.%d.%d.%d", tableId, partitionId,
-                                        indexId, bucket++, schemaHash);
+                                        indexMetaId, bucket++, schemaHash);
 
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
                                 Set<Long> tabletAllReplicas = Sets.newHashSet();
-                                PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexId);
+                                PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexMetaId);
 
                                 if (tablet instanceof LocalTablet) {
                                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -556,7 +561,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                                                 .getBackend(backendId);
 
-                                        pushTask(backendId, tableId, partitionId, indexId, tabletId,
+                                        pushTask(backendId, tableId, partitionId, index.getId(), tabletId,
                                                 replicaId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                                 backend, replica, tabletFinishedReplicas,
                                                 TTabletType.TABLET_TYPE_DISK, columnsDesc);
@@ -583,7 +588,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         continue;
                                     }
 
-                                    pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
+                                    pushTask(backend.getId(), tableId, partitionId, index.getId(), tabletId,
                                             tabletId, schemaHash, partitionVersion, params, batchTask, tabletMetaStr,
                                             backend, new Replica(tabletId, backend.getId(), -1, NORMAL),
                                             tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE, columnsDesc);
@@ -824,8 +829,8 @@ public class SparkLoadJob extends BulkLoadJob {
             // clear job infos that not persist
             resourceDesc = null;
             tableToLoadPartitions.clear();
-            indexToPushBrokerReaderParams.clear();
-            indexToSchemaHash.clear();
+            indexMetaIdToPushBrokerReaderParams.clear();
+            indexMetaIdToSchemaHash.clear();
             tabletToSentReplicaPushTask.clear();
             finishedReplicas.clear();
             quorumTablets.clear();
@@ -857,18 +862,18 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         });
         clearJob();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         super.afterAborted(txnState, txnOperated, txnStatusChangeReason);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 
     @Override
-    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn, boolean needLog) {
-        super.cancelJobWithoutCheck(failMsg, abortTxn, needLog);
+    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn) {
+        super.cancelJobWithoutCheck(failMsg, abortTxn);
         clearJob();
     }
 
@@ -906,16 +911,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 }
             }
         }
-    }
-
-    /**
-     * log load job update info when job state changed to etl or loading
-     */
-    private void unprotectedLogUpdateStateInfo() {
-        SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
-                id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
-                loadStartTimestamp, tabletMetaToFileInfo);
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info);
     }
 
     @Override

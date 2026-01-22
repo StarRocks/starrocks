@@ -647,6 +647,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectPartitionNames(node.getPartitionNames() == null ? Collections.emptyList() :
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexMetaId())
+                        .setHintsTabletIds(node.getTabletIds())
                         .build();
             } else if (!isMVPlanner) {
                 scanOperator = LogicalOlapScanOperator.builder()
@@ -696,7 +697,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.PAIMON.equals(node.getTable().getType())) {
             scanOperator = new LogicalPaimonScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null, tableVersionRange);
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, partitionPredicate, tableVersionRange);
         } else if (Table.TableType.ODPS.equals(node.getTable().getType())) {
             scanOperator = new LogicalOdpsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
@@ -815,6 +816,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
+        if (node.isRecursive()) {
+            throw new SemanticException("Recursive CTE is not supported");
+        }
         if (!cteContext.hasRegisteredCte(node.getCteMouldId())) {
             // doesn't register CTE, should inline directly
             LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
@@ -1039,10 +1043,10 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 .collect(Collectors.toList()), generateNewConstMap(leftConstMap, rightConstMap, node.getJoinOp()));
 
         ScalarOperator onPredicate = null;
-        
+
         if (node.getJoinOp().isFullOuterJoin() && CollectionUtils.isNotEmpty(node.getUsingColNames())) {
             onPredicate = buildJoinUsingPredicate(node, leftPlan, rightPlan);
-            
+
             if (onPredicate != null && !onPredicate.getType().isBoolean()) {
                 throw new SemanticException("JOIN USING predicate must evaluate to a boolean");
             }
@@ -1211,16 +1215,16 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     private ScalarOperator buildJoinUsingPredicate(JoinRelation node, LogicalPlan leftPlan, LogicalPlan rightPlan) {
         List<String> usingColumns = node.getUsingColNames();
         List<ScalarOperator> predicates = new ArrayList<>();
-        
+
         List<Field> leftFields = node.getLeft().getRelationFields().getAllFields();
         List<Field> rightFields = node.getRight().getRelationFields().getAllFields();
         List<ColumnRefOperator> leftOutputColumns = leftPlan.getOutputColumn();
         List<ColumnRefOperator> rightOutputColumns = rightPlan.getOutputColumn();
-        
+
         for (String usingColName : usingColumns) {
             ColumnRefOperator leftCol = findColumnByName(leftFields, leftOutputColumns, usingColName);
             ColumnRefOperator rightCol = findColumnByName(rightFields, rightOutputColumns, usingColName);
-            
+
             if (leftCol != null && rightCol != null) {
                 predicates.add(new BinaryPredicateOperator(BinaryType.EQ, leftCol, rightCol));
             }
@@ -1245,12 +1249,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
      * Example:
      * <pre>
      * FULL OUTER JOIN t1(id INT) and t2(id BIGINT) USING(id)
-     * 
+     *
      * Generated plan:
      * Project: [COALESCE(CAST(t1.id AS BIGINT), t2.id) AS id, ...]
      *   └─ Join: CAST(t1.id AS BIGINT) = t2.id
      * </pre>
-     * 
+     *
      * @param node The JOIN relation with USING clause
      * @param joinBuilder The join OptExprBuilder to wrap
      * @param onPredicate The join ON predicate containing equality conditions
@@ -1265,21 +1269,21 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         Map<String, ScalarOperator> leftExprMap = new HashMap<>();
         Map<String, ScalarOperator> rightExprMap = new HashMap<>();
-        
+
         for (ScalarOperator conjunct : conjuncts) {
             Preconditions.checkState(conjunct instanceof BinaryPredicateOperator,
                     "USING join should only have binary predicates, but got: %s", conjunct.getClass());
-            
+
             BinaryPredicateOperator binaryPred = conjunct.cast();
             Preconditions.checkState(binaryPred.getBinaryType() == BinaryType.EQ,
                     "USING join should only have equality predicates, but got: %s", binaryPred.getBinaryType());
-            
+
             ScalarOperator leftExpr = binaryPred.getChild(0);
             ScalarOperator rightExpr = binaryPred.getChild(1);
-            
+
             String leftColName = extractBaseColumnName(leftExpr);
             String rightColName = extractBaseColumnName(rightExpr);
-            
+
             if (leftColName != null && usingColumns.stream().anyMatch(col -> col.equalsIgnoreCase(leftColName))) {
                 leftExprMap.put(leftColName.toLowerCase(), leftExpr);
             }
@@ -1292,16 +1296,16 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             String lowerColName = colName.toLowerCase();
             ScalarOperator leftExpr = leftExprMap.get(lowerColName);
             ScalarOperator rightExpr = rightExprMap.get(lowerColName);
-            
+
             if (leftExpr != null && rightExpr != null) {
                 Type commonType = TypeManager.getCommonType(leftExpr.getType(), rightExpr.getType());
                 if (!commonType.isValid()) {
                     commonType = leftExpr.getType();
                 }
-                
+
                 ColumnRefOperator coalesceCol = columnRefFactory.create(colName, commonType, true);
                 ScalarOperator coalesceExpr = createCoalesceOperator(leftExpr, rightExpr);
-                
+
                 outputs.add(coalesceCol);
                 projections.put(coalesceCol, coalesceExpr);
             }
@@ -1311,7 +1315,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         Set<String> usingColLowerSet = usingColumns.stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
-        
+
         for (ColumnRefOperator col : joinBuilder.getExpressionMapping().getFieldMappings()) {
             // Skip if this column is a USING column (will be replaced by COALESCE)
             if (!usingColLowerSet.contains(col.getName().toLowerCase())) {
@@ -1322,12 +1326,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         OptExprBuilder projectBuilder = joinBuilder.withNewRoot(projectOperator);
-        
+
         ExpressionMapping outputMapping = new ExpressionMapping(node.getScope(), outputs);
         for (int i = 0; i < usingColumns.size(); i++) {
             outputMapping.put(new SlotRef(null, usingColumns.get(i)), outputs.get(i));
         }
-        
+
         projectBuilder.setExpressionMapping(outputMapping);
         return new LogicalPlan(projectBuilder, outputs, List.of());
     }
@@ -1336,12 +1340,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         if (expr.isColumnRef()) {
             return ((ColumnRefOperator) expr).getName();
         }
-        
+
         List<ColumnRefOperator> usedColumns = expr.getColumnRefs();
         if (usedColumns.size() == 1) {
             return usedColumns.get(0).getName();
         }
-        
+
         return null;
     }
 
@@ -1352,7 +1356,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         if (!commonType.isValid()) {
             commonType = leftType;
         }
-        
+
         Type[] argTypes = new Type[] {leftType, rightType};
         com.starrocks.catalog.Function coalesceFunction =
                 com.starrocks.sql.ast.expression.ExprUtils.getBuiltinFunction(
@@ -1362,12 +1366,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         return new CallOperator(FunctionSet.COALESCE, commonType,
                 Lists.newArrayList(leftOp, rightOp), coalesceFunction);
     }
-    
+
     /**
      * Deduplicate USING columns from the output column list to match the deduplicated scope.
      * For JOIN USING, QueryAnalyzer already deduplicated fields in the scope.
      * We need to match this by selecting the appropriate column from left or right side.
-     * 
+     *
      * - For FULL OUTER JOIN: Not called here (handled by addCoalesceProjectForFullOuterJoinUsing)
      * - For LEFT OUTER/INNER JOIN: Keep left-side USING columns
      * - For RIGHT OUTER JOIN: Keep right-side USING columns
@@ -1379,36 +1383,36 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         Set<String> usingColSet = node.getUsingColNames().stream()
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
-        
+
         List<Field> leftFields = node.getLeft().getRelationFields().getAllFields();
         List<Field> rightFields = node.getRight().getRelationFields().getAllFields();
-        
+
         boolean preferRight = node.getJoinOp().isRightOuterJoin();
-        
+
         // Add USING columns (one from preferred side based on join type)
         List<Field> preferredFields = preferRight ? rightFields : leftFields;
         List<ColumnRefOperator> preferredColumns = preferRight ? rightColumns : leftColumns;
-        
+
         for (String usingCol : node.getUsingColNames()) {
             ColumnRefOperator col = findColumnByName(preferredFields, preferredColumns, usingCol);
             if (col != null) {
                 result.add(col);
             }
         }
-        
+
         // Add non-USING columns from both sides (left first, then right)
         for (int i = 0; i < leftFields.size(); i++) {
             if (leftFields.get(i).getName() == null || !usingColSet.contains(leftFields.get(i).getName().toLowerCase())) {
                 result.add(leftColumns.get(i));
             }
         }
-        
+
         for (int i = 0; i < rightFields.size(); i++) {
             if (rightFields.get(i).getName() == null || !usingColSet.contains(rightFields.get(i).getName().toLowerCase())) {
                 result.add(rightColumns.get(i));
             }
         }
-        
+
         return result;
     }
 

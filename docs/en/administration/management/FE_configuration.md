@@ -277,6 +277,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Directory used by the FE logging subsystem for storing internal logs (`fe.internal.log`). This configuration is substituted into the Log4j configuration and determines where the InternalFile appender writes internal/materialized view/statistics logs and where per-module loggers under `internal.<module>` place their files. Ensure the directory exists, is writable, and has sufficient disk space. Log rotation and retention for files in this directory are controlled by `log_roll_size_mb`, `internal_log_roll_num`, `internal_log_delete_age`, and `internal_log_roll_interval`. If `sys_log_to_console` is enabled, internal logs may be written to console instead of this directory.
 - Introduced in: v3.2.4
 
+##### internal_log_json_format
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `true`, internal statistic/audit entries are written as compact JSON objects to the statistic audit logger. The JSON contains keys "executeType" (InternalType: QUERY or DML), "queryId", "sql", and "time" (elapsed milliseconds). When it is set to `false`, the same information is logged as a single formatted text line ("statistic execute: ... | QueryId: [...] | SQL: ..."). Enabling JSON improves machine parsing and integration with log processors but also causes raw SQL text to be included in logs, which may expose sensitive information and increase log size.
+- Introduced in: -
+
 ##### internal_log_modules
 
 - Default: `{"base", "statistic"}`
@@ -375,6 +384,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: The maximum size of a system log file or an audit log file.
 - Introduced in: -
+
+##### proc_profile_file_retained_days
+
+- Default: 1
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Number of days to retain process profiling files (CPU and memory) generated under `sys_log_dir/proc_profile`. The ProcProfileCollector computes a cutoff by subtracting `proc_profile_file_retained_days` days from the current time (formatted as yyyyMMdd-HHmmss) and deletes profile files whose timestamp portion is lexicographically earlier than that cutoff (that is, timePart.compareTo(timeToDelete) &lt; 0). File deletion also respects the size-based cutoff controlled by `proc_profile_file_retained_size_bytes`. Profile files use the prefixes `cpu-profile-` and `mem-profile-` and are compressed after collection.
+- Introduced in: v3.2.12
+
+##### proc_profile_file_retained_size_bytes
+
+- Default: 2L * 1024 * 1024 * 1024 (2147483648)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum total bytes of collected CPU and memory profile files (files named with prefixes `cpu-profile-` and `mem-profile-`) to keep under the profile directory. When the sum of valid profile files exceeds `proc_profile_file_retained_size_bytes`, the collector deletes the oldest profile files until the remaining total size is less than or equal to `proc_profile_file_retained_size_bytes`. Files older than `proc_profile_file_retained_days` are also removed regardless of size. This setting controls disk usage for profile archives and interacts with `proc_profile_file_retained_days` to determine deletion order and retention.
+- Introduced in: v3.2.12
 
 ##### profile_log_delete_age
 
@@ -749,6 +776,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
 - Introduced in: -
 
+##### max_task_runs_threads_num
+
+- Default: 512
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Controls the maximum number of threads in the task-run executor thread pool. This value is the upper bound of concurrent task-run executions; increasing it raises parallelism but also increases CPU, memory, and network usage, while reducing it can cause task-run backlog and higher latency. Tune this value according to expected concurrent scheduled jobs and available system resources.
+- Introduced in: v3.2.0
+
+##### memory_tracker_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enables the FE memory tracker subsystem. When `memory_tracker_enable` is set to `true`, `MemoryUsageTracker` periodically scans registered metadata modules, updates the in-memory `MemoryUsageTracker.MEMORY_USAGE` map, logs totals, and causes `MetricRepo` to expose memory usage and object-count gauges in metrics output. Use `memory_tracker_interval_seconds` to control the sampling interval. Enabling this feature helps monitoring and debugging memory consumption but introduces CPU and I/O overhead and additional metric cardinality.
+- Introduced in: v3.2.4
+
+##### memory_tracker_interval_seconds
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval in seconds for the FE `MemoryUsageTracker` daemon to poll and record memory usage of the FE process and registered `MemoryTrackable` modules. When `memory_tracker_enable` is set to `true`, the tracker runs on this cadence, updates `MEMORY_USAGE`, and logs aggregated JVM and tracked-module usage.
+- Introduced in: v3.2.4
+
 ##### mysql_nio_backlog_num
 
 - Default: 1024
@@ -779,6 +833,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.
 - Introduced in: -
 
+##### mysql_service_kill_after_disconnect
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Controls how the server handles the session when the MySQL TCP connection is detected closed (EOF on read). If it is set to `true`, the server immediately kills any running query for that connection and performs immediate cleanup. If it is `false`, the server does not kill running queries on disconnection and only performs cleanup when there are no pending request tasks, allowing long-running queries to continue after client disconnects. Note: despite a brief comment suggesting TCP keep‑alive, this parameter specifically governs post-disconnection killing behavior and should be set according to whether you want orphaned queries terminated (recommended behind unreliable/load‑balanced clients) or allowed to finish.
+- Introduced in: -
+
 ##### mysql_service_nio_enable_keep_alive
 
 - Default: true
@@ -805,6 +868,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
 - Introduced in: -
+
+##### proc_profile_cpu_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `true`, the background `ProcProfileCollector` will collect CPU profiles using `AsyncProfiler` and write HTML reports under `sys_log_dir/proc_profile`. Each collection run records CPU stacks for the duration configured by `proc_profile_collect_time_s` and uses `proc_profile_jstack_depth` for Java stack depth. Generated profiles are compressed and old files are pruned according to `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`. `AsyncProfiler` requires the native library (`libasyncProfiler.so`); `one.profiler.extractPath` is set to `STARROCKS_HOME_DIR/bin` to avoid noexec issues on `/tmp`.
+- Introduced in: v3.2.12
 
 ##### qe_max_connection
 
@@ -859,6 +931,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: No
 - Description: Comma separated list, with regex support to whitelist ssl cipher suites by IANA names. If both whitelist and blacklist are set, blacklist takes precedence.
 - Introduced in: v4.0
+
+##### task_runs_concurrency
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Global limit of concurrently running TaskRun instances. `TaskRunScheduler` stops scheduling new runs when current running count is greater than or equal to `task_runs_concurrency`, so this value caps parallel TaskRun execution across the scheduler. It is also used by `MVPCTRefreshPartitioner` to compute per-TaskRun partition refresh granularity. Increasing the value raises parallelism and resource usage; decreasing it reduces concurrency and makes partition refreshes larger per run. Do not set to 0 or negative unless intentionally disabling scheduling: 0 (or negative) will effectively prevent new TaskRuns from being scheduled by `TaskRunScheduler`.
+- Introduced in: v3.2.0
+
+##### task_runs_queue_length
+
+- Default: 500
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Limits the maximum number of pending TaskRun items kept in the pending queue. `TaskRunManager` checks the current pending count and rejects new submissions when valid pending TaskRun count is greater than or equal to `task_runs_queue_length`. The same limit is rechecked before merged/accepted TaskRuns are added. Tune this value to balance memory and scheduling backlog: set higher for large bursty workloads to avoid rejects, or lower to bound memory and reduce pending backlog.
+- Introduced in: v3.2.0
 
 ##### thrift_backlog_num
 
@@ -1141,6 +1231,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
 - Introduced in: -
 
+##### enable_create_partial_partition_in_batch
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `false` (default), StarRocks enforces that batch-created range partitions align to the standard time unit boundaries. It will reject non‑aligned ranges to avoid creating holes. Setting this item to `true` disables that alignment check and allows creating partial (non‑standard) partitions in batch, which can produce gaps or misaligned partition ranges. You should only set it to `true` when you intentionally need partial batch partitions and accept the associated risks.
+- Introduced in: v3.2.0
+
 ##### enable_internal_sql
 
 - Default: true
@@ -1158,6 +1257,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether to enable the Legacy Compatibility for Replication. StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed. `true` indicates enabling this mode.
 - Introduced in: v3.1.10, v3.2.6
+
+##### enable_show_materialized_views_include_all_task_runs
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls how TaskRuns are returned to the SHOW MATERIALIZED VIEWS command. When this item is set to `false`, StarRocks returns only the newest TaskRun per task (legacy behavior for compatibility). When it is set to `true` (default), `TaskManager` may include additional TaskRuns for the same task only when they share the same start TaskRun ID (for example, belong to the same job), preventing unrelated duplicate runs from appearing while allowing multiple statuses tied to one job to be shown. Set this item to `false` to restore single-run output or to surface multi-run job history for debugging and monitoring.
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
 
 ##### enable_statistics_collect_profile
 
@@ -1233,6 +1341,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description: Whether non-Leader FEs ignore the metadata gap from the Leader FE. If the value is TRUE, non-Leader FEs ignore the metadata gap from the Leader FE and continue providing data reading services. This parameter ensures continuous data reading services even when you stop the Leader FE for a long period of time. If the value is FALSE, non-Leader FEs do not ignore the metadata gap from the Leader FE and stop providing data reading services.
 - Introduced in: -
+
+##### ignore_task_run_history_replay_error
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When StarRocks deserializes TaskRun history rows for `information_schema.task_runs`, a corrupted or invalid JSON row will normally cause deserialization to log a warning and throw a RuntimeException. If this item is set to `true`, the system will catch deserialization errors, skip the malformed record, and continue processing remaining rows instead of failing the query. This will make `information_schema.task_runs` queries tolerant of bad entries in the `_statistics_.task_run_history` table. Note that enabling it will silently drop corrupted history records (potential data loss) instead of surfacing an explicit error.
+- Introduced in: v3.3.3, v3.4.0, v3.5.0
 
 ##### lock_checker_interval_second
 
@@ -1635,6 +1752,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the creation of materialized views.
 - Introduced in: -
 
+##### enable_materialized_view_external_table_precise_refresh
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Set this item to `true` to enable an internal optimization for materialized view refresh when a base table is an external (non-cloud-native) table. When enabled, the materialized view refresh processor computes candidate partitions and refreshes only the affected base-table partitions instead of all partitions, reducing I/O and refresh cost. Set it to `false` to force full-partition refresh of external tables.
+- Introduced in: v3.2.9
+
 ##### enable_materialized_view_metrics_collect
 
 - Default: true
@@ -1671,6 +1797,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
 
+##### enable_mv_automatic_repairing_for_broken_base_tables
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `true`, StarRocks will attempt to automatically repair materialized view base-table metadata when a base external table is dropped and recreated or its table identifier changes. The repair flow can update the materialized view's base table information, collect partition-level repair information for external table partitions, and drive partition refresh decisions for async auto-refresh materialized views while honoring `autoRefreshPartitionsLimit`. Currently the automated repair supports Hive external tables; unsupported table types will cause the materialized view to be set inactive and a repair exception. Partition information collection is non-blocking and failures are logged.
+- Introduced in: v3.3.19, v3.4.8, v3.5.6
+
 ##### enable_predicate_columns_collection
 
 - Default: true
@@ -1682,7 +1817,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ##### enable_query_queue_v2
 
-- Default: false
+- Default: true
 - Type: boolean
 - Unit: -
 - Is mutable: No
@@ -1831,6 +1966,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Threshold of low cardinality dictionary.
 - Introduced in: v3.5.0
 
+##### materialized_view_min_refresh_interval
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The minimum allowed refresh interval (in seconds) for ASYNC materialized view schedules. When a materialized view is created with a time-based interval, the interval is converted to seconds and must not be less tham this value; otherwise the CREATE/ALTER operation fails with a DDL error. If this value is greater than 0, the check is enforced; set it to 0 or a negative value to disable the limit, which prevents excessive TaskManager scheduling and high FE memory/CPU usage from overly frequent refreshes. This item does not apply to EVENT_TRIGGERED refreshes.
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
+
+##### materialized_view_refresh_ascending
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `true`, materialized view partition refresh will iterate partitions in ascending partition-key order (oldest to newest). When it is set to `false` (default), the system iterates in descending order (newest to oldest). StarRocks uses this item in both list- and range-partitioned materialized view refresh logic to choose which partitions to process when partition refresh limits apply and to compute the next start/end partition boundaries for subsequent TaskRun executions. Changing this item alters which partitions are refreshed first and how the next partition range is derived; for range-partitioned materialized views, the scheduler validates new start/end and will raise an error if a change would create a repeated boundary (dead-loop), so set this item with care.
+- Introduced in: v3.3.1, v3.4.0, v3.5.0
+
 ##### max_allowed_in_element_num_of_delete
 
 - Default: 10000
@@ -1929,6 +2082,19 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: When the background active_checker thread is enabled, the system will periodically detect and automatically reactivate materialized views that became Inactive due to schema changes or rebuilds of their base tables (or views). This parameter controls the scheduling interval of the checker thread, in seconds. The default value is system-defined.
 - Introduced in: v3.1.6
+
+##### mv_rewrite_consider_data_layout_mode
+
+- Default: `enable`
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether materialized view rewrite should take the base table data layout into account when selecting the best materialized view. Valid values:
+  - `disable`: Never use data-layout criteria when choosing between candidate materialized views.
+  - `enable`: Use data-layout criteria only when the query is recognized as layout-sensitive.
+  - `force`: Always apply data-layout criteria when selecting the best materialized view.
+  Changing this item affects `BestMvSelector` behavior and can improve or broaden rewrite applicability depending on whether physical layout matters for plan correctness or performance.
+- Introduced in: -
 
 ##### publish_version_interval_ms
 
@@ -2118,6 +2284,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: Minimum allowed schedule interval (in seconds) for task schedules checked by the SQL layer. When a task is submitted, TaskAnalyzer converts the schedule period to seconds and rejects the submission with ERR_INVALID_PARAMETER if the period is smaller than `task_min_schedule_interval_s`. This prevents creating tasks that run too frequently and protects the scheduler from high-frequency tasks. If a schedule has no explicit start time, TaskAnalyzer sets the start time to the current epoch seconds.
 - Introduced in: v3.3.0, v3.4.0, v3.5.0
+
+##### task_runs_timeout_second
+
+- Default: 4 * 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Default execution timeout (in seconds) for a TaskRun. This item is used by TaskRun execution as the baseline timeout. If the task run's properties include session variables `query_timeout` or `insert_timeout` with a positive integer value, the runtime uses the larger value between that session timeout and `task_runs_timeout_second`. The effective timeout is then bounded to not exceed the configured `task_runs_ttl_second` and `task_ttl_second`. Set this item to limit how long a task run may execute. Very large values may be clipped by the task/task-run TTL settings.
+- Introduced in: -
 
 ### Loading and unloading
 
@@ -2623,6 +2798,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### Statistic report
 
+##### enable_collect_warehouse_metrics
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: When this item is set to `true`, the system will collect and export per-warehouse metrics. Enabling it adds warehouse-level metrics (slot/usage/availability) to the metric output and increases metric cardinality and collection overhead. Disable it to omit warehouse-specific metrics and reduce CPU/network and monitoring storage cost.
+- Introduced in: v3.5.0
+
 ##### enable_http_detail_metrics
 
 - Default: false
@@ -2631,6 +2815,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: When true, the HTTP server computes and exposes detailed HTTP worker metrics (notably the `HTTP_WORKER_PENDING_TASKS_NUM` gauge). Enabling this causes the server to iterate over Netty worker executors and call `pendingTasks()` on each `NioEventLoop` to sum pending task counts; when disabled the gauge returns 0 to avoid that cost. This extra collection can be CPU- and latency-sensitive — enable only for debugging or detailed investigation.
 - Introduced in: v3.2.3
+
+##### proc_profile_collect_time_s
+
+- Default: 120
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
+- Introduced in: v3.2.12
 
 ### Storage
 
@@ -2669,6 +2862,42 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet.
 - Introduced in: -
+
+##### consistency_check_cooldown_time_second
+
+- Default: 24 * 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Controls the minimal interval (in seconds) required between consistency checks of the same tablet. During tablet selection, a tablet is considered eligible only if `tablet.getLastCheckTime()` is less than `(currentTimeMillis - consistency_check_cooldown_time_second * 1000)`. The default value (24 * 3600) enforces roughly one check per tablet per day to reduce backend disk I/O. Lowering this value increases check frequency and resource usage; raising it reduces I/O at the cost of slower detection of inconsistencies. The value is applied globally when filtering cooldowned tablets from an index's tablet list.
+- Introduced in: v3.5.5
+
+##### consistency_check_end_time
+
+- Default: "4"
+- Type: String
+- Unit: Hour of day (0-23)
+- Is mutable: No
+- Description: Specifies the end hour (hour-of-day) of the ConsistencyChecker work window. The value is parsed with SimpleDateFormat("HH") in the system time zone and accepted as 0–23 (single or two-digit). StarRocks uses it with `consistency_check_start_time` to decide when to schedule and add consistency-check jobs. When `consistency_check_start_time` is greater than `consistency_check_end_time`, the window spans midnight (for example, default is `consistency_check_start_time` = "23" to `consistency_check_end_time` = "4"). When `consistency_check_start_time` is equal to `consistency_check_end_time`, the checker never runs. Parsing failure will cause FE startup to log an error and exit, so provide a valid hour string.
+- Introduced in: v3.2.0
+
+##### consistency_check_start_time
+
+- Default: "23"
+- Type: String
+- Unit: Hour of day (00-23)
+- Is mutable: No
+- Description: Specifies the start hour (hour-of-day) of the ConsistencyChecker work window. The value is parsed with SimpleDateFormat("HH") in the system time zone and accepted as 0–23 (single or two-digit). StarRocks uses it with `consistency_check_end_time` to decide when to schedule and add consistency-check jobs. When `consistency_check_start_time` is greater than `consistency_check_end_time`, the window spans midnight (for example, default is `consistency_check_start_time` = "23" to `consistency_check_end_time` = "4"). When `consistency_check_start_time` is equal to `consistency_check_end_time`, the checker never runs. Parsing failure will cause FE startup to log an error and exit, so provide a valid hour string.
+- Introduced in: v3.2.0
+
+##### consistency_tablet_meta_check_interval_ms
+
+- Default: 2 * 3600 * 1000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Interval used by the ConsistencyChecker to run a full tablet-meta consistency scan between `TabletInvertedIndex` and `LocalMetastore`. The daemon in `runAfterCatalogReady` triggers checkTabletMetaConsistency when `current time - lastTabletMetaCheckTime` exceeds this value. When an invalid tablet is first detected, its `toBeCleanedTime` is set to `now + (consistency_tablet_meta_check_interval_ms / 2)` so actual deletion is delayed until a subsequent scan. Increase this value to reduce scan frequency and load (slower cleanup); decrease it to detect and remove stale tablets faster (higher overhead).
+- Introduced in: v3.2.0
 
 ##### default_replication_num
 
@@ -2766,6 +2995,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The maximum number of partitions can be created in a table.
 - Introduced in: v3.3.2
+
+##### max_task_consecutive_fail_count
+
+- Default: 10
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of consecutive failures a task may have before the scheduler automatically suspends it. When `TaskSource.MV.equals(task.getSource())` and `max_task_consecutive_fail_count` are greater than 0, if a task's consecutive failure counter reaches or exceeds `max_task_consecutive_fail_count`, the task is suspended via the TaskManager and, for materialized-view tasks, the materialized view is inactivated. An exception is thrown indicating suspension and how to reactivate (for example, `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`). Set this item to 0 or a negative value to disable automatic suspension.
+- Introduced in: -
 
 ##### partition_recycle_retention_period_secs
 
@@ -3773,6 +4011,33 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
 - Introduced in: -
 
+##### jdbc_connection_timeout_ms
+
+- Default: 10000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: No
+- Description: The timeout in milliseconds for HikariCP connection pool to acquire a connection. If a connection cannot be acquired from the pool within this time, the operation will fail.
+- Introduced in: v3.5.13
+
+##### jdbc_query_timeout_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout in milliseconds for JDBC statement query execution. This timeout is applied to all SQL queries executed through JDBC catalogs (e.g., partition metadata queries). The value is converted to seconds when passed to the JDBC driver.
+- Introduced in: v3.5.13
+
+##### jdbc_network_timeout_ms
+
+- Default: 30000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout in milliseconds for JDBC network operations (socket read). This timeout applies to database metadata calls (e.g., getSchemas(), getTables(), getColumns()) to prevent indefinite blocking when the external database is unresponsive.
+- Introduced in: v3.5.13
+
 ##### jdbc_connection_pool_size
 
 - Default: 8
@@ -4079,6 +4344,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether plugins can be installed on FEs. Plugins can be installed or uninstalled only on the Leader FE.
 - Introduced in: -
 
+##### proc_profile_jstack_depth
+
+- Default: 128
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum Java stack depth when the system collects CPU and memory profiles. This value controls how many Java stack frames are captured for each sampled stack: larger values increase trace detail and output size and may add profiling overhead, while smaller values reduce details. This setting is used when the profiler is started for both CPU and memory profiling, so adjust it to balance diagnostic needs and performance impact.
+- Introduced in: -
+
+##### proc_profile_mem_enable
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable collection of process memory allocation profiles. When this item is set to `true`, the system generates an HTML profile named `mem-profile-<timestamp>.html` under `sys_log_dir/proc_profile`, sleeps for `proc_profile_collect_time_s` seconds while sampling, and uses `proc_profile_jstack_depth` for Java stack depth. Generated files are compressed and purged according to `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`. The native extraction path uses `STARROCKS_HOME_DIR` to avoid `/tmp` noexec issues. This item is intended for troubleshooting memory-allocation hotspots. Enabling it increases CPU, I/O and disk usage and may produce large files.
+- Introduced in: v3.2.12
+
 ##### query_detail_explain_level
 
 - Default: COSTS
@@ -4132,6 +4415,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Is mutable: Yes
 - Description: The timeout duration for synchronization tasks.
 - Introduced in: v3.3.5
+
+##### skip_whole_phase_lock_mv_limit
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is disable (the system always use the safe, copy-and-lock path). When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
+- Introduced in: v3.2.1
 
 ##### small_file_dir
 

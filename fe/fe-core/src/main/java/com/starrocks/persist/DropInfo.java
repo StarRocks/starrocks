@@ -43,18 +43,19 @@ public class DropInfo implements Writable {
     private long dbId;
     @SerializedName("tb")
     private long tableId;
+    // not change the SerializedName for compatibility
     @SerializedName("idx")
-    private long indexId;
+    private long indexMetaId;
     @SerializedName("fd")
     private boolean forceDrop = false;
 
     public DropInfo() {
     }
 
-    public DropInfo(long dbId, long tableId, long indexId, boolean forceDrop) {
+    public DropInfo(long dbId, long tableId, long indexMetaId, boolean forceDrop) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.indexId = indexId;
+        this.indexMetaId = indexMetaId;
         this.forceDrop = forceDrop;
     }
 
@@ -66,8 +67,8 @@ public class DropInfo implements Writable {
         return this.tableId;
     }
 
-    public long getIndexId() {
-        return this.indexId;
+    public long getIndexMetaId() {
+        return this.indexMetaId;
     }
 
     public boolean isForceDrop() {
@@ -95,7 +96,7 @@ public class DropInfo implements Writable {
 
         DropInfo info = (DropInfo) obj;
 
-        return (dbId == info.dbId) && (tableId == info.tableId) && (indexId == info.indexId)
+        return (dbId == info.dbId) && (tableId == info.tableId) && (indexMetaId == info.indexMetaId)
                 && (forceDrop == info.forceDrop);
     }
 }

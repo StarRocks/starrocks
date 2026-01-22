@@ -75,11 +75,15 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
 
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnablePreAggTopNPushDown()) {
+        int topNPushDownAggMode = context.getSessionVariable().getTopNPushDownAggMode();
+        if (topNPushDownAggMode < 0) {
             return false;
         }
 
         LogicalTopNOperator topn = (LogicalTopNOperator) input.getOp();
+        if (topn.isTopNPushDownAgg()) {
+            return false;
+        }
 
         if (!topn.hasLimit() || topn.getLimit() > context.getSessionVariable().getCboPushDownTopNLimit()) {
             return false;
@@ -124,21 +128,35 @@ public class PushDownTopNToPreAggRule extends TransformationRule {
         OptExpression localAgg = agg.inputAt(0);
         LogicalAggregationOperator localAggOp = (LogicalAggregationOperator) localAgg.getOp();
 
-        OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
-                        .withOperator(localAggOp)
-                        .setTopNLocalAgg(true)
-                        .build(), localAgg.getInputs());
-
-        OptExpression newLocalTopN = OptExpression.create(new LogicalTopNOperator.Builder()
-                .setOrderByElements(topn.getOrderByElements())
-                .setLimit(topn.getLimit())
-                .setTopNType(topn.getTopNType())
-                .setSortPhase(topn.getSortPhase())
+        // Create a new TopN operator that will be placed above the local aggregate
+        // This TopN operator will be used to filter group by data during local aggregation
+        LogicalTopNOperator localTopNOp = new LogicalTopNOperator.Builder()
+                .withOperator(topn)
+                .setSortPhase(SortPhase.PARTIAL)
                 .setIsSplit(false)
-                .setPerPipeline(true)
-                .build(), newLocalAgg);
+                .setPerPipeline(true) // No merge needed
+                .build();
+        localTopNOp.setTopNPushDownAgg();
 
+        LogicalTopNOperator.TopNSortInfo localTopNSortInfo = null;
+        int topNPushDownAggMode = context.getSessionVariable().getTopNPushDownAggMode();
+        // disable topn push down when the first topN's cardinality is low enough
+        if (topNPushDownAggMode >= 1) {
+            localTopNSortInfo = new LogicalTopNOperator.TopNSortInfo(
+                    topn.getOrderByElements(), topn.getSortPhase(), topn.getTopNType(),
+                    topn.getLimit(), topn.getOffset());
+            localTopNOp.setTopNPushDownAgg();
+        }
+        // Create new local aggregation with TopN information for filtering during aggregation
+        OptExpression newLocalAgg = OptExpression.create(new LogicalAggregationOperator.Builder()
+                .withOperator(localAggOp)
+                .setTopNLocalAgg(true)
+                .setAggTopnSortInfo(localTopNSortInfo)
+                .build(), localAgg.getInputs());
+
+        OptExpression newLocalTopN = OptExpression.create(localTopNOp, newLocalAgg);
         OptExpression newAgg = OptExpression.create(aggOp, newLocalTopN);
+        // Return the original topN with the new agg structure
         return Lists.newArrayList(OptExpression.create(topn, newAgg));
     }
 }

@@ -471,9 +471,7 @@ public class ExternalOlapTable extends OlapTable {
                     defaultDistributionInfo);
 
             PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
-                    partitionMeta.getPartition_name(),
-                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
-                    null);
+                    partitionMeta.getPartition_id()); // TODO(wulei): fix it
             physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
 
             logicalPartition.addSubPartition(physicalPartition);
@@ -507,7 +505,7 @@ public class ExternalOlapTable extends OlapTable {
                     index.addTablet(tablet, tabletMeta, false);
                 }
                 if (indexMeta.getPartition_id() == physicalPartition.getId()) {
-                    if (index.getId() != baseIndexMetaId) {
+                    if (index.getMetaId() != baseIndexMetaId) {
                         physicalPartition.createRollupIndex(index);
                     } else {
                         physicalPartition.setBaseIndex(index);

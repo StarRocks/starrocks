@@ -144,8 +144,8 @@ public class MetadataViewer {
 
                     long visibleVersion = physicalPartition.getVisibleVersion();
 
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getId());
+                    for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.VISIBLE)) {
+                        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
                         for (Tablet tablet : index.getTablets()) {
                             long tabletId = tablet.getId();
                             int count = replicationNum;
@@ -267,7 +267,7 @@ public class MetadataViewer {
             for (long partId : partitionIds) {
                 Partition partition = olapTable.getPartition(partId);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             for (long beId : tablet.getBackendIds()) {
                                 if (!countMap.containsKey(beId)) {
@@ -365,7 +365,7 @@ public class MetadataViewer {
                 }
 
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         List<Tablet> tablets = index.getTablets();
 
                         List<Long> rowCountStatistics = Lists.newArrayListWithCapacity(tablets.size());
@@ -387,7 +387,7 @@ public class MetadataViewer {
                             List<String> row = Lists.newArrayList();
                             row.add(partition.getName());
                             row.add(String.valueOf(physicalPartition.getId()));
-                            row.add(olapTable.getIndexNameByMetaId(index.getId()));
+                            row.add(olapTable.getIndexNameByMetaId(index.getMetaId()));
                             row.add(String.valueOf(rowCountStatistics.get(i)));
                             row.add(totalRowCount == 0L ? "0.00 %"
                                     : df.format((double) rowCountStatistics.get(i) / totalRowCount));

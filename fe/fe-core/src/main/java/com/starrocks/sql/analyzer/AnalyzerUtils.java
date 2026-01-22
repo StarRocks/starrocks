@@ -987,11 +987,11 @@ public class AnalyzerUtils {
          */
         class TableIndexId {
             long tableId;
-            long baseIndexId;
+            long baseIndexMetaId;
 
-            public TableIndexId(long tableId, long indexId) {
+            public TableIndexId(long tableId, long indexMetaId) {
                 this.tableId = tableId;
-                this.baseIndexId = indexId;
+                this.baseIndexMetaId = indexMetaId;
             }
 
             @Override
@@ -1003,12 +1003,12 @@ public class AnalyzerUtils {
                     return false;
                 }
                 TableIndexId that = (TableIndexId) o;
-                return tableId == that.tableId && baseIndexId == that.baseIndexId;
+                return tableId == that.tableId && baseIndexMetaId == that.baseIndexMetaId;
             }
 
             @Override
             public int hashCode() {
-                return Objects.hash(tableId, baseIndexId);
+                return Objects.hash(tableId, baseIndexMetaId);
             }
         }
 
@@ -1740,6 +1740,20 @@ public class AnalyzerUtils {
             return new StructType(newFields);
         }
         return type;
+    }
+
+    public static void replaceNullTypeInExprTree(Expr expr) {
+        for (Expr child : expr.getChildren()) {
+            replaceNullTypeInExprTree(child);
+        }
+
+        Type currentType = expr.getType();
+        if (currentType != null) {
+            Type hackedType = replaceNullType2Boolean(currentType);
+            if (!currentType.equals(hackedType)) {
+                expr.setType(hackedType);
+            }
+        }
     }
 
     public static void checkNondeterministicFunction(ParseNode node) {

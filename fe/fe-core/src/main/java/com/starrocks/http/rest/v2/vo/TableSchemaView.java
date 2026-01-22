@@ -101,7 +101,7 @@ public class TableSchemaView {
                 .ifPresent(svo::setColumns);
 
         Optional.ofNullable(table.getIndexMetaIdToMeta())
-                .map(indexIdToMetas -> indexIdToMetas.values().stream()
+                .map(indexMetaIdToMetas -> indexMetaIdToMetas.values().stream()
                         .filter(Objects::nonNull)
                         .sorted(Comparator.comparingLong(MaterializedIndexMeta::getIndexMetaId))
                         .map(MaterializedIndexMetaView::createFrom)

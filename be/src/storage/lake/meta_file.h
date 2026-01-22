@@ -79,6 +79,11 @@ public:
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
 
+    // Mark Lake Compaction Rows Mapper file as orphan for deferred GC cleanup
+    // WHY: lcrm files on remote storage must be cleaned up asynchronously to handle
+    // distributed access patterns and potential failures gracefully.
+    void remove_lcrm_file(const TxnLogPB_OpCompaction& op_compaction);
+
     const TabletMetadata* tablet_meta() const { return _tablet_meta.get(); }
 
     const DelvecPagePB& delvec_page(uint32_t segment_id) const {

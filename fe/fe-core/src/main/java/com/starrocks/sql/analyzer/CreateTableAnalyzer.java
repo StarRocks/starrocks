@@ -125,9 +125,9 @@ public class CreateTableAnalyzer {
         analyzeMultiExprsPartition(statement, tableNameObj);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
-        analyzeSortKeys(statement);
         analyzePartitionDesc(statement);
         analyzeDistributionDesc(statement);
+        analyzeSortKeys(statement); // analyzeSortKeys must be called after analyzeDistributionDesc
         analyzeColumnRef(statement, catalogName);
 
         if (statement.isHasGeneratedColumn()) {
@@ -135,6 +135,9 @@ public class CreateTableAnalyzer {
         }
 
         analyzeIndexDefs(statement);
+        if (statement.isOlapEngine()) {
+            validateComplexTypeDefaultValues(statement);
+        }
     }
 
     private static void analyzeTemporaryTable(CreateTableStmt stmt, ConnectContext context,
@@ -441,6 +444,7 @@ public class CreateTableAnalyzer {
         stmt.setKeysDesc(keysDesc);
     }
 
+    // analyzeSortKeys must be called after analyzeDistributionDesc
     private static void analyzeSortKeys(CreateTableStmt stmt) {
         if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
             return;
@@ -452,7 +456,7 @@ public class CreateTableAnalyzer {
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
         List<OrderByElement> orderByElements = stmt.getOrderByElements();
         List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
-        if (Config.enable_range_distribution) {
+        if (stmt.getDistributionDesc() instanceof RangeDistributionDesc) {
             // For range distribution, the sort columns must be the same as the key
             // columns or only in a different order for none duplicate key table
             if (keysType != KeysType.DUP_KEYS) {
@@ -489,8 +493,11 @@ public class CreateTableAnalyzer {
                     keyColIdxes.add(idx);
                 }
 
-                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
-                if (!res) {
+                if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
+                    throw new SemanticException("The sort columns must be same with primary key columns " +
+                                                "and the order must be consistent");
+                } else if (keysType != KeysType.PRIMARY_KEYS &&
+                                !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
                 }
             }
@@ -950,5 +957,30 @@ public class CreateTableAnalyzer {
         }
 
         statement.setIndexes(indexes);
+    }
+
+    private static void validateComplexTypeDefaultValues(CreateTableStmt statement) {
+        Map<String, String> properties = statement.getProperties();
+        boolean fastSchemaEvolution = true;
+
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION)) {
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+            fastSchemaEvolution = Boolean.parseBoolean(value);
+        }
+
+        if (!fastSchemaEvolution) {
+            List<Column> columns = statement.getColumns();
+            if (columns != null) {
+                for (Column column : columns) {
+                    if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                        throw new SemanticException(
+                                "Complex type (ARRAY/MAP/STRUCT) default values require fast schema evolution. " +
+                                        "Table '" + statement.getTableName() + "' has fast_schema_evolution=false. " +
+                                        "Please remove the 'fast_schema_evolution'='false' property or remove the default " +
+                                        "value for column '" + column.getName() + "'");
+                    }
+                }
+            }
+        }
     }
 }

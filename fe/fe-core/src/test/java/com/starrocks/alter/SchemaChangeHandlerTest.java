@@ -221,7 +221,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -242,7 +242,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(11, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -262,7 +262,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(10, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -273,7 +273,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         AlterTableStmt dropKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(dropKeyColStmtStr);
         Assertions.assertThrows(Exception.class, () -> DDLStmtExecutor.execute(dropKeyColStmt, connectContext));
 
-        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexIdToSchema());
+        LOG.info("getIndexIdToSchema 1: {}", tbl.getIndexMetaIdToSchema());
 
         //process agg drop value column with rollup schema change
         String dropRollUpValColStmtStr = "alter table test.sc_agg drop column max_dwell_time";
@@ -289,7 +289,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -329,7 +329,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(9, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -347,7 +347,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(8, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -387,7 +387,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(7, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -405,7 +405,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
             Assertions.assertEquals(6, tbl.getBaseSchema().size());
             String baseIndexName = tbl.getIndexNameByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertEquals(baseIndexName, tbl.getName());
-            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(tbl.getBaseIndexMetaId());
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             Assertions.assertNotNull(indexMeta);
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
@@ -422,7 +422,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         // origin columns
         Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
         Map<Long, Long> indexToNewSchemaId = new HashMap<>();
-        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexIdToSchema().entrySet()) {
+        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexMetaIdToSchema().entrySet()) {
             indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
             indexToNewSchemaId.put(entry.getKey(), globalStateMgr.getNextId());
         }
@@ -729,5 +729,143 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                     exception.getMessage().contains("Alter operation OPTIMIZE conflicts with operation SCHEMA_CHANGE"),
                     exception.getMessage());
         }
+    }
+
+    @Test
+    public void testAlterTableAddComplexTypeDefaultValue() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_default (\n" +
+                "id INT NOT NULL,\n" +
+                "name STRING\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_complex_default");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals(2, table.getBaseSchema().size());
+
+        String alterSql1 = "ALTER TABLE test.test_complex_default ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3]";
+        AlterTableStmt alterStmt1 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql1);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt1.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(3, table.getBaseSchema().size());
+        Column arrCol = table.getColumn("arr");
+        Assertions.assertNotNull(arrCol);
+        Assertions.assertTrue(arrCol.getType().isArrayType());
+        Assertions.assertNotNull(arrCol.getDefaultExpr());
+
+        String alterSql2 = "ALTER TABLE test.test_complex_default ADD COLUMN mp MAP<STRING, INT> DEFAULT map{'k1': 1, 'k2': 2}";
+        AlterTableStmt alterStmt2 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql2);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt2.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(4, table.getBaseSchema().size());
+        Column mpCol = table.getColumn("mp");
+        Assertions.assertNotNull(mpCol);
+        Assertions.assertTrue(mpCol.getType().isMapType());
+        Assertions.assertNotNull(mpCol.getDefaultExpr());
+
+        String alterSql3 = "ALTER TABLE test.test_complex_default ADD COLUMN st STRUCT<id INT, name STRING> " +
+                "DEFAULT row(1, 'test')";
+        AlterTableStmt alterStmt3 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql3);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt3.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(5, table.getBaseSchema().size());
+        Column stCol = table.getColumn("st");
+        Assertions.assertNotNull(stCol);
+        Assertions.assertTrue(stCol.getType().isStructType());
+        Assertions.assertNotNull(stCol.getDefaultExpr());
+
+        String alterSql4 = "ALTER TABLE test.test_complex_default ADD COLUMN" +
+                " nested_arr ARRAY<STRUCT<id INT, tags ARRAY<STRING>>> DEFAULT [row(1, ['a', 'b']), row(2, ['c', 'd'])]";
+        AlterTableStmt alterStmt4 = (AlterTableStmt) parseAndAnalyzeStmt(alterSql4);
+        Assertions.assertDoesNotThrow(() -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt4.getAlterClauseList(), db, table);
+        });
+
+        jobSize++;
+        Assertions.assertEquals(6, table.getBaseSchema().size());
+        Column nestedCol = table.getColumn("nested_arr");
+        Assertions.assertNotNull(nestedCol);
+        Assertions.assertTrue(nestedCol.getType().isArrayType());
+        Assertions.assertNotNull(nestedCol.getDefaultExpr());
+    }
+
+    @Test
+    public void testAlterTableComplexTypeRequiresFastSchemaEvolution() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_no_fast (\n" +
+                "id INT NOT NULL,\n" +
+                "name STRING\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'false'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("test_complex_no_fast");
+        Assertions.assertNotNull(table);
+
+        String alterSql = "ALTER TABLE test.test_complex_no_fast ADD COLUMN arr ARRAY<INT> DEFAULT [1, 2, 3]";
+        AlterTableStmt alterStmt = (AlterTableStmt) parseAndAnalyzeStmt(alterSql);
+
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> {
+            SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+            handler.process(alterStmt.getAlterClauseList(), db, table);
+        });
+
+        Assertions.assertTrue(exception.getMessage().contains("Complex type (ARRAY/MAP/STRUCT) " +
+                "default values require fast schema evolution"), exception.getMessage());
+    }
+
+    @Test
+    public void testAlterTableComplexTypeInvalidExpression() throws Exception {
+        String createTableStmt = "CREATE TABLE test.test_complex_invalid (\n" +
+                "id INT NOT NULL\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    'replication_num' = '1',\n" +
+                "    'fast_schema_evolution' = 'true'\n" +
+                ");";
+        createTable(createTableStmt);
+
+        String alterSql1 = "ALTER TABLE test.test_complex_invalid ADD COLUMN arr ARRAY<DATETIME> DEFAULT [now()]";
+        SemanticException exception1 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql1));
+        Assertions.assertTrue(exception1.getMessage().contains("Function 'now' is not supported"),
+                exception1.getMessage());
+
+        String alterSql2 = "ALTER TABLE test.test_complex_invalid ADD COLUMN st STRUCT<id INT, name STRING> DEFAULT row(null, " +
+                "'test')";
+        SemanticException exception2 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql2));
+        Assertions.assertTrue(exception2.getMessage().contains("NULL literal is not supported"),
+                exception2.getMessage());
+
+        String alterSql3 = "ALTER TABLE test.test_complex_invalid ADD COLUMN arr2 ARRAY<INT> DEFAULT [1+2, 3*4]";
+        SemanticException exception3 = Assertions.assertThrows(SemanticException.class, () ->
+                parseAndAnalyzeStmt(alterSql3));
+        Assertions.assertTrue(exception3.getMessage().contains("ArithmeticExpr' is not supported"),
+                exception3.getMessage());
     }
 }

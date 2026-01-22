@@ -119,6 +119,7 @@ import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
 import com.starrocks.encryption.KeyMgr;
 import com.starrocks.encryption.KeyRotationDaemon;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -201,7 +202,6 @@ import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.qe.scheduler.slot.GlobalSlotProvider;
 import com.starrocks.qe.scheduler.slot.LocalSlotProvider;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
-import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.ThriftConnectionPool;
@@ -323,7 +323,7 @@ public class GlobalStateMgr {
     private final MaterializedViewMgr materializedViewMgr;
 
     private final ConsistencyChecker consistencyChecker;
-    private final BackupHandler backupHandler;
+    private BackupHandler backupHandler;
     private final PublishVersionDaemon publishVersionDaemon;
     private final DeleteMgr deleteMgr;
     private final DatabaseQuotaRefresher updateDbUsedDataQuotaDaemon;
@@ -498,8 +498,7 @@ public class GlobalStateMgr {
 
     private LockManager lockManager;
 
-    private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
-    private final BaseSlotManager slotManager;
+    private final BaseSlotManager slotManager = ExtensionManager.getComponent(BaseSlotManager.class);
     private final GlobalSlotProvider globalSlotProvider = new GlobalSlotProvider();
     private final SlotProvider localSlotProvider = new LocalSlotProvider();
     private final GlobalLoadJobListenerBus operationListenerBus = new GlobalLoadJobListenerBus();
@@ -674,7 +673,7 @@ public class GlobalStateMgr {
                 new MaterializedViewHandler(),
                 new SystemHandler());
         this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                Config.lake_publish_version_max_threads, "alter-publish", false);
+                Config.publish_version_max_threads, "alter-publish", false);
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -762,7 +761,7 @@ public class GlobalStateMgr {
         this.analyzeMgr = new AnalyzeMgr();
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex);
         this.temporaryTableMgr = new TemporaryTableMgr();
-        this.warehouseMgr = new WarehouseManager();
+        this.warehouseMgr = ExtensionManager.getComponent(WarehouseManager.class);
         this.historicalNodeMgr = new HistoricalNodeMgr();
         this.connectorMgr = new ConnectorMgr();
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
@@ -787,11 +786,9 @@ public class GlobalStateMgr {
         if (RunMode.isSharedDataMode()) {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
-            this.slotManager = new SlotManager(resourceUsageMonitor);
             this.fullVacuumDaemon = new FullVacuumDaemon();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
-            this.slotManager = new SlotManager(resourceUsageMonitor);
         }
 
         this.lockManager = new LockManager();
@@ -2512,6 +2509,10 @@ public class GlobalStateMgr {
         return functionSet.getFunction(desc, mode);
     }
 
+    public boolean isAggregateFunction(String functionName) {
+        return functionSet.isAggregateFunction(functionName);
+    }
+
     public List<Function> getBuiltinFunctions() {
         return functionSet.getBuiltinFunctions();
     }
@@ -2840,7 +2841,7 @@ public class GlobalStateMgr {
     }
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
-        return resourceUsageMonitor;
+        return slotManager.getResourceUsageMonitor();
     }
 
     public DictionaryMgr getDictionaryMgr() {
@@ -2886,5 +2887,9 @@ public class GlobalStateMgr {
 
     public void setRoutineLoadMgr(RoutineLoadMgr routineLoadMgr) {
         this.routineLoadMgr = routineLoadMgr;
+    }
+
+    public void setBackupHandler(BackupHandler backupHandler) {
+        this.backupHandler = backupHandler;
     }
 }

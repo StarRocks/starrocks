@@ -22,6 +22,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -460,12 +461,15 @@ public class ReplicationJob implements GsonPostProcessable {
         return state;
     }
 
-    protected void setState(ReplicationJobState state) {
-        this.state = state;
+    protected void persistStateChange(ReplicationJobState state) {
         if (state.equals(ReplicationJobState.COMMITTED) || state.equals(ReplicationJobState.ABORTED)) {
             finishedTimeMs = System.currentTimeMillis();
         }
-        GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
+        ReplicationJob persistJob = copyForPersist();
+        persistJob.state = state;
+        GlobalStateMgr.getServingState().getEditLog().logReplicationJob(persistJob, (wal) -> {
+            this.state = state;
+        });
         LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}",
                 state, databaseId, tableId, transactionId);
     }
@@ -549,6 +553,22 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
+    protected ReplicationJob(ReplicationJob job) {
+        this.jobId = job.jobId;
+        this.createdTimeMs = job.createdTimeMs;
+        this.finishedTimeMs = job.finishedTimeMs;
+        this.srcToken = job.srcToken;
+        this.databaseId = job.databaseId;
+        this.tableId = job.tableId;
+        this.tableType = job.tableType;
+        this.srcTableType = job.srcTableType;
+        this.replicationDataSize = job.replicationDataSize;
+        this.replicationReplicaCount = job.replicationReplicaCount;
+        this.partitionInfos = job.partitionInfos;
+        this.transactionId = job.transactionId;
+        this.state = job.state;
+    }
+
     public void cancel() {
         if (state.equals(ReplicationJobState.COMMITTED) || state.equals(ReplicationJobState.ABORTED)) {
             return;
@@ -558,7 +578,7 @@ public class ReplicationJob implements GsonPostProcessable {
             abortTransaction("Replication job cancelled");
         }
 
-        setState(ReplicationJobState.ABORTED);
+        persistStateChange(ReplicationJobState.ABORTED);
     }
 
     public void run() {
@@ -566,35 +586,35 @@ public class ReplicationJob implements GsonPostProcessable {
             if (state.equals(ReplicationJobState.INITIALIZING)) {
                 beginTransaction();
                 sendRemoteSnapshotTasks();
-                setState(ReplicationJobState.SNAPSHOTING);
+                persistStateChange(ReplicationJobState.SNAPSHOTING);
             } else if (state.equals(ReplicationJobState.SNAPSHOTING)) {
                 if (isTransactionAborted()) {
-                    setState(ReplicationJobState.ABORTED);
+                    persistStateChange(ReplicationJobState.ABORTED);
                 } else if (isCrashRecovery()) {
                     sendRemoteSnapshotTasks();
                     LOG.info("Replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
                             state, databaseId, tableId, transactionId);
                 } else if (isAllTaskFinished()) {
                     sendReplicateSnapshotTasks();
-                    setState(ReplicationJobState.REPLICATING);
+                    persistStateChange(ReplicationJobState.REPLICATING);
                 }
             } else if (state.equals(ReplicationJobState.REPLICATING)) {
                 if (isTransactionAborted()) {
-                    setState(ReplicationJobState.ABORTED);
+                    persistStateChange(ReplicationJobState.ABORTED);
                 } else if (isCrashRecovery()) {
                     sendReplicateSnapshotTasks();
                     LOG.info("Replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
                             state, databaseId, tableId, transactionId);
                 } else if (isAllTaskFinished()) {
                     commitTransaction();
-                    setState(ReplicationJobState.COMMITTED);
+                    persistStateChange(ReplicationJobState.COMMITTED);
                 }
             }
         } catch (Exception e) {
             LOG.warn("Replication job exception, state: {}, database id: {}, table id: {}, transaction id: {}, ",
                     state, databaseId, tableId, transactionId, e);
             abortTransaction(e.getMessage());
-            setState(ReplicationJobState.ABORTED);
+            persistStateChange(ReplicationJobState.ABORTED);
         }
     }
 
@@ -761,7 +781,7 @@ public class ReplicationJob implements GsonPostProcessable {
             TabletInfo tabletInfo = initTabletInfo(tTabletInfo, tablet);
             tabletInfos.put(tabletInfo.getTabletId(), tabletInfo);
         }
-        int schemaHash = olapTable.getSchemaHashByIndexMetaId(tIndexInfo.index_id);
+        int schemaHash = olapTable.getSchemaHashByIndexMetaId(index.getMetaId());
         return new IndexInfo(tIndexInfo.index_id, schemaHash, tIndexInfo.src_schema_hash, tabletInfos);
     }
 
@@ -799,20 +819,34 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
-            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
-            Preconditions.checkState(physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
-                    "Partition " + physicalPartition.getName() + " in table " + table.getName()
-                            + " publish version not finished");
-            Preconditions.checkState(physicalPartition.getDataVersion() <= srcPartition.getDataVersion(),
-                    "Target data version: " + physicalPartition.getDataVersion()
-                            + " is larger than source data version: " + srcPartition.getDataVersion());
-            if (physicalPartition.getDataVersion() == srcPartition.getDataVersion()) {
-                continue;
+        for (Partition partition : table.getPartitions()) {
+            Partition srcPartition = srcTable.getPartition(partition.getName(), false);
+            Preconditions.checkState(srcPartition != null,
+                    "Partition " + partition.getName() + " in table " + srcTable.getName() + " not found");
+
+            List<PhysicalPartition> physicalPartitions = getOrderedPhysicalPartitions(partition);
+            List<PhysicalPartition> srcPhysicalPartitions = getOrderedPhysicalPartitions(srcPartition);
+            Preconditions.checkState(physicalPartitions.size() == srcPhysicalPartitions.size(),
+                    "Target physical partition size: " + physicalPartitions.size()
+                            + " is not equal to source physical partition size: " + srcPhysicalPartitions.size());
+
+            for (int i = 0; i < physicalPartitions.size(); ++i) {
+                PhysicalPartition physicalPartition = physicalPartitions.get(i);
+                PhysicalPartition srcPhysicalPartition = srcPhysicalPartitions.get(i);
+                Preconditions.checkState(
+                        physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
+                        "Partition " + partition.getName() + "(" + physicalPartition.getId() + ") in table "
+                                + table.getName() + " publish version not finished");
+                Preconditions.checkState(physicalPartition.getDataVersion() <= srcPhysicalPartition.getDataVersion(),
+                        "Target data version: " + physicalPartition.getDataVersion()
+                                + " is larger than source data version: " + srcPhysicalPartition.getDataVersion());
+                if (physicalPartition.getDataVersion() == srcPhysicalPartition.getDataVersion()) {
+                    continue;
+                }
+                PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition,
+                        srcPhysicalPartition, srcSystemInfoService);
+                partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
-            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
-                    srcSystemInfoService);
-            partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }
         return partitionInfos;
     }
@@ -821,10 +855,10 @@ public class ReplicationJob implements GsonPostProcessable {
             PhysicalPartition srcPartition, SystemInfoService srcSystemInfoService) {
         Map<Long, IndexInfo> indexInfos = Maps.newHashMap();
         for (Map.Entry<String, Long> indexNameToId : table.getIndexNameToMetaId().entrySet()) {
-            long indexId = indexNameToId.getValue();
-            long srcIndexId = srcTable.getIndexMetaIdByName(indexNameToId.getKey());
-            MaterializedIndex index = partition.getIndex(indexId);
-            MaterializedIndex srcIndex = srcPartition.getIndex(srcIndexId);
+            long indexMetaId = indexNameToId.getValue();
+            long srcIndexMetaId = srcTable.getIndexMetaIdByName(indexNameToId.getKey());
+            MaterializedIndex index = partition.getLatestIndex(indexMetaId);
+            MaterializedIndex srcIndex = srcPartition.getLatestIndex(srcIndexMetaId);
             IndexInfo indexInfo = initIndexInfo(table, srcTable, index, srcIndex, srcSystemInfoService);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
@@ -835,8 +869,8 @@ public class ReplicationJob implements GsonPostProcessable {
     private static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
             MaterializedIndex srcIndex,
             SystemInfoService srcSystemInfoService) {
-        int schemaHash = table.getSchemaHashByIndexMetaId(index.getId());
-        int srcSchemaHash = srcTable.getSchemaHashByIndexMetaId(srcIndex.getId());
+        int schemaHash = table.getSchemaHashByIndexMetaId(index.getMetaId());
+        int srcSchemaHash = srcTable.getSchemaHashByIndexMetaId(srcIndex.getMetaId());
 
         Map<Long, TabletInfo> tabletInfos = Maps.newHashMap();
         List<Tablet> tablets = index.getTablets();
@@ -849,6 +883,15 @@ public class ReplicationJob implements GsonPostProcessable {
             tabletInfos.put(tabletInfo.getTabletId(), tabletInfo);
         }
         return new IndexInfo(index.getId(), schemaHash, srcSchemaHash, tabletInfos);
+    }
+
+    private static List<PhysicalPartition> getOrderedPhysicalPartitions(Partition partition) {
+        List<PhysicalPartition> physicalPartitions = partition.getSubPartitions().stream()
+                .sorted((left, right) -> Long.compare(left.getId(), right.getId()))
+                .collect(Collectors.toList());
+        Preconditions.checkState(!physicalPartitions.isEmpty()
+                && physicalPartitions.get(0).getId() == partition.getDefaultPhysicalPartition().getId());
+        return physicalPartitions;
     }
 
     private static TabletInfo initTabletInfo(Tablet tablet, Tablet srcTablet,
@@ -1071,6 +1114,10 @@ public class ReplicationJob implements GsonPostProcessable {
 
     protected boolean isCrashRecovery() {
         return runningTasks.isEmpty() && finishedTasks.isEmpty() && (taskNum == 0);
+    }
+
+    public ReplicationJob copyForPersist() {
+        return new ReplicationJob(this);
     }
 
     @Override

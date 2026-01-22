@@ -121,8 +121,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -161,8 +161,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -205,8 +205,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -265,8 +265,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -316,8 +316,8 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -358,8 +358,8 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -400,8 +400,8 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -449,8 +449,8 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     txn_id = next_id();
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -491,8 +491,8 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
     txn_log->set_tablet_id(_tablet_metadata->id());
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f.path));
+    for (const auto& f : writer->segments()) {
+        op_write->mutable_rowset()->add_segments(f.path);
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());

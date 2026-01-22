@@ -1097,6 +1097,15 @@ int64_t Tablet::max_readable_version() const {
     }
 }
 
+int64_t Tablet::min_readable_version() const {
+    if (_updates != nullptr) {
+        return _updates->min_readable_version();
+    } else {
+        std::shared_lock rdlock(_meta_lock);
+        return _timestamped_version_tracker.get_min_readable_version();
+    }
+}
+
 void Tablet::calculate_cumulative_point() {
     std::unique_lock wrlock(_meta_lock);
     if (_cumulative_point != kInvalidCumulativePoint) {

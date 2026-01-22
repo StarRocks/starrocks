@@ -93,25 +93,33 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJob other) {
         this(other.getJobId(), other.getDbId(), other.getTableId(), other.getTableName(), other.getTimeoutMs());
         for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
-            setIndexTabletSchema(indexSchemaInfo.getIndexId(), indexSchemaInfo.getIndexName(), indexSchemaInfo.getSchemaInfo());
+            setIndexTabletSchema(indexSchemaInfo.getIndexMetaId(), indexSchemaInfo.getIndexName(),
+                    indexSchemaInfo.getSchemaInfo());
         }
         this.disableFastSchemaEvolutionV2 = other.disableFastSchemaEvolutionV2;
         this.historySchema = other.historySchema;
         partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
-    public void setIndexTabletSchema(long indexId, String indexName, SchemaInfo schemaInfo) {
-        schemaInfos.add(new IndexSchemaInfo(indexId, indexName, schemaInfo));
+    private LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJob job, boolean copyForPersist) {
+        super(job);
+        this.schemaInfos = job.schemaInfos == null ? null : new ArrayList<>(job.schemaInfos);
+        this.disableFastSchemaEvolutionV2 = job.disableFastSchemaEvolutionV2;
+        this.historySchema = job.historySchema;
+    }
+
+    public void setIndexTabletSchema(long indexMetaId, String indexName, SchemaInfo schemaInfo) {
+        schemaInfos.add(new IndexSchemaInfo(indexMetaId, indexName, schemaInfo));
     }
 
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition, MaterializedIndex index, long nodeId,
                                                        Set<Long> tablets) {
-        String tag = String.format("%d_%d", partition.getId(), index.getId());
+        String tag = String.format("%d_%d", partition.getId(), index.getMetaId());
         TabletMetadataUpdateAgentTask task = null;
         boolean needUpdateSchema = false;
         for (IndexSchemaInfo info : schemaInfos) {
-            if (info.getIndexId() == index.getId()) {
+            if (info.getIndexMetaId() == index.getMetaId()) {
                 needUpdateSchema = true;
                 // `Set.add()` returns true means this set did not already contain the specified element
                 boolean createSchemaFile = partitionsWithSchemaFile.add(tag);
@@ -136,6 +144,26 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         updateCatalogUnprotected(db, table, isReplay);
     }
 
+    @Override
+    protected void prepareForPersist(Database db, LakeTable table) {
+        if (disableFastSchemaEvolutionV2) {
+            return;
+        }
+        // Create historySchema before persistStateChange so it can be included in copyForPersist
+        OlapTableHistorySchema.Builder historySchemaBuilder = OlapTableHistorySchema.newBuilder();
+        for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
+            long indexMetaId = indexSchemaInfo.getIndexMetaId();
+            MaterializedIndexMeta indexMeta = requireNonNull(table.getIndexMetaByMetaId(indexMetaId)).shallowCopy();
+            SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexMetaId, indexMeta);
+            historySchemaBuilder.addIndexSchema(
+                    new IndexSchemaInfo(indexMetaId, table.getIndexNameByMetaId(indexMetaId), oldSchemaInfo));
+        }
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                .getNextTransactionId();
+        historySchemaBuilder.setHistoryTxnIdThreshold(txnId);
+        this.historySchema = historySchemaBuilder.build();
+    }
+
     private void updateCatalogUnprotected(Database db, LakeTable table, boolean isReplay) {
         if (disableFastSchemaEvolutionV2) {
             // only update the property, no need to update schema which is actually not changed
@@ -147,14 +175,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
         Set<String> droppedOrModifiedColumns = Sets.newHashSet();
         boolean hasMv = !table.getRelatedMaterializedViews().isEmpty();
-        OlapTableHistorySchema.Builder historySchemaBuilder = OlapTableHistorySchema.newBuilder();
         for (IndexSchemaInfo indexSchemaInfo : schemaInfos) {
             SchemaInfo schemaInfo = indexSchemaInfo.getSchemaInfo();
-            long indexId = indexSchemaInfo.getIndexId();
-            MaterializedIndexMeta indexMeta = requireNonNull(table.getIndexMetaByIndexId(indexId)).shallowCopy();
+            long indexMetaId = indexSchemaInfo.getIndexMetaId();
+            MaterializedIndexMeta indexMeta = requireNonNull(table.getIndexMetaByMetaId(indexMetaId)).shallowCopy();
             List<Column> oldColumns = indexMeta.getSchema();
-            SchemaInfo oldSchemaInfo = SchemaInfo.fromMaterializedIndex(table, indexId, indexMeta);
-            historySchemaBuilder.addIndexSchema(new IndexSchemaInfo(indexId, table.getIndexNameByMetaId(indexId), oldSchemaInfo));
 
             Preconditions.checkState(Objects.equals(indexMeta.getKeysType(), schemaInfo.getKeysType()));
             Preconditions.checkState(Objects.equals(ListUtils.emptyIfNull(indexMeta.getSortKeyUniqueIds()),
@@ -172,17 +197,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             indexMeta.setSortKeyIdxes(schemaInfo.getSortKeyIndexes());
 
             // update the indexIdToMeta
-            table.getIndexMetaIdToMeta().put(indexId, indexMeta);
+            table.getIndexMetaIdToMeta().put(indexMetaId, indexMeta);
             table.setIndexes(schemaInfo.getIndexes());
-            table.renameColumnNamePrefix(indexId);
+            table.renameColumnNamePrefix(indexMetaId);
         }
         table.rebuildFullSchema();
-        if (!isReplay) {
-            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
-                    .getNextTransactionId();
-            historySchemaBuilder.setHistoryTxnIdThreshold(txnId);
-            this.historySchema = historySchemaBuilder.build();
-        }
 
         // If modified columns are already done, inactive related mv
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, droppedOrModifiedColumns);
@@ -249,6 +268,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         return disableFastSchemaEvolutionV2;
     }
 
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new LakeTableAsyncFastSchemaChangeJob(this, true);
+    }
+
     @SuppressWarnings("rawtypes")
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
@@ -264,8 +288,8 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
             info.add(TimeUtils.longToTimeString(createTimeMs));
             info.add(TimeUtils.longToTimeString(finishedTimeMs));
             info.add(schemaInfo.getIndexName());
-            info.add(schemaInfo.getIndexId());
-            info.add(schemaInfo.getIndexId());
+            info.add(schemaInfo.getIndexMetaId());
+            info.add(schemaInfo.getIndexMetaId());
             info.add(String.format("%d:0", schemaInfo.getSchemaInfo().getVersion())); // schema version and schema hash
             info.add(getWatershedTxnId());
             info.add(jobState.name());

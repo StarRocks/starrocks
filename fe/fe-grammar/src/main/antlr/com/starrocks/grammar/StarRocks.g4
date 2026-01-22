@@ -36,6 +36,7 @@ statement
     | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
+    | alterDatabaseSetStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
@@ -129,6 +130,7 @@ statement
     | executeScriptStatement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
+    | adminAlterAutomatedSnapshotIntervalStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -289,6 +291,17 @@ statement
     | dropFileStatement
     | showSmallFilesStatement
 
+    // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
+    | showWarehousesStatement
+    | showClustersStatement
+    | showNodesStatement
+    | alterWarehouseStatement
+
     // Set Statement
     | setStatement
     | setUserPropertyStatement
@@ -333,17 +346,6 @@ statement
     | truncatePlanAdvisorStatement
     | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
-
-    // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
-    | setWarehouseStatement
-    | showWarehousesStatement
-    | showClustersStatement
-    | showNodesStatement
-    | alterWarehouseStatement
 
     // CNGroup Statement
     | createCNGroupStatement
@@ -396,6 +398,10 @@ showDatabasesStatement
 alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
+alterDatabaseSetStatement
+    : ALTER DATABASE identifier SET propertyList
     ;
 
 createDbStatement
@@ -458,7 +464,7 @@ charsetName
     ;
 
 defaultDesc
-    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')')
+    : DEFAULT (string | NULL | CURRENT_TIMESTAMP ('(' (INTEGER_VALUE)? ')')? | '(' qualifiedName '(' ')' ')' | expression)
     ;
 
 generatedColumnDesc
@@ -789,11 +795,15 @@ syncStatement
     ;
 
 adminSetAutomatedSnapshotOnStatement
-    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (interval)? (STORAGE VOLUME svName=identifier)?
     ;
 
 adminSetAutomatedSnapshotOffStatement
     : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
+    ;
+
+adminAlterAutomatedSnapshotIntervalStatement
+    : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -2335,7 +2345,7 @@ queryRelation
     ;
 
 withClause
-    : WITH commonTableExpression (',' commonTableExpression)*
+    : WITH RECURSIVE? commonTableExpression (',' commonTableExpression)*
     ;
 
 queryNoWith
@@ -3241,7 +3251,7 @@ nonReserved
     | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
-    | REPOSITORIES
+    | REPOSITORIES | RECURSIVE
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP

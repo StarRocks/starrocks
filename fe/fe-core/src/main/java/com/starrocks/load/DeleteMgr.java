@@ -73,6 +73,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.proto.TableSchemaKeyPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
@@ -116,6 +117,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -291,7 +293,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         DeleteJob deleteJob = null;
 
         if (olapTable.isCloudNativeTable()) {
-            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, computeResource);
+            TableSchemaKeyPB schemaKey = new TableSchemaKeyPB();
+            schemaKey.setDbId(db.getId());
+            schemaKey.setTableId(olapTable.getId());
+            schemaKey.setSchemaId(olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaId());
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, schemaKey, deleteInfo, computeResource);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
@@ -515,18 +521,18 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         }
         // check materialized index.
         // only need check the first partition because each partition has same materialized view
-        Map<Long, List<Column>> indexIdToSchema = table.getIndexIdToSchema();
+        Map<Long, List<Column>> indexMetaIdToSchema = table.getIndexMetaIdToSchema();
         PhysicalPartition partition = partitions.get(0).getDefaultPhysicalPartition();
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
-            if (table.getBaseIndexMetaId() == index.getId()) {
+        for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+            if (table.getBaseIndexMetaId() == index.getMetaId()) {
                 continue;
             }
             // check table has condition column
             Map<String, Column> indexColNameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            for (Column column : indexIdToSchema.get(index.getId())) {
+            for (Column column : indexMetaIdToSchema.get(index.getMetaId())) {
                 indexColNameToColumn.put(column.getName(), column);
             }
-            String indexName = table.getIndexNameByMetaId(index.getId());
+            String indexName = table.getIndexNameByMetaId(index.getMetaId());
             for (Predicate condition : conditions) {
                 String columnName = getSlotRef(condition).getColumnName();
                 Column column = indexColNameToColumn.get(columnName);
@@ -534,7 +540,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                     ErrorReport
                             .reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, "index[" + indexName + "]");
                 }
-                MaterializedIndexMeta indexMeta = table.getIndexMetaIdToMeta().get(index.getId());
+                MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(index.getMetaId());
                 if (indexMeta.getKeysType() != KeysType.DUP_KEYS && !column.isKey()) {
                     throw new DdlException("Column[" + columnName + "] is not key column in index[" + indexName + "]");
                 }
@@ -761,6 +767,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     public long getDeleteInfoCount() {
         return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
+    }
+
+    protected List<MultiDeleteInfo> getDeleteInfosForDb(long dbId) {
+        List<MultiDeleteInfo> multiDeleteInfos = dbToDeleteInfos.get(dbId);
+        return Objects.requireNonNullElse(multiDeleteInfos, Collections.emptyList());
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {

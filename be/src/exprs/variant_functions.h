@@ -41,6 +41,9 @@ public:
     DEFINE_VECTORIZED_FN(get_variant_int);
     DEFINE_VECTORIZED_FN(get_variant_double);
     DEFINE_VECTORIZED_FN(get_variant_string);
+    DEFINE_VECTORIZED_FN(get_variant_date);
+    DEFINE_VECTORIZED_FN(get_variant_datetime);
+    DEFINE_VECTORIZED_FN(get_variant_time);
 
     /**
      * @param: [variant, path]

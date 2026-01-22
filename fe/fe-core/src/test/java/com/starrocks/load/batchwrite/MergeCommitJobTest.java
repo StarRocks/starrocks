@@ -20,10 +20,12 @@ import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -148,7 +150,7 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         MergeCommitTask mergeCommitTask = load.getTask(label);
         assertNotNull(mergeCommitTask);
         assertEquals(nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet()),
-                mergeCommitTask.getCoordinatorBackendIds());
+                mergeCommitTask.getBackendIds());
 
         RequestLoadResult result2 = load.requestLoad(nodes.get(1).getId(), nodes.get(1).getHost());
         assertTrue(result2.isOk());
@@ -181,7 +183,7 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         MergeCommitTask mergeCommitTask1 = load.getTask(label1);
         assertNotNull(mergeCommitTask1);
         assertEquals(nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet()),
-                mergeCommitTask1.getCoordinatorBackendIds());
+                mergeCommitTask1.getBackendIds());
 
         RequestLoadResult result2 = load.requestLoad(allNodes.get(parallel).getId(), allNodes.get(parallel).getHost());
         assertTrue(result2.isOk());
@@ -194,11 +196,11 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         assertNotSame(mergeCommitTask1, mergeCommitTask2);
         Set<Long> expectNodeIds = nodes.stream().map(ComputeNode::getId).collect(Collectors.toSet());
         expectNodeIds.add(allNodes.get(parallel).getId());
-        assertEquals(expectNodeIds, mergeCommitTask2.getCoordinatorBackendIds());
+        assertEquals(expectNodeIds, mergeCommitTask2.getBackendIds());
 
         executor.manualRun(mergeCommitTask1);
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label1));
-        assertEquals(mergeCommitTask1.getCoordinatorBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
+        assertEquals(mergeCommitTask1.getBackendIds().size(), txnStateDispatcher.getNumSubmittedTasks());
 
         executor.manualRun(mergeCommitTask2);
         assertEquals(TransactionStatus.VISIBLE, getTxnStatus(label2));
@@ -240,6 +242,42 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
         assertEquals(0, load.numRunningLoads());
     }
 
+    @Test
+    public void testDatabaseDoesNotExist() throws Exception {
+        List<ComputeNode> nodes = allNodes.subList(0, parallel);
+        new Expectations() {
+            {
+                assigner.getBackends(1);
+                result = Optional.of(nodes);
+            }
+        };
+
+        // Create a MergeCommitJob with a non-existent database name
+        Map<String, String> map = new HashMap<>();
+        map.put(StreamLoadHttpHeader.HTTP_FORMAT, "json");
+        map.put(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE, "true");
+        map.put(StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC, "false");
+        StreamLoadKvParams params = new StreamLoadKvParams(map);
+        StreamLoadInfo streamLoadInfo =
+                StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
+
+        MergeCommitJob mergeCommitJob = new MergeCommitJob(
+                1,
+                new TableId("non_existent_db", TABLE_NAME_1_1),
+                WarehouseManager.DEFAULT_WAREHOUSE_NAME,
+                streamLoadInfo,
+                1000,
+                parallel,
+                params,
+                assigner,
+                executor,
+                txnStateDispatcher);
+        RequestLoadResult result = mergeCommitJob.requestLoad(nodes.get(0).getId(), nodes.get(0).getHost());
+        assertFalse(result.isOk());
+        assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        assertTrue(result.getStatus().getError_msgs().get(0).contains("Database 'non_existent_db' does not exist"));
+    }
+
     private class TestThreadPoolExecutor implements Executor {
 
         private final Set<Runnable> pendingRunnable;
@@ -273,26 +311,29 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
                 return;
             }
 
-            if (!(runnable instanceof MergeCommitTask)) {
+            if (!(runnable instanceof MergeCommitTask mergeCommitTask)) {
                 runnable.run();
                 return;
             }
 
-            MergeCommitTask mergeCommitTask = (MergeCommitTask) runnable;
             Thread thread = new Thread(mergeCommitTask);
             thread.start();
+            
             long endTime = System.currentTimeMillis() + 120000;
-            while (mergeCommitTask.getTimeTrace().joinPlanTimeMs.get() <= 0) {
+            do {
                 if (System.currentTimeMillis() > endTime) {
                     throw new Exception("Load executor execute plan timeout");
                 }
                 Thread.sleep(10);
-            }
-            DefaultCoordinator coordinator = (DefaultCoordinator) mergeCommitTask.getCoordinator();
-            assertNotNull(coordinator);
+            } while (!mergeCommitTask.isPlanDeployed());
+
+            DefaultCoordinator coordinator =
+                    (DefaultCoordinator) QeProcessorImpl.INSTANCE.getCoordinator(mergeCommitTask.getLoadId());
+            assertNotNull(coordinator, "Coordinator should be registered");
             coordinator.getExecutionDAG().getExecutions().forEach(execution -> {
                 int indexInJob = execution.getIndexInJob();
                 TReportExecStatusParams request = new TReportExecStatusParams(FrontendServiceVersion.V1);
+                request.setQuery_id(mergeCommitTask.getLoadId());
                 request.setBackend_num(indexInJob)
                         .setDone(true)
                         .setStatus(new TStatus(TStatusCode.OK))
@@ -307,7 +348,8 @@ public class MergeCommitJobTest extends BatchWriteTestBase {
                         LoadJob.LOADED_BYTES, String.valueOf(40)
                 );
                 request.setLoad_counters(currLoadCounters);
-                coordinator.updateFragmentExecStatus(request);
+                TNetworkAddress beAddr = execution.getAddress();
+                QeProcessorImpl.INSTANCE.reportExecStatus(request, beAddr);
             });
             thread.join();
         }

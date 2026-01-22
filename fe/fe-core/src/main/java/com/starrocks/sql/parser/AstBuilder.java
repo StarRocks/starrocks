@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -80,6 +81,7 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -760,6 +762,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitAlterDatabaseSetStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterDatabaseSetStatementContext context) {
+        String dbName = normalizeName(((Identifier) visit(context.identifier())).getValue());
+        NodePosition pos = createPos(context);
+        Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
+        return new AlterDatabaseSetStmt(dbName, properties, pos);
+    }
+
+    @Override
     public ParseNode visitCreateDbStatement(com.starrocks.sql.parser.StarRocksParser.CreateDbStatementContext context) {
         String catalogName = "";
         if (context.catalog != null) {
@@ -1196,6 +1207,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
                 defaultValueDef = new ColumnDef.DefaultValueDef(true,
                         new FunctionCallExpr(functionName, new ArrayList<>()));
+            } else if (defaultDescContext.expression() != null) {
+                Expr defaultExpr = (Expr) visit(defaultDescContext.expression());
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr);
             }
         }
         final com.starrocks.sql.parser.StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =
@@ -2886,13 +2900,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.svName != null) {
             svName = getIdentifierName(context.svName);
         }
-        return new AdminSetAutomatedSnapshotOnStmt(svName, createPos(context));
+        IntervalLiteral intervalLiteral = null;
+        if (context.interval() != null) {
+            intervalLiteral = (IntervalLiteral) visit(context.interval());
+        }
+        return new AdminSetAutomatedSnapshotOnStmt(svName, intervalLiteral, createPos(context));
     }
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
             com.starrocks.sql.parser.StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
         return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminAlterAutomatedSnapshotIntervalStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminAlterAutomatedSnapshotIntervalStatementContext context) {
+        IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+        return new AdminAlterAutomatedSnapshotIntervalStmt(intervalLiteral, createPos(context));
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
@@ -5710,10 +5735,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     @Override
     public ParseNode visitQueryRelation(com.starrocks.sql.parser.StarRocksParser.QueryRelationContext context) {
         List<CTERelation> withQuery = new ArrayList<>();
+        boolean hasRecursiveCTE = false;
         if (context.withClause() != null) {
             withQuery = visit(context.withClause().commonTableExpression(), CTERelation.class);
+            hasRecursiveCTE = context.withClause().RECURSIVE() != null;
         }
         QueryRelation queryRelation = (QueryRelation) visit(context.queryNoWith());
+        queryRelation.setHasRecursiveCTE(hasRecursiveCTE);
         withQuery.forEach(queryRelation::addCTERelation);
         return queryRelation;
     }
@@ -5727,6 +5755,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 normalizeName(((Identifier) visit(context.name)).getValue()),
                 getColumnNames(context.columnAliases()),
                 new QueryStatement(queryRelation),
+                false,
+                true,
                 queryRelation.getPos());
     }
 
