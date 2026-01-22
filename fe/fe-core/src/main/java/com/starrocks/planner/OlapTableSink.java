@@ -301,25 +301,29 @@ public class OlapTableSink extends DataSink {
     }
 
     @Nullable
-    private static TransactionState getTransactionState(TOlapTableSink tSink) throws StarRocksException {
-        TransactionState txnState = null;
+    private static TransactionState getTransactionState(TOlapTableSink tSink, boolean isOlapExternalTable)
+            throws StarRocksException {
         long txnId = tSink.getTxn_id();
-        if (txnId > 0) {
-            // normal transaction state
-            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-            txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
-            if (txnState == null) {
-                // explicit transaction state
-                ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-                if (explicitTxnState != null) {
-                    txnState = explicitTxnState.getTransactionState();
-                }
+        if (txnId <= 0 || isOlapExternalTable) {
+            return null;
+        }
+
+        // normal transaction state
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
+
+        if (txnState == null) {
+            // explicit transaction state
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
+            if (explicitTxnState != null) {
+                txnState = explicitTxnState.getTransactionState();
             }
 
             if (txnState == null) {
                 throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
             }
         }
+
         return txnState;
     }
 
@@ -344,7 +348,7 @@ public class OlapTableSink extends DataSink {
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
 
-        TransactionState txnState = getTransactionState(tSink);
+        TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
 
         TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
                 enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState);
