@@ -146,9 +146,10 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(getDictValues(globalDicts.get(2)), bigList);
         Assertions.assertEquals(getDictValues(globalDicts.get(3)), bigList);
 
-        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(2, 3));
+        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(1, 2, 3));
         Collection<Set<Integer>> columnGroups = unionDictionaryManager.getUnionColumnGroups();
-        Assertions.assertEquals(1, columnGroups.size());
+        Assertions.assertEquals(2, columnGroups.size());
+        Assertions.assertTrue(columnGroups.contains(Set.of(1)));
         Assertions.assertTrue(columnGroups.contains(Set.of(2, 3)));
     }
 
@@ -171,9 +172,10 @@ class UnionDictionaryManagerTest {
         Assertions.assertEquals(getDictValues(globalDicts.get(2)), bigList);
         Assertions.assertEquals(getDictValues(globalDicts.get(3)), bigList);
 
-        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(2, 3));
+        Assertions.assertEquals(unionDictionaryManager.getMergedDictColumnIds(), Set.of(1, 2, 3));
         Collection<Set<Integer>> columnGroups = unionDictionaryManager.getUnionColumnGroups();
-        Assertions.assertEquals(1, columnGroups.size());
+        Assertions.assertEquals(2, columnGroups.size());
+        Assertions.assertTrue(columnGroups.contains(Set.of(1)));
         Assertions.assertTrue(columnGroups.contains(Set.of(2, 3)));
     }
 
@@ -274,10 +276,8 @@ class UnionDictionaryManagerTest {
                 unionDictionaryManager.generateConstantEncodingMap(List.of(col4, col5, col6),
                         List.of(List.of(col1, col8, col3), List.of(col7, col2, col9)), Set.of(1, 2, 4, 5));
 
-        Assertions.assertEquals(3, constantEncodingMap.size());
+        Assertions.assertEquals(2, constantEncodingMap.size());
         Assertions.assertEquals(Map.of(col8, ConstantOperator.createInt(3)), constantEncodingMap.get(0));
         Assertions.assertEquals(Map.of(col7, ConstantOperator.createInt(2)), constantEncodingMap.get(1));
-        Assertions.assertEquals(Map.of(), constantEncodingMap.get(2));
-
     }
 }

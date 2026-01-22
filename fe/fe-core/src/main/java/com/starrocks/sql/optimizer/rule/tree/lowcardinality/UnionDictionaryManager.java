@@ -182,7 +182,6 @@ public class UnionDictionaryManager {
         childColumns.forEach(c -> result.add(Maps.newHashMap()));
         for (int i = 0; i < outputColumns.size(); ++i) {
             if (!allStringColumns.contains(outputColumns.get(i).getId())) {
-                result.add(Map.of());
                 continue;
             }
             Integer dictColumnId = getSourceDictionaryColumnId(outputColumns.get(i).getId());

@@ -215,8 +215,9 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             HashMap<ColumnRefOperator, ColumnRefOperator> columnMapping = Maps.newHashMap();
             constantMapping.forEach((key, value) ->
                     columnMapping.put(key, factory.create(value, value.getType(), value.isNullable())));
-            unionOp.getChildOutputColumns().get(i).forEach(c -> columnMapping.putIfAbsent(
-                    c, info.inputStringColumns.contains(c.getId()) ? context.stringRefToDictRefMap.get(c) : c));
+            unionOp.getChildOutputColumns().get(i).forEach(c -> columnMapping.putIfAbsent(c,
+                    info.inputStringColumns.contains(c.getId()) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+            );
             newChildOutputColumns.add(unionOp.getChildOutputColumns().get(i).stream().map(columnMapping::get).toList());
             if (constantMapping.isEmpty()) {
                 continue;
