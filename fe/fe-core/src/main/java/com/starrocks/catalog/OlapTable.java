@@ -2754,6 +2754,30 @@ public class OlapTable extends Table {
         tableProperty.buildEnableStatisticCollectOnFirstLoad();
     }
 
+    public int getTableQueryTimeout() {
+        if (tableProperty != null) {
+            return tableProperty.getTableQueryTimeout();
+        }
+        return -1;
+    }
+
+    public void setTableQueryTimeout(int tableQueryTimeout) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        if (tableQueryTimeout == -1) {
+            // Unset table_query_timeout to fallback to default behavior.
+            tableProperty.getProperties().remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+            tableProperty.buildTableQueryTimeout();
+            return;
+        }
+        if (tableQueryTimeout <= 0) {
+            throw new IllegalArgumentException("table_query_timeout must be greater than 0, or -1 to reset to default");
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, String.valueOf(tableQueryTimeout));
+        tableProperty.buildTableQueryTimeout();
+    }
+
     public boolean allowBucketSizeSetting() {
         return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
     }
@@ -3604,6 +3628,23 @@ public class OlapTable extends Table {
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
+<<<<<<< HEAD
+=======
+
+        // table query timeout (only show if explicitly set, not default)
+        String tableQueryTimeoutStr = tableProperties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        if (tableQueryTimeoutStr != null) {
+            try {
+                int timeout = Integer.parseInt(tableQueryTimeoutStr);
+                if (timeout > 0) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, tableQueryTimeoutStr);
+                }
+            } catch (NumberFormatException e) {
+                LOG.warn("fail to parse table query_timeout.", e);
+            }
+        }
+
+>>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {

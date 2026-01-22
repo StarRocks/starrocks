@@ -126,6 +126,18 @@ public class AnalyzeAlterTableStatementTest {
     }
 
     @Test
+    public void testAlterTableSetTableQueryTimeoutAnalyze() {
+        // Cover AlterTableClauseAnalyzer's table_query_timeout branch (AlterTableClauseAnalyzer.java:465-472).
+        analyzeSuccess("alter table test.t0 set (\"table_query_timeout\" = \"120\")");
+        // -1 is accepted and means reset to default behavior.
+        analyzeSuccess("alter table test.t0 set (\"table_query_timeout\" = \"-1\")");
+
+        // Invalid value should be rejected by analyzer (it catches AnalysisException and reports SemanticException).
+        analyzeFail("alter table test.t0 set (\"table_query_timeout\" = \"0\")");
+        analyzeFail("alter table test.t0 set (\"table_query_timeout\" = \"abc\")");
+    }
+
+    @Test
     public void testDropIndex() {
         String sql = "DROP INDEX index1 ON test.t0";
         analyzeSuccess(sql);
