@@ -17,6 +17,9 @@ shell: ossutil64 cp --force ./sql/test_files/csv_format/test_auto_increment_inco
 
 insert into t_incorrect_slot_id(val) SELECT $1 as val FROM FILES(
     "path"="oss://${oss_bucket}/test_files/csv_format/${uuid0}/test_auto_increment_incorrect_slot_id.csv",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format"="csv",
     "csv.column_separator"=",",
     "csv.enclose"="\"",
