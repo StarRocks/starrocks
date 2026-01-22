@@ -469,6 +469,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SKEW_JOIN_OPTIMIZE_USE_MCV_COUNT = "skew_join_use_mcv_count";
     public static final String SKEW_JOIN_DATA_SKEW_THRESHOLD = "skew_join_data_skew_threshold";
 
+    // For skew join elimination(v2): auto detect skew values from histogram MCV.
+    public static final String SKEW_JOIN_MCV_SINGLE_THRESHOLD = "skew_join_mcv_single_threshold";
+    public static final String SKEW_JOIN_MCV_MIN_INPUT_ROWS = "skew_join_mcv_min_input_rows";
+
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
 
     public static final String ENABLE_RECURSIVE_CTE = "enable_recursive_cte";
@@ -2972,6 +2976,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SKEW_JOIN_DATA_SKEW_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double skewJoinDataSkewThreshold = 0.2;
 
+    // A single MCV value must exceed this total-domain ratio to be considered as a skew value candidate.
+    @VarAttr(name = SKEW_JOIN_MCV_SINGLE_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double skewJoinMcvSingleThreshold = 0.05;
+
+    // Minimal input rows (estimated) to enable MCV-based skew join elimination rewrite.
+    @VarAttr(name = SKEW_JOIN_MCV_MIN_INPUT_ROWS, flag = VariableMgr.INVISIBLE)
+    private long skewJoinMcvMinInputRows = 10000;
+
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
@@ -5417,6 +5429,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinDataSkewThreshold(double skewJoinDataSkewThreshold) {
         this.skewJoinDataSkewThreshold = skewJoinDataSkewThreshold;
+    }
+
+    public double getSkewJoinMcvSingleThreshold() {
+        return skewJoinMcvSingleThreshold;
+    }
+
+    public void setSkewJoinMcvSingleThreshold(double skewJoinMcvSingleThreshold) {
+        this.skewJoinMcvSingleThreshold = skewJoinMcvSingleThreshold;
+    }
+
+    public long getSkewJoinMcvMinInputRows() {
+        return skewJoinMcvMinInputRows;
+    }
+
+    public void setSkewJoinMcvMinInputRows(long skewJoinMcvMinInputRows) {
+        this.skewJoinMcvMinInputRows = skewJoinMcvMinInputRows;
     }
 
     public boolean isEnableStrictOrderBy() {

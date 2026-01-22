@@ -29,15 +29,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigInteger;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.IsoFields;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
@@ -517,6 +521,7 @@ public class ExpressionStatisticCalculator {
                     .setNullsFraction(columnStatistic.getNullsFraction())
                     .setAverageRowSize(averageRowSize)
                     .setDistinctValuesCount(distinctValue)
+                    .setHistogram(transformHistogramForUnary(callOperator, columnStatistic).orElse(null))
                     .build();
         }
 
@@ -638,13 +643,14 @@ public class ExpressionStatisticCalculator {
                 default:
                     return ColumnStatistic.unknown();
             }
-            return ColumnStatistic.builder()
+            ColumnStatistic.Builder builder = ColumnStatistic.builder()
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(averageRowSize)
-                    .setDistinctValuesCount(distinctValues)
-                    .build();
+                    .setDistinctValuesCount(distinctValues);
+            transformHistogramForBinary(callOperator, left, right).ifPresent(builder::setHistogram);
+            return builder.build();
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
@@ -712,6 +718,224 @@ public class ExpressionStatisticCalculator {
             } else {
                 return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
             }
+        }
+
+        /**
+         * Only do histogram/MCV propagation when the transformation is definitely correct for value domain.
+         *
+         * NOTE: This code path must be semantics-safe because MCV keys may be used as exact constant values
+         * (e.g. as IN-list values in skew join elimination v2). Therefore we only support a small whitelist of
+         * transformations that we can prove to be correct. If you need to support more functions in the future,
+         * add them here with strict guards and "fail closed" (return Optional.empty()) on any ambiguity.
+         *
+         * Current supported cases:
+         * - POSITIVE(x): identity
+         * - NEGATIVE(x): exact -x, fixed-point only
+         * - ABS(x): exact abs(x), fixed-point only (with collision merge)
+         *
+         * For unsupported functions we return empty to keep current behavior (no histogram for expression stats).
+         */
+        private Optional<Histogram> transformHistogramForUnary(CallOperator callOperator, ColumnStatistic childStats) {
+            Histogram childHist = childStats == null ? null : childStats.getHistogram();
+            if (childHist == null || childHist.getMCV() == null || childHist.getMCV().isEmpty()) {
+                return Optional.empty();
+            }
+
+            final String fn = callOperator.getFnName().toLowerCase();
+            final Type targetType = callOperator.getType();
+
+            if (!isSupportedIntegerMcvType(targetType)) {
+                return Optional.empty();
+            }
+
+            if (FunctionSet.POSITIVE.equalsIgnoreCase(fn)) {
+                return Optional.of(childHist);
+            }
+
+            if (!FunctionSet.NEGATIVE.equalsIgnoreCase(fn) && !FunctionSet.ABS.equalsIgnoreCase(fn)) {
+                return Optional.empty();
+            }
+
+            Map<String, Long> newMcv = new HashMap<>();
+            for (Map.Entry<String, Long> e : childHist.getMCV().entrySet()) {
+                Optional<BigInteger> vOpt = parseFixedPointMcvKey(e.getKey(), targetType);
+                if (vOpt.isEmpty()) {
+                    return Optional.empty();
+                }
+                BigInteger v = vOpt.get();
+                BigInteger out;
+                if (FunctionSet.NEGATIVE.equalsIgnoreCase(fn)) {
+                    out = v.negate();
+                } else {
+                    out = v.abs();
+                }
+                Optional<ConstantOperator> outConst = fixedPointToConstant(out, targetType);
+                if (outConst.isEmpty()) {
+                    return Optional.empty();
+                }
+                newMcv.merge(outConst.get().toString(), e.getValue(), Long::sum);
+            }
+
+            return Optional.of(new Histogram(childHist.getBuckets(), newMcv));
+        }
+
+        /**
+         * Only do histogram/MCV propagation for binary expressions when it is definitely correct.
+         *
+         * NOTE: This code path must be semantics-safe because MCV keys may be used as exact constant values
+         * (e.g. as IN-list values in skew join elimination v2). Therefore we only support a small whitelist of
+         * transformations that we can prove to be correct. If you need to support more functions in the future,
+         * add them here with strict guards and "fail closed" (return Optional.empty()) on any ambiguity.
+         *
+         * Current supported cases (fixed-point only):
+         * - ADD(x, const) / ADD(const, x)
+         * - SUBTRACT(x, const) / SUBTRACT(const, x)
+         *
+         * For x +/- const we will:
+         * - transform MCV keys by applying the exact operation
+         * - shift bucket bounds for x +/- const when the mapping is monotonic (x +/- const)
+         *   (for const - x we keep buckets as-is)
+         */
+        private Optional<Histogram> transformHistogramForBinary(
+                CallOperator callOperator, ColumnStatistic leftStats, ColumnStatistic rightStats) {
+            final String fn = callOperator.getFnName().toLowerCase();
+            if (!FunctionSet.ADD.equalsIgnoreCase(fn) && !FunctionSet.SUBTRACT.equalsIgnoreCase(fn)) {
+                return Optional.empty();
+            }
+
+            final Type targetType = callOperator.getType();
+            if (!isSupportedIntegerMcvType(targetType)) {
+                return Optional.empty();
+            }
+
+            ScalarOperator leftOp = callOperator.getChild(0);
+            ScalarOperator rightOp = callOperator.getChild(1);
+            boolean leftIsConst = leftOp != null && leftOp.isConstant();
+            boolean rightIsConst = rightOp != null && rightOp.isConstant();
+            if (leftIsConst == rightIsConst) {
+                return Optional.empty();
+            }
+
+            ConstantOperator constOp = (ConstantOperator) (leftIsConst ? leftOp : rightOp);
+            ColumnStatistic baseStats = leftIsConst ? rightStats : leftStats;
+            Histogram baseHist = baseStats == null ? null : baseStats.getHistogram();
+            if (baseHist == null || baseHist.getMCV() == null || baseHist.getMCV().isEmpty()) {
+                return Optional.empty();
+            }
+
+            Optional<BigInteger> constValOpt = constantToFixedPoint(constOp, targetType);
+            if (constValOpt.isEmpty()) {
+                return Optional.empty();
+            }
+            BigInteger c = constValOpt.get();
+
+            Map<String, Long> newMcv = new HashMap<>();
+            for (Map.Entry<String, Long> e : baseHist.getMCV().entrySet()) {
+                Optional<BigInteger> vOpt = parseFixedPointMcvKey(e.getKey(), targetType);
+                if (vOpt.isEmpty()) {
+                    return Optional.empty();
+                }
+                BigInteger v = vOpt.get();
+                BigInteger out;
+                if (FunctionSet.ADD.equalsIgnoreCase(callOperator.getFnName())) {
+                    out = v.add(c);
+                } else {
+                    // SUBTRACT
+                    if (!leftIsConst) {
+                        // x - const
+                        out = v.subtract(c);
+                    } else {
+                        // const - x
+                        out = c.subtract(v);
+                    }
+                }
+                Optional<ConstantOperator> outConst = fixedPointToConstant(out, targetType);
+                if (outConst.isEmpty()) {
+                    return Optional.empty();
+                }
+                newMcv.merge(outConst.get().toString(), e.getValue(), Long::sum);
+            }
+
+            List<Bucket> newBuckets = baseHist.getBuckets();
+            if (!leftIsConst) {
+                OptionalDouble deltaOpt = ConstantOperatorUtils.doubleValueFromConstant(constOp);
+                if (deltaOpt.isPresent()) {
+                    final double bucketShift = FunctionSet.SUBTRACT.equalsIgnoreCase(callOperator.getFnName())
+                            ? -deltaOpt.getAsDouble()
+                            : deltaOpt.getAsDouble();
+                    newBuckets = baseHist.getBuckets().stream()
+                            .map(b -> new Bucket(b.getLower() + bucketShift, b.getUpper() + bucketShift,
+                                    b.getCount(), b.getUpperRepeats()))
+                            .collect(Collectors.toList());
+                }
+            }
+
+            return Optional.of(new Histogram(newBuckets, newMcv));
+        }
+
+        private Optional<BigInteger> parseFixedPointMcvKey(String mcvKey, Type targetType) {
+            Optional<ConstantOperator> c = ConstantOperator.createVarchar(mcvKey).castTo(targetType);
+            return c.map(constantOperator -> constantToBigInteger(constantOperator, targetType));
+        }
+
+        private Optional<BigInteger> constantToFixedPoint(ConstantOperator constant, Type targetType) {
+            Optional<ConstantOperator> c = constant.castTo(targetType);
+            return c.map(constantOperator -> constantToBigInteger(constantOperator, targetType));
+        }
+
+        private BigInteger constantToBigInteger(ConstantOperator c, Type targetType) {
+            if (targetType.isTinyint()) {
+                return BigInteger.valueOf(c.getTinyInt());
+            } else if (targetType.isSmallint()) {
+                return BigInteger.valueOf(c.getSmallint());
+            } else if (targetType.isInt()) {
+                return BigInteger.valueOf(c.getInt());
+            } else if (targetType.isBigint()) {
+                return BigInteger.valueOf(c.getBigint());
+            } else {
+                // LARGEINT
+                return c.getLargeInt();
+            }
+        }
+
+        private Optional<ConstantOperator> fixedPointToConstant(BigInteger v, Type targetType) {
+            try {
+                if (targetType.isTinyint()) {
+                    if (v.compareTo(BigInteger.valueOf(Byte.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Byte.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createTinyInt(v.byteValueExact()));
+                } else if (targetType.isSmallint()) {
+                    if (v.compareTo(BigInteger.valueOf(Short.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Short.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createSmallInt(v.shortValueExact()));
+                } else if (targetType.isInt()) {
+                    if (v.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createInt(v.intValueExact()));
+                } else if (targetType.isBigint()) {
+                    if (v.compareTo(BigInteger.valueOf(Long.MIN_VALUE)) < 0 ||
+                            v.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                        return Optional.empty();
+                    }
+                    return Optional.of(ConstantOperator.createBigint(v.longValueExact()));
+                } else if (targetType.isLargeint()) {
+                    return Optional.of(ConstantOperator.createLargeInt(v));
+                } else {
+                    return Optional.empty();
+                }
+            } catch (ArithmeticException ex) {
+                return Optional.empty();
+            }
+        }
+
+        private boolean isSupportedIntegerMcvType(Type t) {
+            return t.isTinyint() || t.isSmallint() || t.isInt() || t.isBigint() || t.isLargeint();
         }
     }
 }
