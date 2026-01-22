@@ -386,6 +386,73 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             } catch (Throwable e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
+<<<<<<< HEAD
+=======
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            // Allow setting flat_json.enable to true or false
+            PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.getFlatJsonConfig() != null && olapTable.getFlatJsonConfig().getFlatJsonEnable()) {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+                        PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+                        PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                        PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+                    }
+                } else {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE +
+                                    " haven't been enabled");
+                }
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
+            if (!properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("default") &&
+                    !properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("real_time")) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "unknown compaction strategy: " +
+                        properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY));
+            }
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY +
+                                " can be only set to the cloud native table");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
+                        "update for a primary key table. ");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
+            PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL +
+                                " can only be set for cloud native tables");
+            }
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            try {
+                int maxParallel = Integer.parseInt(value);
+                if (maxParallel < 0) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid lake_compaction_max_parallel value: " + value + ". Value must be non-negative.");
+                }
+            } catch (NumberFormatException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Invalid lake_compaction_max_parallel value: " + value + ". Value must be an integer.");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+>>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

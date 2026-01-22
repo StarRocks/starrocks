@@ -51,6 +51,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -608,6 +609,26 @@ public class ConnectContext {
         if (!SetType.GLOBAL.equals(setVar.getType())
                 && globalStateMgr.getVariableMgr().shouldForwardToLeader(setVar.getVariable())) {
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
+        }
+    }
+
+    /**
+     * Whether {@link SessionVariable#QUERY_TIMEOUT} is explicitly overridden in the current session.
+     * <p>
+     * This is used to decide whether table-level timeout should take effect when the user didn't set
+     * the session query_timeout
+     */
+    public boolean isSessionQueryTimeoutOverridden() {
+        if (modifiedSessionVariables.containsKey(SessionVariable.QUERY_TIMEOUT)) {
+            return true;
+        }
+
+        try {
+            int defaultTimeout = globalStateMgr.getVariableMgr().getDefaultSessionVariable().getQueryTimeoutS();
+            return sessionVariable.getQueryTimeoutS() != defaultTimeout;
+        } catch (Exception e) {
+            LOG.warn("Failed to judge session query timeout override.", e);
+            return false;
         }
     }
 
@@ -1261,9 +1282,19 @@ public class ConnectContext {
                 // Only kill
                 killFlag = true;
 
-                String suggestedMsg = String.format("please increase the '%s' session variable, pending time:%s",
-                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
-                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, suggestedMsg);
+                String msg;
+
+                if (!isSessionQueryTimeoutOverridden() && executor != null && executor.getTableQueryTimeoutInfo() != null) {
+                    Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+                    String tableName = tableTimeoutInfo.first;
+                    int tableTimeout = tableTimeoutInfo.second;
+                    msg = String.format("the table %s table_query_timeout is %ds, pending time:%s",
+                            tableName, tableTimeout, pendingTime);
+                } else {
+                    msg = String.format("please increase the '%s' session variable, pending time:%s",
+                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                }
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
         }
         if (killFlag) {

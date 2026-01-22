@@ -573,6 +573,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else {
                         schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
                     }
