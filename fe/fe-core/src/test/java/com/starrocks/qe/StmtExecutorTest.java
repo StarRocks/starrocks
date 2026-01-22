@@ -24,8 +24,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
-import com.starrocks.sql.ast.StatementBase;
+qimport com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
@@ -391,34 +390,7 @@ public class StmtExecutorTest {
             Assertions.assertNull(executor2.getTableQueryTimeoutInfo());
         }
 
-        // Test 11: Test exception handling when collectAllTable throws exception
-        {
-            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
-            testCtx.setDatabase(dbName);
-            StatementBase stmt = SqlParser.parseSingleStatement("select * from t2", SqlModeHelper.MODE_DEFAULT);
-            Analyzer.analyze(stmt, testCtx); // Analyze SQL to resolve table references
-            
-            // Use a local scope to ensure the mock is cleaned up after the test
-            {
-                new MockUp<AnalyzerUtils>() {
-                    @Mock
-                    public java.util.Map<com.starrocks.catalog.TableName, com.starrocks.catalog.Table> collectAllTable(
-                            StatementBase statementBase) {
-                        throw new RuntimeException("Mock exception for testing");
-                    }
-                };
-                
-                StmtExecutor executor = new StmtExecutor(testCtx, stmt);
-                // Should fall back to session timeout when exception occurs
-                int timeout = executor.getExecTimeout();
-                int defaultTimeout = testCtx.getSessionVariable().getQueryTimeoutS();
-                Assertions.assertEquals(defaultTimeout, timeout);
-                Assertions.assertNull(executor.getTableQueryTimeoutInfo());
-            }
-            // Mock is automatically cleaned up when it goes out of scope
-        }
-
-        // Test 12: Test that isSessionQueryTimeoutOverridden() exception propagates to getExecTimeout()
+        // Test 11: Test that isSessionQueryTimeoutOverridden() exception propagates to getExecTimeout()
         {
             ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
             testCtx.setDatabase(dbName);

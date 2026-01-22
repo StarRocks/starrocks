@@ -65,7 +65,6 @@ import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 import java.util.List;
-import java.util.Map;
 
 public class ConnectContextTest {
     @Mocked
@@ -292,11 +291,6 @@ public class ConnectContextTest {
         int execTimeout = ctx.getExecTimeout();
         Assertions.assertEquals(1, execTimeout, "getExecTimeout() should return 1 (session timeout + pending time)");
 
-        // Ensure modifiedSessionVariables doesn't contain QUERY_TIMEOUT so isSessionQueryTimeoutOverridden() returns false
-        // (unless getDefaultSessionVariable() throws, which we've mocked)
-        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
-        modifiedVars.remove(SessionVariable.QUERY_TIMEOUT);
-        
         // Set session timeout to 1 second to make the query timeout quickly.
         // Since the statement has no tables, executor.getExecTimeout() will return session timeout (1).
         ctx.getSessionVariable().setQueryTimeoutS(1);
