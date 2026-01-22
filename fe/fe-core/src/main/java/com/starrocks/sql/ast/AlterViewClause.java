@@ -26,7 +26,11 @@ public class AlterViewClause extends AlterClause {
 
     protected List<Column> columns;
     protected String inlineViewDef;
+    protected String originalViewDefineSql;
     protected String comment;
+    protected int queryStartIndex = -1;
+    protected int queryStopIndex = -1;
+
     public AlterViewClause(List<ColWithComment> colWithComments, QueryStatement queryStatement, NodePosition nodePosition) {
         super(AlterOpType.ALTER_VIEW, nodePosition);
         this.colWithComments = colWithComments;
@@ -63,6 +67,30 @@ public class AlterViewClause extends AlterClause {
 
     public void setInlineViewDef(String inlineViewDef) {
         this.inlineViewDef = inlineViewDef;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int queryStartIndex) {
+        this.queryStartIndex = queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
+    }
+
+    public void setQueryStopIndex(int queryStopIndex) {
+        this.queryStopIndex = queryStopIndex;
     }
 
     @Override

@@ -48,6 +48,7 @@ public class AlterViewStmt extends DdlStmt {
         AlterViewClause alterViewClause = new AlterViewClause(
                 stmt.getColWithComments(), stmt.getQueryStatement(), NodePosition.ZERO);
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
+        alterViewClause.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
         alterViewClause.setColumns(stmt.getColumns());
         alterViewClause.setComment(stmt.getComment());
         return new AlterViewStmt(stmt.getTableName(), stmt.isSecurity(), AlterDialectType.NONE, Maps.newHashMap(),
@@ -88,6 +89,16 @@ public class AlterViewStmt extends DdlStmt {
 
     public AlterViewClause getAlterClause() {
         return alterClause;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return alterClause == null ? null : alterClause.getOriginalViewDefineSql();
+    }
+
+    public void setOriginalViewDefineSql(String originalViewDefineSql) {
+        if (alterClause != null) {
+            alterClause.setOriginalViewDefineSql(originalViewDefineSql);
+        }
     }
 
     @Override

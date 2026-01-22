@@ -49,6 +49,7 @@ import com.starrocks.common.TimeoutWatcher;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
@@ -710,7 +711,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public void setOriginalViewDefineSql(String originalViewDefineSql) {
-        this.originalViewDefineSql = originalViewDefineSql;
+        // redact credentials in the original view define sql to avoid persisting sensitive information
+        this.originalViewDefineSql = SqlCredentialRedactor.redact(originalViewDefineSql);
     }
 
     public String getOriginalDBName() {

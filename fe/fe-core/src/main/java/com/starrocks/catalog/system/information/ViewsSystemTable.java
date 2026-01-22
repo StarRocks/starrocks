@@ -311,7 +311,7 @@ public class ViewsSystemTable extends SystemTable {
                 status.setLast_check_time(table.getLastCheckTime());
                 if (listingViews) {
                     View view = (View) table;
-                    String ddlSql = view.getInlineViewDef();
+                    String ddlSql = view.getDDLViewDef();
 
                     ConnectContext connectContext = ConnectContext.buildInner();
                     connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);

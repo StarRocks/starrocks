@@ -4479,7 +4479,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             view.setComment(stmt.getComment());
             view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
                     ConnectContext.get().getSessionVariable().getSqlMode());
+<<<<<<< HEAD
             // init here in case the stmt string from view.toSql() has some syntax error.
+=======
+            view.setOriginalViewDef(stmt.getOriginalViewDefineSql());
+>>>>>>> 6b9d4a2bc7 ([Enhancement] Support show create view with original comments inside (#68040))
 
             if (stmt.isSecurity()) {
                 view.setSecurity(stmt.isSecurity());

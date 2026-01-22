@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
@@ -72,8 +73,17 @@ public class ViewAnalyzer {
             }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
+
+            // reserve the original view sql
+
             String viewSql = AstToSQLBuilder.toSQLWithCredential(stmt.getQueryStatement());
             stmt.setInlineViewDef(viewSql);
+            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+            String originalViewDef = stmt.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+            Preconditions.checkArgument(stmt.getQueryStartIndex() >= 0 && stmt.getQueryStopIndex() >= stmt.getQueryStartIndex(),
+                    "View's query start or stop index is invalid");
+            stmt.setOriginalViewDefineSql(originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex()));
             return null;
         }
 
@@ -113,6 +123,14 @@ public class ViewAnalyzer {
             alterViewClause.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
             alterViewClause.setInlineViewDef(viewSql);
+            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+            String originalViewDef = stmt.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+            Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
+                            alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
+                    "View's query start or stop index is invalid");
+            alterViewClause.setOriginalViewDefineSql(
+                    originalViewDef.substring(alterViewClause.getQueryStartIndex(), alterViewClause.getQueryStopIndex()));
             return null;
         }
 
