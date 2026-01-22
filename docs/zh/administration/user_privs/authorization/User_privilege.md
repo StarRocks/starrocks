@@ -193,14 +193,6 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
   GRANT SELECT ON TABLE sr_member TO ROLE example_role;
   ```
 
-- 将权限授予用户组。您可以通过 [Group Provider](../group_provider.md) 从外部验证系统识别用户组。
-
-  以下示例将表 `sr_member` 的 SELECT 权限授予用户组 `analysts`：
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
-
 ### 撤销权限
 
 您可以使用 [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md) 从用户或角色中撤销权限。

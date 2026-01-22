@@ -1196,6 +1196,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ### Create an Iceberg database
 
+<<<<<<< HEAD
 Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../../administration/user_privs/authorization/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
 
 :::tip
@@ -1244,6 +1245,9 @@ The `prefix` varies based on the storage system you use:
 #### AWS S3 or other S3-compatible storage (for example, MinIO)
 
 `Prefix` value: `s3`
+=======
+For DDL operations (CREATE/DROP DATABASE, CREATE/DROP TABLE, and CREATE/ALTER VIEW), see [Iceberg DDL operations](./DDL.md).
+>>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 
 ---
 
@@ -1261,6 +1265,7 @@ DROP DATABASE <database_name>;
 
 ---
 
+<<<<<<< HEAD
 ### Create an Iceberg table
 
 Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../../administration/user_privs/authorization/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) or [CREATE TABLE AS SELECT](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
@@ -1547,6 +1552,11 @@ ALTER VIEW iceberg.iceberg_db.iceberg_view2 ADD DIALECT SELECT k1, k2 FROM icebe
 ```SQL
 ALTER VIEW iceberg.iceberg_db.iceberg_view2 MODIFY DIALECT SELECT k1, k2, k3 FROM iceberg.iceberg_db.iceberg_table;
 ```
+=======
+### Iceberg Stored Procedures
+
+For Iceberg stored procedures (using snapshots, performing manual Compaction), see [Iceberg Stored Procedures](./procedures.md).
+>>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 
 ---
 

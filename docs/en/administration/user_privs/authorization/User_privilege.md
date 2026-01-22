@@ -193,14 +193,6 @@ You can grant privileges to a user or a role using [GRANT](../../../sql-referenc
   GRANT SELECT ON TABLE sr_member TO ROLE example_role;
   ```
 
-- Grant a privilege to a user group. You can identify user groups from external authentication systems via [Group Provider](../group_provider.md).
-
-  The following example grants the SELECT privilege on the table `sr_member` to the user group `analysts`:
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
-
 ### Revoke privileges
 
 You can revoke privileges from a user or a role using [REVOKE](../../../sql-reference/sql-statements/account-management/REVOKE.md).
