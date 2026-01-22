@@ -34,12 +34,8 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
-=======
-import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
@@ -51,11 +47,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.TableRef;
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -74,7 +65,6 @@ import org.junit.jupiter.api.Test;
 import org.xnio.StreamConnection;
 
 import java.util.List;
-import java.util.Map;
 
 public class ConnectContextTest {
     @Mocked
@@ -301,11 +291,6 @@ public class ConnectContextTest {
         int execTimeout = ctx.getExecTimeout();
         Assertions.assertEquals(1, execTimeout, "getExecTimeout() should return 1 (session timeout + pending time)");
 
-        // Ensure modifiedSessionVariables doesn't contain QUERY_TIMEOUT so isSessionQueryTimeoutOverridden() returns false
-        // (unless getDefaultSessionVariable() throws, which we've mocked)
-        Map<String, SystemVariable> modifiedVars = ctx.getModifiedSessionVariablesMap();
-        modifiedVars.remove(SessionVariable.QUERY_TIMEOUT);
-        
         // Set session timeout to 1 second to make the query timeout quickly.
         // Since the statement has no tables, executor.getExecTimeout() will return session timeout (1).
         ctx.getSessionVariable().setQueryTimeoutS(1);

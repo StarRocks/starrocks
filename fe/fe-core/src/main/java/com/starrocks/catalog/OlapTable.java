@@ -3628,8 +3628,6 @@ public class OlapTable extends Table {
         }
 
         Map<String, String> tableProperties = tableProperty != null ? tableProperty.getProperties() : Maps.newLinkedHashMap();
-<<<<<<< HEAD
-=======
 
         // table query timeout (only show if explicitly set, not default)
         String tableQueryTimeoutStr = tableProperties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
@@ -3644,7 +3642,6 @@ public class OlapTable extends Table {
             }
         }
 
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
         // partition live number
         String partitionLiveNumber = tableProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER);
         if (partitionLiveNumber != null) {
