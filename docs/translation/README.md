@@ -23,7 +23,7 @@ Run these commands from the root of the `starrocks` repository:
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -U google-genai pyyaml
+pip install -r docs/translation/requirements.txt
 ```
 
 ## Usage

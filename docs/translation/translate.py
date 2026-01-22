@@ -13,8 +13,9 @@ if "GEMINI_API_KEY" not in os.environ:
     )
 
 try:
-    # Automatically picks up GEMINI_API_KEY from environment
-    client = genai.Client()
+    # The latest version of the Gemini SDK requires the API key to be passed explicitly.
+    # Don't use this any more: client = genai.Client()
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 except Exception as e:
     raise RuntimeError(
         "Failed to initialize Gemini client. "
