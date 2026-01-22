@@ -456,11 +456,6 @@ public class ExportJob implements Writable, GsonPostProcessable {
         if (!brokerDesc.hasBroker()) {
             HdfsUtil.getTProperties(exportTempPath, brokerDesc, hdfsProperties);
         }
-<<<<<<< HEAD
-        fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                    rowDelimiter, brokerDesc, hdfsProperties));
-=======
-        BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
 
         // Extract column names from slot descriptors for CSV header row
         List<String> exportColumnNames = Lists.newArrayList();
@@ -469,8 +464,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, runtimeBrokerDesc, hdfsProperties, exportColumnNames, withHeader));
->>>>>>> fd58add77b ([Enhancement] Support CSV header row for EXPORT and INSERT INTO FILES (#66654))
+                rowDelimiter, brokerDesc, hdfsProperties, exportColumnNames, withHeader));
         try {
             fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
