@@ -17,6 +17,7 @@
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -28,6 +29,7 @@ TEST(ResourceGroupUsageRecorderTest, test_get_resource_group_usages) {
             CpuInfo::num_cores(), num_cores, num_cores, num_cores, CpuInfo::get_core_ids(), true,
             config::enable_resource_group_cpu_borrowing, StarRocksMetrics::instance()->get_pipeline_executor_metrics());
     exec_env._workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
+    ASSERT_OK(exec_env._workgroup_manager->start());
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
     auto default_wg = exec_env.workgroup_manager()->get_default_workgroup();
