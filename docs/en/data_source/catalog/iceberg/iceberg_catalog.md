@@ -1278,7 +1278,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ### Iceberg DDL Operations
 
-For DDL operations (CREATE/DROP DATABASE, CREATE/DROP TABLE, and CREATE/ALTER VIEW), see [Iceberg DDL operations](./DDL.md).
+For DDL operations (CREATE/DROP DATABASE, CREATE/DROP TABLE, CREATE/ALTER VIEW), see [Iceberg DDL operations](./DDL.md).
 
 ---
 
@@ -1288,9 +1288,9 @@ For DML operations (INSERT), see [Iceberg DML operations](./DML.md).
 
 ---
 
-### Iceberg Stored Procedures
+### Iceberg Procedures
 
-For Iceberg stored procedures (using snapshots, performing manual Compaction), see [Iceberg Stored Procedures](./procedures.md).
+For procedures, see [Iceberg Procedures](./procedures.md).
 
 ---
 
