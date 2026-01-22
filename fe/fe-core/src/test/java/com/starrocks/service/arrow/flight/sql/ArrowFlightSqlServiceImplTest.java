@@ -728,41 +728,51 @@ public class ArrowFlightSqlServiceImplTest {
 
     @Test
     public void testGetFEEndpointAllPaths() throws Exception {
+        ArrowFlightSqlConnectContext mockCtx = mock(ArrowFlightSqlConnectContext.class);
+        TUniqueId mockExecutionId = new TUniqueId(5L, 6L);
+        when(mockCtx.getArrowFlightSqlToken()).thenReturn("test-token");
+        when(mockCtx.getExecutionId()).thenReturn(mockExecutionId);
+
         when(mockGlobalSessionVariable.isArrowFlightProxyEnabled()).thenReturn(false);
-        Location result = service.getFEEndpoint();
-        assertEquals(Location.forGrpcInsecure("localhost", 1234), result);
+        Pair<Location, ByteString> result = service.getFEEndpoint(mockCtx);
+        assertEquals(Location.forGrpcInsecure("localhost", 1234), result.first);
+        assertEquals("test-token|00000000-0000-0005-0000-000000000006", result.second.toStringUtf8());
 
         when(mockGlobalSessionVariable.isArrowFlightProxyEnabled()).thenReturn(true);
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn("");
-        result = service.getFEEndpoint();
-        assertEquals(Location.forGrpcInsecure("localhost", 1234), result);
+        result = service.getFEEndpoint(mockCtx);
+        assertEquals(Location.forGrpcInsecure("localhost", 1234), result.first);
+        assertEquals("test-token|00000000-0000-0005-0000-000000000006|localhost:1234", result.second.toStringUtf8());
 
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn("proxy-host:9408");
-        result = service.getFEEndpoint();
-        assertEquals(Location.forGrpcInsecure("proxy-host", 9408), result);
+        result = service.getFEEndpoint(mockCtx);
+        assertEquals(Location.forGrpcInsecure("proxy-host", 9408), result.first);
+        assertEquals("test-token|00000000-0000-0005-0000-000000000006|localhost:1234", result.second.toStringUtf8());
 
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn("invalidproxy");
         InvalidConfException ex = assertThrows(InvalidConfException.class, () ->
-                service.getFEEndpoint());
+                service.getFEEndpoint(mockCtx));
         assertEquals("Expected format 'hostname:port' or 'grpcs://hostname:port', got 'invalidproxy'", ex.getMessage());
 
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn(":9408");
         ex = assertThrows(InvalidConfException.class, () ->
-                service.getFEEndpoint());
+                service.getFEEndpoint(mockCtx));
         assertEquals("Hostname cannot be empty, got ':9408'", ex.getMessage());
 
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn("hostname:abc");
         ex = assertThrows(InvalidConfException.class, () ->
-                service.getFEEndpoint());
+                service.getFEEndpoint(mockCtx));
         assertEquals("Port must be a valid integer, got 'abc'", ex.getMessage());
 
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn("grpcs://proxy-host:443");
-        result = service.getFEEndpoint();
-        assertEquals(Location.forGrpcTls("proxy-host", 443), result);
+        result = service.getFEEndpoint(mockCtx);
+        assertEquals(Location.forGrpcTls("proxy-host", 443), result.first);
+        assertEquals("test-token|00000000-0000-0005-0000-000000000006|localhost:1234", result.second.toStringUtf8());
 
         when(mockGlobalSessionVariable.getArrowFlightProxy()).thenReturn("grpc://proxy-host:9408");
-        result = service.getFEEndpoint();
-        assertEquals(Location.forGrpcInsecure("proxy-host", 9408), result);
+        result = service.getFEEndpoint(mockCtx);
+        assertEquals(Location.forGrpcInsecure("proxy-host", 9408), result.first);
+        assertEquals("test-token|00000000-0000-0005-0000-000000000006|localhost:1234", result.second.toStringUtf8());
     }
 
     @Test
