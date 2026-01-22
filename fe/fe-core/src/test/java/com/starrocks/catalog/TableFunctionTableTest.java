@@ -296,7 +296,7 @@ public class TableFunctionTableTest {
     @Test
     public void testCSVDelimiterConverterForUnload() {
         Map<String, String> properties = new HashMap<>();
-        properties.put("path", "file://test_dir");
+        properties.put("path", "file:///test_dir");
         properties.put("format", "csv");
 
         {
@@ -402,6 +402,59 @@ public class TableFunctionTableTest {
                     "Illegal value of auto_detect_types: notaboolean, only true/false allowed",
                     () -> new TableFunctionTable(properties)
             );
+        }
+    }
+    
+    @Test
+    public void testCSVIncludeHeaderForUnload() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "file:///test_dir");
+        properties.put("format", "csv");
+
+        // default: csv.include_header is false
+        {
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            // verify toTTableFunctionTable also sets this field
+            Assertions.assertFalse(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = true
+        {
+            properties.put("csv.include_header", "true");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            Assertions.assertTrue(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = false (explicit)
+        {
+            properties.put("csv.include_header", "false");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+            Assertions.assertFalse(table.toTTableFunctionTable().isCsv_include_header());
+        }
+
+        // csv.include_header = TRUE (case insensitive)
+        {
+            properties.put("csv.include_header", "TRUE");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertTrue((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+        }
+
+        // csv.include_header = FALSE (case insensitive)
+        {
+            properties.put("csv.include_header", "FALSE");
+            TableFunctionTable table = new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable());
+            Assertions.assertFalse((Boolean) Deencapsulation.getField(table, "csvIncludeHeader"));
+        }
+
+        // abnormal: invalid value
+        {
+            properties.put("csv.include_header", "invalid");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "got invalid parameter \"csv.include_header\" = \"invalid\", expect a boolean value (true or false).",
+                    () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
         }
     }
 }

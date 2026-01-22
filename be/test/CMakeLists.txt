@@ -53,6 +53,7 @@ set(EXEC_FILES
         ./fs/poco_http_client_test.cpp
         ./fs/bundle_file_test.cpp
         ./exec/column_value_range_test.cpp
+        ./exec/plain_text_builder_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
