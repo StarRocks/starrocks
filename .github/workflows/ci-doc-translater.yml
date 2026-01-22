@@ -6,46 +6,21 @@ on:
     types: [ created ]
 
 jobs:
-  translate:
-    if: contains(github.event.issue.pull_request.html_url, 'pull') && contains(github.event.comment.body, '/translate')
+ 
+  verify-membership:
     runs-on: ubuntu-latest
-    env:
-      PR_NUMBER: ${{ github.event.issue.number }}
-      GITHUB_TOKEN: ${{ secrets.PAT }}
-
     steps:
-      - name: Check Team Membership
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const user = context.payload.comment.user.login;
-            const org = 'StarRocks';
-            const team = 'docs-maintainer';
+      - name: Get list of organization members
+        env:
+          DOC_MEMBERSHIP_PAT: ${{ secrets.DOC_MEMBERSHIP_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch the list of users in the organization
+          DOCS_MAINTAINERS=$(curl -s -H "Authorization: token $DOC_MEMBERSHIP_PAT" \
+          "https://api.github.com/orgs/starrocks/teams/docs-maintainer/members" | jq -r '.[].login')
 
-            try {
-              console.log(`Checking membership for ${user} in ${org}/${team}...`);
-              
-              const response = await github.rest.teams.getMembershipForUserInOrg({
-                org: org,
-                team_slug: team,
-                username: user,
-              });
-
-              if (response.data.state === 'active') {
-                console.log(`✅ User ${user} is an active member of ${team}.`);
-              } else {
-                core.setFailed(`❌ User ${user} is in ${team} but their membership is ${response.data.state}.`);
-              }
-
-            } catch (error) {
-              if (error.status === 404) {
-                core.setFailed(`❌ User ${user} not found in team ${org}/${team}. Please ensure your membership is public or the token has org-read access.`);
-              } else if (error.status === 403) {
-                core.setFailed(`❌ Permission Denied (403). The GITHUB_TOKEN does not have 'members: read' permission or Org settings restrict access.`);
-              } else {
-                core.setFailed(`❌ Unexpected error (Status ${error.status}): ${error.message}`);
-              }
-            }
+          # Save the allowlisted users in a file
+          echo "$DOCS_MAINTAINERS" > allowlisted_users.txt
+          cat allowlisted_users.txt
 
       - name: Checkout PR
         uses: actions/checkout@v4
