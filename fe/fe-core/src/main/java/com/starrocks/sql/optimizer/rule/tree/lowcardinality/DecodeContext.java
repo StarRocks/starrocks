@@ -98,6 +98,8 @@ class DecodeContext {
 
     Map<ScalarOperator, ScalarOperator> stringExprToDictExprMap = Maps.newHashMap();
 
+    UnionDictionaryManager unionDictionaryManager;
+
     DecodeContext(ColumnRefFactory factory) {
         this.factory = factory;
     }
