@@ -18,9 +18,11 @@ By integrating Iceberg's snapshot branching and tagging feature, StarRocks suppo
 
 ## Manage branches, tags, and snapshots
 
+This section introduces how to manage branches, tags, and snapshots. For instructions on Iceberg stored procedures (using snapshots, performing manual Compaction), see [Iceberg Stored Procedures](./procedures.md).
+
 ### Create a branch
 
-**`CREATE BRANCH` Syntax**
+#### `CREATE BRANCH` Syntax
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -35,14 +37,14 @@ minSnapshotsToKeep ::= <int> SNAPSHOTS
 maxSnapshotAge ::= <int> { DAYS | HOURS | MINUTES }
 ```
 
-**Parameters**
+#### Parameters
 
 - `branch_name`: Name of the branch to create.
 - `AS OF VERSION`: ID of the snapshot (version) on which to create the branch. 
 - `RETAIN`: Time to retain the branch. Format: `<int> <unit>`. Supported units: `DAYS`, `HOURS`, and `MINUTES`. Example: `7 DAYS`, `12 HOURS`, or `30 MINUTES`.
 - `WITH SNAPSHOT RETENTION`: The minimum number of snapshots to keep and/or the maximum time to keep the snapshots.
 
-**Example**
+#### Example
 
 Create a branch `test-branch` based on version (snapshot ID) `12345` of the table `iceberg.sales.order`, retain the branch for `7` days, and keep at least `2` snapshots on the branch.
 
@@ -73,7 +75,7 @@ WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
 
 ### Load data into a specific branch of a table
 
-**`VERSION AS OF` Syntax**
+#### `VERSION AS OF` Syntax
 
 ```SQL
 INSERT INTO [catalog.][database.]table_name
@@ -81,12 +83,12 @@ INSERT INTO [catalog.][database.]table_name
 <query_statement>
 ```
 
-**Parameters**
+#### Parameters
 
 - `branch_name`: Name of the table branch into which the data is loaded.
 - `query_statement`: Query statement whose result will be loaded into the destination table. It can be any SQL statement supported by StarRocks.
 
-**Example**
+#### Example
 
 Load the result of a query into the branch `test-branch` of the table `iceberg.sales.order`.
 
@@ -98,7 +100,7 @@ SELECT c1, k1 FROM tbl;
 
 ### Create a tag
 
-**`CREATE TAG` Syntax**
+#### `CREATE TAG` Syntax
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -107,13 +109,13 @@ CREATE [OR REPLACE] TAG [IF NOT EXISTS] <tag_name>
 [RETAIN <int> { DAYS | HOURS | MINUTES }]
 ```
 
-**Parameters**
+#### Parameters
 
 - `tag_name`: Name of the tag to create.
 - `AS OF VERSION`: ID of the snapshot (version) on which to create the tag. 
 - `RETAIN`: Time to retain the tag. Format: `<int> <unit>`. Supported units: `DAYS`, `HOURS`, and `MINUTES`. Example: `7 DAYS`, `12 HOURS`, or `30 MINUTES`.
 
-**Example**
+#### Example
 
 Create a tag `test-tag` based on version (snapshot ID) `12345` of the table `iceberg.sales.order`, and retain the tag for `7` days.
 
@@ -123,6 +125,7 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
+<<<<<<< HEAD
 ### Fast forward a branch to another
 
 **`fast_forward` Syntax**
@@ -186,16 +189,18 @@ ALTER TABLE iceberg.sales.order
 EXECUTE expire_snapshots('2023-12-17 00:14:38')
 ```
 
+=======
+>>>>>>> a961d44470 ([Doc] Remove Grant Priv to External Group (#68276))
 ### Drop a branch or a tag
 
-**`DROP BRANCH`, `DROP TAG` Syntax**
+#### `DROP BRANCH`, `DROP TAG` Syntax
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
 DROP { BRANCH <branch_name> | TAG <tag_name> }
 ```
 
-**Example**
+#### Example
 
 ```SQL
 ALTER TABLE iceberg.sales.order
@@ -209,17 +214,17 @@ DROP TAG `test-tag`;
 
 ### Time Travel to a specific branch or tag
 
-**`VERSION AS OF` Syntax**
+#### `VERSION AS OF` Syntax
 
 ```SQL
 [FOR] VERSION AS OF '<branch_or_tag>'
 ```
 
-**Parameter**
+#### Parameter
 
 `tag_or_branch`: Name of the branch or tag to which you want to Time Travel. If a branch name is specified, the query will Time Travel to the head snapshot of the branch. If a tag name is specified, the query will Time Travel to the snapshot that the tag referenced.
 
-**Example**
+#### Example
 
 ```SQL
 -- Time Travel to the head snapshot of a branch.
@@ -230,17 +235,17 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 'test-tag';
 
 ### Time Travel to a specific snapshot
 
-**`VERSION AS OF` Syntax**
+#### `VERSION AS OF` Syntax
 
 ```SQL
 [FOR] VERSION AS OF '<snapshot_id>'
 ```
 
-**Parameter**
+#### Parameter
 
 `snapshot_id`: ID of the snapshot to which you want to Time Travel.
 
-**Example**
+#### Example
 
 ```SQL
 SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
@@ -248,17 +253,17 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
 
 ### Time Travel to a specific datetime or date
 
-**`TIMESTAMP AS OF` Syntax**
+#### `TIMESTAMP AS OF` Syntax
 
 ```SQL
 [FOR] TIMESTAMP AS OF { '<datetime>' | '<date>' | date_and_time_function }
 ```
 
-**Parameter**
+#### Parameter
 
 `date_and_time_function`: Any [date and time functions](../../../sql-reference/sql-functions/date-time-functions/now.md) supported by StarRocks.
 
-**Example**
+#### Example
 
 ```SQL
 SELECT * FROM iceberg.sales.order TIMESTAMP AS OF '1986-10-26 01:21:00';
