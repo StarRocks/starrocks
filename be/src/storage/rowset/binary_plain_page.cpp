@@ -62,6 +62,7 @@ Status BinaryPlainPageDecoder<Type>::get_dict_filter_selection(const std::vector
         // truncated range would leave part of dict_selection as 0, causing over-filtering.
 
         constexpr uint32_t kMaxRowsPerEval = std::numeric_limits<uint16_t>::max(); // 65535
+        std::vector<uint16_t> selected_idx(std::min(_num_elems, kMaxRowsPerEval));
         uint32_t begin = 0;
         while (begin < _num_elems) {
             const uint32_t end = std::min(_num_elems, begin + kMaxRowsPerEval);
@@ -82,7 +83,6 @@ Status BinaryPlainPageDecoder<Type>::get_dict_filter_selection(const std::vector
             ContainerResource container(_page_handle, &_data[base_abs_off], chunk_bytes);
             auto dict_chunk_column = BinaryColumn::create(std::move(container), std::move(offsets));
 
-            std::vector<uint16_t> selected_idx(chunk_elems);
             RETURN_IF_ERROR(compound_and_predicates_evaluate(
                     predicates, dict_chunk_column.get(), _dict_filter_cache_selection.data() + begin,
                     selected_idx.data(), 0, static_cast<uint16_t>(chunk_elems)));
