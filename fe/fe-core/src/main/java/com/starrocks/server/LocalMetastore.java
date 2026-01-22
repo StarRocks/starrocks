@@ -3725,17 +3725,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getEditLog().logDynamicPartition(info);
     }
 
-    private void alterTableQueryTimeout(OlapTable table,
-                                       Map<String, String> properties,
-                                       List<Runnable> appliers) throws DdlException {
-        try {
-            int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
-            appliers.add(() -> table.setTableQueryTimeout(tableQueryTimeout));
-        } catch (AnalysisException ex) {
-            throw new DdlException(ex.getMessage());
-        }
-    }
-
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3842,6 +3831,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                int tableQueryTimeout = (int) results.get(key);
+                table.setTableQueryTimeout(tableQueryTimeout);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3927,8 +3923,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             results.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, enable);
             properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD);
         }
-        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
-            alterTableQueryTimeout(table, properties, appliers);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, tableQueryTimeout);
+            } catch (AnalysisException ex) {
+                throw new DdlException(ex.getMessage());
+            }
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
