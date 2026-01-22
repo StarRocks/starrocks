@@ -361,7 +361,6 @@ public class TableFunctionTableTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testAutoDetectTypes() throws NoSuchFieldException {
         Map<String, String> properties = new HashMap<>();
         properties.put(TableFunctionTable.PROPERTY_PATH, "fake://test/path");
@@ -403,7 +402,10 @@ public class TableFunctionTableTest {
                     "Illegal value of auto_detect_types: notaboolean, only true/false allowed",
                     () -> new TableFunctionTable(properties)
             );
-=======
+        }
+    }
+    
+    @Test
     public void testCSVIncludeHeaderForUnload() {
         Map<String, String> properties = new HashMap<>();
         properties.put("path", "file:///test_dir");
@@ -453,7 +455,6 @@ public class TableFunctionTableTest {
             ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
                     "got invalid parameter \"csv.include_header\" = \"invalid\", expect a boolean value (true or false).",
                     () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
->>>>>>> fd58add77b ([Enhancement] Support CSV header row for EXPORT and INSERT INTO FILES (#66654))
         }
     }
 }
