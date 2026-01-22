@@ -39,6 +39,7 @@ import java.util.Map;
 
 public class BenchmarkScanNodeTest {
     private static final long DEFAULT_ROWS_PER_RANGE = 1_000_000L;
+    private static List<ComputeNode> availableNodes;
 
     @Test
     public void testScanRangeLocationsKnownRows() {
@@ -113,10 +114,11 @@ public class BenchmarkScanNodeTest {
     }
 
     private static void mockAvailableNodes(List<ComputeNode> nodes) {
+        availableNodes = nodes;
         new MockUp<LoadScanNode>() {
             @Mock
             public static List<ComputeNode> getAvailableComputeNodes(ComputeResource computeResource) {
-                return nodes;
+                return availableNodes;
             }
         };
     }

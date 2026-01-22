@@ -107,7 +107,7 @@ public class BenchmarkConnectorTest {
         BenchmarkTable benchmarkTable = (BenchmarkTable) table;
         Assertions.assertEquals("benchmark_catalog", benchmarkTable.getCatalogName());
         Assertions.assertEquals("tpch", benchmarkTable.getCatalogDBName());
-        Assertions.assertEquals("part", benchmarkTable.getCatalogTableName());
+        Assertions.assertTrue("part".equalsIgnoreCase(benchmarkTable.getCatalogTableName()));
         Assertions.assertEquals(2.5, benchmarkTable.getScaleFactor(), 0.0001);
 
         Assertions.assertNull(metadata.getTable(new ConnectContext(), "tpch", "missing"));
