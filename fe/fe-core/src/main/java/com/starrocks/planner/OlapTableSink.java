@@ -85,7 +85,6 @@ import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
@@ -116,10 +115,13 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.ExplicitTxnState;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -298,6 +300,29 @@ public class OlapTableSink extends DataSink {
         return openPartitionIds.stream().collect(Collectors.toList());
     }
 
+    @Nullable
+    private static TransactionState getTransactionState(TOlapTableSink tSink) throws StarRocksException {
+        TransactionState txnState = null;
+        long txnId = tSink.getTxn_id();
+        if (txnId > 0) {
+            // normal transaction state
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
+            if (txnState == null) {
+                // explicit transaction state
+                ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
+                if (explicitTxnState != null) {
+                    txnState = explicitTxnState.getTransactionState();
+                }
+            }
+
+            if (txnState == null) {
+                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
+            }
+        }
+        return txnState;
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws StarRocksException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
@@ -319,14 +344,7 @@ public class OlapTableSink extends DataSink {
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
 
-        TransactionState txnState = null;
-        long txnId = tSink.getTxn_id();
-        if (txnId != DmlStmt.INVALID_TXN_ID) {
-            txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(tSink.getDb_id(), txnId);
-            if (txnState == null) {
-                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
-            }
-        }
+        TransactionState txnState = getTransactionState(tSink);
 
         TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
                 enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState);
