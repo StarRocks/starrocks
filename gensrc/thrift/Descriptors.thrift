@@ -485,6 +485,8 @@ struct TTableFunctionTable {
 
     10: optional bool parquet_use_legacy_encoding
     11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
 }
 
 struct TIcebergSchemaField {
