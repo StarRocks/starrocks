@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -38,6 +39,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.benchmark.BenchmarkRowCountCalculator;
+import com.starrocks.connector.benchmark.RowCountEstimate;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -66,6 +69,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
@@ -103,6 +107,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -816,6 +821,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
+    private long estimateBenchmarkRowCount(Table table) {
+        Preconditions.checkState(table instanceof BenchmarkTable, "Not a benchmark table: %s", table.getType());
+        BenchmarkTable benchmarkTable = (BenchmarkTable) table;
+        RowCountEstimate estimate =
+                BenchmarkRowCountCalculator.estimateRowCount(benchmarkTable.getCatalogDBName(), benchmarkTable.getName(),
+                        benchmarkTable.getScaleFactor());
+        if (!estimate.isKnown()) {
+            return Config.default_statistics_output_row_count;
+        }
+        return estimate.getRowCount();
+    }
+
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
@@ -826,6 +843,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
                 Config.default_statistics_output_row_count);
+    }
+
+    @Override
+    public Void visitLogicalBenchmarkScan(LogicalBenchmarkScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                estimateBenchmarkRowCount(node.getTable()));
+    }
+
+    @Override
+    public Void visitPhysicalBenchmarkScan(PhysicalBenchmarkScanOperator node, ExpressionContext context) {
+        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
+                estimateBenchmarkRowCount(node.getTable()));
     }
 
     @Override
