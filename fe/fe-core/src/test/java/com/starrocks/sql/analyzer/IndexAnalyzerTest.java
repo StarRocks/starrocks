@@ -135,4 +135,66 @@ public class IndexAnalyzerTest {
                 () -> IndexAnalyzer.checkColumn(column, null, properties, KeysType.DUP_KEYS),
                 "Unsupported index type: null");
     }
+    
+    @Test
+    public void testCheckInvertedIndexNgram() {
+        // Test case 1: Valid gram_num value
+        Map<String, String> properties1 = new HashMap<>();
+        properties1.put("dict_gram_num", "5");
+        properties1.put("imp_lib", "builtin");
+        IndexAnalyzer.checkInvertedIndexNgram(properties1); // Should not throw exception
+
+        // Test case 2: Invalid gram_num value (not numeric)
+        Map<String, String> properties2 = new HashMap<>();
+        properties2.put("dict_gram_num", "invalid");
+        properties2.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            IndexAnalyzer.checkInvertedIndexNgram(properties2);
+        }, "INVERTED index dict gram num invalid is a invalid number.");
+
+        // Test case 3: Non-positive gram_num value
+        Map<String, String> properties3 = new HashMap<>();
+        properties3.put("dict_gram_num", "-1");
+        properties3.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            IndexAnalyzer.checkInvertedIndexNgram(properties3);
+        }, "INVERTED index dict gram num -1 should be greater than zero.");
+
+        // Test case 4: Zero gram_num value
+        Map<String, String> properties4 = new HashMap<>();
+        properties4.put("dict_gram_num", "0");
+        properties4.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            IndexAnalyzer.checkInvertedIndexNgram(properties4);
+        }, "INVERTED index dict gram num 0 should be greater than zero.");
+
+        // Test case 5: Non-builtin implementation with gram_num (should fail)
+        Map<String, String> properties5 = new HashMap<>();
+        properties5.put("dict_gram_num", "5");
+        properties5.put("imp_lib", "clucene");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            IndexAnalyzer.checkInvertedIndexNgram(properties5);
+        }, "INVERTED index with clucene implement is invalid for dict gram.");
+
+        // Test case 6: Non-builtin implementation with invalid gram_num (should fail with gram_num error first)
+        Map<String, String> properties6 = new HashMap<>();
+        properties6.put("dict_gram_num", "invalid");
+        properties6.put("imp_lib", "clucene");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            IndexAnalyzer.checkInvertedIndexNgram(properties6);
+        }, "INVERTED index dict gram num invalid is a invalid number.");
+
+        // Test case 7: Null gram_num (should not throw exception)
+        Map<String, String> properties7 = new HashMap<>();
+        properties7.put("imp_lib", "builtin");
+        IndexAnalyzer.checkInvertedIndexNgram(properties7); // Should not throw exception
+
+        // Test case 8: Empty gram_num (should throw exception as it's not numeric)
+        Map<String, String> properties8 = new HashMap<>();
+        properties8.put("dict_gram_num", "");
+        properties8.put("imp_lib", "builtin");
+        Assertions.assertThrows(SemanticException.class, () -> {
+            IndexAnalyzer.checkInvertedIndexNgram(properties8);
+        }, "INVERTED index dict gram num  should be greater than zero.");
+    }
 }
