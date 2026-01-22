@@ -49,8 +49,8 @@ Status CSVFileWriter::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _column_converters.reserve(_types.size());
     for (auto& type : _types) {
-        // TODO: support nested type of hive
-        if (type.is_complex_type()) {
+        // ARRAY type is supported, other complex types (STRUCT, MAP) are not supported yet
+        if (type.is_complex_type() && !type.is_array_type()) {
             return Status::InternalError(fmt::format("Type {} is not supported yet", type.debug_string()));
         }
         auto nullable_conv = csv::get_converter(type, true);
