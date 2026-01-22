@@ -458,6 +458,9 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitCTE(CTERelation node, Void context) {
+            if (node.isRecursive() && !node.isAnchor()) {
+                return null;
+            }
             return visit(node.getCteQueryStatement());
         }
 

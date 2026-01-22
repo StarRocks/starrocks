@@ -1976,6 +1976,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
+        if (optimizerContext.getCteContext().isRecursiveCTE(cteId)) {
+            Statistics.Builder builder = Statistics.builder();
+            for (ColumnRefOperator ref : columnRefMap.keySet()) {
+                builder.addColumnStatistic(ref, ColumnStatistic.unknown());
+            }
+            builder.setOutputRowCount(1);
+            context.setStatistics(builder.build());
+            return visitOperator(node, context);
+        }
 
         if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first

@@ -84,6 +84,10 @@ public class MultiCastPlanFragment extends PlanFragment {
         }
     }
 
+    public void addDestNode(ExchangeNode destNode) {
+        destNodeList.add(destNode);
+    }
+
     @Override
     public PlanFragment getDestFragment() {
         Preconditions.checkState(false);
@@ -116,3 +120,4 @@ public class MultiCastPlanFragment extends PlanFragment {
         multiSink.getDestinations().forEach(List::clear);
     }
 }
+
