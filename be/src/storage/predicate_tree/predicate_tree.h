@@ -354,12 +354,20 @@ public:
     /// In this way, we can use the ColumnPredicates part where OR predicates are not supported.
     const ColumnPredicateMap& get_immediate_column_predicate_map() const;
 
+    /// Returns all predicates in the tree, excluding those in the immediate children of the root.
+    const ColumnPredicateMap& get_non_immediate_column_predicate_map() const;
+
+    /// Returns all predicates in the tree, including those nested inside OR nodes.
+    const ColumnPredicateMap& get_all_column_predicate_map() const;
+
 private:
     explicit PredicateTree(PredicateAndNode&& root, uint32_t num_compound_nodes);
 
     PredicateAndNode _root;
 
     mutable std::optional<std::unordered_set<ColumnId>> _cached_column_ids;
+    mutable std::optional<ColumnPredicateMap> _cached_non_immediate_col_preds;
+    mutable std::optional<ColumnPredicateMap> _cached_all_col_preds;
 
     mutable CompoundNodeContexts _compound_node_contexts;
 };

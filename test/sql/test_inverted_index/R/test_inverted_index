@@ -236,6 +236,151 @@ select count(*) from t_test_gin_index_query where query_chinese match_all "ç‰©åŒ
 -- result:
 1
 -- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'chinese' order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'starrocks' or query_english match 'lakehouse' order by id1;
+-- result:
+hello starrocks
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'test' or query_english match 'view' order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or id1=4 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and (query_english match 'nonexistent' or id1=1) order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or (query_english match 'chinese' and id1=5) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or (id1=5 and query_english match 'chinese') order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' and id1=1) or (query_english match 'test' and id1=5) order by id1;
+-- result:
+hello starrocks
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' or id1=4) and (query_english match 'world' or id1=1) order by id1;
+-- result:
+hello starrocks
+hello world
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'hello') order by id1;
+-- result:
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'starrocks' and not (query_english match 'world') order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'hello') or id1=1 order by id1;
+-- result:
+hello starrocks
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'hello') and not (query_english match 'test') order by id1;
+-- result:
+materialized view
+-- !result
+select query_english from t_test_gin_index_query where (not (query_english match 'hello') or id1=1) and query_english match 'starrocks' order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or query_english match 'test' or query_english match 'nonexistent' order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and query_english match 'starrocks' and id1 <= 3 order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' and id1 >= 1) or (query_english match 'test' and id1 < 6) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where not (query_english match 'nonexistent1') or not (query_english match 'nonexistent2') order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where (query_english match 'hello' or not (query_english match 'world')) and id1 in (1, 2, 3) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or not (query_english match 'world') or id1=10 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where not (not (query_english match 'hello') or id1=10) order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and id1 * 2 <= 6 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' or not (query_english match 'hello') or id1=10 order by id1;
+-- result:
+hello starrocks
+hello world
+hello lakehouse
+materialized view
+chinese test
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'hello' and query_english match 'starrocks' order by id1;
+-- result:
+hello starrocks
+-- !result
+select query_english from t_test_gin_index_query where query_english match 'nonexistent' order by id1;
+-- result:
+-- !result
 drop table t_test_gin_index_query;
 -- result:
 -- !result
@@ -551,7 +696,8 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" A
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
 -- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+1	ABC
+3	ABD
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
 -- result:
@@ -636,7 +782,9 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
 -- result:
-[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+1	ABC
+2	abc
+4	This is Gin Index
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match_any "this abc";
 -- result:
