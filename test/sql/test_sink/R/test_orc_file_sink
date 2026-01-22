@@ -1,6 +1,9 @@
 -- name: testOrcFilesSink1
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0}/", 
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "orc", 
 	"compression" = "uncompressed"
 )
@@ -9,6 +12,9 @@ select 1 as k1, "A" as k2 union select 2 as k1, "B" as k2;
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "orc"
 );
 -- result:
@@ -23,6 +29,9 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0}
 -- name: testOrcFilesSink2
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/testOrcFilesSink2/${uuid0}/", 
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "orc", 
 	"compression" = "uncompressed"
 )
@@ -31,11 +40,14 @@ select 1 as k1, "A" as k2 union select 2 as k1, "B" as k2;
 -- !result
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/testOrcFilesSink2/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "orc"
 );
 -- result:
-1	A
 2	B
+1	A
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testOrcFilesSink2/${uuid0} >/dev/null || echo "exit 0" >/dev/null
 -- result:

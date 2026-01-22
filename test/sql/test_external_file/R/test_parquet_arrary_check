@@ -6,8 +6,11 @@ shell: ossutil64 mkdir oss://${oss_bucket}/test_parquet_array_check/${uuid0}/ >/
 -- !result
 insert into files
 (
-"path" = "oss://${oss_bucket}/test_parquet_array_check/${uuid0}/000/",
-"format" = "parquet"
+    "path" = "oss://${oss_bucket}/test_parquet_array_check/${uuid0}/000/",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "parquet"
 ) 
 with tt  (tme_mv_id, fid,  fsinger_id_max) as ((select 10, "10", null) union all (select 20, "20", "aaa")),
 tt2 (tme_mv_id, fid, fsinger_ids, fsinger_id_max) as (select tme_mv_id, fid, split(fsinger_id_max, '|') as fsinger_ids, fsinger_id_max from tt)
@@ -16,7 +19,11 @@ select * from tt2;
 -- !result
 select * from 
 files("path" = "oss://${oss_bucket}/test_parquet_array_check/${uuid0}/000/*",
-"format" = "parquet") order by tme_mv_id;
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "parquet")
+order by tme_mv_id;
 -- result:
 10	10	None	None
 20	20	["aaa"]	aaa

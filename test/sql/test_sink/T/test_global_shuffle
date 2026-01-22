@@ -4,6 +4,9 @@ set enable_connector_sink_global_shuffle = true;
 
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/1/", 
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format"="parquet", 
 	"compression" = "uncompressed"
 ) 
@@ -11,6 +14,9 @@ select 1 as k1, "A" as k2;
 
 insert into files ( 
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/2/", 
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format"="parquet", 
 	"compression" = "uncompressed",
 	"partition_by"="k1"
@@ -19,11 +25,17 @@ select 2 as k1, "B" as k2;
 
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/1/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "parquet"
 );
 
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/test_global_shuffle/${uuid0}/2/k1=2/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "parquet"
 );
 
