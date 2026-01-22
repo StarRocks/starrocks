@@ -3304,4 +3304,8 @@ public class OlapTable extends Table {
     public Set<TableOperation> getSupportedOperations() {
         return Sets.newHashSet(TableOperation.values());
     }
+
+    public boolean isRangeDistribution() {
+        return defaultDistributionInfo instanceof RangeDistributionInfo;
+    }
 }

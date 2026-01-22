@@ -22,6 +22,7 @@
 #include "column/schema.h"
 #include "common/logging.h"
 #include "fmt/format.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/primary_key_encoder.h"
@@ -175,6 +176,47 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
     }
 
     return sst_seek_range;
+}
+
+TabletRangePB TabletRangeHelper::convert_t_range_to_pb_range(const TTabletRange& t_range) {
+    TabletRangePB pb_range;
+    if (t_range.__isset.lower_bound) {
+        auto* lower_bound = pb_range.mutable_lower_bound();
+        for (const auto& t_val : t_range.lower_bound.values) {
+            auto* pb_val = lower_bound->add_values();
+            if (t_val.__isset.type) {
+                *pb_val->mutable_type() = TypeDescriptor::from_thrift(t_val.type).to_protobuf();
+            }
+            if (t_val.__isset.value) {
+                pb_val->set_value(t_val.value);
+            }
+            if (t_val.__isset.variant_type) {
+                pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
+            }
+        }
+    }
+    if (t_range.__isset.upper_bound) {
+        auto* upper_bound = pb_range.mutable_upper_bound();
+        for (const auto& t_val : t_range.upper_bound.values) {
+            auto* pb_val = upper_bound->add_values();
+            if (t_val.__isset.type) {
+                *pb_val->mutable_type() = TypeDescriptor::from_thrift(t_val.type).to_protobuf();
+            }
+            if (t_val.__isset.value) {
+                pb_val->set_value(t_val.value);
+            }
+            if (t_val.__isset.variant_type) {
+                pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
+            }
+        }
+    }
+    if (t_range.__isset.lower_bound_included) {
+        pb_range.set_lower_bound_included(t_range.lower_bound_included);
+    }
+    if (t_range.__isset.upper_bound_included) {
+        pb_range.set_upper_bound_included(t_range.upper_bound_included);
+    }
+    return pb_range;
 }
 
 } // namespace starrocks::lake
