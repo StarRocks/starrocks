@@ -113,7 +113,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必需**：否\
 **描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul><li>`alive_be_number`：存活的 BE 节点数。</li><li>`partition_number`：要消费的分区数。</li><li>`desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。</li></ul>最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。<br/>
 
-####  `max_batch_interval`
+#### `max_batch_interval`
 
 **必需**：否\
 **描述**：任务的调度间隔，即任务执行的频率。单位：秒。取值范围：`5` ~ `60`。默认值：`10`。建议设置大于 `10` 的值。如果调度时间小于 10 秒，由于导入频率过高，会生成过多的 tablet 版本。
