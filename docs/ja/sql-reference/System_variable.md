@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # システム変数
 
+import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
 StarRocks の変数は、MySQL の変数セットを参照していますが、**一部の変数は MySQL クライアントプロトコルとの互換性のみを持ち、MySQL データベースでは機能しません**。
@@ -1320,6 +1322,7 @@ StarRocks のバージョン。変更できません。
 * **単位**: 秒
 * **データ型**: Int
 
+<<<<<<< HEAD
 ### orc_use_column_names
 
 * **説明**: StarRocks が Hive から ORC ファイルを読み取る際に列がどのように一致するかを指定するために使用されます。デフォルト値は `false` で、ORC ファイル内の列は Hive テーブル定義内の順序位置に基づいて読み取られます。この変数が `true` に設定されている場合、列は名前に基づいて読み取られます。
@@ -1367,3 +1370,6 @@ StarRocks のバージョン。変更できません。
 * **説明**: Spilling から小さなファイルに対する Compaction を有効にするかどうか。この機能を有効にすると、集約と並べ替え時のメモリ使用量を削減します。
 * **デフォルト**: true
 * **導入バージョン**: v3.4
+=======
+<VariableWarehouse />
+>>>>>>> 5fed358303 ([Doc] Add wh Property to SQL (#68268))

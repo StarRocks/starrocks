@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
+import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
+
 CREATE MATERIALIZED VIEW creates a materialized view. For usage information about materialized views, see [Synchronous materialized view](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized view](../../../using_starrocks/async_mv/Materialized_view.md).
 
 > **CAUTION**
@@ -410,6 +412,18 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
+<<<<<<< HEAD
+=======
+- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1. Valid values:
+
+  - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
+  - `AUTO`: Attempts to use incremental refresh whenever possible. If the materialized view's query definition does not support incremental refresh, it will automatically fall back to `PCT` mode for that operation. After a PCT refresh, future refreshes may switch back to incremental refresh if conditions allow.
+  - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
+  - `FULL`: Forces a full refresh of all data every time, regardless of whether the materialized view supports incremental or partition-level refresh.
+
+<MVWarehouse />
+
+>>>>>>> 5fed358303 ([Doc] Add wh Property to SQL (#68268))
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
