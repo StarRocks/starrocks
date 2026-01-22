@@ -1183,15 +1183,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "        union select 1,2\n" +
                 "    ) sys";
         plan = getFragmentPlan(sql);
-        assertContains(plan, plan, "  20:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 30: S_ADDRESS, 31: S_COMMENT\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "  |  \n" +
-                "  |----19:EXCHANGE\n" +
-                "  |    \n" +
-                "  16:EXCHANGE");
+        assertContains(plan, plan, "  20:AGGREGATE (update serialize)\n"
+                + "  |  STREAMING\n"
+                + "  |  group by: 32: cast, 33: cast\n"
+                + "  |  \n"
+                + "  0:UNION\n"
+                + "  |  \n"
+                + "  |----19:EXCHANGE\n"
+                + "  |    \n"
+                + "  16:EXCHANGE");
         assertContains(plan, plan, "Decode");
         plan = getThriftPlan(sql);
         assertNotContains(plan.split("\n")[1], "query_global_dicts");
@@ -1648,8 +1648,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan;
         sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  2:Project\n" +
-                "  |  <slot 15> : DictDecode(16: t1a, [<place-holder>])"), plan);
+        Assertions.assertTrue(plan.contains("  2:Project\n"
+                + "  |  <slot 16> : DictDecode(17: t1a, [<place-holder>])"), plan);
 
         // COW Case
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
@@ -1663,20 +1663,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
                 "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  <slot 20> : DictDecode(24: S_ADDRESS, [<place-holder>])\n" +
-                "  |  <slot 21> : 25: cast\n" +
-                "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  <slot 23> : CAST(DictDecode(24: S_ADDRESS, [CAST(<place-holder> AS DOUBLE)]) + 1.0 AS VARCHAR)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 25> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 24: S_ADDRESS, 15: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 15> : CAST(7: S_SUPPKEY AS BIGINT) + 1\n" +
-                "  |  <slot 24> : 24: S_ADDRESS");
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 20> : DictDecode(24: S_ADDRESS, [<place-holder>])\n"
+                + "  |  <slot 21> : 25: cast\n"
+                + "  |  <slot 22> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  <slot 23> : CAST(DictDecode(24: S_ADDRESS, [CAST(<place-holder> AS DOUBLE)]) + 1.0 AS VARCHAR)\n"
+                + "  |  common expressions:\n"
+                + "  |  <slot 25> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  \n"
+                + "  2:AGGREGATE (update finalize)\n"
+                + "  |  group by: 24: S_ADDRESS, 14: expr\n"
+                + "  |  \n"
+                + "  1:Project\n"
+                + "  |  <slot 14> : CAST(6: S_SUPPKEY AS BIGINT) + 1\n"
+                + "  |  <slot 24> : 24: S_ADDRESS");
 
     }
 
