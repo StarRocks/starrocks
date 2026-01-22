@@ -300,6 +300,34 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
     return res;
 }
 
+std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
+    auto res = std::make_shared<QueryStatistics>();
+    res->add_cpu_costs(cpu_cost());
+    res->add_mem_costs(mem_cost_bytes());
+    res->add_spill_bytes(get_spill_bytes());
+    res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
+    res->add_transmitted_bytes(get_transmitted_bytes());
+
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+            res->add_stats_item(stats_item);
+        }
+    }
+
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
+                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
+    }
+
+    _sub_plan_query_statistics_recvr->aggregate(res.get());
+    return res;
+}
+
 void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
     ScanStats* stats = nullptr;
     {

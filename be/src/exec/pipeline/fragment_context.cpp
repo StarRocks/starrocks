@@ -214,6 +214,18 @@ void FragmentContext::set_final_status(const Status& status) {
             hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
         }
 
+        const bool benign_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
+        if (!_s_status.ok() && !benign_cancel) {
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
+            auto* query_ctx = _runtime_state->query_ctx();
+            if (query_ctx != nullptr) {
+                executor->report_audit_statistics_on_failure(query_ctx, this);
+            }
+        }
+
         if (_s_status.is_cancelled()) {
             std::string cancel_msg =
                     fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),

@@ -56,6 +56,7 @@ public:
                                    bool done, bool attach_profile) = 0;
 
     virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
+    virtual void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) {}
 
     virtual void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const = 0;
 
@@ -85,6 +86,7 @@ public:
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
                            bool attach_profile) override;
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
+    void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
 
     void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override;
 
