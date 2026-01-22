@@ -30,7 +30,7 @@ public class BenchmarkTable extends Table {
 
     public BenchmarkTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
                           BenchmarkCatalogConfig config) {
-        super(id, tableName, TableType.TPCDS, schema);
+        super(id, tableName, TableType.BENCHMARK, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tableName;

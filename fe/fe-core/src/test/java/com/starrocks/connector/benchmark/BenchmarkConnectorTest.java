@@ -85,7 +85,7 @@ public class BenchmarkConnectorTest {
         config.loadConfig(singleScaleConfig("2.5"));
         BenchmarkMetadata metadata = new BenchmarkMetadata("benchmark_catalog", BenchmarkCatalogConfig.from(config));
 
-        Assertions.assertEquals(Table.TableType.TPCDS, metadata.getTableType());
+        Assertions.assertEquals(Table.TableType.BENCHMARK, metadata.getTableType());
 
         List<String> dbNames = metadata.listDbNames(new ConnectContext());
         Set<String> expected = Set.of("tpcds", "tpch", "ssb");

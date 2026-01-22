@@ -748,7 +748,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     new LogicalJDBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
-        } else if (Table.TableType.TPCDS.equals(node.getTable().getType())) {
+        } else if (Table.TableType.BENCHMARK.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalBenchmarkScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,

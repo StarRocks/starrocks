@@ -31,8 +31,8 @@ public class BenchmarkPartitionTraitsTest {
         PartitionKey key = traits.createEmptyKey();
         Assertions.assertTrue(key instanceof BenchmarkPartitionKey);
 
-        Assertions.assertTrue(ConnectorPartitionTraits.isSupported(Table.TableType.TPCDS));
-        Assertions.assertFalse(ConnectorPartitionTraits.isSupportPCTRefresh(Table.TableType.TPCDS));
-        Assertions.assertTrue(ConnectorPartitionTraits.build(Table.TableType.TPCDS) instanceof BenchmarkPartitionTraits);
+        Assertions.assertTrue(ConnectorPartitionTraits.isSupported(Table.TableType.BENCHMARK));
+        Assertions.assertFalse(ConnectorPartitionTraits.isSupportPCTRefresh(Table.TableType.BENCHMARK));
+        Assertions.assertTrue(ConnectorPartitionTraits.build(Table.TableType.BENCHMARK) instanceof BenchmarkPartitionTraits);
     }
 }

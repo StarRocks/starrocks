@@ -45,7 +45,6 @@ public enum ConnectorType {
     ODPS("odps", OdpsConnector.class, null),
     KUDU("kudu", KuduConnector.class, null),
     UNIFIED("unified", UnifiedConnector.class, null),
-    TPCDS("tpcds", BenchmarkConnector.class, BenchmarkConfig.class),
     BENCHMARK("benchmark", BenchmarkConnector.class, BenchmarkConfig.class);
 
     public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
@@ -59,7 +58,6 @@ public enum ConnectorType {
             ODPS,
             KUDU,
             UNIFIED,
-            TPCDS,
             BENCHMARK
     );
 

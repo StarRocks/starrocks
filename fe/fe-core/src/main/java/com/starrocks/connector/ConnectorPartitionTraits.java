@@ -75,7 +75,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
-                    .put(Table.TableType.TPCDS, BenchmarkPartitionTraits::new)
+                    .put(Table.TableType.BENCHMARK, BenchmarkPartitionTraits::new)
                     .build();
 
     protected Table table;

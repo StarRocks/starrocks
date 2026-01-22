@@ -121,7 +121,7 @@ public class DesensitizedSQLBuilder {
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.JDBC
                 || table.getType() == Table.TableType.FILE
-                || table.getType() == Table.TableType.TPCDS) {
+                || table.getType() == Table.TableType.BENCHMARK) {
             tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
         } else if (table instanceof OlapTable) {
             tableDef = visitor.desensitizeOlapTableDef(pair.first, (OlapTable) pair.second);

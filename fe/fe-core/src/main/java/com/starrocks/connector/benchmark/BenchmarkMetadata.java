@@ -40,7 +40,7 @@ public class BenchmarkMetadata implements ConnectorMetadata {
 
     @Override
     public Table.TableType getTableType() {
-        return Table.TableType.TPCDS;
+        return Table.TableType.BENCHMARK;
     }
 
     @Override
