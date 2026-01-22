@@ -31,6 +31,7 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -375,8 +376,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     minDataSize = dataSizePerGroup[i];
                 }
             }
-            dataSizePerGroup[minIndex] +=
-                    Math.max(1, scanRangeParam.getScan_range().getInternal_scan_range().getRow_count());
+            dataSizePerGroup[minIndex] += Math.max(1L, scanRangeRowCount(scanRangeParam));
             result.get(minIndex).add(scanRangeParam);
         }
 
@@ -391,13 +391,35 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     private static long bucketScanRows(ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange) {
         return bucketSeqToScanRange.entrySet().stream().flatMap(entry -> entry.getValue().entrySet().stream())
                 .flatMap(item -> item.getValue().stream())
-                .map(scanRange -> scanRange.getScan_range().internal_scan_range.getRow_count())
+                .map(LocalFragmentAssignmentStrategy::scanRangeRowCount)
                 .reduce(0L, Long::sum);
     }
 
     private static long totalScanRows(List<TScanRangeParams> scanRangeParams) {
         return scanRangeParams.stream()
-                .map(scanRange -> scanRange.getScan_range().getInternal_scan_range().getRow_count())
+                .map(LocalFragmentAssignmentStrategy::scanRangeRowCount)
                 .reduce(0L, Long::sum);
+    }
+
+    private static long scanRangeRowCount(TScanRangeParams scanRangeParam) {
+        if (scanRangeParam == null) {
+            return 0L;
+        }
+        TScanRange scanRange = scanRangeParam.getScan_range();
+        if (scanRange == null) {
+            return 0L;
+        }
+        if (scanRange.isSetInternal_scan_range()) {
+            if (scanRange.getInternal_scan_range() != null && scanRange.getInternal_scan_range().isSetRow_count()) {
+                return scanRange.getInternal_scan_range().getRow_count();
+            }
+        }
+        if (scanRange.isSetBenchmark_scan_range()) {
+            if (scanRange.getBenchmark_scan_range() != null && scanRange.getBenchmark_scan_range().isSetRow_count()) {
+                long rowCount = scanRange.getBenchmark_scan_range().getRow_count();
+                return Math.max(0L, rowCount);
+            }
+        }
+        return 0L;
     }
 }
