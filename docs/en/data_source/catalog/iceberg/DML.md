@@ -1,19 +1,22 @@
 ---
 displayed_sidebar: docs
+toc_max_heading_level: 5
 keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
 ---
 
 # Iceberg DML operations
 
-StarRocks Iceberg Catalog supports a variety of Data Manipulation Language (DML) operations, including inserting data into Iceberg tables.
+This document describes Data Manipulation Language (DML) operations for Iceberg catalogs in StarRocks, including inserting data into Iceberg tables.
 
 You must have the appropriate privileges to perform DML operations. For more information about privileges, see [Privileges](../../../administration/user_privs/authorization/privilege_item.md).
+
+---
 
 ## INSERT
 
 Inserts data into an Iceberg table. This feature is supported from v3.1 onwards.
 
-Similar to loading data into StarRocks native tables, if you have the [INSERT privilege](../../../administration/user_privs/authorization/privilege_item.md#table) on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data to the Iceberg table. Currently, only Parquet-formatted Iceberg tables are supported.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) privilege on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data of a StarRocks table to that Iceberg table (currently only Parquet-formatted Iceberg tables are supported).
 
 ### Syntax
 
@@ -30,7 +33,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 :::note
 
-`NULL` values are not allowed in partition columns. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
+Partition columns do not allow `NULL` values. Therefore, you must make sure that no empty values are loaded into the partition columns of the Iceberg table.
 
 :::
 
@@ -38,25 +41,15 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 #### INTO
 
-Appends the data to the Iceberg table.
+To append the data of the StarRocks table to the Iceberg table.
 
 #### OVERWRITE
 
-Overwrites the existing data of the Iceberg table.
+To overwrite the existing data of the Iceberg table with the data of the StarRocks table.
 
 #### column_name
 
-The name of the destination column to which you want to load data. You can specify one or more columns. Multiple columns are separated with commas (`,`).
-- You can only specify columns that actually exist in the Iceberg table.
-- The destination columns must include the partition columns of the Iceberg table.
-- The destination columns are mapped one on one in sequence to the columns in the SELECT statement (source columns), regardless of what the destination column names are.
-- If no destination columns are specified, the data is loaded into all columns of the Iceberg table.
-- If a non-partition source column cannot be mapped to any destination column, StarRocks writes the default value `NULL` to the destination column.
-- If the data types of the source and destination columns mismatch, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned.
-
-:::note
-You cannot specify the `column_name` property if you have specified the PARTITION clause.
-:::
+The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned.
 
 #### expression
 
@@ -72,11 +65,7 @@ Query statement whose result will be loaded into the Iceberg table. It can be an
 
 #### PARTITION
 
-The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement.
-
-:::note
-You cannot specify the `column_name` property if you have specified the PARTITION clause.
-:::
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property.
 
 ### Examples
 
@@ -130,7 +119,7 @@ You cannot specify the `column_name` property if you have specified the PARTITIO
 
 ## DELETE
 
-You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported from v4.1 and later.
+You can use the DELETE statement to delete data from Iceberg tables based on specified conditions. This feature is supported in StarRocks v4.1 and later versions.
 
 ### Syntax
 
@@ -145,13 +134,13 @@ DELETE FROM <table_name> WHERE <condition>
   - Database-qualified name (after setting catalog): `database_name.table_name`
   - Table name only (after setting catalog and database): `table_name`
 
-- `condition`: The condition to identify which rows to delete. It can include:
+- `condition`: The condition to identify which rows to delete. Can include:
   - Comparison operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `<>`
   - Logical operators: `AND`, `OR`, `NOT`
   - `IN` and `NOT IN` clauses
   - `BETWEEN` and `LIKE` operators
   - `IS NULL` and `IS NOT NULL`
-  - Sub-queries with `IN` or `EXISTS`
+  - Subqueries with `IN` or `EXISTS`
 
 ### Examples
 
@@ -209,15 +198,15 @@ DELETE FROM iceberg_catalog.db.table1 WHERE email IS NULL AND phone IS NULL;
 DELETE FROM iceberg_catalog.db.table1 WHERE age IS NOT NULL;
 ```
 
-#### DELETE with sub-queries
+#### DELETE with subqueries
 
-Use sub-queries to identify rows to delete:
+Use subqueries to identify rows to delete:
 
 ```SQL
--- DELETE with IN sub-query
+-- DELETE with IN subquery
 DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHERE expired = true);
 
--- DELETE with EXISTS sub-query
+-- DELETE with EXISTS subquery
 DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
 ```
 
@@ -260,3 +249,5 @@ SET CATALOG iceberg_catalog;
 USE my_db;
 TRUNCATE TABLE my_table;
 ```
+
+---
