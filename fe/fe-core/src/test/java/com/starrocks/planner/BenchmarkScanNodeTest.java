@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.BenchmarkTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.connector.benchmark.BenchmarkCatalogConfig;
@@ -34,7 +33,9 @@ import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class BenchmarkScanNodeTest {
     private static final long DEFAULT_ROWS_PER_RANGE = 1_000_000L;
@@ -123,7 +124,9 @@ public class BenchmarkScanNodeTest {
     private static TupleDescriptor newBenchmarkTuple(String dbName, String tableName, double scaleFactor) {
         List<Column> schema = List.of(new Column("c1", IntegerType.INT));
         BenchmarkConfig config = new BenchmarkConfig();
-        config.loadConfig(ImmutableMap.of(BenchmarkConfig.SCALE, Double.toString(scaleFactor)));
+        Map<String, String> properties = new HashMap<>();
+        properties.put(BenchmarkConfig.SCALE, Double.toString(scaleFactor));
+        config.loadConfig(properties);
         BenchmarkCatalogConfig catalogConfig = BenchmarkCatalogConfig.from(config);
         BenchmarkTable table = new BenchmarkTable(1L, "benchmark", dbName, tableName, schema, catalogConfig);
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
