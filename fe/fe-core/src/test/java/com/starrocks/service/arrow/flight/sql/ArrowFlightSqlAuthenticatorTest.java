@@ -14,12 +14,16 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -27,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,10 +77,52 @@ class ArrowFlightSqlAuthenticatorTest {
 
         doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken("bad-token");
 
-        CallHeaders headers = mock(CallHeaders.class);
-        when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + "bad-token");
+        SessionVariable mockSv = mock(SessionVariable.class);
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(false);
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
-        assertTrue(ex.getMessage().contains("Invalid token"));
+        VariableMgr mockVariableMgr = mock(VariableMgr.class);
+        when(mockVariableMgr.getDefaultSessionVariable()).thenReturn(mockSv);
+
+        GlobalStateMgr mockGlobalStateMgr = mock(GlobalStateMgr.class);
+        when(mockGlobalStateMgr.getVariableMgr()).thenReturn(mockVariableMgr);
+
+        try (MockedStatic<GlobalStateMgr> mockedStatic = mockStatic(GlobalStateMgr.class)) {
+            mockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalStateMgr);
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + "bad-token");
+
+            RuntimeException ex = assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
+            assertTrue(ex.getMessage().contains("Invalid token"));
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownTokenAllowedWhenProxyEnabled() {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        // Token not found in local cache
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken("remote-token");
+
+        SessionVariable mockSv = mock(SessionVariable.class);
+        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+
+        VariableMgr mockVariableMgr = mock(VariableMgr.class);
+        when(mockVariableMgr.getDefaultSessionVariable()).thenReturn(mockSv);
+
+        GlobalStateMgr mockGlobalStateMgr = mock(GlobalStateMgr.class);
+        when(mockGlobalStateMgr.getVariableMgr()).thenReturn(mockVariableMgr);
+
+        try (MockedStatic<GlobalStateMgr> mockedStatic = mockStatic(GlobalStateMgr.class)) {
+            mockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalStateMgr);
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + "remote-token");
+
+            // token allowed through for proxy forwarding
+            CallHeaderAuthenticator.AuthResult result = authenticator.authenticate(headers);
+            assertEquals("remote-token", result.getPeerIdentity());
+        }
     }
 }
