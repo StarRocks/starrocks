@@ -26,6 +26,38 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.12
+
+发布日期：2026 年 1 月 22 日
+
+### 功能优化
+
+- 为 BrpcStubCache 新增清理器，用于清理未使用的连接。 [#61417](https://github.com/StarRocks/starrocks/pull/61417)
+- 支持对统计信息删除（针对已删除表）以及 Edit Log 写请求进行批量处理。 [#67896](https://github.com/StarRocks/starrocks/pull/67896)
+- 在需要加密的情况下，审计日志中保留 SQL 注释。 [#63298](https://github.com/StarRocks/starrocks/pull/63298)
+- 在物化视图相关指标中新增 `warehouse_name` 标签。 [#67715](https://github.com/StarRocks/starrocks/pull/67715)
+- 改进了 JDBC 表名和列名的标识符包裹处理。 [#67853](https://github.com/StarRocks/starrocks/pull/67853)
+- 为 Iceberg JDBC Catalog 新增 `CLIENT_FACTORY` 属性。 [#67613](https://github.com/StarRocks/starrocks/pull/67613)
+
+### 问题修复
+
+修复了以下问题：
+
+- 在混合使用 DATE 和 DATETIME 类型时，可变参数函数返回错误的日期结果。 [#67947](https://github.com/StarRocks/starrocks/pull/67947)
+- `NormalizePredicateRule` 在非确定性表达式上的震荡问题。 [#67923](https://github.com/StarRocks/starrocks/pull/67923)
+- Lambda 函数在低基数场景下的问题。 [#67843](https://github.com/StarRocks/starrocks/pull/67843)
+- 子字段表达式未收集子字段的问题。 [#67850](https://github.com/StarRocks/starrocks/pull/67850)
+- 在子节点统计信息缺失时，RBO Join Reorder 出现 NPE 的问题。 [#67693](https://github.com/StarRocks/starrocks/pull/67693)
+- 因 MemTable finalize 失败导致 BE 崩溃的问题。 [#67787](https://github.com/StarRocks/starrocks/pull/67787)
+- 在动态 overwrite 场景下，FE 重启后临时分区未被清理的问题。 [#67629](https://github.com/StarRocks/starrocks/pull/67629)
+- Compaction 的 I/O 统计信息不准确的问题。 [#67524](https://github.com/StarRocks/starrocks/pull/67524)
+- 复制事务过程中，跨集群物理分区比较逻辑不正确的问题。 [#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- SQL Server 和 Oracle 标识符符号处理存在的问题。 [#67965](https://github.com/StarRocks/starrocks/pull/67965)
+- 由于配置未正确传递，Iceberg 元数据表查询中出现 NPE 的问题。 [#67151](https://github.com/StarRocks/starrocks/pull/67151)
+- 空 Parquet 或 ORC 文件场景下，`files()` schema 检测存在的问题。 [#67762](https://github.com/StarRocks/starrocks/pull/67762)
+- 在 Hive 表上执行 UNION ALL 时，Profile 中的指标值不准确的问题。 [#67912](https://github.com/StarRocks/starrocks/pull/67912)
+- FE 查询场景下，缺乏通过 Arrow Flight 代理获取数据的支持。 [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+
 ## 3.5.11
 
 **发布日期**：2026 年 1 月 5 日

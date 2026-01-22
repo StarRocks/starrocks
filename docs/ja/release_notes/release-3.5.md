@@ -26,6 +26,38 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.12
+
+リリース日：2026 年 1 月 22 日
+
+### 改善点
+
+- 未使用の接続をクリーンアップするため、BrpcStubCache にクリーナーを追加しました。 [#61417](https://github.com/StarRocks/starrocks/pull/61417)
+- 統計情報の削除（削除済みテーブル向け）および Edit Log 書き込みリクエストのバッチ処理をサポートしました。 [#67896](https://github.com/StarRocks/starrocks/pull/67896)
+- 暗号化が必要な場合でも、監査ログ内の SQL コメントを保持するようにしました。 [#63298](https://github.com/StarRocks/starrocks/pull/63298)
+- マテリアライズドビューのメトリクスに `warehouse_name` ラベルを追加しました。 [#67715](https://github.com/StarRocks/starrocks/pull/67715)
+- JDBC のテーブル名およびカラム名に対する識別子のラップ処理を改善しました。 [#67853](https://github.com/StarRocks/starrocks/pull/67853)
+- Iceberg JDBC カタログに `CLIENT_FACTORY` プロパティを追加しました。 [#67613](https://github.com/StarRocks/starrocks/pull/67613)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- DATE 型と DATETIME 型を混在させた場合に、可変長引数関数が誤った日付を返す問題。 [#67947](https://github.com/StarRocks/starrocks/pull/67947)
+- 非決定的な式において `NormalizePredicateRule` が振動する問題。 [#67923](https://github.com/StarRocks/starrocks/pull/67923)
+- Lambda 関数における低カーディナリティ関連の不具合。 [#67843](https://github.com/StarRocks/starrocks/pull/67843)
+- サブフィールド式が子サブフィールドを収集しない問題。 [#67850](https://github.com/StarRocks/starrocks/pull/67850)
+- 子ノードの統計情報が欠如している場合に、RBO の Join Reorder で NPE が発生する問題。 [#67693](https://github.com/StarRocks/starrocks/pull/67693)
+- MemTable の finalize 失敗により BE がクラッシュする問題。 [#67787](https://github.com/StarRocks/starrocks/pull/67787)
+- 動的 overwrite 実行後、FE 再起動時に一時パーティションがクリーンアップされない問題。 [#67629](https://github.com/StarRocks/starrocks/pull/67629)
+- Compaction の I/O 統計情報が不正確な問題。 [#67524](https://github.com/StarRocks/starrocks/pull/67524)
+- レプリケーショントランザクション中に、クラスタ間の物理パーティション比較ロジックが誤っている問題。 [#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- SQL Server および Oracle における識別子記号の処理に関する問題。 [#67965](https://github.com/StarRocks/starrocks/pull/67965)
+- 設定の伝播不足により、Iceberg メタデータテーブルのクエリで NPE が発生する問題。 [#67151](https://github.com/StarRocks/starrocks/pull/67151)
+- 空の Parquet または ORC ファイルに対する `files()` のスキーマ検出に関する問題。 [#67762](https://github.com/StarRocks/starrocks/pull/67762)
+- Hive テーブルで UNION ALL を使用した際に、Profile 内のメトリクス値が不正確になる問題。 [#67912](https://github.com/StarRocks/starrocks/pull/67912)
+- FE クエリにおいて、Arrow Flight プロキシ経由でのデータ取得がサポートされていない問題。 [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+
 ## 3.5.11
 
 **リリース日**：2026年1月5日
