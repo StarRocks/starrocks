@@ -56,7 +56,11 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     TabletSchemaCSPtr tablet_schema = base_schema;
     if (read_params.column_access_paths != nullptr && !read_params.column_access_paths->empty()) {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*base_schema);
-        int field_number = tmp_schema->num_columns();
+        // Use next_column_unique_id instead of num_columns to avoid unique_id conflicts.
+        // num_columns() returns the current column count, but unique_ids may have gaps
+        // after ADD/DROP COLUMN operations. Using num_columns() can cause extended columns
+        // (flat JSON subfields) to get unique_ids that conflict with existing columns.
+        int field_number = tmp_schema->next_column_unique_id();
         for (auto& path : *read_params.column_access_paths) {
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));
