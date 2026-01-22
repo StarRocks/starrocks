@@ -1,0 +1,29 @@
+-- name: test_dict_in_struct
+
+CREATE TABLE T (
+    id INT,
+    value VARCHAR(10),
+    arr ARRAY<VARCHAR(10)>
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+CREATE TABLE T2 LIKE T;
+
+
+INSERT INTO T VALUES (1, 'a', ['aa', 'aaa']), (2, 'b', ['bb', 'bbb']), (3, 'c', ['cc', 'ccc']);
+
+[UC]analyze FULL TABLE T;
+
+function: wait_global_dict_ready('value', 'T')
+function: wait_global_dict_ready('arr', 'T')
+
+--expect: rewrite
+SELECT LOWER(STRUCT(value, arr).col1) AS r1, UPPER(STRUCT(value, arr).col2[1]) AS r2 FROM T ORDER BY id;
+SELECT STRUCT(value, arr, id) r1, NAMED_STRUCT('value', value, 'arr', arr, 'id', id) FROM T ORDER BY id;
+SELECT ANY_VALUE(STRUCT(id, value, arr)) r FROM (SELECT id, value, arr FROM T ORDER BY id LIMIT 1) sub_query;
+WITH T2 AS (SELECT ANY_VALUE(STRUCT(value, arr)) A FROM (SELECT * FROM T ORDER BY id DESC LIMIT 1) subquery) SELECT LOWER(A.col1), ARRAY_LENGTH(A.col2), UPPER(A.col2[1]) FROM T2;
+
+--expect: norewrite
+SELECT UPPER(STRUCT(value, LOWER(value)).col1) FROM T ORDER BY id;
+SELECT UPPER(STRUCT(value, STRUCT(value)).col1) FROM T ORDER BY id;

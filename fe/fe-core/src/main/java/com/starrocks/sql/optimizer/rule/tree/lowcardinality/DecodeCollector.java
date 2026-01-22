@@ -1284,13 +1284,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
                 // whole expression support dictionary, define new dict column
                 // only support varchar/array<varchar> column
-                if ((exprs.contains(value) && supportLowCardinality(value.getType())) ||
-                        structOpToFieldUseStringRef.containsKey(value)) {
+                if (exprs.contains(value) && supportLowCardinality(value.getType())) {
                     setDefineExpr(key, value, 0);
                     info.outputStringColumns.union(key.getId());
                 }
                 info.usedStringColumns.union(c);
             });
+            if (structOpToFieldUseStringRef.containsKey(value)) {
+                setDefineExpr(key, value, 0);
+                info.outputStringColumns.union(key.getId());
+            }
             matchChildren.union(dictExpressionCollector.matchChildren);
         }
     }
