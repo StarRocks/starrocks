@@ -18,7 +18,7 @@ jobs:
             docs/zh/**/*.md*
             docs/ja/**/*.md*
       - name: Post/Update Status Comment
-        uses: peter-evans/create-or-update-comment@v4
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body-includes: "### 🌎 Translation Required?"
