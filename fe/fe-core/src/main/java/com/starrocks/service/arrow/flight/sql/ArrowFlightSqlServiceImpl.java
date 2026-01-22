@@ -505,6 +505,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     private void getStreamResultFromBE(String queryId, String fragmentInstanceId,
                                         String beHost, int bePort, ServerStreamListener listener) {
         ByteString ticketHandle = buildBETicket(queryId, fragmentInstanceId);
+        // no token needed for be connection
         getStreamResultFromRemoteNode(beHost, bePort, ticketHandle, null, "BE", listener);
     }
 
@@ -653,10 +654,12 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
             // FE task will return FE (or proxy) as endpoint.
             if (!result.isBackendResultDescriptor()) {
-                final ByteString handle = buildFETicket(ctx);
+                Pair<Location, ByteString> feEndpoint = getFEEndpoint(ctx);
+                Location endpoint = feEndpoint.first;
+                ByteString handle = feEndpoint.second;
+
                 FlightSql.TicketStatementQuery ticketStatement =
                         FlightSql.TicketStatementQuery.newBuilder().setStatementHandle(handle).build();
-                Location endpoint = getFEEndpoint();
                 return buildFlightInfo(ticketStatement, descriptor, result.getSchema(), endpoint);
             }
 
@@ -681,18 +684,32 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         }
     }
 
-    private ByteString buildFETicket(ArrowFlightSqlConnectContext ctx) {
+    protected Pair<Location, ByteString> getFEEndpoint(ArrowFlightSqlConnectContext ctx) throws InvalidConfException {
+        ByteString handle;
+        Location endpoint;
         SessionVariable globalSv = getGlobalProxySessionVariable();
+
         if (globalSv.isArrowFlightProxyEnabled()) {
+            String arrowFlightProxy = globalSv.getArrowFlightProxy();
             // FE Proxy Ticket: <Token>|<QueryId>|<FEHost>:<FEPort>
             String feHost = feEndpoint.getUri().getHost();
             int fePort = feEndpoint.getUri().getPort();
-            return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + "|"
+            handle = ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + "|"
                     + DebugUtil.printId(ctx.getExecutionId()) + "|"
                     + feHost + ":" + fePort);
+
+            if (!arrowFlightProxy.isEmpty()) {
+                endpoint = getProxyLocation(arrowFlightProxy);
+            } else {
+                endpoint = feEndpoint;
+            }
+        } else {
+            // FE Local Ticket: <Token>|<QueryId>
+            handle = ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + "|" + DebugUtil.printId(ctx.getExecutionId()));
+            endpoint = feEndpoint;
         }
-        // FE Local Ticket: <Token>|<QueryId>
-        return ByteString.copyFromUtf8(ctx.getArrowFlightSqlToken() + "|" + DebugUtil.printId(ctx.getExecutionId()));
+
+        return new Pair<>(endpoint, handle);
     }
 
     private static ByteString buildBETicket(String queryId, String rootFragmentInstanceId) {
@@ -716,7 +733,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                                                                  Schema schema, CallContext context) {
         try {
             sessionManager.validateAndGetConnectContext(context.peerIdentity());
-            Location endpoint = getFEEndpoint();
+            Location endpoint = getFELocation();
             return buildFlightInfo(request, descriptor, schema, endpoint);
         } catch (InvalidConfException e) {
             throw CallStatus.INTERNAL.withDescription(e.getMessage()).toRuntimeException();
@@ -815,7 +832,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         return GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
     }
 
-    protected Location getFEEndpoint() throws InvalidConfException {
+    protected Location getFELocation() throws InvalidConfException {
         SessionVariable globalSv = getGlobalProxySessionVariable();
         if (globalSv.isArrowFlightProxyEnabled()) {
             String arrowFlightProxy = globalSv.getArrowFlightProxy();
