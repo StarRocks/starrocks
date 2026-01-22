@@ -617,7 +617,7 @@ public class StmtExecutor {
                 tableQueryTimeoutValue = -1;
             }
         }
-        return sessionQueryTimeout;
+        return parsedStmt.getTimeout();
     }
 
     public String getExecType() {
