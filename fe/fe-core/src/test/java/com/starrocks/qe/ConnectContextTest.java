@@ -34,12 +34,8 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
-=======
-import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
@@ -51,11 +47,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.TableRef;
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;

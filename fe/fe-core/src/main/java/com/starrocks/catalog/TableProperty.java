@@ -330,22 +330,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
-<<<<<<< HEAD
-=======
     // table level query timeout in seconds
     // default value -1 means use cluster query_timeout
     @SerializedName(value = "tableQueryTimeout")
     private int tableQueryTimeout = -1;
 
-    /**
-     * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
-     * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
-     * It is disabled by default for existing tables to ensure backward compatibility after an upgrade.
-     * New tables will have this property explicitly set to true upon creation.
-     */
-    private boolean cloudNativeFastSchemaEvolutionV2 = false;
-
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
     public TableProperty() {
         this(Maps.newLinkedHashMap());
     }
@@ -435,12 +424,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildLocation();
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
-<<<<<<< HEAD
-=======
-                buildCloudNativeFastSchemaEvolutionV2();
-                buildLakeCompactionMaxParallel();
                 buildTableQueryTimeout();
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -1251,20 +1235,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-<<<<<<< HEAD
-=======
-    public TableProperty buildCloudNativeFastSchemaEvolutionV2() {
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
-            cloudNativeFastSchemaEvolutionV2 = Boolean.parseBoolean(
-                    properties.get(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2));
-        }
-        return this;
-    }
-
-    public boolean isCloudNativeFastSchemaEvolutionV2() {
-        return cloudNativeFastSchemaEvolutionV2;
-    }
-
     public TableProperty buildTableQueryTimeout() {
         String timeoutStr = properties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
 
@@ -1300,7 +1270,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return tableQueryTimeout;
     }
 
->>>>>>> e03788af8a ([Enhancement] Add table-level table_query_timeout. (#67547))
     @Override
     public void gsonPostProcess() throws IOException {
         try {
