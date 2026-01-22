@@ -417,7 +417,11 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         if (scanRange.isSetBenchmark_scan_range()) {
             if (scanRange.getBenchmark_scan_range() != null && scanRange.getBenchmark_scan_range().isSetRow_count()) {
                 long rowCount = scanRange.getBenchmark_scan_range().getRow_count();
-                return Math.max(0L, rowCount);
+                if (rowCount < 0) {
+                    // TODO(AlvinZ): this stands for the last scan range, meaning reading all data left.
+                    return 1_000_000L;
+                }
+                return rowCount;
             }
         }
         return 0L;
