@@ -26,7 +26,12 @@ Succeed: Total num: 1, size: 1,617. OK num: 1(upload 1 files).
 -- !result
 create table t1 
 properties('replication_num' = '1')
-as select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+as select * from files(
+    'path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet',
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    'format'='parquet');
 -- result:
 -- !result
 desc t1;
