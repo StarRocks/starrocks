@@ -287,25 +287,15 @@ ALTER SECURITY INTEGRATION LDAP SET
 );
 ```
 
-## 将角色或权限授予用户组
+## 将角色授予用户组
 
-您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 将角色或权限授予用户组。
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 将角色授予用户组。
 
-- 将角色授予用户组。
+以下示例将角色 `example_role` 授予用户组 `analysts`：
 
-  以下示例将角色 `example_role` 授予用户组 `analysts`：
-
-  ```SQL
-  GRANT example_role TO EXTERNAL GROUP analysts;
-  ```
-
-- 将权限授予用户组。
-
-  以下示例将表 `sr_member` 的 SELECT 权限授予用户组 `analysts`：
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
+```SQL
+GRANT example_role TO EXTERNAL GROUP analysts;
+```
 
 ## 将 Group Provider 与外部授权系统（Apache Ranger）结合
 
