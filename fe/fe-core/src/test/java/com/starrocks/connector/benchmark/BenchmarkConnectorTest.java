@@ -46,6 +46,14 @@ public class BenchmarkConnectorTest {
     }
 
     @Test
+    public void testConfigDefaultScale() {
+        BenchmarkConfig config = new BenchmarkConfig();
+        config.loadConfig(new HashMap<>());
+        Assertions.assertEquals("1", config.getScale());
+        Assertions.assertEquals(1.0, BenchmarkCatalogConfig.from(config).getScaleFactor(), 0.0001);
+    }
+
+    @Test
     public void testCatalogConfigRejectsInvalidScale() {
         Assertions.assertThrows(StarRocksConnectorException.class, () -> BenchmarkCatalogConfig.from(null));
 
@@ -77,18 +85,23 @@ public class BenchmarkConnectorTest {
         config.loadConfig(singleScaleConfig("2.5"));
         BenchmarkMetadata metadata = new BenchmarkMetadata("benchmark_catalog", BenchmarkCatalogConfig.from(config));
 
+        Assertions.assertEquals(Table.TableType.TPCDS, metadata.getTableType());
+
         List<String> dbNames = metadata.listDbNames(new ConnectContext());
         Set<String> expected = Set.of("tpcds", "tpch", "ssb");
         Assertions.assertEquals(expected, new HashSet<>(dbNames));
 
+        Assertions.assertNull(metadata.getDb(new ConnectContext(), "missing"));
         Database db = metadata.getDb(new ConnectContext(), "TPCDS");
         Assertions.assertNotNull(db);
         Assertions.assertEquals("tpcds", db.getFullName());
         Assertions.assertEquals("benchmark_catalog", db.getCatalogName());
 
+        Assertions.assertTrue(metadata.listTableNames(new ConnectContext(), "missing").isEmpty());
         List<String> tables = metadata.listTableNames(new ConnectContext(), "tpch");
         Assertions.assertTrue(tables.contains("part"));
 
+        Assertions.assertNull(metadata.getTable(new ConnectContext(), "missing", "part"));
         Table table = metadata.getTable(new ConnectContext(), "TPCH", "PART");
         Assertions.assertTrue(table instanceof BenchmarkTable);
         BenchmarkTable benchmarkTable = (BenchmarkTable) table;
