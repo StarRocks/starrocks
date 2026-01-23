@@ -66,6 +66,7 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
 import java.util.List;
@@ -604,5 +605,95 @@ public class ConnectContextTest {
         // set globalStateMgr explicitly
         connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         Assertions.assertNotNull(ConnectContext.get().getGlobalStateMgr());
+    }
+
+    @Test
+    public void testOnQueryFinished_withListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Mock listener
+        ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
+        ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
+
+        ctx.registerListener(listener1);
+        ctx.registerListener(listener2);
+
+        // Execute
+        ctx.onQueryFinished();
+
+        // Verify all listeners are called
+        Mockito.verify(listener1).onQueryFinished(ctx);
+        Mockito.verify(listener2).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_listenerThrowsException() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Mock listener that throws exception
+        ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
+        ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
+
+        Mockito.doThrow(new RuntimeException("listener error")).when(listener1).onQueryFinished(ctx);
+
+        ctx.registerListener(listener1);
+        ctx.registerListener(listener2);
+
+        // Should not throw exception, other listeners should still be called
+        ctx.onQueryFinished();
+
+        Mockito.verify(listener1).onQueryFinished(ctx);
+        Mockito.verify(listener2).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_clearsListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        ConnectContext.Listener listener = Mockito.mock(ConnectContext.Listener.class);
+        ctx.registerListener(listener);
+
+        // First call
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+
+        // Second call - listener should not be called again (cleared after first call)
+        ctx.onQueryFinished();
+        Mockito.verify(listener, Mockito.times(1)).onQueryFinished(ctx);
+    }
+
+    @Test
+    public void testOnQueryFinished_setsCNGroupName() {
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getCurrentComputeResourceName() {
+                return "test_cn_group";
+            }
+        };
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(WarehouseComputeResource.of(1L));
+
+        ctx.onQueryFinished();
+
+        Assertions.assertEquals("test_cn_group", ctx.getAuditEventBuilder().build().cnGroup);
+    }
+
+    @Test
+    public void testOnQueryFinished_withoutListeners() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Should not throw exception when no listeners
+        Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
+    }
+
+    @Test
+    public void testOnQueryFinished_getCNGroupNameFails(@Mocked WarehouseManager warehouseManager) {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(WarehouseComputeResource.of(1L));
+
+        // Should not throw exception even if getting CN group name fails
+        Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
     }
 }
