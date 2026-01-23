@@ -114,6 +114,7 @@ jobs:
             tar zxf fe_ut_report.tar.gz
           fi
           if [[ "${BASE_REF}" == "main" ]] && [[ "$size" == 0 || "${SKIP_COV}" == "true" ]]; then
+            cd ${GITHUB_WORKSPACE}
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
