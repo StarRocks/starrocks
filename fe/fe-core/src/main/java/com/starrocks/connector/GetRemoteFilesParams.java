@@ -72,7 +72,8 @@ public class GetRemoteFilesParams {
                 .setLimit(limit)
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
-                .setEnableColumnStats(enableColumnStats);
+                .setEnableColumnStats(enableColumnStats)
+                .setUsedForDelete(usedForDelete);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
