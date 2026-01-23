@@ -327,33 +327,19 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         return Status::OK();
     }
 
-    // Step 1: Create dictionary column and apply predicates to dictionary
-    uint32_t dict_size = _dict_decoder->count();
-    if (dict_size == 0) {
-        return Status::OK();
-    }
-
-    // For other types, use true zero-copy construction directly from decoder data
-    const void* data_ptr = _dict_decoder->get_raw_data();
-    size_t data_length = _dict_decoder->get_data_length();
-
-    BinaryColumn::Offsets temp_offsets;
-    _dict_decoder->get_offsets_for_zero_copy(temp_offsets);
-
-    // Create zero-copy BinaryColumn directly from decoder's data
-    ContainerResource container(_page_handle, data_ptr, data_length);
-    auto dict_column = BinaryColumn::create(std::move(container), std::move(temp_offsets));
-
-    // Apply predicates to dictionary
-    std::vector<uint8_t> dict_selection(dict_size, 0);
-    std::vector<uint16_t> dict_selected_idx(dict_size);
-    RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, dict_column.get(), dict_selection.data(),
-                                                     dict_selected_idx.data(), 0, dict_size));
-    // Count selected dictionary entries
-    uint32_t dict_selected_count = SIMD::count_nonzero(dict_selection.data(), dict_size);
+    // Step 1: Evaluate predicates on dictionary once and reuse the selection across pages.
+    uint32_t dict_size = 0;
+    uint32_t dict_selected_count = 0;
+    const uint8_t* dict_selection = nullptr;
+    RETURN_IF_ERROR(_dict_decoder->get_dict_filter_selection(compound_and_predicates, &dict_selection, &dict_size,
+                                                             &dict_selected_count));
     if (dict_selected_count == 0) {
         memset(selection, 0, num_rows);
         return Status::OK();
+    }
+    if (dict_selected_count == dict_size) {
+        memset(selection, 1, num_rows);
+        return next_batch(range, column);
     }
 
     // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
