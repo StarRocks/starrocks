@@ -252,19 +252,8 @@ public class ListPartitionDesc extends PartitionDesc {
             }
         }
 
-        if (engineName.equalsIgnoreCase("iceberg")) {
-            checkIcebergPartitionColPos(columnDefs);
-        } else if (engineName.equalsIgnoreCase("hive")) {
+        if (engineName.equalsIgnoreCase("hive")) {
             checkHivePartitionColPos(columnDefs);
-        }
-    }
-
-    public void checkIcebergPartitionColPos(List<ColumnDef> columnDefs) {
-        for (int i = 0; i < columnDefs.size() - partitionColNames.size(); i++) {
-            String colName = columnDefs.get(i).getName();
-            if (partitionColNames.contains(colName)) {
-                throw new SemanticException("Partition columns must be at the end of column defs");
-            }
         }
     }
 
