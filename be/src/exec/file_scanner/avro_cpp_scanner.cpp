@@ -32,7 +32,9 @@ AvroCppScanner::AvroCppScanner(RuntimeState* state, RuntimeProfile* profile, con
                                ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
-          _max_chunk_size(state->chunk_size()) {}
+          _max_chunk_size(state->chunk_size()) {
+    _file_format_str = "avro";
+}
 
 Status AvroCppScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -195,6 +197,7 @@ StatusOr<AvroReaderUniquePtr> AvroCppScanner::open_avro_reader(const TBrokerRang
         return Status::EndOfFile("Empty file");
     }
 
+    ++_counter->num_files_read;
     auto col_not_found_as_null =
             _scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping;
     auto avro_reader = std::make_unique<AvroReader>();
