@@ -14,12 +14,19 @@
 
 #include "formats/csv/output_stream_file.h"
 
+#include <lz4/lz4.h>
+#include <lz4/lz4frame.h>
+#include <lz4/lz4hc.h>
+#include <snappy/snappy-sinksource.h>
+#include <snappy/snappy.h>
+#include <zstd/zstd.h>
+#include <zstd/zstd_errors.h>
+
 #include <algorithm>
 #include <cstring>
 
 #include "fmt/format.h"
 #include "util/coding.h"
-#include "util/compression/compression_headers.h"
 
 namespace starrocks::csv {
 
