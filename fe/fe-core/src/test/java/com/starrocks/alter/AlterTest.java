@@ -645,6 +645,11 @@ public class AlterTest {
         alterTableWithNewParser(stmt, false);
         Assertions.assertEquals(Short.valueOf("3"), tbl.getDefaultReplicationNum());
 
+        // set table_query_timeout
+        stmt = "alter table test.tbl1 set ('table_query_timeout' = '120');";
+        alterTableWithNewParser(stmt, false);
+        Assertions.assertEquals(120, tbl.getTableQueryTimeout());
+
         // set range table's real replication num
         Partition p1 = tbl.getPartition("p1");
         Assertions.assertEquals(Short.valueOf("1"), Short.valueOf(tbl.getPartitionInfo().getReplicationNum(p1.getId())));

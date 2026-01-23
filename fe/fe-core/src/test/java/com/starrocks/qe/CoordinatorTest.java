@@ -26,6 +26,8 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -39,7 +41,10 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
@@ -47,9 +52,11 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
@@ -137,6 +144,56 @@ public class CoordinatorTest extends PlanTestBase {
     @Test
     public void testBucketShuffleRuntimeFilter() throws IOException, StarRocksException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
+    }
+
+    @Test
+    public void testTimeoutHintUsesTableQueryTimeout() {
+        // Cover DefaultCoordinator timeout hint branch:
+        // DefaultCoordinator.java:960-963, 967-975
+
+        // Prepare an executor with table timeout info
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        Deencapsulation.setField(executor, "tableQueryTimeoutTableName", "test.t0");
+        Deencapsulation.setField(executor, "tableQueryTimeoutValue", 120);
+        ctx.setExecutor(executor);
+
+        // Make jobSpec.query_timeout match the table timeout, so DefaultCoordinator uses table_query_timeout hint.
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(120);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains("table_query_timeout"));
+        Assertions.assertTrue(ex.getMessage().contains("please increase"));
+    }
+
+    @Test
+    public void testTimeoutHintFallbackWhenBuildHintThrows() {
+        // Force DefaultCoordinator.java:967-969 (catch) and 975 (reportTimeoutException) to execute.
+        // Ensure executor is present so the code enters the try-block.
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+        new Expectations(executor) {
+            {
+                executor.getTableQueryTimeoutInfo();
+                result = new RuntimeException("mock exception for hint building");
+                minTimes = 0;
+            }
+        };
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(120);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        // After catch, hint falls back to session variable query_timeout.
+        Assertions.assertTrue(ex.getMessage().contains("query_timeout"));
+        Assertions.assertTrue(ex.getMessage().contains("please increase"));
     }
 
     @Test

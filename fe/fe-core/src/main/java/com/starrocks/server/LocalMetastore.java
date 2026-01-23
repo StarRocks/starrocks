@@ -3831,6 +3831,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                int tableQueryTimeout = (int) results.get(key);
+                table.setTableQueryTimeout(tableQueryTimeout);
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
@@ -3915,6 +3922,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             boolean enable = PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
             results.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, enable);
             properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT, tableQueryTimeout);
+            } catch (AnalysisException ex) {
+                throw new DdlException(ex.getMessage());
+            }
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);

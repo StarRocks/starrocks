@@ -473,6 +473,12 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "The compaction strategy can be only " +
                             "update for a primary key table. ");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
