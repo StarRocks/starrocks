@@ -18,11 +18,18 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class PhysicalPartitionImplTest {
     private FakeGlobalStateMgr fakeGlobalStateMgr;
@@ -160,5 +167,69 @@ public class PhysicalPartitionImplTest {
         p1.createRollupIndex(new MaterializedIndex(1));
         p2.createRollupIndex(new MaterializedIndex(2));
         Assertions.assertFalse(p1.equals(p2));
+    }
+
+    @Test
+    public void testPhysicalPartitionDowngrade() throws Exception {
+        long baseIndexId = 10001;
+        long baseIndexMetaId = 10000;
+
+        long rollupIndexId1 = 20001;
+        long rollupIndexId2 = 20002;
+        long rollupIndexMetaId = 20000;
+
+        long shadowIndexId = 30001;
+        long shadowIndexMetaId = 30000;
+
+        MaterializedIndex baseIndex = new MaterializedIndex(baseIndexId, IndexState.NORMAL);
+        MaterializedIndex rollupIndex1 = new MaterializedIndex(rollupIndexId1, IndexState.NORMAL);
+        MaterializedIndex rollupIndex2 = new MaterializedIndex(rollupIndexId2, IndexState.NORMAL);
+        MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, IndexState.SHADOW);
+
+        PhysicalPartition p = new PhysicalPartition(1, "p1", 1, baseIndex);
+
+        Map<Long, MaterializedIndex> visibleIndexes = new HashMap<>();
+        visibleIndexes.put(baseIndexId, baseIndex);
+        visibleIndexes.put(rollupIndexId1, rollupIndex1);
+        visibleIndexes.put(rollupIndexId2, rollupIndex2);
+
+        Map<Long, MaterializedIndex> shadowIndexes = new HashMap<>();
+        shadowIndexes.put(shadowIndexId, shadowIndex);
+
+        Deencapsulation.setField(p, "idToVisibleRollupIndex", visibleIndexes);
+        Deencapsulation.setField(p, "idToShadowIndex", shadowIndexes);
+
+        Map<Long, List<Long>> indexMetaIdToIndexIds = new HashMap<>();
+        indexMetaIdToIndexIds.put(baseIndexMetaId, Collections.singletonList(baseIndexId));
+        indexMetaIdToIndexIds.put(rollupIndexMetaId, Arrays.asList(rollupIndexId1, rollupIndexId2));
+        indexMetaIdToIndexIds.put(shadowIndexMetaId, Collections.singletonList(shadowIndexId));
+        Deencapsulation.setField(p, "indexMetaIdToIndexIds", indexMetaIdToIndexIds);
+        Deencapsulation.setField(p, "baseIndexMetaId", baseIndexMetaId);
+
+        // Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(p);
+        PhysicalPartition restoredPartition = GsonUtils.GSON.fromJson(json, PhysicalPartition.class);
+
+        // Check
+        MaterializedIndex restoredBase = restoredPartition.getBaseIndex();
+        Assertions.assertEquals(baseIndexMetaId, restoredBase.getId());
+
+        MaterializedIndex restoredRollup = restoredPartition.getIndex(rollupIndexMetaId);
+        Assertions.assertNotNull(restoredRollup);
+        Assertions.assertEquals(rollupIndexMetaId, restoredRollup.getId());
+
+        Assertions.assertNull(restoredPartition.getIndex(rollupIndexId2));
+
+        MaterializedIndex restoredShadowRollup = restoredPartition.getIndex(shadowIndexMetaId);
+        Assertions.assertNotNull(restoredShadowRollup);
+        Assertions.assertEquals(shadowIndexMetaId, restoredShadowRollup.getId());
+
+        Assertions.assertEquals(2, restoredPartition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assertions.assertEquals(1, restoredPartition.getMaterializedIndices(IndexExtState.SHADOW).size());
+
+        long newBaseIndexMetaId = Deencapsulation.getField(restoredPartition, "baseIndexMetaId");
+        Assertions.assertEquals(-1L, newBaseIndexMetaId);
+        Map<Long, List<Long>> newMetaMap = Deencapsulation.getField(restoredPartition, "indexMetaIdToIndexIds");
+        Assertions.assertTrue(newMetaMap.isEmpty());
     }
 }
