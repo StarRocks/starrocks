@@ -1165,7 +1165,7 @@ public class CatalogRecycleBinTest {
         info1.setRecoverable(false);
         info1.setRetentionPeriod(3600);
         recycleBin.recyclePartition(info1);
-        
+
         // Non-recoverable partition without retention period
         Partition p2 = new Partition(301, 302, "p2", null, null);
         RecycleRangePartitionInfo info2 =
