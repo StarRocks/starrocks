@@ -557,7 +557,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
                 computeResource = txnState.getComputeResource();
-                List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+                List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
                 for (MaterializedIndex index : indexes) {
                     if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
                         // sanity check. should not happen
@@ -880,7 +880,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return false;
             }
             baseVersion = partition.getVisibleVersion();
-            List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+            List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
                     LOG.info("Ignored index {} for transaction {}", table.getIndexNameByMetaId(index.getMetaId()), txnId);
