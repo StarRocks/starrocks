@@ -84,22 +84,12 @@ public class ThreadPoolManager {
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
-<<<<<<< HEAD
     private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
-            ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-dict",
-            false);
+            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-dict");
 
     private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL_FOR_LAKE =
-            ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_for_lake_size,
-                    "cache-dict-lake", false);
-=======
-    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL =
-            ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_size, "cache-stats"
-            );
-
-    private static final ThreadPoolExecutor STATS_CACHE_THREAD_POOL_FOR_LAKE =
             ThreadPoolManager.newCollectThreadPool(Config.dict_collect_thread_pool_for_lake_size,
-                    "cache-stats-lake");
+                    "cache-dict-lake");
 
     private static ThreadPoolExecutor newCollectThreadPool(int maxNumThread, String poolName) {
         if (Config.dict_collect_reject_policy.equals("ignore")) {
@@ -110,7 +100,6 @@ public class ThreadPoolManager {
             throw new RuntimeException("unknown config" + Config.dict_collect_reject_policy);
         }
     }
->>>>>>> 3f4805737e ([UT] Introducing low-cardinality collection queue parameters to enhance UT stability (#64589))
 
     public static ThreadPoolExecutor getDictCacheThread() {
         return DICT_CACHE_THREAD_POOL;
