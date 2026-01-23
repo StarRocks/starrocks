@@ -732,6 +732,7 @@ public class ConnectContextTest {
         // Should not throw exception even if getting CN group name fails
         Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
     }
+<<<<<<< HEAD
 
     // -----------------------------------------------------------------------
     // Tests for changeCatalogDb() journal-replay wait on follower FE
@@ -1015,4 +1016,6 @@ public class ConnectContextTest {
         // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
     }
+=======
+>>>>>>> 5c97ea4fe7 ([BugFix] Fix query queue allocation time and pending timeout (#65802))
 }
