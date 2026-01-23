@@ -17,7 +17,6 @@ package com.starrocks.lake.snapshot;
 import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -85,19 +84,12 @@ public class ExternalClusterSnapshotJobTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        new FakeEditLog();
-
         try {
             initStorageVolume();
         } catch (Exception ignore) {
         }
 
         new MockUp<GlobalStateMgr>() {
-            @Mock
-            public EditLog getEditLog() {
-                return editLog;
-            }
-
             @Mock
             public ClusterSnapshotMgr getClusterSnapshotMgr() {
                 return clusterSnapshotMgr;
