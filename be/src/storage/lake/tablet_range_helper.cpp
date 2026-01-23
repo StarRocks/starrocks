@@ -192,7 +192,6 @@ StatusOr<TabletRangePB> TabletRangeHelper::convert_t_range_to_pb_range(const TTa
                 return Status::InvalidArgument("TVariant type is required");
             }
 
-            
             if (t_val.__isset.value) {
                 pb_val->set_value(t_val.value);
             } else {
