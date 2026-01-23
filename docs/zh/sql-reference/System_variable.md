@@ -5,6 +5,8 @@ keywords: ['session','variable']
 
 # 系统变量
 
+import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
@@ -1390,3 +1392,5 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 描述: 是否对 Spill 小文件启用 Compaction。启用此功能后，可减少聚合和排序操作的内存使用量。
 * 默认值: true
 * 引入版本: v3.4
+
+<VariableWarehouse />
