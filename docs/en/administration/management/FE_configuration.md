@@ -1821,7 +1821,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: boolean
 - Unit: -
 - Is mutable: No
-- Description: When true, switches the FE slot-based query scheduler to Query Queue V2. The flag is read by the slot manager and trackers (for example, `BaseSlotManager.isEnableQueryQueueV2` and `SlotTracker#createSlotSelectionStrategy`) to choose `SlotSelectionStrategyV2` instead of the legacy strategy. `query_queue_v2_xxx` configuration options and `QueryQueueOptions` take effect only when this flag is enabled. Because the value is static at runtime, enablement requires restarting the leader FE to take effect and may change query scheduling, concurrency limits, and queueing behavior cluster-wide.
+- Description: When true, switches the FE slot-based query scheduler to Query Queue V2. The flag is read by the slot manager and trackers (for example, `BaseSlotManager.isEnableQueryQueueV2` and `SlotTracker#createSlotSelectionStrategy`) to choose `SlotSelectionStrategyV2` instead of the legacy strategy. `query_queue_v2_xxx` configuration options and `QueryQueueOptions` take effect only when this flag is enabled. From v4.1 onwards, the default value is changed from `false` to `true`.
 - Introduced in: v3.3.4, v3.4.0, v3.5.0
 
 ##### enable_sql_blacklist
