@@ -35,12 +35,9 @@
 #include "util/compression/stream_compression.h"
 
 #include <bzlib.h>
-<<<<<<< HEAD
+#include <glog/logging.h>
 #include <lz4/lz4frame.h>
 #include <snappy/snappy.h>
-=======
-#include <glog/logging.h>
->>>>>>> 03de89222d ([Enhancement] Support multiple compression formats (GZIP/SNAPPY/ZSTD/LZ4/LZ4_FRAME/DEFLATE/ZLIB/BZIP2) for CSV file exports (#68054))
 #include <zlib.h>
 #include <zstd/zstd.h>
 #include <zstd/zstd_errors.h>
