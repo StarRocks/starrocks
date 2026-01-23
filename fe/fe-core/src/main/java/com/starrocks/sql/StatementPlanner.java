@@ -626,12 +626,6 @@ public class StatementPlanner {
                     sourceType,
                     session.getExecTimeout(),
                     session.getCurrentComputeResource());
-
-            // add table indexes to transaction state
-            if (targetTable instanceof OlapTable) {
-                TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
-                txnState.addTableIndexes((OlapTable) targetTable);
-            }
         }
 
         stmt.setTxnId(txnId);
