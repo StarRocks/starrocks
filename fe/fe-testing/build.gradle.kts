@@ -35,6 +35,14 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+tasks.named<JavaCompile>("compileJava") {
+    dependsOn("checkstyleMain")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
+}
+
 checkstyle {
     toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
@@ -44,9 +52,6 @@ tasks.withType<Checkstyle> {
     exclude("**/jmockit/**/*")
     isShowViolations = true
     ignoreFailures = false
-}
-
-tasks.named<Checkstyle>("checkstyleTest") {
-    // Maven does not check test sources for this module.
-    enabled = false
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes.
+    classpath = files()
 }
