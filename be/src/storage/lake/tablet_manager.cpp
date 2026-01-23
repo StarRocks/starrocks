@@ -215,7 +215,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_cumulative_point(0);
     tablet_metadata_pb->set_gtid(req.gtid);
     if (req.__isset.range) {
-        auto range_pb = TabletRangeHelper::convert_t_range_to_pb_range(req.range);
+        ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(req.range));
         *tablet_metadata_pb->mutable_range() = range_pb;
     }
 

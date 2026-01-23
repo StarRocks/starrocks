@@ -50,7 +50,7 @@ public:
     static StatusOr<SstSeekRange> create_sst_seek_range_from(const TabletRangePB& tablet_range_pb,
                                                              const TabletSchemaCSPtr& tablet_schema);
 
-    static TabletRangePB convert_t_range_to_pb_range(const TTabletRange& t_range);
+    static StatusOr<TabletRangePB> convert_t_range_to_pb_range(const TTabletRange& t_range);
 
 private:
     // check if the tablet range is closedOpen
