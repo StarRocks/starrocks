@@ -451,8 +451,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrowDecimalATGuard<AT>, A
                     if (null_data[i] == DATUM_NULL) continue;
                 }
                 copy_decimal_value<is_aligned>(&datum, arrow_p);
-                auto overflow = DecimalV3Cast::to_decimal<SrcType, T, SrcType, false, true>(datum, scale_factor,
-                                                                                            data + i);
+                auto overflow = 
+                        DecimalV3Cast::to_decimal<SrcType, T, SrcType, false, true>(datum, scale_factor, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
