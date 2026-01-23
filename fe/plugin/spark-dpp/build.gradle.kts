@@ -77,8 +77,16 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+tasks.named<JavaCompile>("compileJava") {
+    dependsOn("checkstyleMain")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
+}
+
 checkstyle {
-    toolVersion = project.findProperty("puppycrawl.version") as String? ?: "10.21.1"
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 
@@ -86,6 +94,8 @@ tasks.withType<Checkstyle> {
     exclude("**/jmockit/**/*")
     isShowViolations = true
     ignoreFailures = false
+    // Avoid circular dependency: Checkstyle should not depend on compiled classes.
+    classpath = files()
 }
 
 // Equivalent to Maven Assembly plugin to create a jar with dependencies
