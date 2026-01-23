@@ -391,11 +391,11 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range) {
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
     EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
     EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
-    
+
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
     EXPECT_EQ(tablet_id, metadata->id());
     EXPECT_EQ(1, metadata->version());
-    
+
     // Verify range is set correctly
     EXPECT_TRUE(metadata->has_range());
     const auto& pb_range = metadata->range();
@@ -403,12 +403,12 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range) {
     EXPECT_EQ(2, pb_range.lower_bound().values_size());
     EXPECT_EQ("100", pb_range.lower_bound().values(0).value());
     EXPECT_EQ("abc", pb_range.lower_bound().values(1).value());
-    
+
     EXPECT_TRUE(pb_range.has_upper_bound());
     EXPECT_EQ(2, pb_range.upper_bound().values_size());
     EXPECT_EQ("200", pb_range.upper_bound().values(0).value());
     EXPECT_EQ("xyz", pb_range.upper_bound().values(1).value());
-    
+
     EXPECT_TRUE(pb_range.has_lower_bound_included());
     EXPECT_TRUE(pb_range.lower_bound_included());
     EXPECT_TRUE(pb_range.has_upper_bound_included());
@@ -446,7 +446,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     EXPECT_OK(_tablet_manager->create_tablet(req));
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
-    
+
     // Verify range with NULL value
     EXPECT_TRUE(metadata->has_range());
     const auto& pb_range = metadata->range();
@@ -494,14 +494,14 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     EXPECT_OK(_tablet_manager->create_tablet(req));
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
-    
+
     // Verify range with MIN/MAX values
     EXPECT_TRUE(metadata->has_range());
     const auto& pb_range = metadata->range();
     EXPECT_TRUE(pb_range.has_lower_bound());
     EXPECT_EQ(1, pb_range.lower_bound().values_size());
     EXPECT_EQ(VariantTypePB::MIN_VALUE, pb_range.lower_bound().values(0).variant_type());
-    
+
     EXPECT_TRUE(pb_range.has_upper_bound());
     EXPECT_EQ(1, pb_range.upper_bound().values_size());
     EXPECT_EQ(VariantTypePB::MAX_VALUE, pb_range.upper_bound().values(0).variant_type());
@@ -526,7 +526,7 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
     EXPECT_OK(_tablet_manager->create_tablet(req));
     ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
-    
+
     // Verify no range is set
     EXPECT_FALSE(metadata->has_range());
 }

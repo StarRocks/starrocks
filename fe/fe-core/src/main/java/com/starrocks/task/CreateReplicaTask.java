@@ -37,6 +37,7 @@ package com.starrocks.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.FlatJsonConfig;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.thrift.TBinlogConfig;

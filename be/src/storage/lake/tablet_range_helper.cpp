@@ -180,10 +180,9 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
 
 TabletRangePB TabletRangeHelper::convert_t_range_to_pb_range(const TTabletRange& t_range) {
     TabletRangePB pb_range;
-    if (t_range.__isset.lower_bound) {
-        auto* lower_bound = pb_range.mutable_lower_bound();
-        for (const auto& t_val : t_range.lower_bound.values) {
-            auto* pb_val = lower_bound->add_values();
+    auto convert_bound = [](const auto& t_tuple, auto* pb_tuple) {
+        for (const auto& t_val : t_tuple.values) {
+            auto* pb_val = pb_tuple->add_values();
             if (t_val.__isset.type) {
                 *pb_val->mutable_type() = TypeDescriptor::from_thrift(t_val.type).to_protobuf();
             }
@@ -194,21 +193,12 @@ TabletRangePB TabletRangeHelper::convert_t_range_to_pb_range(const TTabletRange&
                 pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
             }
         }
+    };
+    if (t_range.__isset.lower_bound) {
+        convert_bound(t_range.lower_bound, pb_range.mutable_lower_bound());
     }
     if (t_range.__isset.upper_bound) {
-        auto* upper_bound = pb_range.mutable_upper_bound();
-        for (const auto& t_val : t_range.upper_bound.values) {
-            auto* pb_val = upper_bound->add_values();
-            if (t_val.__isset.type) {
-                *pb_val->mutable_type() = TypeDescriptor::from_thrift(t_val.type).to_protobuf();
-            }
-            if (t_val.__isset.value) {
-                pb_val->set_value(t_val.value);
-            }
-            if (t_val.__isset.variant_type) {
-                pb_val->set_variant_type(static_cast<VariantTypePB>(t_val.variant_type));
-            }
-        }
+        convert_bound(t_range.upper_bound, pb_range.mutable_upper_bound());
     }
     if (t_range.__isset.lower_bound_included) {
         pb_range.set_lower_bound_included(t_range.lower_bound_included);
