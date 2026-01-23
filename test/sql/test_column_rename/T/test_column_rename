@@ -1,4 +1,4 @@
--- name: test_column_rename
+-- name: test_column_rename_native @native
 CREATE TABLE t1 (
     k1 INT,
     v1 INT,
@@ -17,7 +17,7 @@ select * from t1;
 select k2 from t1;
 show create table t1;
 insert into t1(k2, v1, v2) values(4, 5, 6);
-select * from t1;
+select * from t1 order by k2;
 drop table t1;
 CREATE TABLE site_access (
     datekey DATE,
@@ -62,7 +62,7 @@ insert overwrite t_recharge_detail PARTITION(datekey='2022-04-02', province='bei
 select 2 as id, 2 as user_id, 2 as recharge_money, 'beijing' as province, '2022-04-02' as datekey from dual;
 desc t_recharge_detail;
 select * from t_recharge_detail;
--- name: test_column_rename_insert
+-- name: test_column_rename_insert_native @native
 CREATE TABLE t2 (
     k1 INT,
     v1 INT,
@@ -113,7 +113,7 @@ select * from bill_detail;
 show create table bill_detail;
 select * from bill_detail where bill = "JT2921712368984";
 
--- name: test_column_rename_failed_with_unused_output_column
+-- name: test_column_rename_failed_with_unused_output_column_native @native
 CREATE TABLE `t_rename_column_unused_output_column_name` (
   `a` bigint(20) NOT NULL COMMENT "",
   `b` varchar(20) NULL COMMENT "",
@@ -141,7 +141,7 @@ SELECT a, e FROM t_rename_column_unused_output_column_name WHERE t_rename_column
 
 drop table t_rename_column_unused_output_column_name force;
 
--- name: test_wrong_access_path_after_column_rename
+-- name: test_wrong_access_path_after_column_rename_native @native
 CREATE TABLE `t_wrong_access_path_after_column_rename` (
   `k` STRING NOT NULL COMMENT "",
   `v` int,
