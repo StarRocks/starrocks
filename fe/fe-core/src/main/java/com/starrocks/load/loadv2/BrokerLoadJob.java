@@ -332,16 +332,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // use newLoadingTasks to save new created loading tasks and submit them later.
                 newLoadingTasks.add(task);
                 // load id will be added to loadStatistic when executing this task
-
-                // save all related tables and rollups in transaction state
-                TransactionState txnState =
-                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
-                if (txnState == null) {
-                    throw new StarRocksException("txn does not exist: " + transactionId);
-                }
-                txnState.addTableIndexes(table);
             }
-
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
