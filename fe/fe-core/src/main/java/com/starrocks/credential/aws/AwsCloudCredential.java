@@ -89,6 +89,8 @@ public class AwsCloudCredential implements CloudCredential {
     private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();
     private static final String TEMPORARY_CREDENTIAL_PROVIDER = TemporaryAWSCredentialsProvider.class.getName();
 
+    public static final String HTTPS_SCHEME = "https://";
+
     private final boolean useAWSSDKDefaultBehavior;
 
     private final boolean useInstanceProfile;
@@ -175,7 +177,7 @@ public class AwsCloudCredential implements CloudCredential {
             stsClientBuilder.region(Region.of(region));
         }
         if (!endpoint.isEmpty()) {
-            stsClientBuilder.endpointOverride(URI.create(endpoint));
+            stsClientBuilder.endpointOverride(ensureSchemeInEndpoint(endpoint));
         }
 
         // Build AssumeRoleRequest
@@ -373,5 +375,19 @@ public class AwsCloudCredential implements CloudCredential {
                     e);
         }
         return region;
+    }
+
+    /**
+     * Checks if the given 'endpoint' contains a scheme. If not, the default HTTPS scheme is added.
+     *
+     * @param endpoint The endpoint string to be checked
+     * @return The URI with the added scheme
+     */
+    public static URI ensureSchemeInEndpoint(String endpoint) {
+        URI uri = URI.create(endpoint);
+        if (uri.getScheme() != null) {
+            return uri;
+        }
+        return URI.create(HTTPS_SCHEME + endpoint);
     }
 }
