@@ -1438,6 +1438,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。
 - 引入版本：-
 
+##### enable_query_queue_v2
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：当设置为 `true` 时，将 FE 基于 Slot 的查询调度器切换为查询队列 V2。该标志由 Slot 管理器和追踪器读取（例如 `BaseSlotManager.isEnableQueryQueueV2` 和 `SlotTracker#createSlotSelectionStrategy`），用于选择 `SlotSelectionStrategyV2` 替代旧版策略。仅当此标志启用时，`query_queue_v2_xxx` 配置选项和 `QueryQueueOptions` 才会生效。自 v4.1 起，默认值从 `false` 改为 `true`。
+- 引入版本：v3.3.4、v3.4.0、v3.5.0
+
 ##### enable_sql_blacklist
 
 - 默认值：false
