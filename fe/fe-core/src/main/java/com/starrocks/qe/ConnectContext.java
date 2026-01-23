@@ -1188,7 +1188,7 @@ public class ConnectContext {
         return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
     }
 
-    private int getExecTimeoutWithoutPendingTime() {
+    public int getExecTimeoutWithoutPendingTime() {
         return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
     }
 
@@ -1621,6 +1621,10 @@ public class ConnectContext {
         this.listeners.add(listener);
     }
 
+    public List<Listener> getListeners() {
+        return listeners;
+    }
+
     public void onQueryFinished() {
         for (Listener listener : listeners) {
             try {
@@ -1630,6 +1634,18 @@ public class ConnectContext {
                 LOG.warn("onQueryFinished error", e);
             }
         }
+<<<<<<< HEAD
+=======
+
+        try {
+            auditEventBuilder.setCNGroup(getCurrentComputeResourceName());
+        } catch (Exception e) {
+            LOG.warn("set cn group name failed", e);
+        }
+
+        // after current query finished, remove all current listeners
+        listeners.clear();
+>>>>>>> 5c97ea4fe7 ([BugFix] Fix query queue allocation time and pending timeout (#65802))
     }
 
     public boolean isSingleStmt() {
