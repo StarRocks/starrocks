@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
@@ -442,7 +441,6 @@ public class TransactionStmtExecutor {
             }
             if (!txnState.getTableIdList().contains(targetTable.getId())) {
                 txnState.getTableIdList().add(targetTable.getId());
-                txnState.addTableIndexes((OlapTable) targetTable);
             }
 
             String label = txnState.getLabel();
