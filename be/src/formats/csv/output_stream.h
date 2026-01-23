@@ -114,6 +114,10 @@ public:
 protected:
     virtual Status _sync(const char* data, size_t size) = 0;
 
+    // Returns the number of bytes currently in the base class buffer
+    // that haven't been synced yet.
+    std::size_t _pending_buffer_size() const { return _pos - _buff; }
+
 private:
     size_t _free_space() const { return _end - _pos; }
 
