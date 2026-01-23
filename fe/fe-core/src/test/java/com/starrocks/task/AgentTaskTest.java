@@ -39,8 +39,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TabletRange;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Range;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
@@ -62,6 +65,7 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -111,6 +115,7 @@ public class AgentTaskTest {
     private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask2;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask1;
     private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask2;
+    private TTabletSchema tabletSchema;
 
     @BeforeEach
     public void setUp() throws AnalysisException {
@@ -126,7 +131,7 @@ public class AgentTaskTest {
 
         PartitionKey pk3 = PartitionKey.createInfinityPartitionKey(Arrays.asList(columns.get(0)), true);
 
-        TTabletSchema tabletSchema = SchemaInfo.newBuilder()
+        tabletSchema = SchemaInfo.newBuilder()
                 .setId(indexId1)
                 .setKeysType(KeysType.AGG_KEYS)
                 .setShortKeyColumnCount(shortKeyNum)
@@ -353,17 +358,17 @@ public class AgentTaskTest {
     @Test
     public void testCreateReplicaTaskWithRange() throws AnalysisException {
         // Create a TabletRange with values
-        List<PartitionValue> lowerBoundValues = new ArrayList<>();
-        lowerBoundValues.add(new PartitionValue("100"));
-        lowerBoundValues.add(new PartitionValue("abc"));
-        PartitionKey lowerBound = new PartitionKey(lowerBoundValues);
+        List<Variant> lowerBoundValues = new ArrayList<>();
+        lowerBoundValues.add(Variant.of(IntegerType.INT, "100"));
+        lowerBoundValues.add(Variant.of(VarcharType.VARCHAR, "abc"));
+        Tuple lowerBound = new Tuple(lowerBoundValues);
 
-        List<PartitionValue> upperBoundValues = new ArrayList<>();
-        upperBoundValues.add(new PartitionValue("200"));
-        upperBoundValues.add(new PartitionValue("xyz"));
-        PartitionKey upperBound = new PartitionKey(upperBoundValues);
+        List<Variant> upperBoundValues = new ArrayList<>();
+        upperBoundValues.add(Variant.of(IntegerType.INT, "200"));
+        upperBoundValues.add(Variant.of(VarcharType.VARCHAR, "xyz"));
+        Tuple upperBound = new Tuple(upperBoundValues);
 
-        TabletRange tabletRange = new TabletRange(lowerBound, upperBound);
+        TabletRange tabletRange = new TabletRange(Range.of(lowerBound, upperBound, true, false));
 
         // Create CreateReplicaTask with range
         CreateReplicaTask taskWithRange = CreateReplicaTask.newBuilder()
@@ -377,6 +382,7 @@ public class AgentTaskTest {
                 .setStorageMedium(TStorageMedium.SSD)
                 .setTabletType(TTabletType.TABLET_TYPE_DISK)
                 .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
                 .setRange(tabletRange)
                 .build();
 
@@ -414,6 +420,7 @@ public class AgentTaskTest {
                 .setStorageMedium(TStorageMedium.HDD)
                 .setTabletType(TTabletType.TABLET_TYPE_DISK)
                 .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
                 .build();
 
         // Get TCreateTabletReq
@@ -437,6 +444,7 @@ public class AgentTaskTest {
                 .setStorageMedium(TStorageMedium.SSD)
                 .setTabletType(TTabletType.TABLET_TYPE_DISK)
                 .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
                 .setRange(null)
                 .build();
 
@@ -450,15 +458,15 @@ public class AgentTaskTest {
     @Test
     public void testCreateReplicaTaskBuilderPreservesRange() throws AnalysisException {
         // Create a TabletRange
-        List<PartitionValue> lowerBoundValues = new ArrayList<>();
-        lowerBoundValues.add(new PartitionValue("MIN_VALUE"));
-        PartitionKey lowerBound = new PartitionKey(lowerBoundValues);
+        List<Variant> lowerBoundValues = new ArrayList<>();
+        lowerBoundValues.add(Variant.of(VarcharType.VARCHAR, "MIN_VALUE"));
+        Tuple lowerBound = new Tuple(lowerBoundValues);
 
-        List<PartitionValue> upperBoundValues = new ArrayList<>();
-        upperBoundValues.add(new PartitionValue("MAX_VALUE"));
-        PartitionKey upperBound = new PartitionKey(upperBoundValues);
+        List<Variant> upperBoundValues = new ArrayList<>();
+        upperBoundValues.add(Variant.of(VarcharType.VARCHAR, "MAX_VALUE"));
+        Tuple upperBound = new Tuple(upperBoundValues);
 
-        TabletRange tabletRange = new TabletRange(lowerBound, upperBound);
+        TabletRange tabletRange = new TabletRange(Range.of(lowerBound, upperBound, true, false));
 
         // Create builder and set range
         CreateReplicaTask.Builder builder = CreateReplicaTask.newBuilder()
@@ -472,6 +480,7 @@ public class AgentTaskTest {
                 .setStorageMedium(TStorageMedium.SSD)
                 .setTabletType(TTabletType.TABLET_TYPE_DISK)
                 .setCompressionType(TCompressionType.LZ4_FRAME)
+                .setTabletSchema(tabletSchema)
                 .setRange(tabletRange);
         
         // Verify builder getter

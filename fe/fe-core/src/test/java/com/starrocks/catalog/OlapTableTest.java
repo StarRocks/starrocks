@@ -51,8 +51,11 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -517,13 +520,13 @@ public class OlapTableTest {
         
         // Create columns for the table
         List<Column> columns = new ArrayList<>();
-        columns.add(new Column("k1", ScalarType.INT));
-        columns.add(new Column("k2", ScalarType.VARCHAR));
-        columns.add(new Column("v1", ScalarType.DOUBLE));
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("k2", VarcharType.VARCHAR));
+        columns.add(new Column("v1", FloatType.DOUBLE));
         
         // Create range distribution info
         List<Column> partitionColumns = Lists.newArrayList(columns.get(0)); // k1 as partition column
-        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo(partitionColumns);
+        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo();
         
         // Create hash distribution info for comparison
         HashDistributionInfo hashDistInfo = new HashDistributionInfo(1, Lists.newArrayList(columns.get(0)));
@@ -564,8 +567,8 @@ public class OlapTableTest {
         Assertions.assertFalse(table.isRangeDistribution());
         
         // Set range distribution
-        List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.INT));
-        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo(columns);
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT));
+        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo();
         table.setDefaultDistributionInfo(rangeDistInfo);
         Assertions.assertTrue(table.isRangeDistribution());
         
