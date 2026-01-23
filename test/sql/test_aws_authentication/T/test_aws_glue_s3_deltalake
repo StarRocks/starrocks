@@ -1,5 +1,5 @@
 -- name: test_aws_glue_s3_deltalake
-CREATE EXTERNAL CATALOG test_aws_glue_s3_deltalake
+CREATE EXTERNAL CATALOG test_aws_glue_s3_deltalake_${uuid0}
 PROPERTIES
 (
 "type"="deltalake",
@@ -12,11 +12,11 @@ PROPERTIES
 "aws.s3.region"="${aws_region}"
 );
 
-select * from test_aws_glue_s3_deltalake.sql_test_db.deltalake_glue_s3;
+select * from test_aws_glue_s3_deltalake_${uuid0}.sql_test_db.deltalake_glue_s3;
 
-drop catalog test_aws_glue_s3_deltalake;
+drop catalog test_aws_glue_s3_deltalake_${uuid0};
 
-CREATE EXTERNAL CATALOG test_aws_assume_role_glue_s3_deltalake
+CREATE EXTERNAL CATALOG test_assume_role_deltalake_${uuid0}
 PROPERTIES
 (
 "type"="deltalake",
@@ -35,7 +35,7 @@ PROPERTIES
 "aws.s3.sts.endpoint"="${aws_sts_endpoint}"
 );
 
-select * from test_aws_assume_role_glue_s3_deltalake.sql_test_db.deltalake_glue_s3;
+select * from test_assume_role_deltalake_${uuid0}.sql_test_db.deltalake_glue_s3;
 
-drop catalog test_aws_assume_role_glue_s3_deltalake;
+drop catalog test_assume_role_deltalake_${uuid0};
 
