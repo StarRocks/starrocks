@@ -304,9 +304,11 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
      * @return The URI with the added scheme
      */
     public static URI ensureSchemeInEndpoint(String endpoint) {
-        URI uri = URI.create(endpoint);
-        if (uri.getScheme() != null) {
-            return uri;
+        // Check if endpoint contains a valid scheme (contains "://")
+        // This handles cases like "localhost:4566" where URI.create() incorrectly
+        // parses the hostname as a scheme
+        if (endpoint.contains("://")) {
+            return URI.create(endpoint);
         }
         return URI.create(HTTPS_SCHEME + endpoint);
     }
