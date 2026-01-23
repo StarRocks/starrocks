@@ -1346,7 +1346,6 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 单位：秒
 * 类型：Int
 
-<<<<<<< HEAD
 ### orc_use_column_names
 
 * 描述：设置通过 Hive Catalog 读取 ORC 文件时，列的对应方式。默认值是 `false`，即按照 Hive 表中列的顺序对应。如果设置为 `true`，则按照列名称对应。
@@ -1393,6 +1392,5 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 描述: 是否对 Spill 小文件启用 Compaction。启用此功能后，可减少聚合和排序操作的内存使用量。
 * 默认值: true
 * 引入版本: v3.4
-=======
+
 <VariableWarehouse />
->>>>>>> 5fed358303 ([Doc] Add wh Property to SQL (#68268))
