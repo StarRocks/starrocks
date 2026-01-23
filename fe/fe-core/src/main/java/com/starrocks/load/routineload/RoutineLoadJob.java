@@ -944,13 +944,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     add("label", label).
                     add("streamLoadTaskId", streamLoadTask.getId()));
 
-            // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
                 throw new StarRocksException("txn does not exist: " + txnId);
             }
-            txnState.addTableIndexes(planner.getDestTable());
 
             planParams.setImport_label(txnState.getLabel());
             planParams.setDb_name(db.getFullName());
