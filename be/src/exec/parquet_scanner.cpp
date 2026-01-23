@@ -40,6 +40,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
           _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096),
           _batch_start_idx(0),
           _chunk_start_idx(0) {
+    _file_format_str = "parquet";
     _chunk_filter.reserve(_max_chunk_size);
     _conv_ctx.state = state;
 }
@@ -474,6 +475,10 @@ Status ParquetScanner::open_next_reader() {
             parquet_reader->set_invalid_as_null(true);
         }
         _next_file++;
+        if (range_desc.start_offset == 0) {
+            // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
+            ++_counter->num_files_read;
+        }
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
         _last_file_size = file_size;

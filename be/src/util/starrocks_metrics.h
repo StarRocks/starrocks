@@ -42,6 +42,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "util/jvm_metrics.h"
 #include "util/metrics.h"
+#include "util/metrics/file_scan_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
 
@@ -427,6 +428,7 @@ public:
     TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
     TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
+    FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
 
 private:
     // Don't allow constructor
@@ -444,6 +446,8 @@ private:
     SystemMetrics _system_metrics;
     JVMMetrics _jvm_metrics;
     TableMetricsManager _table_metrics_mgr;
+
+    std::unique_ptr<FileScanMetrics> _file_scan_metrics;
 };
 
 }; // namespace starrocks
