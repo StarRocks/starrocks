@@ -95,6 +95,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        Config.proc_profile_cpu_enable = false;
+        Config.proc_profile_mem_enable = false;
         SchedulerTestBase.beforeClass();
 
         MetricRepo.init();
@@ -578,24 +580,13 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 1. Run `concurrencyLimit` queries first, and they shouldn't be queued.
         List<DefaultCoordinator> runningCoords = new ArrayList<>();
-        for (int i = 0; i < concurrencyLimit; i++) {
+        for (int i = 0; i < concurrencyLimit - 1; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
             Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
-        }
-
-        {
-            // 2.1 The coming query pending timeout, query_timeout (300) > pending_timeout (2).
-            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
-            Assertions.assertThrows(StarRocksException.class,
-                    () -> manager.maybeWait(connectContext, coord),
-                    "pending timeout");
-            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                    "the session variable [query_queue_pending_timeout_second]",
-                    () -> manager.maybeWait(connectContext, coord));
         }
 
         {
@@ -606,6 +597,18 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // query should not be timeout even query_timeout is small because pending time is not in the query_timeout.
             manager.maybeWait(connectContext, coord);
             runningCoords.add(coord);
+        }
+
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(2);
+        {
+            // 2.1 The coming query pending timeout, query_timeout (300) > pending_timeout (2).
+            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+            Assertions.assertThrows(StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord),
+                    "pending timeout");
+            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                    "the session variable [query_queue_pending_timeout_second]",
+                    () -> manager.maybeWait(connectContext, coord));
         }
 
         {
