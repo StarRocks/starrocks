@@ -156,7 +156,7 @@ public class GetRemoteFilesParams {
         return isRecursive;
     }
 
-    public boolean usdForDelete() {
+    public boolean usedForDelete() {
         return usedForDelete;
     }
 

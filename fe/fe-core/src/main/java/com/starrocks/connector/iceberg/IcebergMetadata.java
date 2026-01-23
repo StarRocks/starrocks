@@ -973,7 +973,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public RemoteFileInfo getOutput() {
                 FileScanTask fileScanTask = iterator.next();
-                checkFileFormatSupportedDelete(fileScanTask, params.usdForDelete());
+                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete());
                 return new IcebergRemoteFileInfo(fileScanTask);
             }
 
@@ -990,7 +990,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public RemoteFileInfo getOutput() {
                 FileScanTask fileScanTask = iterator.next();
-                checkFileFormatSupportedDelete(fileScanTask, params.usdForDelete());
+                checkFileFormatSupportedDelete(fileScanTask, params.usedForDelete());
                 return new IcebergRemoteFileInfo(fileScanTask);
             }
 
