@@ -1339,7 +1339,6 @@ The StarRocks version. Cannot be changed.
 * **Unit**: Second
 * **Data type**: Int
 
-<<<<<<< HEAD
 ### orc_use_column_names
 
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
@@ -1387,6 +1386,5 @@ The StarRocks version. Cannot be changed.
 * **Description**: Whether to enable Compaction for small files from Spilling. When this feature is enabled, it reduces memory usage for aggregation and sorting.
 * **Default**: true
 * **Introduced in**: v3.4
-=======
+
 <VariableWarehouse />
->>>>>>> 5fed358303 ([Doc] Add wh Property to SQL (#68268))
