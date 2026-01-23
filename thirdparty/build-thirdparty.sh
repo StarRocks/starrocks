@@ -1678,7 +1678,7 @@ build_benchgen() {
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
-    ${CMAKE_CMD} --build build
+    ${CMAKE_CMD} --build build -j "${PARALLEL}"
     ${CMAKE_CMD} --install build
 }
 
