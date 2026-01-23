@@ -22,30 +22,26 @@
 #include "formats/utils.h"
 #include "output_stream_file.h"
 #include "runtime/current_thread.h"
+#include "util/compression/compression_utils.h"
+#include "util/defer_op.h"
 
 namespace starrocks::formats {
 
 CSVFileWriter::CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
                              std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                             TCompressionType::type compression_type, std::shared_ptr<CSVWriterOptions> writer_options,
-                             std::function<void()> rollback_action)
+                             std::shared_ptr<CSVWriterOptions> writer_options, std::function<void()> rollback_action)
         : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
           _column_names(std::move(column_names)),
           _types(std::move(types)),
           _column_evaluators(std::move(column_evaluators)),
-          _compression_type(compression_type),
           _writer_options(std::move(writer_options)),
           _rollback_action(std::move(rollback_action)) {}
 
 CSVFileWriter::~CSVFileWriter() = default;
 
 Status CSVFileWriter::init() {
-    if (_compression_type != TCompressionType::NO_COMPRESSION) {
-        return Status::NotSupported(fmt::format("not supported compression type {}", to_string(_compression_type)));
-    }
-
     RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _column_converters.reserve(_types.size());
     for (auto& type : _types) {
@@ -192,14 +188,33 @@ StatusOr<WriterAndStream> CSVFileWriterFactory::create(const std::string& path) 
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
+    // Use CancelableDefer to ensure cleanup on any failure after file creation
+    CancelableDefer cleanup_on_failure([&rollback_action]() { rollback_action(); });
+
     auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
     auto types = ColumnEvaluator::types(_column_evaluators);
     auto async_output_stream =
             std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
-    auto csv_output_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
-    auto writer =
-            std::make_unique<CSVFileWriter>(path, csv_output_stream, _column_names, types, std::move(column_evaluators),
-                                            _compression_type, _parsed_options, rollback_action);
+
+    // Create base async output stream
+    auto base_stream = std::make_shared<csv::AsyncOutputStreamFile>(async_output_stream.get(), 1024 * 1024);
+
+    // Wrap with compression if enabled (decorator pattern)
+    std::shared_ptr<csv::OutputStream> csv_output_stream;
+    CompressionTypePB compression_pb = CompressionUtils::to_compression_pb(_compression_type);
+    // Only use compression if it's a valid, recognized compression type
+    // (not UNKNOWN_COMPRESSION which is returned for AUTO, DEFAULT_COMPRESSION, etc.)
+    if (compression_pb != CompressionTypePB::NO_COMPRESSION &&
+        compression_pb != CompressionTypePB::UNKNOWN_COMPRESSION) {
+        ASSIGN_OR_RETURN(csv_output_stream,
+                         csv::CompressedOutputStream::create(base_stream, compression_pb, 1024 * 1024));
+    } else {
+        csv_output_stream = base_stream;
+    }
+
+    auto writer = std::make_unique<CSVFileWriter>(path, csv_output_stream, _column_names, types,
+                                                  std::move(column_evaluators), _parsed_options, rollback_action);
+    cleanup_on_failure.cancel(); // Prevent cleanup on success
     return WriterAndStream{
             .writer = std::move(writer),
             .stream = std::move(async_output_stream),
