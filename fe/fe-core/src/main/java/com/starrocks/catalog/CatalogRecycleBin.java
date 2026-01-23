@@ -516,6 +516,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         List<Long> finishedTables = Lists.newArrayList();
         for (RecycleTableInfo info : tableToErase) {
+            // For non-retryable tables (shared-nothing mode), skip async deletion to prevent memory leak
+            // These tables are already removed from idToTableInfo in pickTablesToErase
+            if (!info.table.isDeleteRetryable()) {
+                // Directly call deleteFromRecycleBin synchronously without tracking in asyncDeleteForTables
+                info.table.deleteFromRecycleBin(info.dbId, false);
+                continue;
+            }
+
+            // Only retryable tables (lake tables) use async deletion with tracking
             boolean finished = false;
             CompletableFuture<Boolean> future = asyncDeleteForTables.get(info);
             if (future == null) {
@@ -537,10 +546,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 }
             }
 
-            if (!info.table.isDeleteRetryable()) {
-                // Nothing to do
-                continue;
-            }
             Preconditions.checkState(!info.isRecoverable());
             if (finished) {
                 finishedTables.add(info.table.getId());
