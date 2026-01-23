@@ -1671,6 +1671,14 @@ build_flamegraph() {
     chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
 }
 
+# benchgen
+build_benchgen() {
+    check_if_archieve_exist ${BENCHGEN_SOURCE}
+    cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
+    ${CMAKE_CMD} --install build --prefix="${TP_INSTALL_DIR}"
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1778,6 +1786,7 @@ declare -a all_packages=(
     tenann
     xxhash
     pprof
+    benchgen
 )
 
 # Machine specific packages
