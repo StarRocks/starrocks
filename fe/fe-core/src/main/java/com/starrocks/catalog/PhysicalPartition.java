@@ -138,6 +138,12 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
     
     private final AtomicLong extraFileSize = new AtomicLong(0);
 
+    // baseIndexMetaId and indexMetaIdToIndexIds are used for compatibility when downgrading from 4.1
+    @SerializedName(value = "baseIndexMetaId")
+    private long baseIndexMetaId = -1L;
+    @SerializedName(value = "indexMetaIdToIndexIds")
+    private Map<Long, List<Long>> indexMetaIdToIndexIds = Maps.newHashMap();
+
     private PhysicalPartition() {
 
     }
@@ -618,6 +624,22 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return buffer.toString();
     }
 
+    /**
+     * If size == 0 or size > 2, return error.
+     * If size == 1, return the only index (non-range distribution table or range distribution table with split finished state).
+     * If size == 2, return the old index (range distribution table with split cross-publish state).
+     */
+    private MaterializedIndex selectIndexForDowngrade(long indexMetaId, List<Long> indexIds,
+                                                      Map<Long, MaterializedIndex> indexes) {
+        Preconditions.checkState(indexIds != null && (indexIds.size() == 1 || indexIds.size() == 2),
+                "base index meta id %s not exist or index list %s size is invalid", indexMetaId, indexIds);
+
+        long indexId = indexIds.get(0);
+        MaterializedIndex index = indexes.get(indexId);
+        Preconditions.checkNotNull(index, "index is null, id %s, meta id %s", indexId, indexMetaId);
+        return index;
+    }
+
     public void gsonPostProcess() throws IOException {
         if (dataVersion == 0) {
             dataVersion = visibleVersion;
@@ -630,6 +652,43 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        // Rollback from version 4.1
+        if (baseIndexMetaId != -1) {
+            Map<Long, MaterializedIndex> allIndexes = Maps.newHashMap();
+            allIndexes.putAll(idToVisibleRollupIndex);
+            allIndexes.putAll(idToShadowIndex);
+
+            idToVisibleRollupIndex.clear();
+            idToShadowIndex.clear();
+
+            for (Map.Entry<Long, List<Long>> entry : indexMetaIdToIndexIds.entrySet()) {
+                long indexMetaId = entry.getKey();
+                List<Long> indexIds = entry.getValue();
+
+                MaterializedIndex index = selectIndexForDowngrade(indexMetaId, indexIds, allIndexes);
+                // reset index id with meta id
+                index.setIdForRestore(indexMetaId);
+
+                if (indexMetaId == baseIndexMetaId) {
+                    // base index
+                    baseIndex = index;
+                } else {
+                    if (index.getState() == IndexState.NORMAL) {
+                        // visible index
+                        idToVisibleRollupIndex.put(index.getId(), index);
+                    } else {
+                        // shadow index
+                        Preconditions.checkState(index.getState() == IndexState.SHADOW);
+                        idToShadowIndex.put(index.getId(), index);
+                    }
+                }
+            }
+
+            // Reset version 4.1 variables
+            baseIndexMetaId = -1;
+            indexMetaIdToIndexIds.clear();
         }
     }
 }
