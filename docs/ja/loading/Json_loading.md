@@ -13,24 +13,74 @@ displayed_sidebar: docs
 
 ### Stream Load インポート
 
-サンプルデータ:
+StarRocks は以下の JSON 形式でのデータインポートをサポートしています：
+
+1. **単一 JSON オブジェクト**: ファイルごとに 1 つの JSON オブジェクト。
+2. **JSON 配列**: 配列 `[]` で囲まれた複数の JSON オブジェクト。`strip_outer_array: true` の設定が必要です。
+3. **NDJSON (改行区切り JSON)**: 複数の JSON オブジェクト、各オブジェクトは独自の行に配置され、末尾のカンマはありません。
+
+> **重要**
+>
+> 配列括弧**なし**でカンマで区切られた JSON オブジェクト（例：`{...}, {...}, {...}`）は**有効な JSON ではありません**。パース失敗の原因となります。複数のレコードをロードする場合は、必ず `strip_outer_array: true` を設定した JSON 配列形式か、NDJSON 形式を使用してください。
+
+#### 例 1: 単一 JSON オブジェクト
+
+サンプルデータ (`example.json`):
 
 ~~~json
-{ "id": 123, "city" : "beijing"},
-{ "id": 456, "city" : "shanghai"},
-    ...
+{"id": 123, "city": "beijing"}
 ~~~
 
-例:
+インポートコマンド:
 
 ~~~shell
 curl -v --location-trusted -u <username>:<password> \
-    -H "format: json" -H "jsonpaths: [\"$.id\", \"$.city\"]" \
+    -H "format: json" \
     -T example.json \
     http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
 ~~~
 
-`format: json` パラメータは、インポートするデータの形式を実行することを可能にします。`jsonpaths` は、対応するデータインポートパスを実行するために使用されます。
+#### 例 2: JSON 配列形式（複数レコードの場合に推奨）
+
+サンプルデータ (`example.json`):
+
+~~~json
+[
+    {"id": 123, "city": "beijing"},
+    {"id": 456, "city": "shanghai"}
+]
+~~~
+
+インポートコマンド（`strip_outer_array: true` ヘッダーに注意）:
+
+~~~shell
+curl -v --location-trusted -u <username>:<password> \
+    -H "format: json" -H "strip_outer_array: true" \
+    -H "jsonpaths: [\"$.id\", \"$.city\"]" \
+    -T example.json \
+    http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
+~~~
+
+#### 例 3: NDJSON 形式（改行区切り JSON）
+
+サンプルデータ (`example.json`):
+
+~~~json
+{"id": 123, "city": "beijing"}
+{"id": 456, "city": "shanghai"}
+~~~
+
+インポートコマンド:
+
+~~~shell
+curl -v --location-trusted -u <username>:<password> \
+    -H "format: json" \
+    -H "jsonpaths: [\"$.id\", \"$.city\"]" \
+    -T example.json \
+    http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
+~~~
+
+`format: json` パラメータは、インポートするデータの形式を指定します。`jsonpaths` は、対応するデータインポートパスを指定するために使用されます。
 
 関連パラメータ:
 

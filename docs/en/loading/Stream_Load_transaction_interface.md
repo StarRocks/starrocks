@@ -21,6 +21,20 @@ The Stream Load transaction interface supports using an HTTP protocol-compatible
 Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB. Stream Load does not support Parquet file format. If you need to load data from Parquet files, use [INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 :::
 
+:::caution Important: Valid JSON Formats
+When loading JSON data, StarRocks supports the following formats:
+
+1. **Single JSON object**: `{"key": "value"}`
+2. **JSON Array** (requires `-H "strip_outer_array: true"`): `[{"key": "value"}, {"key": "value"}]`
+3. **NDJSON (Newline Delimited JSON)**: Each JSON object on its own line, **without trailing commas**:
+   ```
+   {"key": "value"}
+   {"key": "value"}
+   ```
+
+**IMPORTANT**: Comma-separated JSON objects **without** array brackets (e.g., `{...}, {...}, {...}`) is **NOT valid JSON** and will cause the error "No partitions have data available for loading". Always use JSON Array format with `strip_outer_array: true` or NDJSON format when loading multiple records.
+:::
+
 ### Transaction management
 
 The Stream Load transaction interface provides the following API operations, which are used to manage transactions:

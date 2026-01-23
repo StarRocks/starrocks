@@ -13,24 +13,74 @@ You can import semi-structured data (for example, JSON) by using stream load or 
 
 ### Stream Load Import
 
-Sample data:
+StarRocks supports importing JSON data in the following formats:
+
+1. **Single JSON object**: A single JSON object per file.
+2. **JSON Array**: Multiple JSON objects wrapped in an array `[]`. Requires setting `strip_outer_array: true`.
+3. **NDJSON (Newline Delimited JSON)**: Multiple JSON objects, each on its own line without trailing commas.
+
+> **IMPORTANT**
+>
+> Comma-separated JSON objects **without** array brackets (e.g., `{...}, {...}, {...}`) is **NOT valid JSON** and will cause parsing failures. Always use JSON Array format with `strip_outer_array: true` or NDJSON format when loading multiple records.
+
+#### Example 1: Single JSON object
+
+Sample data (`example.json`):
 
 ~~~json
-{ "id": 123, "city" : "beijing"},
-{ "id": 456, "city" : "shanghai"},
-    ...
+{"id": 123, "city": "beijing"}
 ~~~
 
-Example:
+Import command:
 
 ~~~shell
 curl -v --location-trusted -u <username>:<password> \
-    -H "format: json" -H "jsonpaths: [\"$.id\", \"$.city\"]" \
+    -H "format: json" \
     -T example.json \
     http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
 ~~~
 
-The `format: json` parameter allows you to execute the format of the imported data. `jsonpaths` is used to execute the corresponding data import path.
+#### Example 2: JSON Array format (recommended for multiple records)
+
+Sample data (`example.json`):
+
+~~~json
+[
+    {"id": 123, "city": "beijing"},
+    {"id": 456, "city": "shanghai"}
+]
+~~~
+
+Import command (note the `strip_outer_array: true` header):
+
+~~~shell
+curl -v --location-trusted -u <username>:<password> \
+    -H "format: json" -H "strip_outer_array: true" \
+    -H "jsonpaths: [\"$.id\", \"$.city\"]" \
+    -T example.json \
+    http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
+~~~
+
+#### Example 3: NDJSON format (Newline Delimited JSON)
+
+Sample data (`example.json`):
+
+~~~json
+{"id": 123, "city": "beijing"}
+{"id": 456, "city": "shanghai"}
+~~~
+
+Import command:
+
+~~~shell
+curl -v --location-trusted -u <username>:<password> \
+    -H "format: json" \
+    -H "jsonpaths: [\"$.id\", \"$.city\"]" \
+    -T example.json \
+    http://FE_HOST:HTTP_PORT/api/DATABASE/TABLE/_stream_load
+~~~
+
+The `format: json` parameter specifies the format of the imported data. `jsonpaths` is used to specify the corresponding data import path.
 
 Related parameters:
 

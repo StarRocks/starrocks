@@ -21,6 +21,20 @@ Stream Load 事务接口支持通过兼容 HTTP 协议的工具或语言发起�
 Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的数据文件数量较少、单个数据文件的大小不超过 10 GB 时使用。Stream Load 不支持 Parquet 文件格式。如果要导入 Parquet 格式的数据，请使用 [INSERT+files()](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件).
 :::
 
+:::caution 重要：有效的 JSON 格式
+导入 JSON 数据时，StarRocks 支持以下格式：
+
+1. **单个 JSON 对象**：`{"key": "value"}`
+2. **JSON 数组**（需要添加 `-H "strip_outer_array: true"`）：`[{"key": "value"}, {"key": "value"}]`
+3. **NDJSON（换行分隔的 JSON）**：每个 JSON 对象独占一行，**末尾不带逗号**：
+   ```
+   {"key": "value"}
+   {"key": "value"}
+   ```
+
+**重要提示**：用逗号分隔的 JSON 对象但**没有**数组括号（如 `{...}, {...}, {...}`）**不是有效的 JSON**，会导致 "No partitions have data available for loading" 错误。导入多条记录时，请务必使用带 `strip_outer_array: true` 的 JSON 数组格式，或 NDJSON 格式。
+:::
+
 ### 事务管理
 
 提供如下标准接口，用于管理事务：

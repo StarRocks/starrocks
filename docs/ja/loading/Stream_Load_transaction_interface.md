@@ -21,6 +21,20 @@ Stream Load トランザクションインターフェースは、HTTP プロト
 Stream Load は CSV および JSON ファイル形式をサポートします。個々のサイズが 10 GB を超えない少数のファイルからデータをロードしたい場合、この方法が推奨されます。Stream Load は Parquet ファイル形式をサポートしていません。Parquet ファイルからデータをロードする必要がある場合は、[INSERT+files()](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) を使用してください。
 :::
 
+:::caution 重要：有効な JSON 形式
+JSON データをロードする場合、StarRocks は以下の形式をサポートしています：
+
+1. **単一 JSON オブジェクト**: `{"key": "value"}`
+2. **JSON 配列**（`-H "strip_outer_array: true"` が必要）: `[{"key": "value"}, {"key": "value"}]`
+3. **NDJSON（改行区切り JSON）**: 各 JSON オブジェクトを独自の行に配置し、**末尾のカンマなし**：
+   ```
+   {"key": "value"}
+   {"key": "value"}
+   ```
+
+**重要**: 配列括弧**なし**でカンマで区切られた JSON オブジェクト（例: `{...}, {...}, {...}`）は**有効な JSON ではありません**。「No partitions have data available for loading」エラーの原因となります。複数のレコードをロードする場合は、必ず `strip_outer_array: true` を設定した JSON 配列形式か、NDJSON 形式を使用してください。
+:::
+
 ### トランザクション管理
 
 Stream Load トランザクションインターフェースは、トランザクションを管理するために使用される以下の API 操作を提供します。
