@@ -373,6 +373,46 @@ public class RangePartitionInfoTest {
         });
     }
 
+    /**
+     * Regression test: when adding a fixed range partition with an explicitly specified lower bound, we must validate
+     * intersection against both the predecessor and successor partitions. Only checking the successor can miss overlaps
+     * with earlier partitions when the lower bound is much smaller than expected.
+     */
+    @Test
+    public void testFixedRangeOverlapShouldCheckPreviousRange() {
+        assertThrows(DdlException.class, () -> {
+            // Single-column INT range partitioning.
+            int columns = 1;
+            Column partDt = new Column("part_dt", new ScalarType(PrimitiveType.INT), true, null, "", "");
+            partitionColumns.add(partDt);
+            partitionInfo = new RangePartitionInfo(partitionColumns);
+
+            // Existing partitions are non-overlapping.
+            PartitionKeyDesc p1 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("20220901")),
+                    Lists.newArrayList(new PartitionValue("20220902")));
+            SingleRangePartitionDesc d1 = new SingleRangePartitionDesc(false, "p1", p1, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(d1, columns, null);
+            partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns), d1, 1L, false);
+
+            PartitionKeyDesc p2 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("20260110")),
+                    Lists.newArrayList(new PartitionValue("20260111")));
+            SingleRangePartitionDesc d2 = new SingleRangePartitionDesc(false, "p2", p2, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(d2, columns, null);
+            partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns), d2, 2L, false);
+
+            // Buggy fixed-range: upper bound equals successor's lower bound (so it doesn't intersect the successor),
+            // but its lower bound is far smaller and intersects earlier partitions.
+            PartitionKeyDesc bad = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("2020109")),
+                    Lists.newArrayList(new PartitionValue("20260110")));
+            SingleRangePartitionDesc dBad = new SingleRangePartitionDesc(false, "p_bad", bad, null);
+            PartitionDescAnalyzer.analyzeSingleRangePartitionDesc(dBad, columns, null);
+            partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(partitionColumns), dBad, 3L, false);
+        });
+    }
+
     @Test
     public void testCopyPartitionInfo() throws Exception {
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.INT), true, null, "", "");
