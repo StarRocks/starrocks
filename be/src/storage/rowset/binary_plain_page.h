@@ -328,6 +328,19 @@ public:
         }
     }
 
+    // Dictionary-page predicate cache (used by BinaryDictPageDecoder):
+    //
+    // For string columns with DICT_ENCODING, there is a single dictionary page (DICTIONARY_PAGE) shared by all
+    // data pages in the column. At runtime, ScalarColumnIterator loads that dictionary page into a
+    // BinaryPlainPageDecoder (this class). When predicate-late-materialization calls into
+    // BinaryDictPageDecoder::next_batch_with_filter(), we can evaluate predicates on the dictionary page once
+    // (dict_id -> selected) and reuse the selection across all subsequent data pages.
+    //
+    // This cache is only meaningful when this decoder instance represents the *dictionary page*.
+    // It should not be used for ordinary string data pages.
+    Status get_dict_filter_selection(const std::vector<const ColumnPredicate*>& predicates, const uint8_t** selection,
+                                     uint32_t* dict_size, uint32_t* selected_count) const;
+
 private:
     // Return the offset within '_data' where the string value with index 'idx' can be found.
     uint32_t offset(int idx) const { return idx < _num_elems ? offset_uncheck(idx) : _offsets_pos; }
@@ -375,6 +388,11 @@ private:
     size_t _estimated_row_size;
 
     std::optional<std::vector<Slice>> _parsed_datas;
+
+    // Cached result of predicate evaluation on the dictionary page. See get_dict_filter_selection().
+    mutable bool _dict_filter_cache_valid{false};
+    mutable std::vector<uint8_t> _dict_filter_cache_selection;
+    mutable uint32_t _dict_filter_cache_selected_count{0};
 };
 
 } // namespace starrocks
