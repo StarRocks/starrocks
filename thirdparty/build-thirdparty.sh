@@ -1673,10 +1673,13 @@ build_flamegraph() {
 
 # benchgen
 build_benchgen() {
-    check_if_archieve_exist ${BENCHGEN_SOURCE}
+    check_if_source_exist ${BENCHGEN_SOURCE}
     cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
-    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
-    ${CMAKE_CMD} --install build --prefix="${TP_INSTALL_DIR}"
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
+    ${CMAKE_CMD} --build build
+    ${CMAKE_CMD} --install build
 }
 
 # restore cxxflags/cppflags/cflags to default one
