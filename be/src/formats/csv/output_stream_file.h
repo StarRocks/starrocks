@@ -14,11 +14,15 @@
 
 #pragma once
 
+#include <limits>
 #include <memory>
 
 #include "formats/csv/output_stream.h"
 #include "fs/fs.h"
+#include "gen_cpp/segment.pb.h"
 #include "io/async_flush_output_stream.h"
+#include "util/compression/stream_compression.h"
+#include "util/raw_container.h"
 
 namespace starrocks::csv {
 
@@ -61,6 +65,68 @@ protected:
 
 private:
     io::AsyncFlushOutputStream* _stream;
+};
+
+// CompressedOutputStream wraps any OutputStream and adds compression.
+// This design follows the decorator pattern, allowing flexible composition:
+//   data -> AsyncOutputStreamFile -> CompressedOutputStream
+// or any other OutputStream implementation.
+//
+// Streaming compression support:
+//   - GZIP, ZSTD, LZ4_FRAME, DEFLATE, BZIP2: Use streaming codecs and output
+//     standard frames that common tools can decode.
+//   - SNAPPY, LZ4 (raw): Use a block-stream wrapper compatible with the existing
+//     StreamCompression decoders.
+//
+// Block stream format (for SNAPPY and LZ4 raw, big-endian):
+//   Block 1: [uncompressed_len: 4B][compressed_len: 4B][compressed_data]
+//   Block 2: [uncompressed_len: 4B][compressed_len: 4B][compressed_data]
+//   ...
+//   Terminator: [0x00000000: 4B]
+class CompressedOutputStream final : public OutputStream {
+public:
+    // Factory method to create CompressedOutputStream with proper error handling.
+    // Returns error status if compression codec initialization fails.
+    // @param underlying_stream: The stream to write compressed data to (not owned, must outlive this object)
+    // @param compression_type: The compression algorithm to use
+    // @param buff_size: Buffer size for the base OutputStream
+    static StatusOr<std::shared_ptr<CompressedOutputStream>> create(std::shared_ptr<OutputStream> underlying_stream,
+                                                                    CompressionTypePB compression_type,
+                                                                    size_t buff_size);
+
+    ~CompressedOutputStream() override = default;
+
+    Status finalize() override;
+    std::size_t size() override;
+
+protected:
+    Status _sync(const char* data, size_t size) override;
+
+private:
+    // Private constructor - use create() factory method instead
+    CompressedOutputStream(std::shared_ptr<OutputStream> underlying_stream, CompressionTypePB compression_type,
+                           std::unique_ptr<StreamCompressor> compressor, size_t buff_size);
+
+    Status _compress_and_write(const uint8_t* data, size_t size);
+    Status _flush_block();
+    Status _write_block(uint32_t block_size, const uint8_t* compressed_data, uint32_t compressed_len);
+    Status _write_block_end();
+    static size_t _estimate_block_compressed_len(CompressionTypePB compression_type, size_t input_size);
+
+    static constexpr size_t kBlockBufferSize = 1024 * 1024;
+    static constexpr size_t kBlockHeaderSize = 8;
+    static constexpr size_t kBlockEndSize = 4;
+    // Ensure kBlockBufferSize fits in uint32_t for block header encoding
+    static_assert(kBlockBufferSize <= std::numeric_limits<uint32_t>::max(), "kBlockBufferSize must fit in uint32_t");
+
+    std::shared_ptr<OutputStream> _underlying_stream;
+    CompressionTypePB _compression_type;
+    bool _is_block_compression; // Cached result of is_block_compression(_compression_type)
+    std::unique_ptr<StreamCompressor> _compressor;
+    raw::RawVector<uint8_t> _compress_buffer;
+    raw::RawVector<uint8_t> _block_buffer;
+    // Track the total compressed bytes written to underlying stream
+    size_t _compressed_bytes_written = 0;
 };
 
 } // namespace starrocks::csv
