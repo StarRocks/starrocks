@@ -16,12 +16,8 @@
 
 #include "exec/workgroup/work_group.h"
 #include "gtest/gtest.h"
-<<<<<<< HEAD
 #include "runtime/exec_env.cpp"
-=======
-#include "runtime/exec_env.h"
 #include "testutil/assert.h"
->>>>>>> 0b177c7b8f ([UT] fix UT core due to WorkGroupManager not initialized (#68229))
 
 namespace starrocks {
 
