@@ -359,4 +359,65 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select lead(ta) over() from test_laglead");
         analyzeSuccess("select lag(ta) over() from test_laglead");
     }
+
+    // ========== Named Arguments Tests ==========
+
+    @Test
+    public void testMixingNamedAndPositionalArguments() {
+        // Test mixing named and positional arguments - should fail
+        // With grammar separation, mixing is now a syntax error (not semantic)
+        // namedArgsFunctionCall only accepts namedArgumentList
+        // simpleFunctionCall only accepts expression list
+        analyzeFail("select concat('hello', sep => ', ')",
+                "Unexpected input");
+
+        // Positional first, then named - should fail
+        analyzeFail("select substr('hello', len => 3)",
+                "Unexpected input");
+
+        // Named first, then positional - should fail with syntax error
+        analyzeFail("select substr(str => 'hello', 1)",
+                "Unexpected input");
+    }
+
+    @Test
+    public void testMixingNamedAndPositionalArgumentsSpecialFunctions() {
+        // Special handler functions should also validate mixing
+        // With grammar separation, mixing is now caught at parse time
+
+        // LPAD - special handler in AstBuilder
+        analyzeFail("select lpad('hello', len => 10)",
+                "Unexpected input");
+
+        // Multiple positional then named
+        analyzeFail("select concat('a', 'b', sep => ',')",
+                "Unexpected input");
+
+        // RPAD
+        analyzeFail("select rpad('hi', size => 5)",
+                "Unexpected input");
+    }
+
+    @Test
+    public void testPurePositionalArguments() {
+        // Pure positional arguments should work normally
+        analyzeSuccess("select concat('hello', 'world')");
+        analyzeSuccess("select substr('hello', 1, 3)");
+        analyzeSuccess("select lpad('hi', 5, '*')");
+        analyzeSuccess("select rpad('hi', 5, '*')");
+    }
+
+    @Test
+    public void testPureNamedArgumentsOnUnsupportedFunction() {
+        // For functions WITHOUT special handling in AstBuilder,
+        // pure named arguments should fail with clear error message
+
+        // Note: Functions with special handling (substr, lpad, etc.)
+        // will strip NamedArgument wrappers and treat them as positional,
+        // so they will succeed (by design, for now)
+
+        // array_length has no special handling - should fail with clear message
+        analyzeFail("select array_length(arr => [1,2,3])",
+                "does not support named arguments");
+    }
 }

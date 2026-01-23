@@ -6026,6 +6026,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
         tResult.setEnable_hash_join_serialize_fixed_size_string(enableHashJoinSerializeFixedSizeString);
 
+        // http_request function SSL verification (admin-enforced setting from Config)
+        tResult.setHttp_request_ssl_verification_required(Config.http_request_ssl_verification_required);
+
+        // http_request function SSRF protection settings (admin-enforced from Config)
+        tResult.setHttp_request_security_level(Config.http_request_security_level);
+        tResult.setHttp_request_ip_allowlist(Config.http_request_ip_allowlist);
+        tResult.setHttp_request_host_allowlist_regexp(Config.http_request_host_allowlist_regexp);
+        tResult.setHttp_request_allow_private_in_allowlist(Config.http_request_allow_private_in_allowlist);
+
         return tResult;
     }
 

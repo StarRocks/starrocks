@@ -54,7 +54,19 @@ ${license}
 
 package com.starrocks.builtins;
 
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.common.Pair;
+import com.starrocks.type.Type;
+import com.google.common.collect.Lists;
+
+import java.util.List;
+import java.util.Vector;
 
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
 import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
@@ -171,13 +183,55 @@ def add_function(fn_data):
         entry["prepare"] = "&" + fn_data[7] if fn_data[7] != "nullptr" else "nullptr"
         entry["close"] = "&" + fn_data[8] if fn_data[8] != "nullptr" else "nullptr"
 
+    # Named Arguments metadata: check if last element is a dict with 'named_args' key
+    entry["named_args"] = []
+    if fn_data and isinstance(fn_data[-1], dict) and 'named_args' in fn_data[-1]:
+        entry["named_args"] = fn_data[-1]['named_args']
+
     function_list.append(entry)
+
+
+def generate_default_value(param, fn_id):
+    """Convert Python value to Java Expr code for Named Arguments default values"""
+    default = param.get('default')
+    name = param['name']
+
+    if 'default' not in param:
+        return None  # required parameter, no default value
+    elif isinstance(default, bool):
+        return f'            defaults{fn_id}.add(new Pair<>("{name}", new BoolLiteral({str(default).lower()})));'
+    elif isinstance(default, int):
+        return f'            defaults{fn_id}.add(new Pair<>("{name}", new IntLiteral({default})));'
+    elif isinstance(default, str):
+        # Escape all special characters for Java string literals
+        escaped = (default
+            .replace('\\', '\\\\')  # backslash first
+            .replace('"', '\\"')    # double quote
+            .replace('\n', '\\n')   # newline
+            .replace('\r', '\\r')   # carriage return
+            .replace('\t', '\\t'))  # tab
+        return f'            defaults{fn_id}.add(new Pair<>("{name}", new StringLiteral("{escaped}")));'
+    else:
+        print(f"WARNING: Unsupported default value type '{type(default).__name__}' "
+              f"for parameter '{name}' in function {fn_id}. "
+              f"Parameter will be treated as required.")
+        return None
 
 
 def generate_fe(path):
     fn_template = Template(
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
     )
+
+    fn_named_template = Template('''{
+            List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});
+            Function fn${id} = ScalarFunction.createVectorizedBuiltin(${id}L, "${name}", argTypes${id}, ${has_vargs}, ${ret});
+            fn${id}.setArgNames(Lists.newArrayList(${arg_names}));
+            Vector<Pair<String, Expr>> defaults${id} = new Vector<>();
+${default_values}
+            fn${id}.setDefaultNamedArgs(defaults${id});
+            functionSet.addBuiltin(fn${id});
+        }''')
 
     def gen_fe_fn(fnm):
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
@@ -186,7 +240,26 @@ def generate_fe(path):
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
 
-        return fn_template.substitute(fnm)
+        # Check if function has named arguments
+        if fnm.get("named_args"):
+            named_args = fnm["named_args"]
+            arg_names = ', '.join([f'"{p["name"]}"' for p in named_args])
+            default_lines = [generate_default_value(p, fnm["id"]) for p in named_args]
+            default_values = '\n'.join([d for d in default_lines if d])
+            # List of argument types for List<Type> constructor
+            args_types_list = ", ".join([i for i in fnm["args"] if i != "..."])
+
+            return fn_named_template.substitute(
+                id=fnm["id"],
+                name=fnm["name"],
+                has_vargs=fnm["has_vargs"],
+                ret=fnm["ret"],
+                args_types_list=args_types_list,
+                arg_names=arg_names,
+                default_values=default_values
+            )
+        else:
+            return fn_template.substitute(fnm)
 
     value = dict()
     value["license"] = license_string
@@ -256,6 +329,7 @@ def generate_cpp(path):
         "MapFunctions",
         "GinFunctions",
         "AiFunctions",
+        "HttpRequestFunctions",
     ]
 
     modules_contents = dict()

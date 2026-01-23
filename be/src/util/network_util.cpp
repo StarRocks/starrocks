@@ -35,6 +35,9 @@
 #include "util/network_util.h"
 
 #include <arpa/inet.h>
+#include <curl/curl.h>
+#include <fmt/format.h>
+
 #include <common/logging.h>
 #include <ifaddrs.h>
 #include <netdb.h>
@@ -193,6 +196,265 @@ Status hostname_to_ipv6(const std::string& host, std::string& ip) {
 bool is_valid_ip(const std::string& ip) {
     unsigned char buf[sizeof(struct in6_addr)];
     return (inet_pton(AF_INET6, ip.data(), buf) > 0) || (inet_pton(AF_INET, ip.data(), buf) > 0);
+}
+
+// Check if IPv4 address (as 32-bit integer in host byte order) is in a private range
+static bool is_private_ipv4(uint32_t ip) {
+    // 127.0.0.0/8 - Loopback
+    if ((ip & 0xFF000000) == 0x7F000000) return true;
+
+    // 10.0.0.0/8 - Class A Private
+    if ((ip & 0xFF000000) == 0x0A000000) return true;
+
+    // 172.16.0.0/12 - Class B Private
+    if ((ip & 0xFFF00000) == 0xAC100000) return true;
+
+    // 192.168.0.0/16 - Class C Private
+    if ((ip & 0xFFFF0000) == 0xC0A80000) return true;
+
+    // 169.254.0.0/16 - Link-local(Include IMDS)
+    if ((ip & 0xFFFF0000) == 0xA9FE0000) return true;
+
+    // 0.0.0.0/8 - Current network
+    if ((ip & 0xFF000000) == 0x00000000) return true;
+
+    return false;
+}
+
+// Check if IPv6 address is in a private range
+static bool is_private_ipv6(const unsigned char* ip) {
+    // :: - Unspecified address (all zeros) - block to prevent SSRF bypass
+    static const unsigned char unspecified[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    if (memcmp(ip, unspecified, 16) == 0) return true;
+
+    // ::1 - Loopback
+    static const unsigned char loopback[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+    if (memcmp(ip, loopback, 16) == 0) return true;
+
+    // fc00::/7 - Unique local (fc00:: to fdff::)
+    if ((ip[0] & 0xFE) == 0xFC) return true;
+
+    // fe80::/10 - Link-local
+    if (ip[0] == 0xFE && (ip[1] & 0xC0) == 0x80) return true;
+
+    // ::ffff:0:0/96 - IPv4-mapped IPv6, check the embedded IPv4
+    static const unsigned char v4mapped_prefix[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
+    if (memcmp(ip, v4mapped_prefix, 12) == 0) {
+        uint32_t v4_addr = (static_cast<uint32_t>(ip[12]) << 24) | (static_cast<uint32_t>(ip[13]) << 16) |
+                           (static_cast<uint32_t>(ip[14]) << 8) | static_cast<uint32_t>(ip[15]);
+        return is_private_ipv4(v4_addr);
+    }
+
+    return false;
+}
+
+bool is_private_ip(const std::string& ip) {
+    // Try IPv4 first
+    struct in_addr addr4;
+    if (inet_pton(AF_INET, ip.c_str(), &addr4) == 1) {
+        return is_private_ipv4(ntohl(addr4.s_addr));
+    }
+
+    // Try IPv6
+    struct in6_addr addr6;
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) == 1) {
+        return is_private_ipv6(addr6.s6_addr);
+    }
+
+    // Invalid IP format - treat as private for safety
+    return true;
+}
+
+bool is_link_local_ip(const std::string& ip) {
+    // Try IPv4 first
+    struct in_addr addr4;
+    if (inet_pton(AF_INET, ip.c_str(), &addr4) == 1) {
+        uint32_t ip_num = ntohl(addr4.s_addr);
+        // 169.254.0.0/16 - Link-local (AWS/GCP/Azure metadata, etc.)
+        return (ip_num & 0xFFFF0000) == 0xA9FE0000;
+    }
+
+    // Try IPv6
+    struct in6_addr addr6;
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) == 1) {
+        // fe80::/10 - Link-local
+        if (addr6.s6_addr[0] == 0xFE && (addr6.s6_addr[1] & 0xC0) == 0x80) {
+            return true;
+        }
+        // ::ffff:169.254.x.x - IPv4-mapped link-local
+        static const unsigned char v4mapped_prefix[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF};
+        if (memcmp(addr6.s6_addr, v4mapped_prefix, 12) == 0) {
+            uint32_t v4_addr = (static_cast<uint32_t>(addr6.s6_addr[12]) << 24) |
+                               (static_cast<uint32_t>(addr6.s6_addr[13]) << 16) |
+                               (static_cast<uint32_t>(addr6.s6_addr[14]) << 8) |
+                               static_cast<uint32_t>(addr6.s6_addr[15]);
+            return (v4_addr & 0xFFFF0000) == 0xA9FE0000;
+        }
+    }
+
+    return false;
+}
+
+StatusOr<std::vector<std::string>> resolve_hostname_all_ips(const std::string& hostname) {
+    std::vector<std::string> results;
+
+    // Check if hostname is already a valid IP address
+    if (is_valid_ip(hostname)) {
+        results.push_back(hostname);
+        return results;
+    }
+
+    struct addrinfo hints {};
+    hints.ai_family = AF_UNSPEC;     // Allow IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP
+    hints.ai_flags = AI_ADDRCONFIG;  // Only return addresses the system can reach
+
+    struct addrinfo* res = nullptr;
+    int err = getaddrinfo(hostname.c_str(), nullptr, &hints, &res);
+    if (err != 0) {
+        return Status::InvalidArgument(
+                strings::Substitute("DNS resolution failed for $0: $1", hostname, gai_strerror(err)));
+    }
+
+    for (struct addrinfo* p = res; p != nullptr; p = p->ai_next) {
+        char ip_str[INET6_ADDRSTRLEN];
+
+        if (p->ai_family == AF_INET) {
+            struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(p->ai_addr);
+            inet_ntop(AF_INET, &addr->sin_addr, ip_str, sizeof(ip_str));
+            results.emplace_back(ip_str);
+        } else if (p->ai_family == AF_INET6) {
+            struct sockaddr_in6* addr = reinterpret_cast<struct sockaddr_in6*>(p->ai_addr);
+            inet_ntop(AF_INET6, &addr->sin6_addr, ip_str, sizeof(ip_str));
+            results.emplace_back(ip_str);
+        }
+    }
+
+    freeaddrinfo(res);
+
+    if (results.empty()) {
+        return Status::InvalidArgument(strings::Substitute("No IP addresses found for $0", hostname));
+    }
+
+    return results;
+}
+
+// RAII wrapper for CURLU handle to ensure proper cleanup
+class CurlUrlHandle {
+public:
+    CurlUrlHandle() : _handle(curl_url()) {}
+    ~CurlUrlHandle() {
+        if (_handle) {
+            curl_url_cleanup(_handle);
+        }
+    }
+    CurlUrlHandle(const CurlUrlHandle&) = delete;
+    CurlUrlHandle& operator=(const CurlUrlHandle&) = delete;
+
+    CURLU* get() const { return _handle; }
+    explicit operator bool() const { return _handle != nullptr; }
+
+private:
+    CURLU* _handle;
+};
+
+// RAII wrapper for curl_free to ensure proper cleanup of curl-allocated strings
+class CurlString {
+public:
+    explicit CurlString(char* str) : _str(str) {}
+    ~CurlString() {
+        if (_str) {
+            curl_free(_str);
+        }
+    }
+    CurlString(const CurlString&) = delete;
+    CurlString& operator=(const CurlString&) = delete;
+
+    const char* get() const { return _str; }
+    explicit operator bool() const { return _str != nullptr; }
+
+private:
+    char* _str;
+};
+
+StatusOr<std::string> extract_host_from_url(const std::string& url) {
+    if (url.empty()) {
+        return Status::InvalidArgument("URL is empty");
+    }
+
+    CurlUrlHandle curl_url;
+    if (!curl_url) {
+        return Status::InternalError("Failed to create CURL URL handle");
+    }
+
+    // Parse the URL using libcurl's URL parser
+    // This ensures we parse URLs exactly the same way curl will when making requests
+    CURLUcode rc = curl_url_set(curl_url.get(), CURLUPART_URL, url.c_str(), 0);
+    if (rc != CURLUE_OK) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
+    }
+
+    // Extract the host component
+    char* host = nullptr;
+    rc = curl_url_get(curl_url.get(), CURLUPART_HOST, &host, 0);
+    if (rc != CURLUE_OK || host == nullptr) {
+        return Status::InvalidArgument(
+                fmt::format("Failed to extract host from URL '{}': {}",
+                            url, curl_url_strerror(rc)));
+    }
+
+    CurlString host_guard(host);
+    std::string result(host_guard.get());
+
+    // Strip brackets from IPv6 addresses (curl returns [::1], we want ::1)
+    if (result.size() >= 2 && result.front() == '[' && result.back() == ']') {
+        result = result.substr(1, result.size() - 2);
+    }
+
+    return result;
+}
+
+StatusOr<int> extract_port_from_url(const std::string& url) {
+    if (url.empty()) {
+        return Status::InvalidArgument("URL is empty");
+    }
+
+    CurlUrlHandle curl_url;
+    if (!curl_url) {
+        return Status::InternalError("Failed to create CURL URL handle");
+    }
+
+    // Parse the URL using libcurl's URL parser
+    CURLUcode rc = curl_url_set(curl_url.get(), CURLUPART_URL, url.c_str(), 0);
+    if (rc != CURLUE_OK) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid URL '{}': {}", url, curl_url_strerror(rc)));
+    }
+
+    // Extract the port component
+    // CURLU_DEFAULT_PORT: If no port is specified, return the default port for the scheme
+    char* port_str = nullptr;
+    rc = curl_url_get(curl_url.get(), CURLUPART_PORT, &port_str, CURLU_DEFAULT_PORT);
+    if (rc != CURLUE_OK || port_str == nullptr) {
+        return Status::InvalidArgument(
+                fmt::format("Failed to extract port from URL '{}': {}",
+                            url, curl_url_strerror(rc)));
+    }
+
+    CurlString port_guard(port_str);
+
+    try {
+        int port = std::stoi(port_guard.get());
+        if (port <= 0 || port > 65535) {
+            return Status::InvalidArgument(
+                    fmt::format("Port out of range in URL '{}': {}", url, port));
+        }
+        return port;
+    } catch (const std::exception& e) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid port in URL '{}': {}", url, e.what()));
+    }
 }
 
 // Prefer ipv4 when both ipv4 and ipv6 bound to the same host

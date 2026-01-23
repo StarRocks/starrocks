@@ -1686,13 +1686,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new AlterTableOperationClause(createPos(context), operationName, Collections.emptyList(), where);
         }
 
-        if (tableOperation.argumentList().expressionList() != null) {
-            parameters = visit(tableOperation.argumentList().expressionList().expression(), Expr.class);
-        } else {
-            parameters = visit(tableOperation.argumentList().namedArgumentList().namedArgument(), Expr.class);
-            useNamedArgs = true;
-        }
+        parameters = visit(tableOperation.argumentList().argumentItem(), Expr.class);
         int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).toList().size();
+        useNamedArgs = namedArgNum > 0;
         if (namedArgNum > 0 && namedArgNum < parameters.size()) {
             throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
         }
@@ -1720,13 +1716,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new CallProcedureStatement(qualifiedName, Collections.emptyList(), createPos(context));
         }
 
-        if (context.argumentList().expressionList() != null) {
-            parameters = visit(context.argumentList().expressionList().expression(), Expr.class);
-        } else {
-            parameters = visit(context.argumentList().namedArgumentList().namedArgument(), Expr.class);
-            useNamedArgs = true;
-        }
+        parameters = visit(context.argumentList().argumentItem(), Expr.class);
         int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).toList().size();
+        useNamedArgs = namedArgNum > 0;
         if (namedArgNum > 0 && namedArgNum < parameters.size()) {
             throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
         }
@@ -6373,11 +6365,25 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (name == null || name.isEmpty() || name.equals(" ")) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The left of => shouldn't be empty"));
         }
-        Expr node = (Expr) visit(context.expression());
-        if (node == null) {
+        ParseNode parseNode = visit(context.expression());
+        if (parseNode == null) {
             throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(" The right of => shouldn't be null"));
         }
-        return new NamedArgument(name, node);
+        if (!(parseNode instanceof Expr)) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedExpr(
+                    " Named argument value must be an expression, got " + parseNode.getClass().getSimpleName()),
+                    createPos(context.expression()));
+        }
+        return new NamedArgument(name, (Expr) parseNode, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitArgumentItem(com.starrocks.sql.parser.StarRocksParser.ArgumentItemContext context) {
+        // argumentItem can be either a namedArgument or an expression
+        if (context.namedArgument() != null) {
+            return visit(context.namedArgument());
+        }
+        return visit(context.expression());
     }
 
     @Override
@@ -6400,12 +6406,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitNormalizedTableFunction(
             com.starrocks.sql.parser.StarRocksParser.NormalizedTableFunctionContext context) {
         QualifiedName functionName = getQualifiedName(context.qualifiedName());
-        List<Expr> parameters = null;
-        if (context.argumentList().expressionList() != null) {
-            parameters = visit(context.argumentList().expressionList().expression(), Expr.class);
-        } else {
-            parameters = visit(context.argumentList().namedArgumentList().namedArgument(), Expr.class);
-        }
+        List<Expr> parameters = visit(context.argumentList().argumentItem(), Expr.class);
         int namedArgNum = parameters.stream().filter(f -> f instanceof NamedArgument).collect(toList()).size();
         if (namedArgNum > 0 && namedArgNum < parameters.size()) {
             throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
@@ -7846,6 +7847,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over(), pos);
         }
+        return SyntaxSugars.parse(functionCallExpr);
+    }
+
+    @Override
+    public ParseNode visitNamedArgsFunctionCall(
+            com.starrocks.sql.parser.StarRocksParser.NamedArgsFunctionCallContext context) {
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
+        NodePosition pos = createPos(context);
+
+        // Extract all named arguments - they will be processed by ExpressionAnalyzer
+        List<Expr> args = visit(context.namedArgumentList().namedArgument(), Expr.class);
+
+        // Create FunctionCallExpr with named arguments preserved
+        // ExpressionAnalyzer.reorderNamedArgAndAppendDefaults() will handle reordering
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(fullFunctionName,
+                new FunctionParams(false, args), pos);
         return SyntaxSugars.parse(functionCallExpr);
     }
 

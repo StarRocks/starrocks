@@ -367,6 +367,35 @@ public:
                _query_options.enable_full_sort_use_german_string;
     }
 
+    bool http_request_ssl_verification_required() const {
+        // Default to true (secure by default) when thrift field is not set
+        // This ensures SSL verification is enabled during FE/BE version mismatch
+        return !_query_options.__isset.http_request_ssl_verification_required ||
+               _query_options.http_request_ssl_verification_required;
+    }
+
+    int32_t http_request_security_level() const {
+        return _query_options.__isset.http_request_security_level ? _query_options.http_request_security_level
+                                                                  : 3; // default: RESTRICTED
+    }
+
+    const std::string& http_request_ip_allowlist() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_ip_allowlist ? _query_options.http_request_ip_allowlist : empty;
+    }
+
+    const std::string& http_request_host_allowlist_regexp() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist_regexp
+                       ? _query_options.http_request_host_allowlist_regexp
+                       : empty;
+    }
+
+    bool http_request_allow_private_in_allowlist() const {
+        return _query_options.__isset.http_request_allow_private_in_allowlist &&
+               _query_options.http_request_allow_private_in_allowlist;
+    }
+
     int32_t spill_mem_table_size() const {
         return EXTRACE_SPILL_PARAM(_query_options, _spill_options, spill_mem_table_size);
     }
