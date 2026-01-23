@@ -71,7 +71,6 @@ import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
-import com.starrocks.sql.ast.expression.DictQueryExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -234,6 +233,14 @@ public class Load {
         return shadowColumnDescs;
     }
 
+    public static ConnectContext createLoadConnectContext(String dbName) {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setDatabase(dbName);
+        connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        return connectContext;
+    }
+
     public static List<ImportColumnDesc> getMaterializedShadowColumnDesc(Table tbl, String dbName, boolean analyze) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
@@ -243,10 +250,7 @@ public class Load {
 
             TableName tableName = new TableName(dbName, tbl.getName());
 
-            ConnectContext connectContext = new ConnectContext();
-            connectContext.setDatabase(dbName);
-            connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            ConnectContext connectContext = createLoadConnectContext(dbName);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
             Expr expr = column.getGeneratedColumnExpr(tbl.getIdToColumn());
@@ -263,12 +267,6 @@ public class Load {
             shadowColumnDescs.add(importColumnDesc);
         }
         return shadowColumnDescs;
-    }
-
-    public static boolean checDictQueryExpr(Expr checkExpr) {
-        List<DictQueryExpr> result = Lists.newArrayList();
-        checkExpr.collect(DictQueryExpr.class, result);
-        return result.size() != 0;
     }
 
     public static boolean tableSupportOpColumn(Table tbl) {

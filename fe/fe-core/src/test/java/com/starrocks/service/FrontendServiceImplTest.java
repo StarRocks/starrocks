@@ -1324,6 +1324,8 @@ public class FrontendServiceImplTest {
         putRequest.setLoadId(loadId);
         putRequest.setFileType(FILE_STREAM);
         putRequest.setAuth_code(100);
+        putRequest.setUser("user1");
+        putRequest.setUser_ip("127.0.0.1");
         TStreamLoadPutResult putResult = impl.streamLoadPut(putRequest);
         assertEquals(TStatusCode.OK, putResult.getStatus().status_code);
         return beginResult.getTxnId();
@@ -1448,6 +1450,8 @@ public class FrontendServiceImplTest {
         loadRequest.txnId = result.getTxnId();
         loadRequest.loadId = queryId;
         loadRequest.setAuth_code(100);
+        loadRequest.setUser("user1");
+        loadRequest.setUser_ip("127.0.0.1");
         TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
         TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
     }
@@ -1460,7 +1464,9 @@ public class FrontendServiceImplTest {
         request.tbl = "tbl_test";
         request.txnId = 1001L;
         request.setAuth_code(100);
-        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        request.setUser("user1");
+        request.setUser_ip("127.0.0.1");
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any(), any());
         TStreamLoadPutResult result = impl.streamLoadPut(request);
         Assertions.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
     }
@@ -1525,6 +1531,7 @@ public class FrontendServiceImplTest {
     @Test
     public void testMetaNotFound() throws StarRocksException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        final ConnectContext context = new ConnectContext();
         TStreamLoadPutRequest request = new TStreamLoadPutRequest();
         request.db = "test";
         request.tbl = "foo";
@@ -1532,15 +1539,15 @@ public class FrontendServiceImplTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setLoadId(new TUniqueId(1, 2));
 
-        Exception e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        Exception e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("unknown table"));
 
         request.tbl = "v";
-        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("load table type is not OlapTable"));
 
         request.tbl = "mv";
-        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(request));
+        e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("is a materialized view"));
     }
 
