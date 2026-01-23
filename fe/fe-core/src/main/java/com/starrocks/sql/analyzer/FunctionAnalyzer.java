@@ -1018,7 +1018,12 @@ public class FunctionAnalyzer {
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
-            Preconditions.checkState(argumentTypes.length == 2);
+            if (argumentTypes.length != 2) {
+                String functionName = fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, "");
+                throw new SemanticException(String.format(
+                        "Function '%s' requires exactly 2 arguments: column and number, but got %d argument(s)",
+                        functionName, argumentTypes.length));
+            }
             Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
             if (args[0].isDecimalV3()) {
