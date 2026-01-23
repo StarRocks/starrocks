@@ -111,6 +111,9 @@ public class LocalWarehouse extends Warehouse implements GsonPostProcessable {
     public LocalWarehouse(long id, String name, WarehouseProperty property, String comment) {
         super(id, name, comment);
         this.property = property;
+        if (this.property == null) {
+            this.property = new WarehouseProperty();
+        }
         this.clusters = new ArrayList<>();
         this.cluster = null;
         this.createdTime = System.currentTimeMillis();
