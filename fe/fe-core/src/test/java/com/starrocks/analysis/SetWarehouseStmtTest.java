@@ -14,8 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.Config;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.qe.ConnectContext;
@@ -25,71 +24,45 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.utframe.MockedWarehouseManager;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.Collections;
-import java.util.HashSet;
+import org.junit.jupiter.api.Assertions;
 
 public class SetWarehouseStmtTest {
     private static ConnectContext ctx;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        AnalyzeTestUtil.init();
-        StarRocksAssert starRocksAssert = new StarRocksAssert();
-        starRocksAssert.withDatabase("db1").useDatabase("tbl1");
-        ctx = new ConnectContext(null);
-        ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(new HashSet<>(Collections.singletonList(-1L)));
-
-        Config.run_mode = RunMode.SHARED_DATA.getName();
-        RunMode.detectRunMode();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        ctx = UtFrameUtils.createDefaultCtx();
     }
 
     @Test
     public void testParserAndAnalyzer() {
+        AnalyzeTestUtil.setConnectContext(ctx);
         String sql = "set warehouse aaa";
         AnalyzeTestUtil.analyzeSuccess(sql);
     }
 
-    /**
-     * Mock {@link WarehouseManager#getWarehouse(String)} and {@link WarehouseManager#warehouseExists(String)}.
-     */
     @Test
-    public void testSetWarehouse() throws Exception {
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        WarehouseManager warehouseManager = new MockedWarehouseManager();
+    public void testSetWarehouse() {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.addWarehouse(new LocalWarehouse(12343L, "aaa", null, "mock warehouse for ut"));
-        GlobalStateMgr globalStateMgr = ctx.getGlobalStateMgr();
-
-        new Expectations(globalStateMgr) {{
-            globalStateMgr.getWarehouseMgr();
-            result = warehouseManager;
-        }};
 
         ctx.setQueryId(UUIDUtil.genUUID());
-        StmtExecutor executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser("SET WAREHOUSE aaa", ctx));
-        executor.execute();
-
+        Assertions.assertDoesNotThrow(() -> {
+            StmtExecutor executor =
+                    new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser("SET WAREHOUSE aaa", ctx));
+            executor.execute();
+        });
+        Assertions.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
         Assert.assertEquals("aaa", ctx.getCurrentWarehouseName());
 
-        executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser("set xxx=aaa", ctx));
-        executor.execute();
-        Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
+        ctx.setQueryId(UUIDUtil.genUUID());
+        AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser("set xxx=aaa", ctx));
+        Assert.assertTrue(exception.getMessage().contains("Unknown system variable 'xxx'"));
     }
 }
