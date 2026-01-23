@@ -43,6 +43,7 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
+    public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
     public static final String ICEBERG_PARTITION_STREAMING_THRESHOLD = "iceberg_partition_streaming_threshold";
 
     // internal config
@@ -69,6 +70,7 @@ public class IcebergCatalogProperties {
     private boolean enableCacheDataFileIdentifierColumnStatistics;
     private double icebergDataFileCacheMemoryUsageRatio;
     private double icebergDeleteFileCacheMemoryUsageRatio;
+    private double icebergTableCacheMemoryUsageRatio;
     private long icebergTableCacheRefreshIntervalSec;
     private int icebergPartitionStreamingThreshold;
 
@@ -109,6 +111,8 @@ public class IcebergCatalogProperties {
                     properties, ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergDeleteFileCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
                     properties, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO, 0.1);
+        this.icebergTableCacheMemoryUsageRatio = PropertyUtil.propertyAsDouble(
+                    properties, ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
                 properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
@@ -186,6 +190,10 @@ public class IcebergCatalogProperties {
 
     public double getIcebergDeleteFileCacheMemoryUsageRatio() {
         return icebergDeleteFileCacheMemoryUsageRatio;
+    }
+
+    public double getIcebergTableCacheMemoryUsageRatio() {
+        return icebergTableCacheMemoryUsageRatio;
     }
 
     public long getRefreshIcebergManifestMinLength() {

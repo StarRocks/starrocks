@@ -53,6 +53,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -579,6 +580,26 @@ public class ConnectContext {
         return true;
     }
 
+    /**
+     * Whether {@link SessionVariable#QUERY_TIMEOUT} is explicitly overridden in the current session.
+     * <p>
+     * This is used to decide whether table-level timeout should take effect when the user didn't set
+     * the session query_timeout
+     */
+    public boolean isSessionQueryTimeoutOverridden() {
+        if (modifiedSessionVariables.containsKey(SessionVariable.QUERY_TIMEOUT)) {
+            return true;
+        }
+
+        try {
+            int defaultTimeout = globalStateMgr.getVariableMgr().getDefaultSessionVariable().getQueryTimeoutS();
+            return sessionVariable.getQueryTimeoutS() != defaultTimeout;
+        } catch (Exception e) {
+            LOG.warn("Failed to judge session query timeout override.", e);
+            return false;
+        }
+    }
+
     public void modifyUserVariable(UserVariable userVariable) {
         if (userVariables.size() > 1024 && !userVariables.containsKey(userVariable.getVariable())) {
             throw new SemanticException("User variable exceeds the maximum limit of 1024");
@@ -985,7 +1006,13 @@ public class ConnectContext {
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.sessionVariable.setCatalog(currentCatalog);
+        SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(currentCatalog));
+        try {
+            globalStateMgr.getVariableMgr().setSystemVariable(sessionVariable, variable, true);
+            modifiedSessionVariables.put(variable.getVariable(), variable);
+        } catch (DdlException e) {
+            LOG.warn("failed to set catalog {}", currentCatalog, e);
+        }
     }
 
     public Long getCurrentWarehouseIdAllowNull() {
@@ -1314,7 +1341,7 @@ public class ConnectContext {
         return pendingTimeSecond + getExecTimeoutWithoutPendingTime();
     }
 
-    private int getExecTimeoutWithoutPendingTime() {
+    public int getExecTimeoutWithoutPendingTime() {
         return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
     }
 
@@ -1384,9 +1411,19 @@ public class ConnectContext {
                 // Only kill
                 killFlag = true;
 
-                String suggestedMsg = String.format("please increase the '%s' session variable, pending time:%s",
-                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
-                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, suggestedMsg);
+                String msg;
+
+                if (!isSessionQueryTimeoutOverridden() && executor != null && executor.getTableQueryTimeoutInfo() != null) {
+                    Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+                    String tableName = tableTimeoutInfo.first;
+                    int tableTimeout = tableTimeoutInfo.second;
+                    msg = String.format("the table %s table_query_timeout is %ds, pending time:%s",
+                            tableName, tableTimeout, pendingTime);
+                } else {
+                    msg = String.format("please increase the '%s' session variable, pending time:%s",
+                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                }
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
         }
         if (killFlag) {
@@ -1755,6 +1792,10 @@ public class ConnectContext {
         this.listeners.add(listener);
     }
 
+    public List<Listener> getListeners() {
+        return listeners;
+    }
+
     public void onQueryFinished() {
         for (Listener listener : listeners) {
             try {
@@ -1770,6 +1811,9 @@ public class ConnectContext {
         } catch (Exception e) {
             LOG.warn("set cn group name failed", e);
         }
+
+        // after current query finished, remove all current listeners
+        listeners.clear();
     }
 
     public boolean isSingleStmt() {

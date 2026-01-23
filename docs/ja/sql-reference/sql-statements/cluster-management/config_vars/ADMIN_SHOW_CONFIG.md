@@ -28,10 +28,10 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 
 ```plain text
 1. Key:        設定項目名
-2. Value:      設定項目の値
-3. Type:       設定項目のタイプ
-4. IsMutable:  ADMIN SET CONFIG コマンドで設定可能かどうか
-5. MasterOnly: leader FE のみに適用されるかどうか
+2. AliasNames: 設定項目のエイリアス
+3. Value:      設定項目の値
+4. Type:       設定項目のタイプ
+5. IsMutable:  ADMIN SET CONFIG コマンドで設定可能かどうか
 6. Comment:    設定項目の説明
 ```
 
@@ -46,11 +46,11 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 2. `like` 述語を使用して、現在の FE ノードの設定を検索します。
 
     ```plain text
-    mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%check_java_version%';
-    +--------------------+-------+---------+-----------+------------+---------+
-    | Key                | Value | Type    | IsMutable | MasterOnly | Comment |
-    +--------------------+-------+---------+-----------+------------+---------+
-    | check_java_version | true  | boolean | false     | false      |         |
-    +--------------------+-------+---------+-----------+------------+---------+
+    mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%vectorized_load_enable%';
+    +------------------------+------------+-------+---------+-----------+---------+
+    | Key                    | AliasNames | Value | Type    | IsMutable | Comment |
+    +------------------------+------------+-------+---------+-----------+---------+
+    | vectorized_load_enable | []         | true  | boolean | true      |         |
+    +------------------------+------------+-------+---------+-----------+---------+
     1 row in set (0.00 sec)
     ```

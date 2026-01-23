@@ -19,5 +19,10 @@ set enable_scan_predicate_expr_reuse=false;
 WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3;
 WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 0;
 WITH T2 AS (SELECT c IS NULL AS cn, [c] AS c FROM t1), T3 AS (SELECT array_length(ARRAY_MAP((arg_811) -> cn, c)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
-
+-- array map
+WITH T2 AS (SELECT c IS NULL AS dict, ["A"] AS arr1, ["a"] AS arr2 FROM t1), T3 AS (SELECT ARRAY_LENGTH(ARRAY_MAP((arg1)->ARRAY_SUM(ARRAY_MAP((arg2)->dict, arr2)), arr1)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+-- array sortby (can use outer variables like dict)
+WITH T2 AS (SELECT c IS NULL AS dict, ["A"] AS arr1, ["a"] AS arr2 FROM t1), T3 AS (SELECT ARRAY_LENGTH(ARRAY_SORTBY((arg1)->ARRAY_SUM(ARRAY_MAP((arg2)->dict, arr2)), arr1)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
+-- array sortby (can use outer variables like dict)
+WITH T2 AS (SELECT c IS NULL AS dict, ["A"] AS arr1, ["a"] AS arr2 FROM t1), T3 AS (SELECT ARRAY_LENGTH(ARRAY_SORTBY((arg1)->ARRAY_SUM(ARRAY_MAP((arg2)->dict, arr2)), arr1)) AS l FROM T2) SELECT * FROM T3 WHERE l > 1;
 drop table t1;

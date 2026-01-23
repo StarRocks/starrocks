@@ -117,6 +117,99 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+## DELETE
+
+您可以使用 DELETE 语句根据指定条件从 Iceberg 表中删除数据。此功能在 StarRocks v4.1 及更高版本中受支持。
+
+### 语法
+
+```SQL
+DELETE FROM <table_name> WHERE <condition>
+```
+
+### 参数
+
+- `table_name`: 要删除数据的 Iceberg 表名称。您可以使用：
+  - 完全限定名称：`catalog_name.database_name.table_name`
+  - 数据库限定名称（设置 catalog 后）：`database_name.table_name`
+  - 仅表名（设置 catalog 和数据库后）：`table_name`
+
+- `condition`: 用于标识要删除哪些行的条件。可以包括：
+  - 比较运算符：`=`、`!=`、`>`、`<`、`>=`、`<=`、`<>`
+  - 逻辑运算符：`AND`、`OR`、`NOT`
+  - `IN` 和 `NOT IN` 子句
+  - `BETWEEN` 和 `LIKE` 运算符
+  - `IS NULL` 和 `IS NOT NULL`
+  - 带 `IN` 或 `EXISTS` 的子查询
+
+### 示例
+
+#### Basic DELETE 操作
+
+使用简单条件删除行：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE id = 3;
+```
+
+#### 带 IN 和 NOT IN 的 DELETE
+
+使用 IN 子句删除多行：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE id IN (18, 20, 22);
+DELETE FROM iceberg_catalog.db.table1 WHERE id NOT IN (100, 101, 102);
+```
+
+#### 带逻辑运算符的 DELETE
+
+组合多个条件：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE age > 30 AND salary < 70000;
+DELETE FROM iceberg_catalog.db.table1 WHERE status = 'inactive' OR last_login < '2023-01-01';
+```
+
+#### 带模式匹配的 DELETE
+
+使用 LIKE 进行基于模式的删除：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE name LIKE 'A%';
+DELETE FROM iceberg_catalog.db.table1 WHERE email LIKE '%@example.com';
+```
+
+#### 带范围条件的 DELETE
+
+使用 BETWEEN 进行基于范围的删除：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE age BETWEEN 30 AND 40;
+DELETE FROM iceberg_catalog.db.table1 WHERE created_date BETWEEN '2023-01-01' AND '2023-12-31';
+```
+
+#### 带 NULL 检查的 DELETE
+
+删除包含或不包含 NULL 值的行：
+
+```SQL
+DELETE FROM iceberg_catalog.db.table1 WHERE name IS NULL;
+DELETE FROM iceberg_catalog.db.table1 WHERE email IS NULL AND phone IS NULL;
+DELETE FROM iceberg_catalog.db.table1 WHERE age IS NOT NULL;
+```
+
+#### 带子查询的 DELETE
+
+使用子查询确定要删除的行：
+
+```SQL
+-- 带 IN 子查询的 DELETE
+DELETE FROM iceberg_catalog.db.table1 WHERE id IN (SELECT id FROM temp_table WHERE expired = true);
+
+-- 带 EXISTS 子查询的 DELETE
+DELETE FROM iceberg_catalog.db.table1 t1 WHERE EXISTS (SELECT user_id FROM inactive_users t2 WHERE t2.user_id = t1.user_id);
+```
+
 ## TRUNCATE
 
 您可以使用 TRUNCATE TABLE 语句快速删除 Iceberg 表中的所有数据。

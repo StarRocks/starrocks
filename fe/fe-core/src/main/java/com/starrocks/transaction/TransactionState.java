@@ -35,6 +35,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -42,7 +43,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
@@ -338,9 +339,10 @@ public class TransactionState implements Writable, GsonPreProcessable {
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
     // this map should be set when load execution begin, so that when the txn commit, it will know
-    // which tables and rollups it loaded.
-    // tbl id -> (index ids)
-    private final Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
+    // which tables, physical partitions and materialized indexes it loaded.
+    // tbl id -> (physical partition id -> (index ids))
+    @SerializedName("ltpi")
+    private final Map<Long, Map<Long, List<Long>>> loadedTblPartitionIndexes;
 
     // record some error msgs during the transaction operation.
     // this msg will be shown in show proc "/transactions/dbId/";
@@ -375,6 +377,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
         txnLock.writeLock().unlock();
     }
 
+    public void readLock() {
+        txnLock.readLock().lock();
+    }
+
+    public void readUnlock() {
+        txnLock.readLock().unlock();
+    }
+
     public TransactionState() {
         this.dbId = -1;
         this.tableIdList = Lists.newArrayList();
@@ -393,6 +403,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
+        this.loadedTblPartitionIndexes = Maps.newHashMap();
         this.txnSpan = TraceManager.startNoopSpan();
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
 
@@ -420,6 +431,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
+        this.loadedTblPartitionIndexes = Maps.newHashMap();
         this.callbackIdList = Lists.newArrayList(callbackId);
 
         this.timeoutMs = timeoutMs;
@@ -452,6 +464,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
+        this.loadedTblPartitionIndexes = Maps.newHashMap();
         this.callbackIdList = Lists.newArrayList();
 
         this.timeoutMs = timeoutMs;
@@ -865,33 +878,65 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return false;
     }
 
-    /*
-     * Add related table indexes to the transaction.
-     * If function should always be called before adding this transaction state to transaction manager,
-     * No other thread will access this state. So no need to lock
+    /**
+     * Add materialized index ids related to the loaded table and physical partition in the transaction.
      */
-    public void addTableIndexes(OlapTable table) {
-        Set<Long> indexIds = loadedTblIndexes.computeIfAbsent(table.getId(), k -> Sets.newHashSet());
-        // always equal the index ids
-        indexIds.clear();
-        // TODO(wyb): fix indexIds with partition
-        indexIds.addAll(table.getIndexMetaIdToMeta().keySet());
+    public void addPartitionLoadedIndexesWithoutLock(long tableId, long physicalPartitionId, List<Long> indexIds) {
+        Preconditions.checkState(!indexIds.isEmpty());
+        Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.computeIfAbsent(
+                tableId, k -> Maps.newHashMap());
+        loadedPartitionIndexes.put(physicalPartitionId, indexIds);
     }
 
-    public List<MaterializedIndex> getPartitionLoadedTblIndexes(long tableId, PhysicalPartition partition) {
-        List<MaterializedIndex> loadedIndex;
-        if (loadedTblIndexes.isEmpty()) {
-            loadedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-        } else {
-            loadedIndex = Lists.newArrayList();
-            for (long indexId : loadedTblIndexes.get(tableId)) {
-                MaterializedIndex index = partition.getIndex(indexId);
-                if (index != null) {
-                    loadedIndex.add(index);
+    public void addPartitionLoadedIndexes(long tableId, long physicalPartitionId, List<Long> indexIds) {
+        writeLock();
+        try {
+            addPartitionLoadedIndexesWithoutLock(tableId, physicalPartitionId, indexIds);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * Get materialized indexes by table and physical partition from the transaction.
+     */
+    public List<MaterializedIndex> getPartitionLoadedIndexesWithoutLock(long tableId, PhysicalPartition physicalPartition) {
+        Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.get(tableId);
+        if (loadedPartitionIndexes != null) {
+            List<Long> loadedIndexIds = loadedPartitionIndexes.get(physicalPartition.getId());
+            if (loadedIndexIds != null) {
+                List<MaterializedIndex> loadedIndexes = Lists.newArrayList();
+                List<Long> missingIndexIds = new ArrayList<>();
+
+                for (Long indexId : loadedIndexIds) {
+                    MaterializedIndex index = physicalPartition.getIndex(indexId);
+                    if (index != null) {
+                        loadedIndexes.add(index);
+                    } else {
+                        missingIndexIds.add(indexId);
+                    }
                 }
+
+                if (!missingIndexIds.isEmpty()) {
+                    LOG.warn("transaction {} has loaded materialized indexes {} which do not exist" +
+                                    " in table {} physical partition {}",
+                            getTransactionId(), missingIndexIds, tableId, physicalPartition.getId());
+                }
+
+                return loadedIndexes;
             }
         }
-        return loadedIndex;
+
+        return physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+    }
+
+    public List<MaterializedIndex> getPartitionLoadedIndexes(long tableId, PhysicalPartition physicalPartition) {
+        readLock();
+        try {
+            return getPartitionLoadedIndexesWithoutLock(tableId, physicalPartition);
+        } finally {
+            readUnlock();
+        }
     }
 
     @Override

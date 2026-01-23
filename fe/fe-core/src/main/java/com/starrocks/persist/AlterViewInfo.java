@@ -40,6 +40,8 @@ public class AlterViewInfo implements Writable {
     private String comment;
     @SerializedName(value = "security")
     private boolean security;
+    @SerializedName(value = "originalViewDef")
+    private String originalViewDef;
 
     public AlterViewInfo() {
         // for persist
@@ -47,13 +49,15 @@ public class AlterViewInfo implements Writable {
     }
 
     public AlterViewInfo(long dbId, long tableId, String inlineViewDef, List<Column> newFullSchema, long sqlMode,
-                         String comment) {
+                         String comment,
+                         String originalViewDef) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.inlineViewDef = inlineViewDef;
         this.newFullSchema = newFullSchema;
         this.sqlMode = sqlMode;
         this.comment = comment;
+        this.originalViewDef = originalViewDef;
     }
 
     public AlterViewInfo(long dbId, long tableId, boolean security) {
@@ -88,6 +92,10 @@ public class AlterViewInfo implements Writable {
 
     public boolean getSecurity() {
         return security;
+    }
+
+    public String getOriginalViewDef() {
+        return originalViewDef;
     }
 
     @Override

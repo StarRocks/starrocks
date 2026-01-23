@@ -48,6 +48,9 @@ const config = {
       zh: {
         htmlLang: "zh-CN",
       },
+      ja: {
+        htmlLang: "ja-JP",
+      },
     },
   },
 

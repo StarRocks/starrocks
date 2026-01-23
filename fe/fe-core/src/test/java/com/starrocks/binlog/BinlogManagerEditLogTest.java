@@ -89,7 +89,7 @@ public class BinlogManagerEditLogTest {
         // 2. Get all physical partitions and tablets
         long totalReplicaCount = 0;
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            totalReplicaCount += partition.getBaseIndex().getReplicaCount();
+            totalReplicaCount += partition.getLatestBaseIndex().getReplicaCount();
         }
 
         // 3. Simulate reporting from all replicas
@@ -99,8 +99,8 @@ public class BinlogManagerEditLogTest {
         
         // Get first tablet ID
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            if (!partition.getBaseIndex().getTablets().isEmpty()) {
-                tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            if (!partition.getLatestBaseIndex().getTablets().isEmpty()) {
+                tabletId = partition.getLatestBaseIndex().getTablets().get(0).getId();
                 break;
             }
         }
@@ -161,7 +161,7 @@ public class BinlogManagerEditLogTest {
         // 3. Get all physical partitions and tablets
         long totalReplicaCount = 0;
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            totalReplicaCount += partition.getBaseIndex().getReplicaCount();
+            totalReplicaCount += partition.getLatestBaseIndex().getReplicaCount();
         }
 
         // 4. Simulate reporting from all replicas
@@ -171,8 +171,8 @@ public class BinlogManagerEditLogTest {
         
         // Get first tablet ID
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            if (partition.getBaseIndex().getTablets().size() > 0) {
-                tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            if (partition.getLatestBaseIndex().getTablets().size() > 0) {
+                tabletId = partition.getLatestBaseIndex().getTablets().get(0).getId();
                 break;
             }
         }
@@ -221,8 +221,8 @@ public class BinlogManagerEditLogTest {
         
         // Get first tablet ID
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            if (partition.getBaseIndex().getTablets().size() > 0) {
-                tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+            if (partition.getLatestBaseIndex().getTablets().size() > 0) {
+                tabletId = partition.getLatestBaseIndex().getTablets().get(0).getId();
                 break;
             }
         }

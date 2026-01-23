@@ -631,6 +631,9 @@ public class TypeManager {
         }
 
         if (t1.isStringType() || t2.isStringType()) {
+            if (t1.getLength() <= 0 || t2.getLength() <= 0) {
+                return VarcharType.VARCHAR;
+            }
             return TypeFactory.createVarcharType(Math.max(t1.getLength(), t2.getLength()));
         }
 

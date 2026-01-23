@@ -1320,7 +1320,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             // sync stream load related query info should unregister here
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
     @Override
@@ -1358,7 +1358,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
         } finally {
             writeUnlock();
         }
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
     }
 
     @Override

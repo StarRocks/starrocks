@@ -944,13 +944,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     add("label", label).
                     add("streamLoadTaskId", streamLoadTask.getId()));
 
-            // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
                 throw new StarRocksException("txn does not exist: " + txnId);
             }
-            txnState.addTableIndexes(planner.getDestTable());
 
             planParams.setImport_label(txnState.getLabel());
             planParams.setDb_name(db.getFullName());
@@ -1484,7 +1482,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.STOPPED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "RoutineLoad: name: " + name);
     }
 
     private void executeCancel(ErrorReason reason) {
@@ -1492,7 +1490,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.CANCELLED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "RoutineLoad: name: " + name);
     }
 
     private void clearTasks() {

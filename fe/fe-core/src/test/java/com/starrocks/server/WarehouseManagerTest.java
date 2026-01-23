@@ -320,8 +320,8 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(123, 456, "aaa", index, null);
         ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
                         index, Collections.emptyList(), 1));
@@ -397,8 +397,8 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(123, 456, "aaa", index, null);
         scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
         // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
         // getAliveComputeNodes.

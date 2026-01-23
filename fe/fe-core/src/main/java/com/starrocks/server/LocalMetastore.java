@@ -384,8 +384,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                     partitionId).getStorageMedium();
             long physicalPartitionId = partition.getId();
-            for (MaterializedIndex index : partition
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 long indexId = index.getId();
                 TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
                         indexId, medium, olapTable.isCloudNativeTableOrMaterializedView());
@@ -1458,7 +1457,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
                             index.getId(), info.getDataProperty().getStorageMedium());
                     for (Tablet tablet : index.getTablets()) {
@@ -1667,7 +1666,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         // physical partitions in the same logical partition use the same shard_group_id,
         // so that the shards of this logical partition are more evenly distributed.
-        long shardGroupId = partition.getDefaultPhysicalPartition().getBaseIndex().getShardGroupId();
+        long shardGroupId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getShardGroupId();
         for (long indexMetaId : olapTable.getIndexMetaIdToMeta().keySet()) {
             // initially, index id and index meta id are the same
             MaterializedIndex rollup = new MaterializedIndex(indexMetaId, MaterializedIndex.IndexState.NORMAL, shardGroupId);
@@ -1792,16 +1791,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             partition.addSubPartition(physicalPartition);
             // the shardGrouId may invalid when upgrade from old version
             if (olapTable.isCloudNativeTable() &&
-                    physicalPartition.getBaseIndex().getShardGroupId() ==
+                    physicalPartition.getLatestBaseIndex().getShardGroupId() ==
                             PhysicalPartition.INVALID_SHARD_GROUP_ID) {
-                physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+                physicalPartition.getLatestBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
             }
             olapTable.addPhysicalPartition(physicalPartition);
 
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                     TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(),
                             physicalPartition.getId(), index.getId(), olapTable.getPartitionInfo().getDataProperty(
                             info.getPartitionId()).getStorageMedium(), false);
@@ -2100,8 +2099,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     long physicalPartitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partition.getParentId()).getStorageMedium();
-                    for (MaterializedIndex mIndex : partition
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (MaterializedIndex mIndex : partition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId,
                                 mIndex.getId(), medium, table.isCloudNativeTableOrMaterializedView());
                         for (Tablet tablet : mIndex.getTablets()) {
@@ -3941,6 +3939,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterTableQueryTimeout(OlapTable table,
+                                       Map<String, String> properties,
+                                       List<Runnable> appliers) throws DdlException {
+        try {
+            int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+            appliers.add(() -> table.setTableQueryTimeout(tableQueryTimeout));
+        } catch (AnalysisException ex) {
+            throw new DdlException(ex.getMessage());
+        }
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3977,6 +3986,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
             alterLakeCompactionMaxParallel(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            alterTableQueryTimeout(table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4523,6 +4535,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             view.setComment(stmt.getComment());
             view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
                     ConnectContext.get().getSessionVariable().getSqlMode());
+            view.setOriginalViewDef(stmt.getOriginalViewDefineSql());
 
             if (stmt.isSecurity()) {
                 view.setSecurity(stmt.isSecurity());
@@ -4778,7 +4791,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             Partition oldPartition = olapTable.replacePartition(dbId, newPartition);
             for (PhysicalPartition physicalPartition : oldPartition.getSubPartitions()) {
                 // save old tablets to be removed
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                     // let HashSet do the deduplicate work
                     oldTablets.addAll(index.getTablets());
                 }
@@ -4819,8 +4832,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        for (MaterializedIndex mIndex : physicalPartition.getMaterializedIndices(
-                                MaterializedIndex.IndexExtState.ALL)) {
+                        for (MaterializedIndex mIndex : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                             TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
                                     physicalPartition.getId(), mIndex.getId(), medium,
                                     olapTable.isCloudNativeTableOrMaterializedView());
@@ -5121,7 +5133,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     private void setBadForHighVersionReplica(PhysicalPartition physicalPartition, long version) {
-        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
             for (Tablet tablet : index.getTablets()) {
                 if (!(tablet instanceof LocalTablet localTablet)) {
                     continue;
@@ -5152,7 +5164,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // remove tablet in inverted index
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.deleteTablet(tabletId);

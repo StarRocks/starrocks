@@ -178,6 +178,9 @@ private:
         std::string to_string() const;
 
         OlapReaderStatistics* stats = nullptr;
+        // Non-null when runtime filter pushdown is enabled. Points to SegmentIterator::_column_to_runtime_filters_map.
+        // Used by predicate-column late materialization to include runtime filters in page-level predicate pushdown.
+        std::unordered_map<ColumnId, RuntimeFilterPredicates>* runtime_filters_by_column = nullptr;
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -609,8 +612,13 @@ Status SegmentIterator::ScanContext::PredicateLateMaterializationScanStrategy::r
     DCHECK(!_ctx->_predicate_order.empty());
 
     auto& column_iterators = _ctx->_column_iterators_for_predicate_late_materialize;
+    const ColumnId first_column_id = _ctx->_predicate_order[0];
+    const bool first_col_has_runtime_filter =
+            _ctx->runtime_filters_by_column != nullptr && _ctx->runtime_filters_by_column->contains(first_column_id);
+    // TODO:support runtime bloom filter push down to page level
     bool first_col_supports_pushdown =
-            column_iterators[0]->support_push_down_predicate(_ctx->_column_predicate_map[_ctx->_predicate_order[0]]);
+            !first_col_has_runtime_filter &&
+            column_iterators[0]->support_push_down_predicate(_ctx->_column_predicate_map[first_column_id]);
 
     // reset _is_filtered every time
     _ctx->_is_filtered = false;
@@ -644,7 +652,7 @@ Status SegmentIterator::ScanContext::PredicateLateMaterializationScanStrategy::r
                 // and selection is record for filter rowId column
                 // and only append filtered data in col
                 RETURN_IF_ERROR(column_iterators[i]->next_batch_with_filter(
-                        range, col, _ctx->_column_predicate_map[_ctx->_predicate_order[0]], selection, selected_idx,
+                        range, col, _ctx->_column_predicate_map[first_column_id], selection, selected_idx,
                         &processed_rows));
                 size_t appended_rows = col->size() - original_row_num;
                 if (processed_rows >= appended_rows && _ctx->stats != nullptr) {
@@ -2321,7 +2329,7 @@ FieldPtr SegmentIterator::_make_field(size_t i) {
 
 Status SegmentIterator::_switch_context(ScanContext* to) {
     if (_context != nullptr) {
-        const ordinal_t ordinal = _context->_column_iterators[0]->get_current_ordinal();
+        const ordinal_t ordinal = _cur_rowid;
         for (ColumnIterator* iter : to->_column_iterators) {
             RETURN_IF_ERROR(iter->seek_to_ordinal(ordinal));
         }
@@ -2811,7 +2819,8 @@ void SegmentIterator::_build_context_for_predicate(ScanContext* ctx) {
     // but we still can push down predicate into page level
     ctx->_only_output_one_predicate_col_with_filter_push_down =
             !has_or_predicates && (_predicate_columns == 1 && _schema.num_fields() == 1) &&
-            ctx->_column_iterators[0]->support_push_down_predicate(column_predicate_map.begin()->second);
+            ctx->_column_iterators[0]->support_push_down_predicate(column_predicate_map.begin()->second) &&
+            _opts.enable_predicate_col_late_materialize;
 
     if (!ctx->_enable_predicate_col_late_materialize && !ctx->_only_output_one_predicate_col_with_filter_push_down) {
         return;
@@ -2898,6 +2907,13 @@ void SegmentIterator::_build_column_oriented_rf(ScanContext* ctx) {
             }
         }
     }
+
+    // Expose runtime filter presence to ScanContext so PredicateLateMaterializationScanStrategy can decide
+    // whether it's safe to push down predicates to the page level for the first predicate column.
+    ctx->runtime_filters_by_column =
+            (_opts.enable_join_runtime_filter_pushdown && !_column_to_runtime_filters_map.empty())
+                    ? &_column_to_runtime_filters_map
+                    : nullptr;
 }
 
 Status SegmentIterator::_init_global_dict_decoder() {
@@ -3256,6 +3272,7 @@ Status SegmentIterator::_init_inverted_index_iterators() {
         index_opts.lake_io_opts = _opts.lake_io_opts;
         index_opts.read_file = _column_files[cid].get();
         index_opts.stats = _opts.stats;
+        index_opts.segment_rows = num_rows();
 
         if (_inverted_index_ctx->inverted_index_iterators[cid] == nullptr) {
             RETURN_IF_ERROR(_segment->new_inverted_index_iterator(
@@ -3303,6 +3320,9 @@ Status SegmentIterator::_apply_inverted_index() {
                 if (res.ok()) {
                     erased_preds.emplace(pred);
                     erased_pred_col_ids.emplace(cid);
+                } else {
+                    LOG(WARNING) << "Failed to seek inverted index for column " << column_name
+                                 << ", reason: " << res.detailed_message();
                 }
             }
         }

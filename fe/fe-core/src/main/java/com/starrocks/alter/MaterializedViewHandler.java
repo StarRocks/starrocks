@@ -220,9 +220,10 @@ public class MaterializedViewHandler extends AlterHandler {
                 addMVClause.getWhereClause(), addMVClause.getProperties(), olapTable, db, baseIndexMetaId,
                 addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
 
-        addAlterJobV2(rollupJobV2);
-        olapTable.setState(OlapTableState.ROLLUP);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2, wal -> {
+            olapTable.setState(OlapTableState.ROLLUP);
+            addAlterJobV2(rollupJobV2);
+        });
 
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
@@ -294,18 +295,17 @@ public class MaterializedViewHandler extends AlterHandler {
             throw e;
         }
 
-        // set table' state to ROLLUP before adding rollup jobs.
-        // so that when the AlterHandler thread run the jobs, it will see the expected table's state.
-        // ATTN: This order is not mandatory, because database lock will protect us,
-        // but this order is more reasonable
-        olapTable.setState(OlapTableState.ROLLUP);
-
         // 2 batch submit rollup job
         List<AlterJobV2> rollupJobV2List = new ArrayList<>(rollupNameJobMap.values());
-        batchAddAlterJobV2(rollupJobV2List);
-
         BatchAlterJobPersistInfo batchAlterJobV2 = new BatchAlterJobPersistInfo(rollupJobV2List);
-        GlobalStateMgr.getCurrentState().getEditLog().logBatchAlterJob(batchAlterJobV2);
+        GlobalStateMgr.getCurrentState().getEditLog().logBatchAlterJob(batchAlterJobV2, wal -> {
+            // set table' state to ROLLUP before adding rollup jobs.
+            // so that when the AlterHandler thread run the jobs, it will see the expected table's state.
+            // ATTN: This order is not mandatory, because database lock will protect us,
+            // but this order is more reasonable
+            olapTable.setState(OlapTableState.ROLLUP);
+            batchAddAlterJobV2(rollupJobV2List);
+        });
         LOG.info("finished to create materialized view job: {}", logJobIdSet);
     }
 
@@ -678,7 +678,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
         // check state
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex baseIndex = partition.getIndex(baseIndexMetaId);
+            MaterializedIndex baseIndex = partition.getLatestIndex(baseIndexMetaId);
             // up to here. index's state should only be NORMAL
             Preconditions.checkState(baseIndex.getState() == IndexState.NORMAL, baseIndex.getState().name());
         }
@@ -760,7 +760,7 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(mvSchemaHash != -1);
 
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex materializedIndex = partition.getIndex(mvIndexMetaId);
+            MaterializedIndex materializedIndex = partition.getLatestIndex(mvIndexMetaId);
             Preconditions.checkNotNull(materializedIndex);
         }
     }
@@ -776,12 +776,13 @@ public class MaterializedViewHandler extends AlterHandler {
         long mvIndexMetaId = olapTable.getIndexMetaIdByName(mvName);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-            MaterializedIndex rollupIndex = partition.getIndex(mvIndexMetaId);
             // delete rollup index
-            partition.deleteRollupIndex(mvIndexMetaId);
+            List<MaterializedIndex> droppedIndices = partition.deleteMaterializedIndexByMetaId(mvIndexMetaId);
             // remove tablets from inverted index
-            for (Tablet tablet : rollupIndex.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+            for (MaterializedIndex index : droppedIndices) {
+                for (Tablet tablet : index.getTablets()) {
+                    invertedIndex.deleteTablet(tablet.getId());
+                }
             }
         }
         olapTable.deleteIndexInfo(mvName);
@@ -799,12 +800,14 @@ public class MaterializedViewHandler extends AlterHandler {
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
             for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
-                MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexMetaId);
+                List<MaterializedIndex> droppedIndices = partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
 
                 if (!GlobalStateMgr.isCheckpointThread()) {
                     // remove from inverted index
-                    for (Tablet tablet : rollupIndex.getTablets()) {
-                        invertedIndex.deleteTablet(tablet.getId());
+                    for (MaterializedIndex rollupIndex : droppedIndices) {
+                        for (Tablet tablet : rollupIndex.getTablets()) {
+                            invertedIndex.deleteTablet(tablet.getId());
+                        }
                     }
                 }
             }

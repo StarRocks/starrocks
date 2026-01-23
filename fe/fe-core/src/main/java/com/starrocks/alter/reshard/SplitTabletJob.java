@@ -205,7 +205,7 @@ public class SplitTabletJob extends TabletReshardJob {
                     allPartitionFinished = false;
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
@@ -536,15 +536,11 @@ public class SplitTabletJob extends TabletReshardJob {
 
                 physicalPartition.setVisibleVersion(commitVersion, stateStartedTimeMs);
 
-                // Temporary code, ignore, will be replaced later
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
                     MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
-                    if (newIndex.getMetaId() == olapTable.getBaseIndexMetaId()) {
-                        physicalPartition.setBaseIndex(newIndex);
-                    } else {
-                        physicalPartition.createRollupIndex(newIndex);
-                    }
+                    physicalPartition.addMaterializedIndex(newIndex,
+                            newIndex.getMetaId() == olapTable.getBaseIndexMetaId());
                 }
             }
         }
@@ -563,17 +559,15 @@ public class SplitTabletJob extends TabletReshardJob {
 
                 for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                         .getReshardingIndexes().values()) {
-                    MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+                    MaterializedIndex oldIndex = physicalPartition
+                            .deleteMaterializedIndexByIndexId(reshardingIndex.getMaterializedIndexId());
                     if (oldIndex == null) {
                         continue;
                     }
-
-                    /*
-                     * To do later
-                     * for (Tablet tablet : oldIndex.getTablets()) {
-                     * invertedIndex.deleteTablet(tablet.getId());
-                     * }
-                     */
+                    // Remove old tablets from inverted index
+                    for (Tablet tablet : oldIndex.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
                 }
             }
         }

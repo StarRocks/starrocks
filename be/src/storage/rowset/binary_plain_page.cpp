@@ -20,7 +20,9 @@
 #include <emmintrin.h>
 #endif
 
+#include <algorithm>
 #include <cstring>
+#include <limits>
 
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
@@ -28,10 +30,74 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::get_dict_filter_selection(const std::vector<const ColumnPredicate*>& predicates,
+                                                               const uint8_t** selection, uint32_t* dict_size,
+                                                               uint32_t* selected_count) const {
+    DCHECK(_parsed);
+    DCHECK(selection != nullptr);
+    DCHECK(dict_size != nullptr);
+    DCHECK(selected_count != nullptr);
+
+    *dict_size = _num_elems;
+    if (UNLIKELY(_num_elems == 0)) {
+        *selection = nullptr;
+        *selected_count = 0;
+        return Status::OK();
+    }
+
+    if (!_dict_filter_cache_valid) {
+        raw::stl_vector_resize_uninitialized(&_dict_filter_cache_selection, _num_elems);
+
+        // NOTE:
+        // compound_and_predicates_evaluate() (and ColumnPredicate::evaluate*) uses uint16_t [from,to) bounds, so we must
+        // evaluate the dictionary in chunks when dict_size > 65535. This is correctness critical: otherwise the
+        // truncated range would leave part of dict_selection as 0, causing over-filtering.
+
+        constexpr uint32_t kMaxRowsPerEval = std::numeric_limits<uint16_t>::max(); // 65535
+        std::vector<uint16_t> selected_idx(std::min(_num_elems, kMaxRowsPerEval));
+        uint32_t begin = 0;
+        while (begin < _num_elems) {
+            const uint32_t end = std::min(_num_elems, begin + kMaxRowsPerEval);
+            const uint32_t chunk_elems = end - begin;
+
+            BinaryColumn::Offsets offsets;
+            offsets.resize(chunk_elems + 1);
+            offsets[0] = 0;
+
+            const uint32_t base_abs_off = offset_uncheck(static_cast<int>(begin));
+            // Intermediate offsets: i in (begin, end)
+            for (uint32_t i = begin + 1; i < end; ++i) {
+                offsets[i - begin] = offset_uncheck(static_cast<int>(i)) - base_abs_off;
+            }
+            const uint32_t chunk_bytes = offset(static_cast<int>(end)) - base_abs_off;
+            offsets[chunk_elems] = chunk_bytes;
+
+            ContainerResource container(_page_handle, &_data[base_abs_off], chunk_bytes);
+            auto dict_chunk_column = BinaryColumn::create(std::move(container), std::move(offsets));
+
+            RETURN_IF_ERROR(compound_and_predicates_evaluate(
+                    predicates, dict_chunk_column.get(), _dict_filter_cache_selection.data() + begin,
+                    selected_idx.data(), 0, static_cast<uint16_t>(chunk_elems)));
+
+            begin = end;
+        }
+
+        _dict_filter_cache_selected_count = SIMD::count_nonzero(_dict_filter_cache_selection.data(), _num_elems);
+        _dict_filter_cache_valid = true;
+    }
+
+    *selection = _dict_filter_cache_selection.data();
+    *selected_count = _dict_filter_cache_selected_count;
+    return Status::OK();
+}
 
 template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, Column* dst) {
@@ -285,13 +351,20 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
         auto data_column = ColumnHelper::get_data_column(dst);
         RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows));
 
-        // Append null flags for selected rows if null_data is provided
-        if (null != nullptr) {
+        if (dst->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(dst);
-            auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column->as_mutable_raw_ptr());
-            RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(
-                    nullable_column->null_column_raw_ptr(), *temp_nullable->null_column(), selection, num_rows));
-            nullable_column->update_has_null();
+            if (null != nullptr) {
+                // Append null flags for selected rows if null_data is provided
+                auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column->as_mutable_raw_ptr());
+                RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(
+                        nullable_column->null_column_raw_ptr(), *temp_nullable->null_column(), selection, num_rows));
+                nullable_column->update_has_null();
+            } else {
+                // The page has no null flags (all values are not-null), but destination can still be nullable.
+                // Keep its null column in sync with selected rows.
+                nullable_column->null_column_raw_ptr()->resize(nullable_column->null_column_raw_ptr()->size() +
+                                                               selected_count);
+            }
         }
 
 #ifndef NDEBUG

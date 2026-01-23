@@ -32,13 +32,19 @@ import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -67,21 +73,30 @@ public class SchemaChangeHandlerEditLogTest {
     private static final long PHYSICAL_PARTITION_ID = 11004L;
     private static final long INDEX_ID = 11005L;
     private static final long TABLET_ID = 11006L;
+    private static final long BACKEND_ID = 11007L;
+    private static final long REPLICA_ID = 11008L;
+    private ConnectContext connectContext;
 
     @BeforeEach
     public void setUp() throws Exception {
         UtFrameUtils.setUpForPersistTest();
+        connectContext = UtFrameUtils.createDefaultCtx();
 
         // Create database and table directly (no mincluster)
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         Database db = new Database(DB_ID, DB_NAME);
         metastore.unprotectCreateDb(db);
+        if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(BACKEND_ID) == null) {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .addBackend(new com.starrocks.system.Backend(BACKEND_ID, "127.0.0.1", 9050));
+        }
         OlapTable table = createHashOlapTable(TABLE_ID, TABLE_NAME, 3);
         db.registerTableUnlocked(table);
     }
 
     @AfterEach
     public void tearDown() {
+        ConnectContext.remove();
         UtFrameUtils.tearDownForPersisTest();
     }
 
@@ -424,6 +439,8 @@ public class SchemaChangeHandlerEditLogTest {
 
         MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         LocalTablet tablet = new LocalTablet(TABLET_ID);
+        tablet.addReplica(new com.starrocks.catalog.Replica(REPLICA_ID, BACKEND_ID,
+                com.starrocks.catalog.Replica.ReplicaState.NORMAL, 1, 0), false);
         TabletMeta tabletMeta = new TabletMeta(DB_ID, tableId, PARTITION_ID, INDEX_ID, TStorageMedium.HDD);
         baseIndex.addTablet(tablet, tabletMeta);
 
@@ -545,5 +562,149 @@ public class SchemaChangeHandlerEditLogTest {
         Column unchangedColumn = unchangedTable.getColumn("v1");
         Assertions.assertNotNull(unchangedColumn);
         Assertions.assertEquals(originalComment, unchangedColumn.getComment());
+    }
+
+    @Test
+    public void testProcessLakeTableAlterMetaEditLog() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        Assertions.assertNotNull(db);
+
+        LakeTable lakeTable = createHashLakeTable(GlobalStateMgr.getCurrentState().getNextId(),
+                "lake_table", 3);
+        db.registerTableUnlocked(lakeTable);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.processLakeTableAlterMeta(clause, db, lakeTable);
+
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, lakeTable.getState());
+        List<AlterJobV2> createdJobs = handler.getUnfinishedAlterJobV2ByTableId(lakeTable.getId());
+        Assertions.assertFalse(createdJobs.isEmpty());
+        AlterJobV2 createdJob = createdJobs.get(0);
+        Assertions.assertNotNull(createdJob);
+
+        AlterJobV2 loggedJob = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+        Assertions.assertEquals(createdJob.getJobId(), loggedJob.getJobId());
+        Assertions.assertEquals(lakeTable.getId(), loggedJob.getTableId());
+    }
+
+    @Test
+    public void testProcessLakeTableAlterMetaEditLogException() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        Assertions.assertNotNull(db);
+
+        LakeTable lakeTable = createHashLakeTable(GlobalStateMgr.getCurrentState().getNextId(),
+                "lake_table_exception", 3);
+        db.registerTableUnlocked(lakeTable);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAlterJob(any(AlterJobV2.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> handler.processLakeTableAlterMeta(clause, db, lakeTable));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, lakeTable.getState());
+            Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(lakeTable.getId()).isEmpty());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testProcessEditLog() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        ColumnDef columnDef = new ColumnDef("v3", new TypeDef(IntegerType.BIGINT), true);
+        AddColumnClause clause = new AddColumnClause(columnDef, null, null, new HashMap<>(), NodePosition.ZERO);
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.process(List.of(clause), db, table);
+
+        Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+        List<AlterJobV2> createdJobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        Assertions.assertFalse(createdJobs.isEmpty());
+        AlterJobV2 createdJob = createdJobs.get(0);
+
+        AlterJobV2 loggedJob = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+        Assertions.assertEquals(createdJob.getJobId(), loggedJob.getJobId());
+        Assertions.assertEquals(table.getId(), loggedJob.getTableId());
+    }
+
+    @Test
+    public void testProcessEditLogException() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        ColumnDef columnDef = new ColumnDef("v3", new TypeDef(IntegerType.BIGINT), true);
+        AddColumnClause clause = new AddColumnClause(columnDef, null, null, new HashMap<>(), NodePosition.ZERO);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAlterJob(any(AlterJobV2.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> handler.process(List.of(clause), db, table));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    private static LakeTable createHashLakeTable(long tableId, String tableName, int bucketNum) {
+        List<Column> columns = Lists.newArrayList();
+        Column col1 = new Column("v1", IntegerType.BIGINT);
+        col1.setIsKey(true);
+        columns.add(col1);
+        columns.add(new Column("v2", IntegerType.BIGINT));
+
+        long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+        long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
+        long indexId = GlobalStateMgr.getCurrentState().getNextId();
+        long tabletId = GlobalStateMgr.getCurrentState().getNextId();
+
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(bucketNum, Lists.newArrayList(col1));
+
+        MaterializedIndex baseIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        LocalTablet tablet = new LocalTablet(tabletId);
+        TabletMeta tabletMeta = new TabletMeta(DB_ID, tableId, partitionId, indexId, TStorageMedium.HDD);
+        baseIndex.addTablet(tablet, tabletMeta);
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", baseIndex, distributionInfo);
+
+        LakeTable lakeTable = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo,
+                distributionInfo);
+        lakeTable.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+        lakeTable.setBaseIndexMetaId(indexId);
+        lakeTable.addPartition(partition);
+        lakeTable.setTableProperty(new TableProperty(new HashMap<>()));
+        lakeTable.setState(OlapTable.OlapTableState.NORMAL);
+        return lakeTable;
     }
 }

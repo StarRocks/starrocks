@@ -296,9 +296,12 @@ public class SparkLoadJob extends BulkLoadJob {
             appId = attachment.getAppId();
             etlOutputPath = attachment.getOutputPath();
 
-            executeEtl();
             // log etl state
-            unprotectedLogUpdateStateInfo();
+            long curTimestamp = System.currentTimeMillis();
+            SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
+                    id, JobState.ETL, transactionId, sparkLoadAppHandle, curTimestamp, appId, etlOutputPath,
+                    loadStartTimestamp, tabletMetaToFileInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info, wal -> executeEtl(curTimestamp));
         } finally {
             writeUnlock();
         }
@@ -307,8 +310,8 @@ public class SparkLoadJob extends BulkLoadJob {
     /**
      * update etl start time and state in spark load job
      */
-    private void executeEtl() {
-        etlStartTimestamp = System.currentTimeMillis();
+    private void executeEtl(long etlStartTimestamp) {
+        this.etlStartTimestamp = etlStartTimestamp;
         state = JobState.ETL;
         LOG.info("update to {} state success. job id: {}", state, id);
     }
@@ -415,8 +418,6 @@ public class SparkLoadJob extends BulkLoadJob {
         // get etl output files and update loading state
         BrokerDesc runtimeBrokerDescForPaths = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
         unprotectedUpdateToLoadingState(etlStatus, handler.getEtlFilePaths(etlOutputPath, runtimeBrokerDescForPaths));
-        // log loading statedppResult
-        unprotectedLogUpdateStateInfo();
         // prepare loading infos
         unprotectedPrepareLoadingInfos();
     }
@@ -435,9 +436,13 @@ public class SparkLoadJob extends BulkLoadJob {
 
             loadingStatus = etlStatus;
             progress = 0;
-            unprotectedUpdateState(JobState.LOADING);
             loadStartTimestamp = System.currentTimeMillis();
             startLoad = true;
+            SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
+                    id, JobState.LOADING, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
+                    loadStartTimestamp, tabletMetaToFileInfo);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(
+                    info, wal -> unprotectedUpdateState(JobState.LOADING));
             LOG.info("update to {} state success. job id: {}", state, id);
         } catch (Exception e) {
             LOG.warn("update to {} state failed. job id: {}", state, id, e);
@@ -527,7 +532,7 @@ public class SparkLoadJob extends BulkLoadJob {
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
-                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {
                             long indexMetaId = index.getMetaId();
                             int schemaHash = indexMetaIdToSchemaHash.get(indexMetaId);
@@ -857,18 +862,18 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         });
         clearJob();
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         super.afterAborted(txnState, txnOperated, txnStatusChangeReason);
-        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 
     @Override
-    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn, boolean needLog) {
-        super.cancelJobWithoutCheck(failMsg, abortTxn, needLog);
+    public void cancelJobWithoutCheck(FailMsg failMsg, boolean abortTxn) {
+        super.cancelJobWithoutCheck(failMsg, abortTxn);
         clearJob();
     }
 
@@ -906,16 +911,6 @@ public class SparkLoadJob extends BulkLoadJob {
                 }
             }
         }
-    }
-
-    /**
-     * log load job update info when job state changed to etl or loading
-     */
-    private void unprotectedLogUpdateStateInfo() {
-        SparkLoadJobStateUpdateInfo info = new SparkLoadJobStateUpdateInfo(
-                id, state, transactionId, sparkLoadAppHandle, etlStartTimestamp, appId, etlOutputPath,
-                loadStartTimestamp, tabletMetaToFileInfo);
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateLoadJob(info);
     }
 
     @Override

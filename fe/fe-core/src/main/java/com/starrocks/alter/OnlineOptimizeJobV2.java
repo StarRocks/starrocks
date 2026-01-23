@@ -132,6 +132,18 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         this.postfix = "_" + jobId;
     }
 
+    protected OnlineOptimizeJobV2(OnlineOptimizeJobV2 job) {
+        super(job);
+        this.watershedTxnId = job.watershedTxnId;
+        this.tmpPartitionIds = job.tmpPartitionIds == null ? null : Lists.newArrayList(job.tmpPartitionIds);
+        this.rewriteTasks = job.rewriteTasks == null ? null : Lists.newArrayList(job.rewriteTasks);
+        this.sourcePartitionNames = job.sourcePartitionNames == null ? null : Lists.newArrayList(job.sourcePartitionNames);
+        this.tmpPartitionNames = job.tmpPartitionNames == null ? null : Lists.newArrayList(job.tmpPartitionNames);
+        this.allPartitionOptimized = job.allPartitionOptimized;
+        this.distributionInfo = job.distributionInfo;
+        this.optimizeOperation = job.optimizeOperation;
+    }
+
     public List<Long> getTmpPartitionIds() {
         return tmpPartitionIds;
     }
@@ -206,14 +218,14 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         long createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
 
         // wait previous transactions finished
-        this.jobState = JobState.WAITING_TXN;
         this.optimizeOperation = optimizeClause.toString();
         span.setAttribute("createPartitionElapse", createPartitionElapse);
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
         // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        // createAndAddTempPartitionsForTable will write edit log for creating temp partitions, so do not need to apply here.
+        persistStateChange(this, JobState.WAITING_TXN);
         LOG.info("transfer optimize job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -421,10 +433,10 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.debug("all insert overwrite tasks finished, optimize job: {}", jobId);
 
         this.progress = 100;
-        this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        // Replace tmp partitions log with be written in onFinished(), so do not need to apply here.
+        persistStateChange(this, JobState.FINISHED);
         LOG.info("optimize job finished: {}", jobId);
         this.span.end();
     }
@@ -464,7 +476,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             Set<Tablet> sourceTablets = Sets.newHashSet();
             Partition partition = targetTable.getPartition(sourcePartitionName);
             for (MaterializedIndex index
-                    : partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    : partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 sourceTablets.addAll(index.getTablets());
             }
 
@@ -518,16 +530,20 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
 
-        jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new OnlineOptimizeJobV2(this);
     }
 
     private void cancelInternal() {
@@ -567,7 +583,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     Partition partition = targetTable.getPartition(pid);
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                                .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             // hash set is able to deduplicate the elements
                             tmpTablets.addAll(index.getTablets());
                         }
@@ -672,7 +688,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
                 for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     sourceTablets.addAll(index.getTablets());
                 }
                 targetTable.dropTempPartition(partition.getName(), true);

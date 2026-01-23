@@ -146,6 +146,47 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         this.isColocateMVIndex = isColocateMVIndex;
     }
 
+    protected LakeRollupJob(LakeRollupJob job) {
+        super(job);
+        if (job.commitVersionMap != null) {
+            this.commitVersionMap = Maps.newHashMap();
+            this.commitVersionMap.putAll(job.commitVersionMap);
+        } else {
+            this.commitVersionMap = null;
+        }
+        if (job.physicalPartitionIdToBaseRollupTabletIdMap != null) {
+            this.physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+            for (Map.Entry<Long, Map<Long, Long>> entry : job.physicalPartitionIdToBaseRollupTabletIdMap.entrySet()) {
+                Map<Long, Long> tabletIdMap = Maps.newHashMap();
+                if (entry.getValue() != null) {
+                    tabletIdMap.putAll(entry.getValue());
+                }
+                this.physicalPartitionIdToBaseRollupTabletIdMap.put(entry.getKey(), tabletIdMap);
+            }
+        } else {
+            this.physicalPartitionIdToBaseRollupTabletIdMap = null;
+        }
+        if (job.physicalPartitionIdToRollupIndex != null) {
+            this.physicalPartitionIdToRollupIndex = Maps.newHashMap();
+            this.physicalPartitionIdToRollupIndex.putAll(job.physicalPartitionIdToRollupIndex);
+        } else {
+            this.physicalPartitionIdToRollupIndex = null;
+        }
+        this.baseIndexMetaId = job.baseIndexMetaId;
+        this.rollupIndexMetaId = job.rollupIndexMetaId;
+        this.baseIndexName = job.baseIndexName;
+        this.rollupIndexName = job.rollupIndexName;
+        this.rollupSchema = job.rollupSchema == null ? null : new ArrayList<>(job.rollupSchema);
+        this.rollupSchemaVersion = job.rollupSchemaVersion;
+        this.baseSchemaHash = job.baseSchemaHash;
+        this.rollupSchemaHash = job.rollupSchemaHash;
+        this.rollupKeysType = job.rollupKeysType;
+        this.rollupShortKeyColumnCount = job.rollupShortKeyColumnCount;
+        this.origStmt = job.origStmt;
+        this.viewDefineSql = job.viewDefineSql;
+        this.isColocateMVIndex = job.isColocateMVIndex;
+    }
+
     // for deserialization
     public LakeRollupJob() {
         super(JobType.ROLLUP);
@@ -258,7 +299,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             }
             watershedTxnId = getNextTransactionId();
             watershedGtid = getNextGtid();
-            addRollIndexToCatalog(table);
+            addRollupIndexToCatalog(table);
         }
 
         // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
@@ -275,13 +316,14 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     "concurrent transaction detected while adding shadow index, please re-run the alter table command");
         }
 
-        jobState = JobState.WAITING_TXN;
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        writeEditLog(this);
+        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
+        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
+        persistStateChange(this, JobState.WAITING_TXN);
 
         LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
@@ -393,13 +435,12 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 commitVersionMap.put(physicalPartitionId, commitVersion);
                 LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
             }
-            this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            writeEditLog(this);
-
-            // NOTE: !!! below this point, this roll up job must success unless the database or table been dropped. !!!
-            updateNextVersion(table);
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this roll up job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
         }
 
         if (span != null) {
@@ -428,15 +469,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 return;
             }
 
-            visualiseRollupIndex(table);
-
-            this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             // There is no need to set the table state to normal,
             // because it will be set in MaterializedViewHandler `onJobDone`
+
+            persistStateChange(this, JobState.FINISHED, () -> visualiseRollupIndex(table));
         }
 
-        writeEditLog(this);
         if (span != null) {
             span.end();
         }
@@ -458,22 +497,21 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(rollupBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                removeRollupIndex(table);
-            }
-        }
-
-        this.jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, () -> {
+            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                if (table != null) {
+                    removeRollupIndex(table);
+                }
+            }
+        });
+
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
         }
-
-        writeEditLog(this);
         LOG.info("Lake Rollup job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;
@@ -551,7 +589,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 addTabletToInvertedIndex(table);
                 table.setState(OlapTable.OlapTableState.ROLLUP);
             } else if (jobState == JobState.WAITING_TXN) {
-                addRollIndexToCatalog(table);
+                addRollupIndexToCatalog(table);
             } else if (jobState == JobState.RUNNING) {
                     // do nothing
             } else if (jobState == JobState.FINISHED_REWRITING) {
@@ -595,11 +633,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static void writeEditLog(LakeRollupJob job) {
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job);
-    }
-
-    @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
@@ -613,7 +646,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
     }
 
-    void addRollIndexToCatalog(@NotNull OlapTable tbl) {
+    void addRollupIndexToCatalog(@NotNull OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long partitionId = physicalPartition.getId();
@@ -687,7 +720,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(physicalPartition != null, partitionId);
                 List<MaterializedIndex> allMaterializedIndex = physicalPartition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 for (MaterializedIndex index : allMaterializedIndex) {
                     allOtherPartitionTablets.addAll(index.getTablets());
@@ -743,7 +776,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 invertedIndex.deleteTablet(rollupTablet.getId());
             }
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            partition.deleteRollupIndex(rollupIndexMetaId);
+            partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
             partition.setMinRetainVersion(0);
         }
         table.deleteIndexInfo(rollupIndexName);
@@ -762,9 +795,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
                 LOG.debug("update visible version of partition {} to {}. jobId={}", physicalPartition.getId(),
                         commitVersion, jobId);
-                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexMetaId);
+                MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
                 Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
-                physicalPartition.visualiseShadowIndex(rollupIndexMetaId, false);
+                physicalPartition.visualiseShadowIndex(rollupIndex.getId(), false);
             }
         }
         table.rebuildFullSchema();
@@ -793,6 +826,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         Map<Long, Long> tabletIdMap =
                 physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
         tabletIdMap.put(rollupTabletId, baseTabletId);
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new LakeRollupJob(this);
     }
 
     public String getRollupIndexName() {

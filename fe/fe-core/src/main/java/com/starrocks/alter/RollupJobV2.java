@@ -214,6 +214,42 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.whereClause = whereClause;
     }
 
+    protected RollupJobV2(RollupJobV2 job) {
+        super(job);
+        if (job.physicalPartitionIdToBaseRollupTabletIdMap != null) {
+            this.physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+            for (Map.Entry<Long, Map<Long, Long>> entry : job.physicalPartitionIdToBaseRollupTabletIdMap.entrySet()) {
+                Map<Long, Long> tabletIdMap = Maps.newHashMap();
+                if (entry.getValue() != null) {
+                    tabletIdMap.putAll(entry.getValue());
+                }
+                this.physicalPartitionIdToBaseRollupTabletIdMap.put(entry.getKey(), tabletIdMap);
+            }
+        } else {
+            this.physicalPartitionIdToBaseRollupTabletIdMap = null;
+        }
+        if (job.physicalPartitionIdToRollupIndex != null) {
+            this.physicalPartitionIdToRollupIndex = Maps.newHashMap();
+            this.physicalPartitionIdToRollupIndex.putAll(job.physicalPartitionIdToRollupIndex);
+        } else {
+            this.physicalPartitionIdToRollupIndex = null;
+        }
+        this.baseIndexMetaId = job.baseIndexMetaId;
+        this.rollupIndexMetaId = job.rollupIndexMetaId;
+        this.baseIndexName = job.baseIndexName;
+        this.rollupIndexName = job.rollupIndexName;
+        this.rollupSchema = job.rollupSchema == null ? null : new ArrayList<>(job.rollupSchema);
+        this.rollupSchemaVersion = job.rollupSchemaVersion;
+        this.baseSchemaHash = job.baseSchemaHash;
+        this.rollupSchemaHash = job.rollupSchemaHash;
+        this.rollupKeysType = job.rollupKeysType;
+        this.rollupShortKeyColumnCount = job.rollupShortKeyColumnCount;
+        this.origStmt = job.origStmt;
+        this.watershedTxnId = job.watershedTxnId;
+        this.viewDefineSql = job.viewDefineSql;
+        this.isColocateMVIndex = job.isColocateMVIndex;
+    }
+
     @Override
     public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
         Map<Long, Long> tabletIdMap =
@@ -396,17 +432,15 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
-            addRollupIndexToCatalog(tbl);
+            this.watershedTxnId =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            final OlapTable finalTbl = tbl;
+            persistStateChange(this, JobState.WAITING_TXN, () -> addRollupIndexToCatalog(finalTbl));
         }
 
-        this.watershedTxnId =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
 
-        // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("transfer rollup job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -730,14 +764,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 } // end for tablets
             } // end for partitions
 
-            onFinished(tbl);
+            this.finishedTimeMs = System.currentTimeMillis();
+            persistStateChange(this, JobState.FINISHED, () -> onFinished(tbl));
         }
 
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("rollup job finished: {}", jobId);
+
         this.span.end();
     }
 
@@ -749,14 +781,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private void onFinished(OlapTable tbl) {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex rollupIndex = physicalPartition.getIndex(rollupIndexMetaId);
+                MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
                 Preconditions.checkNotNull(rollupIndex, rollupIndexMetaId);
                 for (Tablet tablet : rollupIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         replica.setState(ReplicaState.NORMAL);
                     }
                 }
-                physicalPartition.visualiseShadowIndex(rollupIndexMetaId, false);
+                physicalPartition.visualiseShadowIndex(rollupIndex.getId(), false);
             }
         }
         tbl.rebuildFullSchema();
@@ -790,13 +822,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         if (jobState.isFinalState()) {
             return false;
         }
-        cancelInternal();
 
-        jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+        persistStateChange(this, JobState.CANCELLED, this::cancelInternal);
+
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
@@ -819,7 +850,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                             invertedIndex.deleteTablet(rollupTablet.getId());
                         }
                         PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
-                        partition.deleteRollupIndex(rollupIndexMetaId);
+                        partition.deleteMaterializedIndexByMetaId(rollupIndexMetaId);
                     }
                     tbl.deleteIndexInfo(rollupIndexName);
                 }
@@ -1041,6 +1072,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             whereClause = columnNameToDefineExpr.get(CreateMaterializedViewStmt.WHERE_PREDICATE_COLUMN_NAME);
         }
         setColumnsDefineExpr(columnNameToDefineExpr);
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new RollupJobV2(this);
     }
 
     @Override
