@@ -31,12 +31,12 @@ bool DefaultValueConverter::read_string(Column* column, const Slice& s, const Op
     return read_quoted_string(column, s, options);
 }
 
-Status DefaultValueConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status DefaultValueConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                                   const Options& options) const {
     return Status::InternalError("Csv DefaultValueConverter only support for read, not write");
 }
 
-Status DefaultValueConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status DefaultValueConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                            const Options& options) const {
     return write_quoted_string(os, column, row_num, options);
 }
