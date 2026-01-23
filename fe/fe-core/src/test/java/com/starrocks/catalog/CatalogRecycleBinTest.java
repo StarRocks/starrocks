@@ -80,13 +80,7 @@ public class CatalogRecycleBinTest {
     }
 
     private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
-        while (recycleBin.isDeletingTable(id)) {
-            recycleBin.eraseTable(time);
-            try {
-                Thread.sleep(100);
-            } catch (Exception ignore) {
-            }
-        }
+        // For shared-nothing mode, table deletion is synchronous, so this is a no-op.
     }
 
     private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
@@ -802,9 +796,9 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testAsyncDeleteForTablesMemoryLeak() {
-        // This test verifies the fix for memory leak in asyncDeleteForTables map
-        // Non-retryable tables should not be added to asyncDeleteForTables to prevent memory leak
+    public void testNonRetryableTableErasure() {
+        // This test verifies that non-retryable tables (shared-nothing mode) are erased synchronously
+        // and do not leak in any tracking data structures (lakeTableToPartitions, etc.)
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         long dbId = 1;
 
@@ -828,11 +822,6 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(nonRetryableTable1.getId(), expireFromNow - 1000);
         recycleBin.idToRecycleTime.put(nonRetryableTable2.getId(), expireFromNow - 1000);
 
-        // Get asyncDeleteForTables map before erasure
-        java.util.Map<?, ?> asyncDeleteForTablesBefore =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
-        int sizeBeforeErase = asyncDeleteForTablesBefore.size();
-
         // Trigger table erasure
         recycleBin.eraseTable(now);
         waitTableClearFinished(recycleBin, nonRetryableTable1.getId(), now);
@@ -842,25 +831,18 @@ public class CatalogRecycleBinTest {
         Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
         Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
 
-        // CRITICAL: Verify asyncDeleteForTables map does NOT contain non-retryable tables
-        // This is the key assertion to verify the memory leak fix
-        java.util.Map<?, ?> asyncDeleteForTablesAfter =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
+        // CRITICAL: Verify non-retryable tables are NOT tracked in lakeTableToPartitions
+        // Non-retryable tables should be deleted synchronously without any async tracking
+        java.util.Map<?, ?> lakeTableToPartitions =
+                Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
+        Assertions.assertTrue(lakeTableToPartitions.isEmpty(),
+                "lakeTableToPartitions should be empty for non-retryable tables");
 
-        // Non-retryable tables should never be added to asyncDeleteForTables
-        // So the size should remain the same (or even decrease if there were retryable tables before)
-        Assertions.assertTrue(asyncDeleteForTablesAfter.size() <= sizeBeforeErase,
-                "asyncDeleteForTables should not grow for non-retryable tables. " +
-                "Before: " + sizeBeforeErase + ", After: " + asyncDeleteForTablesAfter.size());
-
-        // Verify the map doesn't contain entries for our non-retryable tables
-        for (Object key : asyncDeleteForTablesAfter.keySet()) {
-            CatalogRecycleBin.RecycleTableInfo info = (CatalogRecycleBin.RecycleTableInfo) key;
-            Assertions.assertNotEquals(nonRetryableTable1.getId(), info.getTable().getId(),
-                    "Non-retryable table should not be in asyncDeleteForTables");
-            Assertions.assertNotEquals(nonRetryableTable2.getId(), info.getTable().getId(),
-                    "Non-retryable table should not be in asyncDeleteForTables");
-        }
+        // Verify partitionsFromTableDeletion is also empty
+        java.util.Set<?> partitionsFromTableDeletion =
+                Deencapsulation.getField(recycleBin, "partitionsFromTableDeletion");
+        Assertions.assertTrue(partitionsFromTableDeletion.isEmpty(),
+                "partitionsFromTableDeletion should be empty for non-retryable tables");
     }
 
     /**
