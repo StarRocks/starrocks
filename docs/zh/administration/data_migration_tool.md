@@ -190,6 +190,9 @@ target_cluster_user=root
 target_cluster_password=
 target_cluster_password_secret_key=
 
+jdbc_connect_timeout_ms=30000
+jdbc_socket_timeout_ms=60000
+
 # Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
 # example: db1,db2.tbl2,db3
 # Effective order: 1. include 2. exclude
@@ -252,6 +255,8 @@ enable_table_property_sync=false
 | target_cluster_user                       | 用于登录目标集群的用户名。此用户需要有 SYSTEM 级 OPERATE 权限。 |
 | target_cluster_password                   | 用于登录目标集群的用户密码。                                 |
 | target_cluster_password_secret_key        | 用于对目标集群登录用户密码加密的密钥。默认值为空，代表不对登录密码进行加密。如果需要对 `target_cluster_password` 加密，可以通过 SQL 语句 `SELECT TO_BASE64(AES_ENCRYPT('<target_cluster_password>','<target_cluster_password_secret_key>'))` 获得加密后的 `target_cluster_password`。 |
+| jdbc_connect_timeout_ms                   | FE 查询的 JDBC 连接超时时间，单位毫秒，默认值为 `30000`。 |
+| jdbc_socket_timeout_ms                    | FE 查询的 JDBC 读写超时时间，单位毫秒，默认值为 `60000`。 |
 | include_data_list                         | 需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。此项优先于 `exclude_data_list` 生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | exclude_data_list                         | 不需要迁移的数据库和表，多个对象使用逗号（`,`）分隔。示例：`db1,db2.tbl2,db3`。`include_data_list` 优先于此项生效。如果您需要迁移集群中所有数据库和表，则无须配置该项。 |
 | target_cluster_storage_volume             | 目标集群为存算分离集群时，建表使用的 Storage Volume。使用默认 Storage Volume 时无须配置该项。|
@@ -323,19 +328,24 @@ vi conf/hosts.properties
 默认文件内容如下，说明了网络地址映射的配置方式：
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
 ```
+
+:::note
+`<host>` 必须与 `SHOW FRONTENDS`、`SHOW BACKENDS` 或 `SHOW COMPUTE NODES` 返回结果中的 `IP` 列一致。
+:::
 
 以下示例执行如下操作：
 
 1. 将源集群的私有网络地址 `192.1.1.1` 和 `192.1.1.2` 映射到 `10.1.1.1` 和 `10.1.1.2`。
-2. 将目标集群的私有网络地址 `fe-0.starrocks.svc.cluster.local` 映射到 `10.1.2.1`。
+2. 将源集群的 FE 端口 `8030` 和 `9030` 映射为 `10.1.1.1` 上的 `38030` 和 `39030`。
+3. 将目标集群的私有网络地址 `fe-0.starrocks.svc.cluster.local` 映射到 `10.1.2.1`，并映射端口 `9030`。
 
 ```Properties
-# <SOURCE/TARGET>_<domain>=<IP>
-SOURCE_192.1.1.1=10.1.1.1
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
+SOURCE_192.1.1.1=10.1.1.1;8030:38030,9030:39030
 SOURCE_192.1.1.2=10.1.1.2
-TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1
+TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1;9030:19030
 ```
 
 ## 第三步：启动迁移工具
