@@ -1675,7 +1675,7 @@ build_flamegraph() {
 build_benchgen() {
     check_if_source_exist ${BENCHGEN_SOURCE}
     cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
-    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
     ${CMAKE_CMD} --build build -j "${PARALLEL}"
