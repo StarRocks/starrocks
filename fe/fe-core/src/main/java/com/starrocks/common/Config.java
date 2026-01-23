@@ -4101,9 +4101,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int lake_remove_partition_thread_num = 8;
 
-    @ConfField(mutable = false)
-    public static int lake_remove_table_thread_num = 4;
-
     /**
      * Enable dropping tablet data cache before removing a table or partition in shared-data mode.
      * This helps to free up cache space proactively when data is being deleted.

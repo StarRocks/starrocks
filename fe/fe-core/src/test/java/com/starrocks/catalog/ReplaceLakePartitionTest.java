@@ -165,6 +165,12 @@ public class ReplaceLakePartitionTest {
         }
 
         while (GlobalStateMgr.getCurrentState().getRecycleBin().getRecycleTableInfo(id) != null) {
+            // Must call erasePartition() before eraseTable() to simulate the daemon cycle:
+            // eraseTable() converts Lake table deletion to partition-level deletion by adding
+            // partitions to idToPartition, then erasePartition() processes them asynchronously.
+            // On the next cycle, eraseTable() checks if all partitions are deleted and finalizes.
+            ExceptionChecker.expectThrowsNoException(()
+                    -> GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(Long.MAX_VALUE));
             ExceptionChecker.expectThrowsNoException(()
                     -> GlobalStateMgr.getCurrentState().getRecycleBin().eraseTable(Long.MAX_VALUE));
             try {
@@ -217,9 +223,11 @@ public class ReplaceLakePartitionTest {
     public void testLakeTableDeleteFromRecycleBin() {
         {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.RANGE);
+            // Mock getAllPartitions() to return empty so addLakeTablePartitionsToRecycleBin()
+            // treats the table as having no partitions, triggering immediate cleanup.
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<Partition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
@@ -233,7 +241,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.LIST);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<Partition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
@@ -247,7 +255,7 @@ public class ReplaceLakePartitionTest {
             LakeTable tbl = buildLakeTableWithTempPartition(PartitionType.UNPARTITIONED);
             new MockUp<LakeTable>() {
                 @Mock
-                public Collection<PhysicalPartition> getAllPhysicalPartitions() {
+                public Collection<Partition> getAllPartitions() {
                     return Lists.newArrayList();
                 }
             };
