@@ -488,10 +488,10 @@ XXHASH_SOURCE=xxHash-0.8.3
 XXHASH_MD5SUM="599804eb9555e51c05f1b821f9212a07"
 
 # benchgen
-BENCHGEN_DOWNLOAD="https://github.com/StarRocks/benchgen/archive/refs/tags/v26.01.0.tar.gz"
-BENCHGEN_NAME=benchgen-26.01.0.tar.gz
-BENCHGEN_SOURCE=benchgen-26.01.0
-BENCHGEN_MD5SUM="8d58af9fb6f9ae9810a59c31998d910b"
+BENCHGEN_DOWNLOAD="https://github.com/StarRocks/benchgen/archive/refs/tags/v26.01.1.tar.gz"
+BENCHGEN_NAME=benchgen-26.01.1.tar.gz
+BENCHGEN_SOURCE=benchgen-26.01.1
+BENCHGEN_MD5SUM="8867ada51fc9a4ab6e711edee3f1b8e0"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
