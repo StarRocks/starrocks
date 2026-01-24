@@ -90,6 +90,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
+<<<<<<< HEAD
                 CacheLoader.from(key -> {
                     Table nativeTable = getTable(key.dbName, key.tableName);
                     IcebergTable icebergTable =
@@ -105,6 +106,63 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 newCacheBuilder(
                         icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
                 : null;
+=======
+                    new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
+                        @Override
+                        public Map<String, Partition> load(IcebergTableName key) throws Exception {
+                            Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
+                            IcebergTable icebergTable =
+                                    IcebergTable.builder()
+                                            .setCatalogDBName(key.dbName)
+                                            .setSrTableName(key.tableName)
+                                            .setCatalogTableName(key.tableName)
+                                            .setNativeTable(nativeTable).build();
+                            return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                        }
+                    });
+        long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergDataFileCacheMemoryUsageRatio());
+        long deleteFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergDeleteFileCacheMemoryUsageRatio());
+
+        this.dataFileCache = enableCache ? Caffeine.newBuilder()
+                .executor(executorService)
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .weigher((Weigher<String, Set<DataFile>>) (String key, Set<DataFile> files) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!files.isEmpty()) {
+                        size += 1L * SizeEstimator.estimate(files.iterator().next()) * files.size();
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
+                .maximumWeight(dataFileCacheSize)
+                .removalListener((String key, Set<DataFile> value, RemovalCause cause) -> {
+                    LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
+                            key,
+                            value != null ? value.size() : 0,
+                            cause));
+                })
+                .build() : null;
+        this.deleteFileCache = enableCache ? Caffeine.newBuilder()
+                .executor(executorService)
+                .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
+                .weigher((Weigher<String, Set<DeleteFile>>) (String key, Set<DeleteFile> files) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (!files.isEmpty()) {
+                        size += 1L * SizeEstimator.estimate(files.iterator().next()) * files.size();
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
+                .maximumWeight(deleteFileCacheSize)
+                .removalListener((String key, Set<DeleteFile> value, RemovalCause cause) -> {
+                    LOG.debug(String.format("Key=%s, Value.size=%d, Cause=%s",
+                            key,
+                            value != null ? value.size() : 0,
+                            cause));
+                })
+                .build() : null;
+
+>>>>>>> 718e24b304 ([UT] Fix FE unstable unit test (#68384))
         this.backgroundExecutor = executorService;
     }
 
