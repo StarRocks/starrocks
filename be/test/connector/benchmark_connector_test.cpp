@@ -14,7 +14,7 @@
 
 #include "connector/benchmark_connector.h"
 
-#include <arrow/schema.h>
+#include <arrow/type.h>
 #include <arrow/status.h>
 #include <gtest/gtest.h>
 

@@ -14,8 +14,8 @@
 
 #include "exec/benchmark_scanner.h"
 
-#include <arrow/schema.h>
 #include <arrow/status.h>
+#include <arrow/type.h>
 #include <gtest/gtest.h>
 
 #include "benchgen/benchmark_suite.h"
