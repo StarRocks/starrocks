@@ -324,6 +324,9 @@ set_target_properties(azure-storage-blobs PROPERTIES IMPORTED_LOCATION ${THIRDPA
 add_library(azure-storage-files-datalake STATIC IMPORTED GLOBAL)
 set_target_properties(azure-storage-files-datalake PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libazure-storage-files-datalake.a)
 
+add_library(benchgen STATIC IMPORTED GLOBAL)
+set_target_properties(benchgen PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbenchgen.a)
+
 set(absl_DIR "${THIRDPARTY_DIR}/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
 find_package(absl CONFIG REQUIRED)
 set(gRPC_DIR "${THIRDPARTY_DIR}/lib/cmake/grpc" CACHE PATH "grpc search path")
