@@ -16,14 +16,14 @@
 
 #include <algorithm>
 
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "exprs/cast_expr.h"
-#include "exprs/column_ref.h"
-#include "exec/file_scanner/parquet_scanner.h"
-#include "runtime/runtime_state.h"
 #include "benchgen/benchmark_suite.h"
 #include "benchgen/record_batch_iterator_factory.h"
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "exec/file_scanner/parquet_scanner.h"
+#include "exprs/cast_expr.h"
+#include "exprs/column_ref.h"
+#include "runtime/runtime_state.h"
 #include "util/arrow/utils.h"
 
 namespace starrocks {
@@ -92,9 +92,10 @@ Status BenchmarkScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
         }
 
         _conv_ctx.current_slot = slot_desc;
-        RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
-                                                                raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
-                                                                _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
+        RETURN_IF_ERROR(
+                ParquetScanner::convert_array_to_column(_conv_funcs[i].get(), num_elements, array.get(),
+                                                        raw_chunk->get_column_raw_ptr_by_slot_id(slot_desc->id()),
+                                                        _batch_start_idx, 0, &_chunk_filter, &_conv_ctx));
     }
 
     raw_chunk->filter(_chunk_filter);

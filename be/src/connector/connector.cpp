@@ -21,10 +21,10 @@
 #ifndef __APPLE__
 #include "connector/iceberg_connector.h"
 #endif
+#include "connector/benchmark_connector.h"
 #include "connector/jdbc_connector.h"
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
-#include "connector/benchmark_connector.h"
 
 namespace starrocks::connector {
 

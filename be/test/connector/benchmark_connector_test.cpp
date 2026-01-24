@@ -14,8 +14,8 @@
 
 #include "connector/benchmark_connector.h"
 
-#include <arrow/type.h>
 #include <arrow/status.h>
+#include <arrow/type.h>
 #include <gtest/gtest.h>
 
 #include "benchgen/benchmark_suite.h"
