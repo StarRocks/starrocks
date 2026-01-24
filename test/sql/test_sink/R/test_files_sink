@@ -1,9 +1,9 @@
 -- name: testFilesSink
 insert into files ( 
-	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
-    "fs.oss.endpoint" = "${oss_endpoint}",
-    "fs.oss.accessKeyId" = "${oss_ak}",
-    "fs.oss.accessKeySecret" = "${oss_sk}",
+	"path" = "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format"="parquet", 
 	"compression" = "uncompressed"
 )
@@ -14,10 +14,10 @@ set pipeline_sink_dop = 1;
 -- result:
 -- !result
 insert into files ( 
-	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
-    "fs.oss.endpoint" = "${oss_endpoint}",
-    "fs.oss.accessKeyId" = "${oss_ak}",
-    "fs.oss.accessKeySecret" = "${oss_sk}",
+	"path" = "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format"="parquet", 
 	"compression" = "uncompressed"
 )
@@ -48,10 +48,10 @@ insert into t1 select 1, bitmap_to_binary(bitmap_agg(generate_series)) from TABL
 -- result:
 -- !result
 insert into files (
-	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/",
-    "fs.oss.endpoint" = "${oss_endpoint}",
-    "fs.oss.accessKeyId" = "${oss_ak}",
-    "fs.oss.accessKeySecret" = "${oss_sk}",
+	"path" = "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format"="parquet",
 	"compression" = "uncompressed"
 ) select * from t1;
