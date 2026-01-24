@@ -13,15 +13,10 @@ if "GEMINI_API_KEY" not in os.environ:
     )
 
 try:
-    # The latest version of the Gemini SDK requires the API key to be passed explicitly.
-    # Don't use this any more: client = genai.Client()
     client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 except Exception as e:
-    raise RuntimeError(
-        "Failed to initialize Gemini client. "
-        "Please verify that GEMINI_API_KEY is correctly set and that your environment "
-        "is configured for the Google Gemini SDK."
-    ) from e
+    raise RuntimeError("Failed to initialize Gemini client.") from e
+
 MODEL_NAME = "gemini-2.0-flash" 
 CONFIG_BASE_PATH = "./docs/translation/configs"
 
@@ -44,13 +39,8 @@ class StarRocksTranslator:
         self.dictionary_str = self._load_dict_as_string(dict_path)
 
     def _read_file(self, path: str) -> str:
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Config file not found: {path}") from e
-        except OSError as e:
-            raise RuntimeError(f"Error reading config file '{path}': {e}") from e
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
 
     def _load_dict_as_string(self, path: str) -> str:
         if not os.path.exists(path):
@@ -60,23 +50,19 @@ class StarRocksTranslator:
             return "\n".join([f"{k}: {v}" for k, v in data.items()]) if data else ""
 
     def validate_mdx(self, original: str, translated: str) -> bool:
-        # Match MDX/JSX-style tags, including attributes, hyphen/underscore in names,
-        # and optional self-closing slash with or without preceding whitespace.
         tag_pattern = r'<\s*/?\s*[A-Za-z_][A-Za-z0-9_.-]*\b[^<>]*?/?>'
         return len(re.findall(tag_pattern, original)) == len(re.findall(tag_pattern, translated))
 
     def translate_file(self, input_file: str):
         if not os.path.exists(input_file):
-            print(f"Warning: Input file not found, skipping: {input_file}")
+            print(f"Warning: Input file not found: {input_file}")
             return
         
-        # 1. Detect Source Language
         source_lang = "en"
         if "docs/zh/" in input_file: source_lang = "zh"
         elif "docs/ja/" in input_file: source_lang = "ja"
         source_lang_full = LANG_MAP.get(source_lang, source_lang)
 
-        # 2. Path Mapping
         abs_input = os.path.abspath(input_file)
         output_file = abs_input.replace(f"/docs/{source_lang}/", f"/docs/{self.target_lang}/")
         
@@ -86,13 +72,11 @@ class StarRocksTranslator:
 
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-        # 3. FIXED: Dynamic Prompt Injection (Using local variables)
         system_instruction = (self.system_template
                               .replace("${source_lang}", source_lang_full)
                               .replace("${target_lang}", self.target_lang_full)
                               .replace("${dictionary}", self.dictionary_str))
         
-        # We don't modify self.human_template; we create a new string for THIS file
         current_human_prompt = (self.human_template 
                                 + f"\n\n### CONTENT TO TRANSLATE ###\n\n{self._read_file(input_file)}")
 
@@ -108,33 +92,15 @@ class StarRocksTranslator:
                 contents=current_human_prompt
             )
             
-            # Access text inside the try block and handle empty/blocked responses
             if not response.text:
-                print(f"⚠️ Warning: Gemini returned an empty response for {input_file}. This usually happens if content is blocked by safety filters.")
+                print(f"⚠️ Warning: Gemini returned empty response for {input_file} (Blocked?).")
                 return
                 
             translated_text = response.text.strip()
-
         except Exception as e:
-            error_message = str(e)
-            print(f"❌ Gemini API request failed for {input_file}:")
-            print(f"   Details: {error_message}")
-            lower_msg = error_message.lower()
-            if "429" in error_message or "rate" in lower_msg:
-                print("   Possible cause: rate limit exceeded. Try reducing request frequency or batching files.")
-            elif "quota" in lower_msg or "exceeded" in lower_msg:
-                print("   Possible cause: quota exhausted. Check your Gemini project billing and quota settings.")
-            elif "safety" in lower_msg or "blocked" in lower_msg:
-                print("   Possible cause: content blocked by safety filters. Review the source content and Gemini safety settings.")
-            elif "network" in lower_msg or "timeout" in lower_msg or "connection" in lower_msg:
-                print("   Possible cause: network connectivity issue. Verify your internet connection and retry.")
-            else:
-                print("   The error could be due to configuration, authentication, or an unexpected server issue.")
-            print("   If the problem persists, verify GEMINI_API_KEY is set correctly and that your environment can reach the Gemini API.")
+            print(f"❌ Gemini API failed for {input_file}: {e}")
             return
-        translated_text = response.text.strip()
-        
-        # CLEANUP: Remove markdown code fences if Gemini added them
+
         if translated_text.startswith("```"):
             lines = translated_text.splitlines()
             if lines[0].startswith("```"): lines = lines[1:]
