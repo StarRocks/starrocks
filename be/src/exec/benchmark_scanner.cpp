@@ -29,7 +29,7 @@
 namespace starrocks {
 
 BenchmarkScanner::BenchmarkScanner(BenchmarkScannerParam param, const TupleDescriptor* tuple_desc)
-        : _param(std::move(param)), _tuple_desc(tuple_desc), _slot_descs(tuple_desc->slots()) {}
+        : _param(std::move(param)), _slot_descs(tuple_desc->slots()) {}
 
 Status BenchmarkScanner::open(RuntimeState* state) {
     _conv_ctx.state = state;

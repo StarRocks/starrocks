@@ -55,7 +55,6 @@ private:
     Status _next_batch(bool* eos);
 
     BenchmarkScannerParam _param;
-    const TupleDescriptor* _tuple_desc;
     std::vector<SlotDescriptor*> _slot_descs;
 
     std::unique_ptr<benchgen::RecordBatchIterator> _iter;
