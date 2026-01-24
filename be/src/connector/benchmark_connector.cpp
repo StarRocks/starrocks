@@ -97,29 +97,16 @@ Status BenchmarkDataSource::_init_params(RuntimeState* state) {
     }
 
     BenchmarkScannerParam param;
-    if (_has_scan_range && _benchmark_scan_range.__isset.db_name && !_benchmark_scan_range.db_name.empty()) {
-        param.db_name = _benchmark_scan_range.db_name;
-    } else if (scan_node.__isset.db_name && !scan_node.db_name.empty()) {
-        param.db_name = scan_node.db_name;
-    } else {
-        param.db_name = "tpcds";
-    }
+    param.db_name = scan_node.db_name;
     param.table_name = scan_node.table_name;
     param.options.scale_factor = scan_node.__isset.scale_factor ? scan_node.scale_factor : 1.0;
-    if (_has_scan_range && _benchmark_scan_range.__isset.start_row) {
-        param.options.start_row = _benchmark_scan_range.start_row;
-    } else {
-        param.options.start_row = scan_node.__isset.start_row ? scan_node.start_row : 0;
-    }
+    param.options.start_row = _benchmark_scan_range.start_row;
     if (_has_scan_range && _benchmark_scan_range.__isset.row_count) {
         param.options.row_count = _benchmark_scan_range.row_count;
     } else {
-        param.options.row_count = scan_node.__isset.row_count ? scan_node.row_count : -1;
+        param.options.row_count = -1;
     }
     param.options.chunk_size = state->chunk_size();
-    if (param.options.chunk_size <= 0) {
-        param.options.chunk_size = 4096;
-    }
     if (_read_limit != -1) {
         if (param.options.row_count < 0) {
             param.options.row_count = _read_limit;
