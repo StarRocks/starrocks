@@ -13,7 +13,11 @@ insert into t2 values(1,1,1), (2,2,2), (2,2,3), (3,3,4), (3,3,5), (3,3,6);
 -- result:
 -- !result
 
-select t1.k1, t1.k2, count(distinct t1.k3) as k33 from t1 left join t2 on t1.k1 = t2.k1 group by t1.k1,t1.k2 order by k33 into outfile "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/" format as csv;
+select t1.k1, t1.k2, count(distinct t1.k3) as k33 from t1 left join t2 on t1.k1 = t2.k1 group by t1.k1,t1.k2 order by k33 into outfile "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/" format as csv properties (
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}"
+);
 -- result:
 -- !result
 shell: ossutil64 cat oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/0.csv | head -3
