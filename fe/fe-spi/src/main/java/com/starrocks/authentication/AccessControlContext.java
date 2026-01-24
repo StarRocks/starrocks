@@ -101,13 +101,12 @@ public class AccessControlContext {
     }
 
     /**
-     * Initialize the original(login) user context once.
-     * This method is idempotent and will only set the original context if it has not been set before.
+     * Initialize or update the original(login) user context from the result of a successful
+     * authentication. Called once per login and again on re-authentication of the same
+     * connection (e.g. to refresh roles after grant/revoke). For CHANGE USER, the caller
+     * must invoke {@link #resetOriginalUserContext()} before re-auth so this sets the new user.
      */
     public void initOriginalUserContext(UserIdentity userIdentity, Set<String> groups, Set<Long> roleIds) {
-        if (this.originalUserIdentity != null) {
-            return;
-        }
         this.originalUserIdentity = userIdentity;
         this.originalGroups = groups == null ? new HashSet<>() : new HashSet<>(groups);
         this.originalRoleIds = roleIds == null ? new HashSet<>() : new HashSet<>(roleIds);
