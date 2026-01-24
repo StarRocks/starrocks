@@ -370,9 +370,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     /**
-     * Override getPartitionsByNames to avoid double-computing estimatePartitionCount.
-     * The base interface method computes estimate once, and getPartitions() computes it again on cache miss.
-     * This override computes the estimate once and uses it for both streaming decision and cache bypass decision.
+     * Override getPartitionsByNames to always use streaming approach.
+     * This loads only the requested partitions without loading all partitions first,
+     * preventing OOM for large Iceberg tables with millions of partitions.
      */
     @Override
     public List<Partition> getPartitionsByNames(IcebergTable icebergTable,
@@ -390,48 +390,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             return List.of(partitionMap.get(IcebergCatalog.EMPTY_PARTITION_NAME));
         }
 
-        // Compute estimate ONCE and use for both decisions
-        long estimatedCount = -1;
-        try {
-            estimatedCount = delegate.estimatePartitionCount(icebergTable, snapshotId);
-        } catch (Exception e) {
-            LOG.debug("Failed to estimate partition count, falling back to default", e);
-        }
-
-        // Decision 1: If requested partitions are less than 10% of total, use streaming approach
-        if (estimatedCount > 0 && partitionNames.size() < estimatedCount / 10) {
-            return getPartitionsByNamesStreaming(icebergTable, snapshotId, executorService, partitionNames);
-        }
-
-        // Decision 2: For larger requests, get all partitions
-        // But use the already-computed estimate to decide on cache bypass
-        IcebergTableName key = new IcebergTableName(
-                icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
-
-        // Check cache first
-        Map<String, Partition> cached = partitionCache.getIfPresent(key);
-        Map<String, Partition> partitionMap;
-        if (cached != null) {
-            partitionMap = cached;
-        } else {
-            // Use the already-computed estimate to decide on cache bypass
-            int threshold = icebergProperties.getIcebergPartitionStreamingThreshold();
-            if (estimatedCount > 0 && estimatedCount > threshold) {
-                LOG.info("Table {}.{} has ~{} partitions (exceeds threshold {}), bypassing partition cache",
-                        key.dbName, key.tableName, estimatedCount, threshold);
-                partitionMap = delegate.getPartitions(icebergTable, snapshotId, executorService);
-            } else {
-                partitionMap = partitionCache.get(key);
-            }
-        }
-
-        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-        for (String partitionName : partitionNames) {
-            Partition partition = partitionMap.get(partitionName);
-            // Use MISSING_PARTITION placeholder to maintain positional alignment
-            partitions.add(partition != null ? partition : Partition.MISSING_PARTITION);
-        }
-        return partitions.build();
+        // Always use streaming - load only requested partitions without loading all partitions first
+        return getPartitionsByNamesStreaming(icebergTable, snapshotId, executorService, partitionNames);
     }
 
     /**
