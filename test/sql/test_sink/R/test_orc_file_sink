@@ -1,9 +1,9 @@
 -- name: testOrcFilesSink1
 insert into files ( 
-	"path" = "oss://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0}/", 
-    "fs.oss.endpoint" = "${oss_endpoint}",
-    "fs.oss.accessKeyId" = "${oss_ak}",
-    "fs.oss.accessKeySecret" = "${oss_sk}",
+	"path" = "s3://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0}/", 
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format" = "orc", 
 	"compression" = "uncompressed"
 )
@@ -18,8 +18,8 @@ select * from files (
 	"format" = "orc"
 );
 -- result:
-1	A
 2	B
+1	A
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0} >/dev/null || echo "exit 0" >/dev/null
 -- result:
@@ -28,10 +28,10 @@ shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testOrcFilesSink1/${uuid0}
 -- !result
 -- name: testOrcFilesSink2
 insert into files ( 
-	"path" = "oss://${oss_bucket}/test_sink/testOrcFilesSink2/${uuid0}/", 
-    "fs.oss.endpoint" = "${oss_endpoint}",
-    "fs.oss.accessKeyId" = "${oss_ak}",
-    "fs.oss.accessKeySecret" = "${oss_sk}",
+	"path" = "s3://${oss_bucket}/test_sink/testOrcFilesSink2/${uuid0}/", 
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format" = "orc", 
 	"compression" = "uncompressed"
 )
