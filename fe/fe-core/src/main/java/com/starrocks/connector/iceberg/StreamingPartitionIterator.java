@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.PartitionUtil;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
@@ -45,7 +44,6 @@ public class StreamingPartitionIterator implements CloseableIterator<Map.Entry<S
     private static final Logger LOG = LogManager.getLogger(StreamingPartitionIterator.class);
 
     private final Table nativeTable;
-    private final IcebergTable icebergTable;
     private final CloseableIterable<FileScanTask> taskIterable;
     private final long snapshotId;
 
@@ -55,11 +53,10 @@ public class StreamingPartitionIterator implements CloseableIterator<Map.Entry<S
     private Map.Entry<String, Partition> nextEntry;
     private boolean closed = false;
 
-    public StreamingPartitionIterator(Table nativeTable, IcebergTable icebergTable,
+    public StreamingPartitionIterator(Table nativeTable,
                                       CloseableIterable<FileScanTask> taskIterable,
                                       long snapshotId) {
         this.nativeTable = nativeTable;
-        this.icebergTable = icebergTable;
         this.taskIterable = taskIterable;
         this.snapshotId = snapshotId;
         this.nextEntry = null;

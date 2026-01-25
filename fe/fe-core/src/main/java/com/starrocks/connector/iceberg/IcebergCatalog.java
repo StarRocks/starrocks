@@ -486,7 +486,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
 
         CloseableIterable<FileScanTask> tasks = tableScan.planFiles();
-        return new StreamingPartitionIterator(nativeTable, icebergTable, tasks, snapshotId);
+        return new StreamingPartitionIterator(nativeTable, tasks, snapshotId);
     }
 
     default List<String> listPartitionNames(IcebergTable icebergTable,
