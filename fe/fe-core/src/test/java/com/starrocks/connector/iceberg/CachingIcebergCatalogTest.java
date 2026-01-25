@@ -1070,7 +1070,7 @@ public class CachingIcebergCatalogTest {
 
         // Create the iterator
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         // Close immediately without iterating (simulating early termination)
         Assertions.assertFalse(taskIterableClosed.get(), "Task iterable should not be closed yet");
@@ -1134,7 +1134,7 @@ public class CachingIcebergCatalogTest {
 
         // Create and iterate
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         Assertions.assertTrue(iterator.hasNext());
         Map.Entry<String, Partition> entry = iterator.next();
@@ -1188,7 +1188,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         Map.Entry<String, Partition> entry = iterator.next();
 
@@ -1222,7 +1222,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         Assertions.assertThrows(RuntimeException.class, () -> {
-            new StreamingPartitionIterator(nativeTable, icebergTable, taskIterable, 1L);
+            new StreamingPartitionIterator(nativeTable, taskIterable, 1L);
         });
 
         // Verify taskIterable was closed despite constructor failure
@@ -1518,7 +1518,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, emptyTaskIterable, 1L);
+                nativeTable, emptyTaskIterable, 1L);
 
         Assertions.assertFalse(iterator.hasNext());
         Assertions.assertThrows(java.util.NoSuchElementException.class, iterator::next);
@@ -1603,7 +1603,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         RuntimeException thrown = Assertions.assertThrows(RuntimeException.class, () -> {
-            new StreamingPartitionIterator(nativeTable, icebergTable, taskIterable, 1L);
+            new StreamingPartitionIterator(nativeTable, taskIterable, 1L);
         });
 
         // Verify close was called and IOException was suppressed
@@ -1636,7 +1636,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         // Should throw RuntimeException when trying to read
         Assertions.assertThrows(RuntimeException.class, iterator::hasNext);
@@ -1680,7 +1680,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         // Should handle exception gracefully and use snapshot timestamp
         Assertions.assertTrue(iterator.hasNext());
@@ -1725,7 +1725,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         // Should handle null snapshot gracefully and return -1
         Assertions.assertTrue(iterator.hasNext());
@@ -1796,7 +1796,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         // Should handle IOException gracefully and continue to next task
         Assertions.assertTrue(iterator.hasNext());
@@ -1857,7 +1857,7 @@ public class CachingIcebergCatalogTest {
                 .build();
 
         StreamingPartitionIterator iterator = new StreamingPartitionIterator(
-                nativeTable, icebergTable, taskIterable, 1L);
+                nativeTable, taskIterable, 1L);
 
         // Iterate through all entries
         Assertions.assertTrue(iterator.hasNext());
