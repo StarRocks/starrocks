@@ -231,19 +231,14 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-<<<<<<< HEAD
-        // no predicate on agg operator
-        if (aggregationOperator.getPredicate() != null) {
-=======
         // add check for column mapping
         if (!scanOperator.getColRefToColumnMetaMap().keySet()
                 .containsAll(groupingKeys)) {
             return false;
         }
 
-        // no materialized column in predicate of aggregation
-        if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
->>>>>>> 8dbc16b59a ([BugFix] incorrect optimization transformation (#67152))
+        // no predicate on agg operator
+        if (aggregationOperator.getPredicate() != null) {
             return false;
         }
 
