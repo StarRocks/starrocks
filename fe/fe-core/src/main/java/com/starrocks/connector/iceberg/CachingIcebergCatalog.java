@@ -121,7 +121,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
                             Table nativeTable = getTable(new ConnectContext(), key.dbName, key.tableName);
                             IcebergTable icebergTable =
-                                    IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
+                                    IcebergTable.builder()
+                                            .setCatalogDBName(key.dbName)
+                                            .setSrTableName(key.tableName)
+                                            .setCatalogTableName(key.tableName)
                                             .setNativeTable(nativeTable).build();
                             return delegate.getPartitions(icebergTable, key.snapshotId, null);
                         }
