@@ -175,6 +175,9 @@ public class AdminStmtAnalyzer {
                         properties, PropertyAnalyzer.PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY, false);
                 adminRepairTableStmt.setAllowEmptyTabletRecovery(allowEmptyTabletRecovery);
 
+                boolean dryRun = PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DRY_RUN, false);
+                adminRepairTableStmt.setDryRun(dryRun);
+
                 if (!properties.isEmpty()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, properties);
                 }
