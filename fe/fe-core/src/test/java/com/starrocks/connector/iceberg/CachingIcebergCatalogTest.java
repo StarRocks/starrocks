@@ -106,12 +106,8 @@ public class CachingIcebergCatalogTest {
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
         IcebergTable table =
-<<<<<<< HEAD
-                IcebergTable.builder().setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
-=======
                 IcebergTable.builder().setSrTableName("test")
                 .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
->>>>>>> 718e24b304 ([UT] Fix FE unstable unit test (#68384))
 
         Assertions.assertFalse(nativeTable.spec().isUnpartitioned());
         {
