@@ -519,7 +519,12 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
 
         // Estimate partition count to decide on streaming vs. full load
-        long estimatedCount = estimatePartitionCount(icebergTable, snapshotId);
+        long estimatedCount = -1;
+        try {
+            estimatedCount = estimatePartitionCount(icebergTable, snapshotId);
+        } catch (Exception e) {
+            // Fall through to full-load path
+        }
 
         // If requested partitions are less than 10% of total, use streaming approach
         // This avoids loading millions of partitions when only a few are needed
