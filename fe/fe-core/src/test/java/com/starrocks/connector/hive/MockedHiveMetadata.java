@@ -880,7 +880,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                     ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(),
                     null, null, "EXTERNAL_TABLE");
 
-            Column partitionColumn = new Column("l_shipdate", DateType.DATE);
+            Column partitionColumn = new Column("l_shipdate", Type.DATE);
 
             List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
             lineitemPartitionKeyList.add(
@@ -929,7 +929,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                     ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(),
                     null, null, "EXTERNAL_TABLE");
 
-            Column partitionColumn = new Column("l_shipdate", DateType.DATE);
+            Column partitionColumn = new Column("l_shipdate", Type.DATE);
 
             List<PartitionKey> lineitemPartitionKeyList = Lists.newArrayList();
             lineitemPartitionKeyList.add(
