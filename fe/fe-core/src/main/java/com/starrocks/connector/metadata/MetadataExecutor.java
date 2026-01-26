@@ -32,7 +32,6 @@ public class MetadataExecutor {
     public void asyncExecuteSQL(MetadataCollectJob job) {
         ConnectContext context = job.getContext();
         try (var scope = context.bindScope()) {
-            context.setThreadLocalInfo();
             String sql = job.getSql();
             ExecPlan execPlan;
             StatementBase parsedStmt;
