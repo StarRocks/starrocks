@@ -4951,13 +4951,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             partitionNames.stream().forEach(e ->
                     GlobalStateMgr.getCurrentState().getAnalyzeMgr().recordDropPartition(olapTable.getPartition(e).getId()));
             olapTable.replaceTempPartitions(db.getId(), partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
-            // trigger to refresh related mvs
-            LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
 
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), olapTable.getId(),
                     partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
             GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+
+            // trigger to refresh related mvs
+            LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
           
             LOG.info("finished to replace partitions {} with temp partitions {} from table: {}",
                     clause.getPartitionNames(), clause.getTempPartitionNames(), tableName);
