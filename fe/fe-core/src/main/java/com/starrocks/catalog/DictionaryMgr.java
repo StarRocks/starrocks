@@ -646,7 +646,6 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             context.setQueryId(UUIDUtil.genUUID());
             context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
             context.setStartTime();
-            context.setThreadLocalInfo();
             WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             Warehouse warehouse = manager.getBackgroundWarehouse();
             context.setCurrentWarehouse(warehouse.getName());
@@ -713,7 +712,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
             // 1. context for plan
             ConnectContext context = buildConnectContext();
-            try {
+            try (var scope = context.bindScope()){
                 // 2. get statement througth sql string
                 QueryStatement stmt = getStatement(dictionary.buildQuery(), context);
 
@@ -726,8 +725,6 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 } finally {
                     QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                 }
-            } finally {
-                ConnectContext.remove();
             }
         }
 
