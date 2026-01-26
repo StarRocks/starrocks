@@ -69,8 +69,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public static final long DEFAULT_CACHE_NUM = 100000;
     private static final int MEMORY_META_SAMPLES = 10;
     private static final int MEMORY_FILE_SAMPLES = 100;
-    private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
-    private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
     // Approximate weight for one snapshot's in-memory metadata footprint (bytes).
     // This is intentionally a rough upper bound so that tables with many snapshots
     // get evicted earlier and don't cause FE OOM.
