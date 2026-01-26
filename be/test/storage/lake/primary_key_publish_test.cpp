@@ -29,6 +29,7 @@
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
@@ -40,6 +41,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -89,6 +91,7 @@ public:
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        ExecEnv::GetInstance()->parallel_compact_mgr()->TEST_set_tablet_mgr(_tablet_mgr.get());
     }
 
     void TearDown() override {
@@ -1749,6 +1752,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i <= config::cloud_native_pk_index_rebuild_files_threshold; i++) {
@@ -1832,6 +1836,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
         GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
         GTEST_SKIP() << "this case only for cloud native index";
     }
+    ConfigResetGuard guard(&config::pk_index_memtable_max_count, 1);
+    ConfigResetGuard guard2(&config::enable_pk_index_parallel_execution, false);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     {
@@ -1924,10 +1930,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 1.5);
+    EXPECT_EQ(compaction_score(_tablet_mgr.get(), new_tablet_metadata), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
-    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->sstable_meta().sstables_size(), 2);
     EXPECT_TRUE(new_tablet_metadata->orphan_files_size() >= (sst_cnt - 1));
 }
 
@@ -2105,13 +2111,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_delvec_corrupt) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) {
-    bool old_enable_pk_index_parallel_get = config::enable_pk_index_parallel_get;
-    int64_t old_pk_index_parallel_get_min_rows = config::pk_index_parallel_get_min_rows;
+    bool old_enable_pk_index_parallel_execution = config::enable_pk_index_parallel_execution;
+    int64_t old_pk_index_parallel_execution_min_rows = config::pk_index_parallel_execution_min_rows;
     int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     int64_t old_pk_index_memtable_max_count = config::pk_index_memtable_max_count;
     config::l0_max_mem_usage = 10;
-    config::enable_pk_index_parallel_get = true;
-    config::pk_index_parallel_get_min_rows = 4096;
+    config::enable_pk_index_parallel_execution = true;
+    config::pk_index_parallel_execution_min_rows = 4096;
     config::pk_index_memtable_max_count = 3;
     const int64_t chunk_size = 3 * 4096;
     auto [chunk0, indexes] = gen_data_and_index(chunk_size, 0, true, true);
@@ -2141,8 +2147,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
     // reset configs
-    config::enable_pk_index_parallel_get = old_enable_pk_index_parallel_get;
-    config::pk_index_parallel_get_min_rows = old_pk_index_parallel_get_min_rows;
+    config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;
+    config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     config::pk_index_memtable_max_count = old_pk_index_memtable_max_count;
 }
@@ -2154,5 +2160,284 @@ INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                                                            PartialUpdateMode::ROW_MODE, true},
                                            PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE,
                                                            PartialUpdateMode::ROW_MODE, true}));
+
+// Test case for verifying full replication clears sstable_meta properly.
+// This test simulates the scenario where:
+// 1. A PK table with cloud native persistent index has SST files (from previous incremental replication writes)
+// 2. Full replication replaces all rowsets with new ones
+// 3. Subsequent writes should succeed (not fail with "unexpected segment id" error)
+// This is a regression test for the bug where sstable_meta was not cleared during
+// full replication, causing primary index to contain stale segment id mappings.
+TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_sstable_meta) {
+    // Skip if not using cloud native persistent index
+    if (GetParam().persistent_index_type != PersistentIndexTypePB::CLOUD_NATIVE ||
+        !GetParam().enable_persistent_index) {
+        GTEST_SKIP() << "This test only applies to cloud native persistent index";
+    }
+
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    // Step 1: Write some data to generate SST files
+    // We need multiple writes to trigger SST file generation
+    // Note: In a real scenario, SST files are generated by incremental replication.
+    // Here we simulate the scenario by directly writing data to the tablet.
+    auto old_config = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 1; // Force SST flush
+    for (int i = 0; i < 5; i++) {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, i, false, true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    config::l0_max_mem_usage = old_config;
+
+    // Verify that SST files exist
+    ASSIGN_OR_ABORT(auto metadata_before_replication, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_TRUE(metadata_before_replication->sstable_meta().sstables_size() > 0)
+            << "Expected SST files to exist before full replication";
+
+    // Step 2: Simulate full replication by creating a replication txn log
+    {
+        int64_t txn_id = next_id();
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(tablet_id);
+        txn_log->set_txn_id(txn_id);
+
+        auto* op_replication = txn_log->mutable_op_replication();
+        auto* txn_meta = op_replication->mutable_txn_meta();
+        txn_meta->set_txn_id(txn_id);
+        txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+        txn_meta->set_tablet_id(tablet_id);
+        txn_meta->set_visible_version(version);
+        txn_meta->set_snapshot_version(version + 1);
+        txn_meta->set_incremental_snapshot(false); // Full replication
+
+        // Create a new rowset with different segment data (simulating source cluster data)
+        auto* op_write = op_replication->add_op_writes();
+        auto* rowset_meta = op_write->mutable_rowset();
+        rowset_meta->set_overlapped(false);
+        rowset_meta->set_num_rows(kChunkSize);
+        rowset_meta->set_data_size(1024);
+        // Use a segment id that would be different from the local ones
+        rowset_meta->set_id(1000); // Source cluster's rowset id
+
+        // Write a segment file for this rowset
+        {
+            auto [chunk, indexes] = gen_data_and_index(kChunkSize, 100, false, true);
+            auto tablet = _tablet_mgr->get_tablet(tablet_id);
+            ASSERT_OK(tablet.status());
+            auto segment_name = gen_segment_filename(txn_id);
+            auto segment_path = _tablet_mgr->segment_location(tablet_id, segment_name);
+
+            SegmentWriterOptions opts;
+            WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_ABORT(auto wfile, fs::new_writable_file(fopts, segment_path));
+            SegmentWriter writer(std::move(wfile), 0, _tablet_schema, opts);
+            ASSERT_OK(writer.init());
+
+            // Create data columns (without op column)
+            auto c0 = chunk->get_column_by_index(0);
+            auto c1 = chunk->get_column_by_index(1);
+            auto data_chunk = std::make_shared<Chunk>(Columns{c0, c1}, _schema);
+            ASSERT_OK(writer.append_chunk(*data_chunk));
+
+            uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
+            ASSERT_OK(writer.finalize(&seg_size, &idx_size, &footer_pos));
+
+            rowset_meta->add_segments(segment_name);
+            rowset_meta->add_segment_size(seg_size);
+        }
+
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+
+        // Publish full replication
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 3: Verify sstable_meta is cleared after full replication
+    ASSIGN_OR_ABORT(auto metadata_after_replication, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(metadata_after_replication->sstable_meta().sstables_size(), 0)
+            << "Expected SST files to be cleared after full replication";
+
+    // Verify old SST files are marked as orphan files for cleanup
+    EXPECT_TRUE(metadata_after_replication->orphan_files_size() > 0)
+            << "Expected old SST files to be marked as orphan files";
+
+    // Step 4: Write more data - this should NOT fail with "unexpected segment id"
+    // Before the fix, this would fail because the primary index would still have
+    // old segment id mappings from the stale SST files
+    {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 200, false, true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // This publish should succeed after the fix
+        auto result = publish_single_version(tablet_id, version + 1, txn_id);
+        ASSERT_OK(result);
+        version++;
+    }
+
+    // Verify data can be read correctly
+    EXPECT_EQ(kChunkSize * 2, read_rows(tablet_id, version));
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_full_replication_clears_delvec_and_dcg_meta) {
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    // Step 1: Write initial data
+    {
+        auto [chunk, indexes] = gen_data_and_index(kChunkSize, 0, false, true);
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 2: Get current metadata and manually add delvec_meta and dcg_meta for testing
+    ASSIGN_OR_ABORT(auto current_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto modified_metadata = std::make_shared<TabletMetadataPB>(*current_metadata);
+
+    // Add mock delvec_meta entry
+    auto* delvec_meta = modified_metadata->mutable_delvec_meta();
+    auto& delvec_file = (*delvec_meta->mutable_version_to_file())[100];
+    delvec_file.set_name("test_delvec_file.delvec");
+    delvec_file.set_size(1024);
+    delvec_file.set_shared(false);
+
+    // Add mock dcg_meta entry
+    auto* dcg_meta = modified_metadata->mutable_dcg_meta();
+    auto& dcg_ver = (*dcg_meta->mutable_dcgs())[0];
+    dcg_ver.add_column_files("test_dcg_file1.cols");
+    dcg_ver.add_column_files("test_dcg_file2.cols");
+    dcg_ver.add_shared_files(false);
+    dcg_ver.add_shared_files(true);
+
+    // Save modified metadata
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(modified_metadata));
+
+    // Step 3: Simulate full replication
+    {
+        int64_t txn_id = next_id();
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(tablet_id);
+        txn_log->set_txn_id(txn_id);
+
+        auto* op_replication = txn_log->mutable_op_replication();
+        auto* txn_meta = op_replication->mutable_txn_meta();
+        txn_meta->set_txn_id(txn_id);
+        txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+        txn_meta->set_tablet_id(tablet_id);
+        txn_meta->set_visible_version(version);
+        txn_meta->set_snapshot_version(version + 1);
+        txn_meta->set_incremental_snapshot(false); // Full replication
+
+        // Create a new rowset
+        auto* op_write = op_replication->add_op_writes();
+        auto* rowset_meta = op_write->mutable_rowset();
+        rowset_meta->set_overlapped(false);
+        rowset_meta->set_num_rows(kChunkSize);
+        rowset_meta->set_data_size(1024);
+        rowset_meta->set_id(1000);
+
+        // Write a segment file for this rowset
+        {
+            auto [chunk, indexes] = gen_data_and_index(kChunkSize, 100, false, true);
+            auto segment_name = gen_segment_filename(txn_id);
+            auto segment_path = _tablet_mgr->segment_location(tablet_id, segment_name);
+
+            SegmentWriterOptions opts;
+            WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+            ASSIGN_OR_ABORT(auto wfile, fs::new_writable_file(fopts, segment_path));
+            SegmentWriter writer(std::move(wfile), 0, _tablet_schema, opts);
+            ASSERT_OK(writer.init());
+
+            auto c0 = chunk->get_column_by_index(0);
+            auto c1 = chunk->get_column_by_index(1);
+            auto data_chunk = std::make_shared<Chunk>(Columns{c0, c1}, _schema);
+            ASSERT_OK(writer.append_chunk(*data_chunk));
+
+            uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
+            ASSERT_OK(writer.finalize(&seg_size, &idx_size, &footer_pos));
+
+            rowset_meta->add_segments(segment_name);
+            rowset_meta->add_segment_size(seg_size);
+        }
+
+        ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 4: Verify delvec_meta and dcg_meta are cleared
+    ASSIGN_OR_ABORT(auto metadata_after_replication, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(metadata_after_replication->delvec_meta().version_to_file_size(), 0)
+            << "Expected delvec_meta to be cleared after full replication";
+    EXPECT_EQ(metadata_after_replication->dcg_meta().dcgs_size(), 0)
+            << "Expected dcg_meta to be cleared after full replication";
+
+    // Step 5: Verify old delvec and dcg files are marked as orphan files
+    bool found_delvec_file = false;
+    bool found_dcg_file1 = false;
+    bool found_dcg_file2 = false;
+    for (int i = 0; i < metadata_after_replication->orphan_files_size(); i++) {
+        const auto& orphan_file = metadata_after_replication->orphan_files(i);
+        if (orphan_file.name() == "test_delvec_file.delvec") {
+            found_delvec_file = true;
+            EXPECT_EQ(orphan_file.size(), 1024);
+            EXPECT_FALSE(orphan_file.shared());
+        }
+        if (orphan_file.name() == "test_dcg_file1.cols") {
+            found_dcg_file1 = true;
+            EXPECT_FALSE(orphan_file.shared());
+        }
+        if (orphan_file.name() == "test_dcg_file2.cols") {
+            found_dcg_file2 = true;
+            EXPECT_TRUE(orphan_file.shared());
+        }
+    }
+    EXPECT_TRUE(found_delvec_file) << "Expected delvec file to be in orphan_files";
+    EXPECT_TRUE(found_dcg_file1) << "Expected dcg file 1 to be in orphan_files";
+    EXPECT_TRUE(found_dcg_file2) << "Expected dcg file 2 to be in orphan_files";
+}
 
 } // namespace starrocks::lake

@@ -22,10 +22,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
-import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -36,14 +32,14 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -52,6 +48,11 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.spy;
 
 public class CatalogRecycleBinTest {
     private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
@@ -96,15 +97,22 @@ public class CatalogRecycleBinTest {
         }
     }
 
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-    private VariableMgr variableMgr = new VariableMgr();
-    private SessionVariable defSessionVariable = new SessionVariable();
+    @BeforeEach
+    public void setup() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        LocalMetastore spyLocalMetastore = spy(new LocalMetastore(globalStateMgr,
+                globalStateMgr.getRecycleBin(), globalStateMgr.getColocateTableIndex()));
+        doNothing().when(spyLocalMetastore).onEraseDatabase(anyLong());
+        doNothing().when(spyLocalMetastore).onErasePartition(any());
+        globalStateMgr.setLocalMetastore(spyLocalMetastore);
 
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
+
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     private static String rowsToString(List<List<String>> rows) {
@@ -155,8 +163,6 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testGetPartition() throws Exception {
-        FakeEditLog fakeEditLog = new FakeEditLog();
-
         CatalogRecycleBin bin = new CatalogRecycleBin();
         List<Column> columns = Lists.newArrayList(new Column("k1", TypeFactory.createVarcharType(10)));
         Range<PartitionKey> range =
@@ -220,25 +226,7 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testReplayEraseTableEx(@Mocked GlobalStateMgr globalStateMgr) {
-
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                globalStateMgr.getCurrentState().getEditLog().logEraseMultiTables((List<Long>) any);
-                minTimes = 1;
-                maxTimes = 1;
-                result = null;
-
-                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
-
+    public void testReplayEraseTableEx() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
         bin.recycleTable(11, table, true);
@@ -394,14 +382,6 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testEnsureEraseLater() {
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                result = clusterSnapshotMgr;
-            }
-        };
-
         Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         Database db = new Database(111, "uno");
@@ -458,7 +438,7 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testRecycleDb(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testRecycleDb() {
         Database db1 = new Database(111, "uno");
         Database db2SameName = new Database(22, "dos"); // samename
         Database db2 = new Database(222, "dos");
@@ -480,37 +460,6 @@ public class CatalogRecycleBinTest {
         long now = System.currentTimeMillis();
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(db1.getId(), expireFromNow - 1000);
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
-                minTimes = 0;
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseDb(anyLong);
-                minTimes = 0;
-            }
-        };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
 
         recycleBin.eraseDatabase(now);
 
@@ -545,38 +494,7 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testRecycleTableMaxBatchSize(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 1;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 1;
-                maxTimes = 1;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 1;
-                maxTimes = 1;
-                result = null;
-            }
-        };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
+    public void testRecycleTableMaxBatchSize() {
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         for (int i = 0; i < CatalogRecycleBin.getMaxEraseOperationsPerCycle() + 1; i++) {
             Table t = new Table(i, String.format("t%d", i), Table.TableType.VIEW, null);
@@ -588,40 +506,10 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testRecycleTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testRecycleTable() {
         Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
         Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
         Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
-                result = null;
-            }
-        };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
 
         // 1. add 2 tables
         long dbId = 1;
@@ -676,42 +564,10 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testRecyclePartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        Partition p1 = new Partition(111, 112, "uno", null, null);
-        Partition p2SameName = new Partition(22, 221, "dos", null, null);
-        Partition p2 = new Partition(222, 223, "dos", null, null);
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
-                minTimes = 0;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logErasePartition(anyLong);
-                minTimes = 0;
-            }
-        };
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
+    public void testRecyclePartition() {
+        Partition p1 = new Partition(111, 112, "uno", new MaterializedIndex(), null);
+        Partition p2SameName = new Partition(22, 221, "dos", new MaterializedIndex(), null);
+        Partition p2 = new Partition(222, 223, "dos", new MaterializedIndex(), null);
 
         // 1. add 2 partitions
         long dbId = 1;
@@ -768,8 +624,7 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testShowCatalogRecycleBinDatabase(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
-            @Mocked LocalMetastore localMetaStore, @Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
+    public void testShowCatalogRecycleBinDatabase() {
         Database db1 = new Database(211, "uno");
         Database db2SameName = new Database(32, "dos"); // samename
         Database db2 = new Database(422, "dos");
@@ -792,78 +647,6 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(db1.getId(), expireFromNow - 1000);
 
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
-        new Expectations(clusterSnapshotMgr) {
-            {
-                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
-                minTimes = 0;
-                result = true;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getLocalMetastore();
-                minTimes = 0;
-                result = localMetaStore;
-            }
-        };
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                localMetaStore.onEraseDatabase(anyLong);
-                minTimes = 0;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseDb(anyLong);
-                minTimes = 0;
-            }
-        };
-        String tz = "Asia/Shanghai";
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getVariableMgr();
-                minTimes = 0;
-                result = variableMgr;
-            }
-        };
-        new Expectations() {
-            {
-                variableMgr.getDefaultSessionVariable();
-                minTimes = 0;
-                result = defSessionVariable;
-
-                defSessionVariable.getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
-        new Expectations() {
-            {
-                connectContext.getSessionVariable().getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
-
         recycleBin.eraseDatabase(now);
 
         Assertions.assertEquals(recycleBin.getDatabase(db1.getId()), null);
@@ -878,80 +661,10 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testShowCatalogRecycleBinTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
-            @Mocked VariableMgr variableMgr, @Mocked LocalMetastore localMetaStore, 
-            @Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
+    public void testShowCatalogRecycleBinTable() {
         Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
         Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
         Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
-        new Expectations(clusterSnapshotMgr) {
-            {
-                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
-                minTimes = 0;
-                result = true;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getLocalMetastore();
-                minTimes = 0;
-                result = localMetaStore;
-            }
-        };
-
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
-                result = null;
-            }
-        };
-        String tz = "Asia/Shanghai";
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getVariableMgr();
-                minTimes = 0;
-                result = variableMgr;
-            }
-        };
-        new Expectations() {
-            {
-                variableMgr.getDefaultSessionVariable();
-                minTimes = 0;
-                result = defSessionVariable;
-
-                defSessionVariable.getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
-        new Expectations() {
-            {
-                connectContext.getSessionVariable().getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
 
         // 1. add 2 tables
         long dbId = 1;
@@ -984,84 +697,10 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testShowCatalogRecycleBinPartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog,
-            @Mocked LocalMetastore localMetaStore, @Mocked ClusterSnapshotMgr clusterSnapshotMgr) {
-        Partition p1 = new Partition(111, 112, "uno", null, null);
-        Partition p2SameName = new Partition(22, 23, "dos", null, null);
-        Partition p2 = new Partition(222, 223, "dos", null, null);
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-            }
-        };
-        new Expectations(clusterSnapshotMgr) {
-            {
-                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
-                minTimes = 0;
-                result = true;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getLocalMetastore();
-                minTimes = 0;
-                result = localMetaStore;
-            }
-        };
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                localMetaStore.onEraseDatabase(anyLong);
-                minTimes = 0;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logErasePartition(anyLong);
-                minTimes = 0;
-            }
-        };
-        String tz = "Asia/Shanghai";
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getVariableMgr();
-                minTimes = 0;
-                result = variableMgr;
-            }
-        };
-        new Expectations() {
-            {
-                variableMgr.getDefaultSessionVariable();
-                minTimes = 0;
-                result = defSessionVariable;
-
-                defSessionVariable.getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
-
-        new Expectations() {
-            {
-                connectContext.getSessionVariable().getTimeZone();
-                minTimes = 0;
-                result = tz;
-            }
-        };
+    public void testShowCatalogRecycleBinPartition() {
+        Partition p1 = new Partition(111, 112, "uno", new MaterializedIndex(), null);
+        Partition p2SameName = new Partition(22, 23, "dos", new MaterializedIndex(), null);
+        Partition p2 = new Partition(222, 223, "dos", new MaterializedIndex(), null);
 
         // 1. add 2 partitions
         long dbId = 1;
@@ -1092,34 +731,14 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testTimeExpiredWithRetentionPeriod(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
-        ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                globalStateMgr.getClusterSnapshotMgr();
-                minTimes = 0;
-                result = clusterSnapshotMgr;
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-
-                editLog.logErasePartition(anyLong);
-                minTimes = 0;
-            }
-        };
-
+    public void testTimeExpiredWithRetentionPeriod() {
         long dbId = 1;
         long tableId = 2;
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
         // Create non-recoverable partition with retention period = 7200 seconds (2 hours)
-        Partition p1 = new Partition(101, 102, "p1", null, null);
+        Partition p1 = new Partition(101, 102, "p1", new MaterializedIndex(), null);
         RecycleRangePartitionInfo info1 =
                 new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, null);
         info1.setRecoverable(false);
@@ -1157,15 +776,15 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
 
         // Non-recoverable partition with retention period
-        Partition p1 = new Partition(201, 202, "p1", null, null);
+        Partition p1 = new Partition(201, 202, "p1", new MaterializedIndex(), null);
         RecycleRangePartitionInfo info1 =
                 new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, null);
         info1.setRecoverable(false);
         info1.setRetentionPeriod(3600);
         recycleBin.recyclePartition(info1);
-        
+
         // Non-recoverable partition without retention period
-        Partition p2 = new Partition(301, 302, "p2", null, null);
+        Partition p2 = new Partition(301, 302, "p2", new MaterializedIndex(), null);
         RecycleRangePartitionInfo info2 =
                 new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, null);
         info2.setRecoverable(false);
@@ -1178,5 +797,67 @@ public class CatalogRecycleBinTest {
         // Without retention period: should return 0 for non-recoverable partition
         long adjustedTime2 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p2.getId());
         Assertions.assertEquals(0, adjustedTime2);
+    }
+
+    @Test
+    public void testAsyncDeleteForTablesMemoryLeak() {
+        // This test verifies the fix for memory leak in asyncDeleteForTables map
+        // Non-retryable tables should not be added to asyncDeleteForTables to prevent memory leak
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        long dbId = 1;
+
+        // Create non-retryable tables (regular tables in shared-nothing mode)
+        Table nonRetryableTable1 = new Table(111, "non_retryable_1", Table.TableType.OLAP, Lists.newArrayList());
+        Table nonRetryableTable2 = new Table(222, "non_retryable_2", Table.TableType.OLAP, Lists.newArrayList());
+
+        // Recycle non-retryable tables
+        recycleBin.recycleTable(dbId, nonRetryableTable1, false);
+        recycleBin.recycleTable(dbId, nonRetryableTable2, false);
+
+        // Verify tables are in recycle bin
+        Assertions.assertEquals(2, recycleBin.getTables(dbId).size());
+        Assertions.assertNotNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
+        Assertions.assertNotNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
+
+        // Set expire time to trigger erasure
+        Config.catalog_trash_expire_second = 3600;
+        long now = System.currentTimeMillis();
+        long expireFromNow = now - 3600 * 1000L;
+        recycleBin.idToRecycleTime.put(nonRetryableTable1.getId(), expireFromNow - 1000);
+        recycleBin.idToRecycleTime.put(nonRetryableTable2.getId(), expireFromNow - 1000);
+
+        // Get asyncDeleteForTables map before erasure
+        java.util.Map<?, ?> asyncDeleteForTablesBefore =
+                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
+        int sizeBeforeErase = asyncDeleteForTablesBefore.size();
+
+        // Trigger table erasure
+        recycleBin.eraseTable(now);
+        waitTableClearFinished(recycleBin, nonRetryableTable1.getId(), now);
+        waitTableClearFinished(recycleBin, nonRetryableTable2.getId(), now);
+
+        // Verify tables are removed from recycle bin
+        Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
+        Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
+
+        // CRITICAL: Verify asyncDeleteForTables map does NOT contain non-retryable tables
+        // This is the key assertion to verify the memory leak fix
+        java.util.Map<?, ?> asyncDeleteForTablesAfter =
+                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
+
+        // Non-retryable tables should never be added to asyncDeleteForTables
+        // So the size should remain the same (or even decrease if there were retryable tables before)
+        Assertions.assertTrue(asyncDeleteForTablesAfter.size() <= sizeBeforeErase,
+                "asyncDeleteForTables should not grow for non-retryable tables. " +
+                "Before: " + sizeBeforeErase + ", After: " + asyncDeleteForTablesAfter.size());
+
+        // Verify the map doesn't contain entries for our non-retryable tables
+        for (Object key : asyncDeleteForTablesAfter.keySet()) {
+            CatalogRecycleBin.RecycleTableInfo info = (CatalogRecycleBin.RecycleTableInfo) key;
+            Assertions.assertNotEquals(nonRetryableTable1.getId(), info.getTable().getId(),
+                    "Non-retryable table should not be in asyncDeleteForTables");
+            Assertions.assertNotEquals(nonRetryableTable2.getId(), info.getTable().getId(),
+                    "Non-retryable table should not be in asyncDeleteForTables");
+        }
     }
 }

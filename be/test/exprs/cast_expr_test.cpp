@@ -21,10 +21,9 @@
 
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
-#include "column/map_column.h"
 #include "column/nullable_column.h"
-#include "column/struct_column.h"
 #include "column/type_traits.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -2532,6 +2531,24 @@ static std::string cast_json_to_map(LogicalType key_type, LogicalType value_type
     return ptr->debug_item(0);
 }
 
+static ColumnPtr cast_to_variant(const TypeDescriptor& from_type, const ColumnPtr& column) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 1;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    cast_expr.child_type = to_thrift(from_type.type);
+    cast_expr.type = gen_type_desc(TPrimitiveType::VARIANT);
+    cast_expr.__set_child_type_desc(from_type.to_thrift());
+
+    ObjectPool pool;
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    MockExpr child(from_type, column);
+    expr->_children.push_back(&child);
+    return expr->evaluate(nullptr, nullptr);
+}
+
 TEST_F(VectorizedCastExprTest, json_to_map) {
     EXPECT_EQ(R"({'1':1,'2':true,'3':null,'4':[5, 6, 7],'5':{"k51": "v51"}})",
               cast_json_to_map(TYPE_VARCHAR, TYPE_JSON,
@@ -2547,6 +2564,23 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
     EXPECT_EQ(R"(NULL)", cast_json_to_map(TYPE_VARCHAR, TYPE_JSON, R"([1,2,3])"));
     EXPECT_EQ(R"({1:1,3:NULL,NULL:NULL})",
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
+}
+
+TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
+    auto column = Int32Column::create();
+    column->append(123);
+    column->append(-7);
+
+    ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
+    auto* data_col = ColumnHelper::get_data_column(result.get());
+    auto* variant_col = down_cast<const VariantColumn*>(data_col);
+
+    auto json0 = variant_col->get_object(0)->to_json();
+    auto json1 = variant_col->get_object(1)->to_json();
+    ASSERT_TRUE(json0.ok());
+    ASSERT_TRUE(json1.ok());
+    EXPECT_EQ("123", json0.value());
+    EXPECT_EQ("-7", json1.value());
 }
 
 } // namespace starrocks

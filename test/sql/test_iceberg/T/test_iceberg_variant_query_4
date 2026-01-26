@@ -1,0 +1,230 @@
+-- name: test_iceberg_variant_query_4
+
+-- iceberg catalog on hive does not variant yet.
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/warehouse/");
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/warehouse/iceberg_variant > /dev/null
+
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+
+-- ========================================
+-- StarRocks Table Creation for P0 String Extensions
+-- ========================================
+
+CREATE TABLE variant_string_unicode_test (
+    test_id INT,
+    test_label STRING,
+    expected_value STRING,
+    variant_col VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+
+CREATE TABLE variant_string_size_test (
+    test_id INT,
+    test_label STRING,
+    size_bytes INT,
+    variant_col VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+
+
+
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet > /dev/null
+
+alter table variant_string_unicode_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_unicode_test/data/00000-0-25ecb658-ed0c-4f1e-9886-eda14c03c061-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00000-10-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00001-11-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00002-12-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+alter table variant_string_size_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/variant_string_size_test/data/00003-13-c43c64d6-c3e1-4607-b065-7884504d3b70-0-00001.parquet', file_format='parquet');
+
+
+-- ========================================
+-- P0 String Extensions Validation Queries
+-- ========================================
+
+-- ========================================
+-- Query 1: Unicode String Extraction
+-- Test ID: UNC-1.1.1
+-- ========================================
+SELECT 'Query 1: Validate Unicode string extraction from VARIANT' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    get_variant_string(variant_col, '$') as extracted_value,
+    expected_value,
+    CASE
+        WHEN get_variant_string(variant_col, '$') = expected_value THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result,
+    variant_typeof(variant_query(variant_col, '$')) as value_type
+FROM variant_string_unicode_test
+ORDER BY test_id;
+
+-- ========================================
+-- Query 2: Unicode String Length Verification
+-- ========================================
+SELECT 'Query 2: Verify Unicode string length preservation' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    LENGTH(get_variant_string(variant_col, '$')) as extracted_length,
+    LENGTH(expected_value) as expected_length,
+    CASE
+        WHEN LENGTH(get_variant_string(variant_col, '$')) = LENGTH(expected_value) THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_string_unicode_test
+ORDER BY test_id;
+
+-- ========================================
+-- Query 3: Large String Extraction
+-- Test ID: UNC-1.1.2, UNC-3.1.1, UNC-3.1.2
+-- ========================================
+SELECT 'Query 3: Validate large string extraction and size' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    size_bytes,
+    LENGTH(get_variant_string(variant_col, '$')) as extracted_length,
+    CASE
+        WHEN LENGTH(get_variant_string(variant_col, '$')) = size_bytes THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result,
+    variant_typeof(variant_query(variant_col, '$')) as value_type
+FROM variant_string_size_test
+ORDER BY test_id;
+
+-- ========================================
+-- Query 4: Large String Substring Verification
+-- ========================================
+SELECT 'Query 4: Verify large string content integrity' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    SUBSTR(get_variant_string(variant_col, '$'), 1, 10) as first_10_chars,
+    SUBSTR(get_variant_string(variant_col, '$'), -10) as last_10_chars,
+    CASE test_id
+        WHEN 1 THEN 'AAAAAAAAAA'
+        WHEN 2 THEN 'BBBBBBBBBB'
+        WHEN 3 THEN 'CCCCCCCCCC'
+        WHEN 4 THEN 'DDDDDDDDDD'
+    END as expected_first_10,
+    CASE
+        WHEN SUBSTR(get_variant_string(variant_col, '$'), 1, 10) =
+             (CASE test_id
+                WHEN 1 THEN 'AAAAAAAAAA'
+                WHEN 2 THEN 'BBBBBBBBBB'
+                WHEN 3 THEN 'CCCCCCCCCC'
+                WHEN 4 THEN 'DDDDDDDDDD'
+              END)
+        THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_string_size_test
+ORDER BY test_id;
+
+-- ========================================
+-- Query 5: CAST String VARIANT to VARCHAR
+-- ========================================
+SELECT 'Query 5: CAST VARIANT strings to VARCHAR' AS test_description;
+SELECT
+    test_id,
+    test_label,
+    CAST(variant_col AS VARCHAR(1000)) as cast_result,
+    CASE
+        WHEN CAST(variant_col AS VARCHAR(1000)) = expected_value THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_string_unicode_test
+WHERE test_id <= 7  -- Skip very long strings for VARCHAR cast
+ORDER BY test_id;
+
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/ > /dev/null
+
+drop table variant_string_unicode_test force;
+drop table variant_string_size_test force;
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};
+
+
+-- use spark to generate those data files
+
+-- ========================================
+-- P0 String Extensions Test Suite
+-- Covers: UNC-1.1.1, UNC-1.1.2
+-- ========================================
+-- This test suite validates VARIANT handling of:
+-- - Unicode/special characters (Chinese, Arabic, Emoji, Cyrillic)
+-- - Large strings (64KB, 1MB, 5MB)
+-- ========================================
+
+-- use iceberg_glue2.zya;
+
+-- DROP TABLE IF EXISTS variant_string_unicode_test;
+-- DROP TABLE IF EXISTS variant_string_size_test;
+
+-- -- ========================================
+-- -- Test 1: Unicode and Special Characters
+-- -- Test ID: UNC-1.1.1
+-- -- ========================================
+-- CREATE TABLE variant_string_unicode_test (
+--     test_id INT,
+--     test_label STRING,
+--     expected_value STRING,
+--     variant_col VARIANT
+-- ) USING iceberg
+-- TBLPROPERTIES (
+--     'format-version' = '3',
+--     'write.format.default' = 'parquet',
+--     'engine.hive.enabled' = 'false'
+-- );
+
+-- INSERT INTO variant_string_unicode_test VALUES
+--     (1, 'chinese', '你好世界', parse_json('"你好世界"')),
+--     (2, 'arabic', 'مرحبا بك', parse_json('"مرحبا بك"')),
+--     (3, 'emoji', 'Hello 👋 World 🌍', parse_json('"Hello 👋 World 🌍"')),
+--     (4, 'cyrillic', 'Привет мир', parse_json('"Привет мир"')),
+--     (5, 'japanese', 'こんにちは', parse_json('"こんにちは"')),
+--     (6, 'korean', '안녕하세요', parse_json('"안녕하세요"')),
+--     (7, 'mixed', '🎉 Test 测试 Тест اختبار 🚀', parse_json('"🎉 Test 测试 Тест اختبار 🚀"')),
+--     (8, 'special_chars', 'Line1\nLine2\tTab"Quote\'Apostrophe', parse_json('"Line1\\nLine2\\tTab\\"Quote\'Apostrophe"')),
+--     (9, 'unicode_escape', '\u0048\u0065\u006C\u006C\u006F', parse_json('"\u0048\u0065\u006C\u006C\u006F"')),
+--     (10, 'emoji_complex', '👨‍👩‍👧‍👦🏳️‍🌈', parse_json('"👨‍👩‍👧‍👦🏳️‍🌈"'));
+
+-- -- ========================================
+-- -- Test 2: Large String Sizes
+-- -- Test ID: UNC-1.1.2, UNC-3.1.1, UNC-3.1.2
+-- -- ========================================
+-- CREATE TABLE variant_string_size_test (
+--     test_id INT,
+--     test_label STRING,
+--     size_bytes INT,
+--     variant_col VARIANT
+-- ) USING iceberg
+-- TBLPROPERTIES (
+--     'format-version' = '3',
+--     'write.format.default' = 'parquet',
+--     'engine.hive.enabled' = 'false'
+-- );
+
+-- -- Generate strings of different sizes
+-- INSERT INTO variant_string_size_test VALUES
+--     (1, '1KB_string', 1024, parse_json(concat('"', repeat('A', 1024), '"'))),
+--     (2, '64KB_string', 65536, parse_json(concat('"', repeat('B', 65536), '"'))),
+--     (3, '1MB_string', 1048576, parse_json(concat('"', repeat('C', 1048576), '"'))),
+--     (4, '5MB_string', 5242880, parse_json(concat('"', repeat('D', 5242880), '"')));
+
+-- -- Sanity checks
+-- SELECT 'variant_string_unicode_test' AS table_name, COUNT(*) AS row_count FROM variant_string_unicode_test;
+-- SELECT 'variant_string_size_test' AS table_name, COUNT(*) AS row_count FROM variant_string_size_test;

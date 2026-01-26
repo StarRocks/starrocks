@@ -106,6 +106,7 @@ public class QueryPlannerTest {
         // Make each case independent so running the whole class/suite doesn't leak state between cases.
         clearSqlBlackList();
         clearSqlDigestBlackList();
+        connectContext.getState().setError("");
     }
 
     @AfterEach
@@ -115,6 +116,7 @@ public class QueryPlannerTest {
         // Reset configs to avoid affecting other test classes in the same JVM.
         setFrontendConfig("enable_sql_blacklist", "false");
         setFrontendConfig("enable_sql_digest", "false");
+        connectContext.getState().setError("");
     }
 
     private static void clearSqlBlackList() {
@@ -423,7 +425,7 @@ public class QueryPlannerTest {
 
             StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, sqlStmt);
             stmtExecutor2.execute();
-            Assertions.assertEquals("Access denied; This sql is in blacklist, please contact your admin. " +
+            Assertions.assertEquals("Access denied; This sql is in blacklist (id: -1), please contact your admin. " +
                             "Digest: 389d2ef8d98994a4290b5d2e1d5838aa",
                     connectContext.getState().getErrorMessage());
             connectContext.getState().setError("");

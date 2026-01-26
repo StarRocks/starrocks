@@ -5,6 +5,8 @@ keywords: ['session','variable']
 
 # 系统变量
 
+import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](sql-statements/cluster-management/config_vars/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
 
 StarRocks 中的变量参考 MySQL 中的变量设置，但**部分变量仅用于兼容 MySQL 客户端协议，并不产生其在 MySQL 数据库中的实际意义**。
@@ -180,6 +182,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 如果要在当前会话中激活一个角色，可以使用 [SET ROLE](sql-statements/account-management/SET_ROLE.md)。
 
+### array_low_cardinality_optimize
+
+* **作用域**: Session
+* **描述**: 控制优化器是否将 ARRAY&lt;VARCHAR&gt; 列纳入低基数（基于字典）的解码及相关优化的考虑范围。启用时，优化器的低基数规则（例如 `DecodeCollector`）可能会定义字典列，并将字典解码应用于类型为 VARCHAR 或 ARRAY&lt;VARCHAR&gt; 的表达式。禁用时，仅标量 VARCHAR 列有资格参与，ARRAY&lt;VARCHAR&gt; 类型会被这些低基数优化忽略。该变量由 `DecodeCollector.supportAndEnabledLowCardinality(...)` 读取以控制对数组的支持，并通过 `SessionVariable` 的 getter/setter 方法暴露。
+* **默认值**: `true`
+* **数据类型**: boolean
+* **引入版本**: v3.3.0, v3.4.0, v3.5.0
+
 ### auto_increment_increment
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
@@ -249,6 +259,22 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 类型：Boolean
 
+### cbo_max_reorder_node_use_dp
+
+* **描述**: 会话级限制，用于控制 CBO 何时包含 DP（dynamic programming，动态规划）连接重排序算法。优化器将连接输入数量（MultiJoinNode.atoms.size()）与此值比较，只有在 `multiJoinNode.getAtoms().size()` 小于等于 `cbo_max_reorder_node_use_dp` 且启用了 `cbo_enable_dp_join_reorder` 时才运行或添加 DP 重排序。用于 将 JoinReorderDP 添加到候选算法以及在将计划复制到 memo 时决定是否执行 JoinReorderDP。默认值 10 反映了一个实际性能的截止点。可通过调优该值在优化器运行时长（DP 开销较大）与对更大多表连接查询潜在计划质量之间进行权衡。该设置与 `cbo_enable_dp_join_reorder` 和贪心阈值 `cbo_max_reorder_node_use_greedy` 交互。比较为包含等号（`<=`）。
+* **范围**: Session
+* **默认值**: `10`
+* **数据类型**: long
+* **引入版本**: v3.2.0
+
+### cbo_max_reorder_node_use_exhaustive
+
+* **范围**: Session
+* **描述**: 控制 CBO 中 Join 重排序算法选择的阈值。优化器会统计查询中的内/交叉连接节点数量；当该计数大于此值时，planner 会走基于变换（更激进）的重排序路径：强制收集 CTE 统计信息并调用 ReorderJoinRule.transform 及相关的交换律规则。 当计数小于或等于此值时，planner 应用开销较小的连接变换规则（并且在某些半/反连接情况下可能会添加 INNER_JOIN_LEFT_ASSCOM_RULE）。优化器（`SPMOptimizer`, `QueryOptimizer`）会读取此会话变量，并且可以通过 `setMaxTransformReorderJoins` 在会话级别设置。
+* **默认值**: `4`
+* **数据类型**: int
+* **引入版本**: v3.2.0
+
 ### cbo_max_reorder_node_use_greedy
 
 * **描述**: 在 multi-join 中，CBO 优化器会考虑使用贪婪（greedy）join-reorder 算法的最大联接输入（atoms）数量。优化器在构建候选重排序算法列表时会检查此项以及 `cbo_enable_greedy_join_reorder`：如果 `multiJoinNode.getAtoms().size()` 小于或等于此值，则会添加并执行一个 `JoinReorderGreedy` 实例。该变量在会话范围生效，影响是否尝试贪婪重排序（前提是有统计信息且启用了贪婪算法）。调整此值以控制在有大量被联接关系的查询中优化器的时间/复杂度权衡。
@@ -299,7 +325,10 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### connector_sink_compression_codec
 
-* 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。
+* 描述：用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。有效值：`uncompressed`、`snappy`、`lz4`、`zstd`、`gzip`。该参数只在以下情况生效：
+  * Hive 表中未指定 `compression_codec` 属性。
+  * Iceberg 表中未包含`write.parquet.compression-codec` 属性。
+  * `INSERT INTO FILES` 时未设置 `compression` 属性。 
 * 默认值：uncompressed
 * 类型：String
 * 引入版本：v3.2.3
@@ -332,6 +361,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 - 单位：秒
 - 引入版本：v3.5.1
 
+### default_authentication_plugin
+
+* **范围**: Session
+* **描述**: 会话范围的变量，指定本会话的默认 MySQL 认证插件名称。它以 SessionVariable.defaultAuthenticationPlugin 的形式存储，并由 StarRocks 的 MySQL 协议兼容层在服务器需要通告或使用默认认证插件时使用（例如在握手期间或未指定插件时）。接受服务器支持的标准 MySQL 认证插件标识（例如 `mysql_native_password`、`caching_sha2_password`）。此变量仅影响会话行为；持久化的用户账号认证配置由其他机制单独管理。参见相关会话变量 `authentication_policy`。
+* **默认值**: `mysql_native_password`
+* **类型**: String
+* **引入版本**: -
+
 ### default_rowset_type (global)
 
 全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
@@ -342,6 +379,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：lz4_frame
 * 类型：String
 * 引入版本：v3.0
+
+### default_tmp_storage_engine
+
+* **描述**: 会话变量，用于控制临时表的默认存储引擎（包括显式的 `CREATE TEMPORARY TABLE` 以及引擎创建的内部/隐式临时表）。在 `SessionVariable.java` 中以 `@VariableMgr.VarAttr` 注解声明，主要用于 MySQL 8.0 的兼容性，以便期望 MySQL 行为的客户端和工具可以在每个会话级别查看或更改临时表引擎。更改此值会影响在不同引擎下（例如基于内存 vs 基于磁盘的引擎）如何在存储层上存放/管理临时表数据。
+* **范围**: Session
+* **默认值**: `InnoDB`
+* **类型**: String
+* **引入版本**: v3.4.2, v3.5.0
 
 ### disable_colocate_join
 
@@ -355,6 +400,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **默认值**: `false`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
+
+### disable_spill_to_local_disk
+
+* **描述**: 当会话中设置为 `true` 时，FE 将指示 BE 禁用本地磁盘落盘（spilling to local disk），并改为依赖远程存储落盘（如果配置了远程溢写）。该标志仅在 `enable_spill` 为 `true`、`enable_spill_to_remote_storage` 为 `true` 且 FE 提供并找到有效的 `spill_storage_volume` 时才有意义。如果未配置远程溢写或无法解析所命名的存储卷，则此设置无效。谨慎使用：禁用本地磁盘落盘可能会增加网络 I/O 和延迟，并要求远程存储具有可靠性和良好性能。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.3.0, v3.4.0, v3.5.0
 
 ### div_precision_increment
 
@@ -486,6 +539,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_incremental_mv
+
+* **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。
+* **范围**: Session（每连接）
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
 ### enable_insert_partial_update
 
 * **描述**：是否为主键表的 INSERT 语句启用部分更新（Partial Update）。当设置为 `true`（默认）时，如果 INSERT 语句只指定了部分列（少于表中所有非生成列），系统会执行部分更新，即仅更新指定列，并保留其他列的现有值。当设置为 `false` 时，系统会对未指定的列使用默认值，而不是保留已有值。此功能特别适用于对主键表的特定列进行更新，而不影响其他列的值。
@@ -496,6 +557,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
+
+### max_unknown_string_meta_length (global)
+
+* 描述：当字符串列的最大长度未知时用于元数据的回退长度。如果客户端依赖该元数据且报告的长度小于真实值，部分 BI 工具可能返回空值或截断。小于等于 0 时回退为 `64`；有效范围为 `1` ~ `1048576`。
+* 默认值：64
+* 数据类型：Int
+* 引入版本：v3.5.12
 
 ### enable_lake_tablet_internal_parallel
 
@@ -509,6 +577,17 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **作用域**: Session
 * **描述**: 启用后，FE 会请求收集 load 作业的运行时 profile，load 协调器将在 load 完成后收集/导出该 profile。对于 stream load，FE 会设置 `TQueryOptions.enable_profile = true` 并将 `load_profile_collect_second`（来自 `stream_load_profile_collect_threshold_second`）传递给 backends；协调器随后有条件地调用 profile 收集（参见 StreamLoadTask.collectProfile()）。实际行为是此会话变量与目标表上的表级属性 `enable_load_profile` 的逻辑 OR；采集还受 `load_profile_collect_interval_second`（FE 端采样间隔）的限制以避免频繁采集。会话标志通过 `SessionVariable.isEnableLoadProfile()` 读取，并且可以通过 `setEnableLoadProfile(...)` 按连接设置。
 * **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.2.0
+
+### enable_local_shuffle_agg
+
+* **描述**: 控制 planner 和 cost model 是否可以生成使用本地 shuffle 的单阶段局部聚合计划（Scan -> LocalShuffle -> OnePhaseAgg），而不是两阶段/全局 shuffle 聚合。启用时（默认），优化器和成本模型会：
+  - 允许在单 backend+compute-node 集群中将 Scan 与 Global Agg 之间的 SHUFFLE exchange 替换为本地 shuffle + 单阶段聚合（参见 `PruneShuffleDistributionNodeRule` 和 `EnforceAndCostTask`），
+  - 在该单节点场景下让成本模型忽略 SHUFFLE 的网络成本以偏好单阶段计划（`CostModel`）。
+  仅在 `enable_pipeline_engine` 启用且集群为单个 backend+compute 节点时考虑替换。规划器在不安全的情况下仍会拒绝本地 shuffle 转换（例如 DISTINCT 聚合、检测到的数据倾斜、缺失/未知的列统计、多输入算子如 joins 或其他语义限制）。某些代码路径（INSERT/UPDATE/DELETE 的 planner 和 MaterializedViewOptimizer）会临时禁用该会话标志，因为非查询的 sink 或某些重写需要按 driver 分配扫描，而本地 shuffle 无法使用这种分配。
+* **范围**: Session
+* **默认值**: `true`
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
@@ -882,12 +961,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 单位：秒
 * 类型：Int
 
-### interpolate_passthrough
-
-* 描述：是否为某些算子添加 local-exchang-passthrough。当前支持算子包括 Streaming Aggregates 等。添加 local-exchange-passthrough 会降低数据倾斜的影响，但是会稍微增加内存使用。
-* 默认值：true
-* 引入版本：v3.2
-
 ### io_tasks_per_scan_operator
 
 * 每个 Scan 算子能同时下发的 I/0 任务的数量。如果使用远端存储系统（比如 HDFS 或 S3）且时延较长，可以增加该值。但是值过大会增加内存消耗。
@@ -952,6 +1025,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   * `false`: 在数据湖查询中禁用低基数优化。
 * 引入版本：v3.5.0
 
+### low_cardinality_optimize_v2
+
+* **作用域**: Session
+* **描述**: 会话级变量，用于选择优化器应用哪种低基数（low-cardinality）优化重写。为 `true` 时，优化器将尝试由 `LowCardinalityRewriteRule` 实现的新版 Skew Join V2 重写（使用 `DecodeCollector` / `DecodeRewriter` 对低基数 VARCHAR 列进行编码/解码）。为 `false` 时，优化器回退到由 `AddDecodeNodeForDictStringRule` 实现的旧版重写。执行任一重写还需要 `enableLowCardinalityOptimize` 被启用；如果 `enableLowCardinalityOptimize` 被禁用，则不执行任何低基数重写。该变量在优化器的树重写路径中被检查以选择合适的转换。
+* **默认值**: `true`
+* **数据类型**: boolean
+* **引入版本**: v3.3.0, v3.4.0, v3.5.0
+
 ### lower_case_table_names (global)
 
 用于兼容 MySQL 客户端，无实际作用。StarRocks 中的表名是大小写敏感的。
@@ -978,6 +1059,18 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：33554432 (32 MB)
 * 单位：Byte
 * 类型：Int
+
+### max_pipeline_dop
+
+* **范围**: Session
+* **描述**: 每会话的 pipeline 引擎并行度（DOP）上限。行为：
+  * 仅在 `enable_pipeline_engine` 启用且未显式设置 `pipeline_dop`（大于 0）时生效。如果 `pipeline_dop` 大于 0 则忽略此变量并直接使用 `pipeline_dop`。
+  * 当 `pipeline_dop` 小于或等于 0（自适应/默认模式）时，执行的实际 DOP 计算为 min(`max_pipeline_dop`, BackendResourceStat 返回的后端默认 DOP)。对于 pipeline sinks，同样的逻辑使用 sink 的默认 DOP。
+  * 如果 `max_pipeline_dop` 小于或等于 0，则不施加额外上限，使用后端默认 DOP。
+  * 目的：通过对自动计算的并行度设置上限，避免在核数非常大的机器上调度带来的负面开销。
+* **默认值**: `64`
+* **数据类型**: int
+* **引入版本**: v3.2.0
 
 ### max_pushdown_conditions_per_column
 
@@ -1375,6 +1468,14 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于兼容 MySQL 客户端，无实际作用。别名 `transaction_isolation`。
 
+### tx_visible_wait_timeout
+
+* **描述**: 会话范围的超时时间（秒），控制服务器在提交事务后等待该事务变为可见（published）再继续处理的最长时间。如果可见等待超时，事务将被视为已 COMMITTED 但尚未 VISIBLE。物化视图刷新逻辑（`MVTaskRunProcessor`）会临时将此变量设置为 `Long.MAX_VALUE / 1000` 以有效地无限期等待可见性，并在刷新后恢复原值。当启用 `enable_sync_publish` 时，该变量被忽略，因为 publish 等待时间将由作业截止时间推导。
+* **范围**: Session
+* **默认值**: `10`
+* **类型**: long
+* **引入版本**: v3.2.0
+
 ### use_compute_nodes
 
 * 描述：用于设置使用 CN 节点的数量上限。该设置只会在 `prefer_compute_node=true` 时才会生效。`-1`，表示使用所有 CN 节点。`0` 表示不使用 CN 节点。
@@ -1397,4 +1498,4 @@ MySQL 服务器的版本，取值等于 FE 参数 `mysql_server_version`。
 * 单位：秒
 * 类型：Int
 
-
+<VariableWarehouse />

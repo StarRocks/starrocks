@@ -444,4 +444,13 @@ int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     return num;
 }
 
+Status ArrayMapExpr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    RETURN_IF_ERROR(Expr::do_for_each_child(callback));
+
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(callback(expr));
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

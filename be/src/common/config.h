@@ -156,6 +156,8 @@ CONF_Int32(storage_medium_migrate_count, "3");
 CONF_mInt32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
+// The count of thread to update tablet meta info.
+CONF_mInt32(update_tablet_meta_info_worker_count, "1");
 // The count of thread to upload.
 CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
@@ -427,14 +429,13 @@ CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
-// Enable parallel execution within tablet for primary key tables.
-CONF_mBool(enable_pk_parallel_execution, "true");
-// The minimum threshold of data size for enabling pk parallel execution.
+// Enable eager build of PK index files during import and compaction.
+CONF_mBool(enable_pk_index_eager_build, "true");
+// The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
-CONF_mInt64(pk_parallel_execution_threshold_bytes, "104857600");
+CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
-// Default is 4.
-CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "4");
+CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_size, "1048576");
 // The splitting threshold for PK index compaction tasks — when the total size of the files involved in a task is
@@ -451,21 +452,21 @@ CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 // early sst compaction threshold for primary key index in shared-data mode.
 CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
 // Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "false");
+CONF_mBool(enable_pk_index_parallel_compaction, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_get, "false");
+CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
-CONF_mInt64(pk_index_parallel_get_min_rows, "16384");
+CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 // The threadpool max thread num for pk index get in shared-data mode.
-CONF_mInt32(pk_index_parallel_get_threadpool_max_threads, "0");
+CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
 // The queue size for pk index parallel get threadpool in shared-data mode.
-CONF_mInt32(pk_index_parallel_get_threadpool_size, "1048576");
+CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 // Memtable flush threadpool max thread num for pk index in shared-data mode.
-CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "4");
+CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
-CONF_mInt32(pk_index_memtable_max_count, "1");
+CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 // The parameters for pk index size-tiered compaction strategy.
@@ -474,6 +475,13 @@ CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");
 CONF_mInt64(pk_index_size_tiered_max_level, "5");
 // Used to control the sampling interval size for SSTable files.
 CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
+// Controls merge condition evaluation behavior within the same transaction for primary key tables.
+// When enabled (true), allows load spilling and parallel execution optimizations for condition updates
+// by skipping merge condition checks on data from the same transaction. This improves performance
+// when ingesting large batches with condition updates, as same-transaction conflicts don't need
+// complex comparison logic.
+// Default: false (conservative, validates all conditions even within same transaction)
+CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -1254,6 +1262,20 @@ CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
+
+// Maximum data volume (bytes) per parallel compaction subtask.
+// If total picked rowsets data size is less than this threshold, parallel compaction
+// will be skipped and fallback to normal compaction flow.
+// Default: 5GB
+CONF_mInt64(lake_compaction_max_bytes_per_subtask, "5368709120");
+
+// Maximum rowset size (bytes) for compaction consideration.
+// Non-overlapped rowsets larger than this threshold are considered "well-compacted"
+// and will be skipped in compaction score calculation (treated as score 0).
+// This is also used in split_rowsets_into_groups to skip large non-overlapped rowsets.
+// Default: 4GB
+CONF_mInt64(lake_compaction_max_rowset_size, "4294967296");
+
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");

@@ -55,7 +55,7 @@ jobs:
           echo "SHA=${SHA}" >> $GITHUB_OUTPUT
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pr_num
           path: ./pr_num.txt
@@ -138,7 +138,7 @@ jobs:
       - name: Checkout code
         id: checkout_code
         if: github.base_ref != 'main'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: refs/pull/${{ github.event.pull_request.number }}/head
@@ -189,7 +189,7 @@ jobs:
           echo "TEST_PR=${{ steps.check_test_case.outputs.TEST_PR }}" >> ./test-pr-info.txt
 
       - name: Upload the Test Case Info
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: steps.check_test_case_info.outcome == 'success'
         with:
           name: TEST_PR_INFO
@@ -245,7 +245,7 @@ jobs:
           echo ${{ steps.path-filter.outputs.thirdparty }} > thirdparty_filter.txt
 
       - name: Upload the BE Filter Info
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: be-path-filter
           path: ./be-path-filter/
@@ -291,7 +291,7 @@ jobs:
       - name: Checkout Code
         id: checkout_code
         if: needs.be-checker.outputs.be_change == 'true' || needs.be-checker.outputs.pre_format_conclusion != 'success'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -382,7 +382,7 @@ jobs:
       - name: Upload Thirdparty Result
         id: upload_thirdparty_result
         if: steps.update-image.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
@@ -412,7 +412,7 @@ jobs:
           ./scripts/check-thirdparty-result.sh
 
       - name: Download Thirdparty Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           pattern: THIRDPARTY-RESULT-*
           path: outputs
@@ -457,7 +457,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload Log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always() && steps.run_ut.outcome == 'failure' && steps.run_ut.outputs.BE_LOG != ''
         with:
           name: BE UT LOG
@@ -572,7 +572,7 @@ jobs:
           echo ${{ steps.path-filter.outputs.pom }} > pom_filter.txt
 
       - name: Upload the FE Filter Info
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fe-path-filter
           path: ./fe-path-filter/
@@ -613,7 +613,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         id: checkout_code
         if: steps.branch.outcome == 'success'
         with:
@@ -700,7 +700,7 @@ jobs:
 
       - name: Upload log
         if: always() && steps.run_ut.outputs.RES_LOG != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -831,7 +831,7 @@ jobs:
           fi
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.base_ref }}
           
@@ -872,7 +872,7 @@ jobs:
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: steps.build_result.outcome == 'success'
         with:
           name: base_version
@@ -1054,7 +1054,7 @@ jobs:
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -1097,7 +1097,7 @@ jobs:
           ossutil64 --config-file ~/.ossutilconfig cp test/ ${xml_oss_path} --include "*.xml" --recursive --force --tagging="type=ci"
 
       - name: Upload log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: SQL-Tester Log
@@ -1328,7 +1328,7 @@ jobs:
           echo $PR_NUMBER > pr_num.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: pr_num
           path: ./pr_num.txt

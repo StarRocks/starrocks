@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -22,7 +23,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -364,6 +367,14 @@ public class StatisticsCalcUtils {
         } else {
             return 0;
         }
+    }
+
+    public static void ensureStatistics(OptExpression optExpression, OptimizerContext optimizerContext) {
+        if (optExpression.getStatistics() == null) {
+            Utils.calculateStatistics(optExpression, optimizerContext);
+        }
+        Preconditions.checkState(optExpression.getStatistics() != null,
+                "Statistics is null after calculateStatistics");
     }
 
 }

@@ -53,7 +53,7 @@ public:
 
     Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
 
-    bool should_enable_pk_parallel_execution(int64_t input_bytes);
+    bool should_enable_pk_index_eager_build(int64_t input_bytes);
 
 protected:
     int64_t _txn_id;

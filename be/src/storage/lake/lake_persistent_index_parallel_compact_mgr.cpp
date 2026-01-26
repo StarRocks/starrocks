@@ -28,6 +28,7 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/concatenating_iterator.h"
@@ -36,37 +37,15 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "util/countdown_latch.h"
+#include "util/cpu_info.h"
 #include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
 namespace starrocks::lake {
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 const sstable::Comparator* comparator = sstable::BytewiseComparator();
-
-// return true when [seek_key, stop_key) and [range.start_key(), range.end_key()] overlap
-bool SeekRange::has_overlap(const PersistentIndexSstableRangePB& range) const {
-    // range is on the right side of [seek_key, stop_key)
-    if (!stop_key.empty() && comparator->Compare(Slice(stop_key), Slice(range.start_key())) <= 0) {
-        return false;
-    }
-    // range is on the left side of [seek_key, stop_key)
-    if (comparator->Compare(Slice(range.end_key()), Slice(seek_key)) < 0) {
-        return false;
-    }
-    return true;
-}
-
-// Return true when [seek_key, stop_key) fully contains [range.start_key(), range.end_key()]
-bool SeekRange::full_contains(const PersistentIndexSstableRangePB& range) const {
-    if (comparator->Compare(Slice(seek_key), Slice(range.start_key())) > 0) {
-        return false;
-    }
-    if (!stop_key.empty() && comparator->Compare(Slice(stop_key), Slice(range.end_key())) <= 0) {
-        return false;
-    }
-    return true;
-}
 
 size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
     size_t cnt = 0;
@@ -116,6 +95,7 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
     sstable::ReadOptions read_options;
     read_options.fill_cache = false;
 
+    bool contain_shared_sstables = false;
     // Open each sstable and create iterator
     for (const auto& fileset : _input_sstables) {
         std::vector<sstable::Iterator*> sst_iters;
@@ -130,6 +110,10 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
             }
             TRACE_COUNTER_INCREMENT("compact_input_bytes", sstable_pb.filesize());
             TRACE_COUNTER_INCREMENT("compact_input_sst_cnt", 1);
+
+            if (sstable_pb.shared()) {
+                contain_shared_sstables = true;
+            }
 
             // Open sstable file
             RandomAccessFileOptions opts;
@@ -164,6 +148,15 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     if (concat_iters.empty()) {
         return Status::OK();
+    }
+
+    // adjust sst seek range by tablet range
+    if (contain_shared_sstables) {
+        RETURN_IF(!_metadata->has_range(), Status::InternalError("Tablet range is not set"));
+        auto tablet_schema = TabletSchema::create(_metadata->schema());
+        ASSIGN_OR_RETURN(auto tablet_range,
+                         TabletRangeHelper::create_sst_seek_range_from(_metadata->range(), tablet_schema));
+        _seek_range &= tablet_range;
     }
 
     if (concat_iters.size() == 1) {
@@ -289,9 +282,13 @@ LakePersistentIndexParallelCompactMgr::~LakePersistentIndexParallelCompactMgr() 
 Status LakePersistentIndexParallelCompactMgr::init() {
     ThreadPoolBuilder builder("cloud_native_pk_index_compact");
     builder.set_min_threads(1);
-    builder.set_max_threads(std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads));
+    builder.set_max_threads(calc_max_threads());
     builder.set_max_queue_size(config::pk_index_parallel_compaction_threadpool_size);
-    return builder.build(&_thread_pool);
+    auto st = builder.build(&_thread_pool);
+    if (st.ok()) {
+        REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_compact, _thread_pool);
+    }
+    return st;
 }
 
 void LakePersistentIndexParallelCompactMgr::shutdown() {
@@ -306,6 +303,14 @@ Status LakePersistentIndexParallelCompactMgr::update_max_threads(int max_threads
         return _thread_pool->update_max_threads(max_threads);
     }
     return Status::OK();
+}
+
+int32_t LakePersistentIndexParallelCompactMgr::calc_max_threads() const {
+    int32_t max_threads = config::pk_index_parallel_compaction_threadpool_max_threads;
+    if (max_threads <= 0) {
+        max_threads = CpuInfo::num_cores() / 2;
+    }
+    return std::max(1, max_threads);
 }
 
 StatusOr<AsyncCompactCBPtr> LakePersistentIndexParallelCompactMgr::async_compact(
@@ -394,7 +399,7 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
             if (!sst.has_range()) {
                 // Found an sstable with infinite boundary, no parallel splitting
                 tasks->push_back(std::make_shared<LakePersistentIndexParallelCompactTask>(
-                        candidates, _tablet_mgr, metadata, merge_base_level, UniqueId::gen_uid(), SeekRange()));
+                        candidates, _tablet_mgr, metadata, merge_base_level, UniqueId::gen_uid(), SstSeekRange()));
                 return;
             }
         }
@@ -445,12 +450,11 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
     // Calculate segment number based on total size, threshold and parallelism config
     size_t segment_num = std::max<size_t>(
             1, total_size / std::max<size_t>(1, config::pk_index_parallel_compaction_task_split_threshold_bytes));
-    segment_num =
-            std::min<size_t>(segment_num, std::max(1, config::pk_index_parallel_compaction_threadpool_max_threads) * 2);
+    segment_num = std::min<size_t>(segment_num, calc_max_threads() * 2);
 
     struct Segment {
         // [seek_key, stop_key)
-        SeekRange seek_range;
+        SstSeekRange seek_range;
         std::vector<std::vector<PersistentIndexSstablePB>> filesets; // organized by fileset
         size_t file_cnt = 0;
     };

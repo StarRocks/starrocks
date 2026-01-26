@@ -7,6 +7,8 @@ toc_max_heading_level: 4
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
 import MultiServiceAccess from '../../../_assets/commonMarkdown/multi-service-access.mdx'
+import GrantCreateWarehouse from '../../../_assets/commonMarkdown/grant_create_warehouse.mdx'
+import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 ## 説明
 
@@ -33,12 +35,7 @@ GRANT 操作を実行する前に、関連するユーザーまたはロール�
 
 #### システム
 
-```SQL
-GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME | SECURITY } 
-    ON SYSTEM
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
-```
+<GrantCreateWarehouse />
 
 #### リソースグループ
 
@@ -46,7 +43,7 @@ GRANT
 GRANT
     { ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE GROUP <resource_group_name> [, <resource_group_name >,...] ｜ ALL RESOURCE GROUPS} 
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### リソース
@@ -55,7 +52,7 @@ GRANT
 GRANT
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### グローバル UDF
@@ -65,7 +62,7 @@ GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { GLOBAL FUNCTION <function_name>(input_data_type) [, <function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 例: `GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
@@ -76,7 +73,7 @@ GRANT
 GRANT
     { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
     ON CATALOG default_catalog
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### External catalog
@@ -85,7 +82,7 @@ GRANT
 GRANT
    { USAGE | DROP | ALL [PRIVILEGES] } 
    ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
-   TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+   TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 #### データベース
@@ -94,7 +91,7 @@ GRANT
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
     ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
@@ -107,13 +104,13 @@ GRANT
   GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
     ON TABLE <table_name> [, < table_name >,...]
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 
 -- 特定のデータベースまたはすべてのデータベース内のすべてのテーブルに対する権限を付与します。
   GRANT
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]}
     ON ALL TABLES IN { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
@@ -121,7 +118,7 @@ GRANT
 * Internal および External Catalogs 内のすべてのテーブルに対して SELECT 権限を付与して、これらのテーブルからデータを読み取ることができます。Hive および Iceberg Catalogs 内のテーブルに対しては、INSERT 権限を付与してデータを書き込むことができます (Iceberg は v3.1以降、Hive は v3.2以降でサポート)。
 
   ```SQL
-  GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### ビュー
@@ -132,7 +129,7 @@ GRANT
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
@@ -140,7 +137,7 @@ GRANT
 * External Catalog 内のテーブルに対しては、Hive テーブルビューにのみ SELECT 権限を付与できます (v3.1以降)。
 
   ```SQL
-  GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### マテリアライズドビュー
@@ -151,14 +148,14 @@ GRANT
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<mv_name>` を使用して mv を表すこともできます。
 
   ```SQL
-  GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### 関数
@@ -169,14 +166,14 @@ GRANT
     ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
 
 - このコマンドを実行する前に SET CATALOG を実行する必要があります。
 - `<db_name>.<function_name>` を使用して関数を表すこともできます。
 
   ```SQL
-  GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO { ROLE <role_name> | USER <user_name>| EXTERNAL GROUP <external_group_name> }
+  GRANT <priv> ON FUNCTION <db_name>.<function_name>(input_data_type) TO { ROLE <role_name> | USER <user_name> }
   ```
 
 #### ユーザー
@@ -193,8 +190,10 @@ TO USER <user_identity_1> [ WITH GRANT OPTION ]
 GRANT  
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
     ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
-    TO { ROLE | USER | EXTERNAL GROUP } { <role_name> | <user_identity> | <external_group_name> } [ WITH GRANT OPTION ]
+    TO { ROLE | USER } { <role_name> | <user_identity> } [ WITH GRANT OPTION ]
 ```
+
+<GrantWarehouse />
 
 ### ロールをロールまたはユーザーに付与
 

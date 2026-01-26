@@ -17,12 +17,10 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.AnalysisException;
-
 import java.util.Collection;
 
 public interface DistributionPruner {
     // return partition after prunning
-    public Collection<Long> prune() throws AnalysisException;
+    public Collection<Long> prune();
 }
 

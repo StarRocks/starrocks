@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/status.h"
+#include "util/runtime_profile.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -33,8 +34,8 @@ struct QuitFlag {
 
 class TabletInternalParallelMergeTask : public Runnable {
 public:
-    TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator, MemTracker* merge_mem_tracker,
-                                    Schema* schema, int32_t task_index, QuitFlag* quit_flag);
+    TabletInternalParallelMergeTask(TabletWriter* writer, ChunkIterator* block_iterator, Schema* schema,
+                                    int32_t task_index, QuitFlag* quit_flag, RuntimeProfile::Counter* write_io_timer);
 
     ~TabletInternalParallelMergeTask();
 
@@ -49,11 +50,12 @@ public:
 private:
     TabletWriter* _writer = nullptr;
     ChunkIterator* _block_iterator = nullptr;
-    MemTracker* _merge_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _merge_mem_tracker;
     Schema* _schema = nullptr;
     int32_t _task_index = 0;
     Status _status;
     QuitFlag* _quit_flag = nullptr;
+    RuntimeProfile::Counter* _write_io_timer = nullptr;
 };
 
 } // namespace lake

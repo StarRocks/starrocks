@@ -42,6 +42,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
@@ -686,12 +687,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this(indexMeta.getIndexMetaId(), db.getId(), mvName, indexMeta.getSchema(), indexMeta.getKeysType(),
                 partitionInfo, distributionInfo, refreshScheme);
         Preconditions.checkState(baseTable.getIndexMetaIdByName(mvName) != null);
-        long indexId = indexMeta.getIndexMetaId();
+        long indexMetaId = indexMeta.getIndexMetaId();
         this.state = baseTable.state;
-        this.baseIndexMetaId = indexMeta.getIndexMetaId();
+        this.baseIndexMetaId = indexMetaId;
 
-        this.indexNameToMetaId.put(baseTable.getIndexNameByMetaId(indexId), indexId);
-        this.indexMetaIdToMeta.put(indexId, indexMeta);
+        this.indexNameToMetaId.put(baseTable.getIndexNameByMetaId(indexMetaId), indexMetaId);
+        this.indexMetaIdToMeta.put(indexMetaId, indexMeta);
 
         this.baseTableInfos = Lists.newArrayList();
         this.baseTableInfos.add(
@@ -790,7 +791,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public void setOriginalViewDefineSql(String originalViewDefineSql) {
-        this.originalViewDefineSql = originalViewDefineSql;
+        // redact credentials in the original view define sql to avoid persisting sensitive information
+        this.originalViewDefineSql = SqlCredentialRedactor.redact(originalViewDefineSql);
     }
 
     public String setIvmDefineSql(String ivmDefineSql) {
@@ -890,6 +892,21 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public long getWarehouseId() {
         return warehouseId;
+    }
+
+    /**
+     * Get the warehouse name of the materialized view.
+     */
+    public String getWarehouseName() {
+        if (warehouseId == WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(warehouseId);
+        if (warehouse != null) {
+            return warehouse.getName();
+        }
+        return "";
     }
 
     public int getMaxMVRewriteStaleness() {
@@ -1044,7 +1061,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         long maxRowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                maxRowCount = Math.max(maxRowCount, partition.getBaseIndex().getRowCount());
+                maxRowCount = Math.max(maxRowCount, partition.getLatestBaseIndex().getRowCount());
             }
         }
         return maxRowCount;
@@ -1398,6 +1415,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // register constraints from global state manager
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         globalConstraintManager.registerConstraint(this);
+
+        // register into mv metrics
+        try {
+            MaterializedViewMetricsRegistry.getInstance().registerMetricsEntity(getMvId());
+        } catch (Exception e) {
+            // log and continue
+            LOG.warn("failed to register mv metrics for mv: {}", this, e);
+        }
+
         // log reload cost
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish reloading mv {} in {}ms, total base table count: {}", getName(), duration, baseTableInfos.size());

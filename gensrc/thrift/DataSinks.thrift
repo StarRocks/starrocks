@@ -191,6 +191,10 @@ struct TExportSink {
 
     // export file name prefix
     30: optional string file_name_prefix
+    // column names for CSV header row
+    31: optional list<string> column_names
+    // whether to include header row in CSV output
+    32: optional bool with_header = false
 }
 
 struct TDictionaryCacheSink {

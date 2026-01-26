@@ -287,6 +287,8 @@ struct TOlapTableTablet {
 }
 
 struct TOlapTableIndexTablets {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `index id` is set to the `index meta id`.
     1: required i64 index_id
     2: required list<i64> tablet_ids
     3: optional list<TOlapTableTablet> tablets
@@ -342,7 +344,9 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id // index id
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
+    1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
@@ -534,6 +538,8 @@ struct TTableFunctionTable {
 
     10: optional bool parquet_use_legacy_encoding
     11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
 }
 
 struct TIcebergSchemaField {

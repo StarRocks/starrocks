@@ -82,7 +82,6 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
@@ -138,7 +137,7 @@ public class ShowExecutorTest {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
@@ -190,10 +189,6 @@ public class ShowExecutorTest {
                 table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
-
-                table.getStorageTypeByIndexMetaId(0L);
-                minTimes = 0;
-                result = TStorageType.COLUMN;
 
                 table.getPartition(anyLong);
                 minTimes = 0;

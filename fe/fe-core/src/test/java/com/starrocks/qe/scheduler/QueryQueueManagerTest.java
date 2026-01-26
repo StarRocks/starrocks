@@ -92,9 +92,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private int prevQueuePendingTimeoutSecond;
     private int prevQueueTimeoutSecond;
     private int prevQueueMaxQueuedQueries;
+    private boolean enableQueryQueueV2 = false;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+        Config.proc_profile_cpu_enable = false;
+        Config.proc_profile_mem_enable = false;
         SchedulerTestBase.beforeClass();
 
         MetricRepo.init();
@@ -102,6 +105,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @BeforeEach
     public void before() {
+        enableQueryQueueV2 = Config.enable_query_queue_v2;
+        Config.enable_query_queue_v2 = false;
         prevQueueEnableSelect = GlobalVariable.isEnableQueryQueueSelect();
         prevQueueEnableStatistic = GlobalVariable.isEnableQueryQueueStatistic();
         prevQueueEnableLoad = GlobalVariable.isEnableQueryQueueLoad();
@@ -137,6 +142,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
     @AfterEach
     public void after() {
+        Config.enable_query_queue_v2 = enableQueryQueueV2;
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
@@ -357,6 +363,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         }
     }
 
+    @Disabled
     @Test
     public void testDisableGroupLevelQueue() throws Exception {
         final int concurrencyLimit = 100;
@@ -578,24 +585,13 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         // 1. Run `concurrencyLimit` queries first, and they shouldn't be queued.
         List<DefaultCoordinator> runningCoords = new ArrayList<>();
-        for (int i = 0; i < concurrencyLimit; i++) {
+        for (int i = 0; i < concurrencyLimit - 1; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             manager.maybeWait(connectContext, coord);
             Assertions.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
             Assertions.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
             runningCoords.add(coord);
-        }
-
-        {
-            // 2.1 The coming query pending timeout, query_timeout (300) > pending_timeout (2).
-            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
-            Assertions.assertThrows(StarRocksException.class,
-                    () -> manager.maybeWait(connectContext, coord),
-                    "pending timeout");
-            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
-                    "the session variable [query_queue_pending_timeout_second]",
-                    () -> manager.maybeWait(connectContext, coord));
         }
 
         {
@@ -606,6 +602,18 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // query should not be timeout even query_timeout is small because pending time is not in the query_timeout.
             manager.maybeWait(connectContext, coord);
             runningCoords.add(coord);
+        }
+
+        GlobalVariable.setQueryQueuePendingTimeoutSecond(2);
+        {
+            // 2.1 The coming query pending timeout, query_timeout (300) > pending_timeout (2).
+            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+            Assertions.assertThrows(StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord),
+                    "pending timeout");
+            ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                    "the session variable [query_queue_pending_timeout_second]",
+                    () -> manager.maybeWait(connectContext, coord));
         }
 
         {

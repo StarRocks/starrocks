@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <climits>
+
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
@@ -216,6 +218,11 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        // Tablet id check for cross publish
+        if (log.tablet_id() != _metadata->id()) {
+            return Status::InternalError("Tablet id in txn log and metadata are not the same");
+        }
+
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
@@ -227,6 +234,10 @@ public:
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(
                     check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
+        }
+        if (log.has_op_parallel_compaction()) {
+            RETURN_IF_ERROR(check_and_recover(
+                    [&]() { return apply_parallel_compaction_log(log.op_parallel_compaction(), log.txn_id()); }));
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -252,6 +263,11 @@ public:
 
         // Pre-check: only accept op_write operations
         for (const auto& log : txn_logs) {
+            // Tablet id check for cross publish
+            if (log->tablet_id() != _metadata->id()) {
+                return Status::InternalError("Tablet id in txn log and metadata are not the same");
+            }
+
             _max_txn_id = std::max(_max_txn_id, log->txn_id());
 
             // Ensure this log has op_write
@@ -289,6 +305,10 @@ public:
     }
 
     Status finish() override {
+        if (_is_lake_replication) {
+            return finalize_lake_replication();
+        }
+
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
@@ -363,6 +383,20 @@ private:
         return Status::OK();
     }
 
+    Status finalize_lake_replication() {
+        // For lake pk replication transactions, we don't need to handle primary index or delvec operations.
+        // This is because the tablet metadata is directly copied from the source cluster's table
+        _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
+        _metadata->set_version(_new_version);
+        if (_skip_write_tablet_metadata) {
+            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+        }
+        // Persist the tablet metadata
+        RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
+        _has_finalized = true;
+        return Status::OK();
+    }
+
     Status apply_write_log(const TxnLogPB_OpWrite& op_write, int64_t txn_id) {
         RETURN_IF_ERROR(update_metadata_schema(op_write, txn_id, _metadata, _tablet.tablet_mgr()));
         // get lock to avoid gc
@@ -401,8 +435,84 @@ private:
             return Status::OK();
         }
         RETURN_IF_ERROR(prepare_primary_index());
+
+        // Single output compaction
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
                                                                 _index_entry, &_builder, _base_version);
+    }
+
+    // Apply parallel compaction log: process multiple subtask compactions
+    // Each subtask has its own OpCompaction with independent input/output rowsets and lcrm file.
+    // Reuses publish_primary_compaction for each subtask, with pre-check to skip failed subtasks.
+    Status apply_parallel_compaction_log(const TxnLogPB_OpParallelCompaction& op_parallel, int64_t txn_id) {
+        // get lock to avoid gc
+        _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
+        DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
+
+        RETURN_IF_ERROR(prepare_primary_index());
+
+        // Process each subtask's OpCompaction
+        for (int i = 0; i < op_parallel.subtask_compactions_size(); i++) {
+            const auto& subtask_op = op_parallel.subtask_compactions(i);
+
+            // Pre-check: verify all input rowsets exist in current metadata
+            // Skip this subtask if any input rowset is missing (partial success handling)
+            if (!_check_input_rowsets_exist(subtask_op)) {
+                std::vector<uint32_t> input_ids(subtask_op.input_rowsets().begin(), subtask_op.input_rowsets().end());
+                LOG(WARNING) << "Parallel compaction subtask " << i << " skipped due to missing input rowsets"
+                             << ", tablet=" << _tablet.id() << ", first_input_ids=["
+                             << JoinInts(std::vector<uint32_t>(input_ids.begin(),
+                                                               input_ids.begin() + std::min(5, (int)input_ids.size())),
+                                         ",")
+                             << "]";
+                continue;
+            }
+
+            // Reuse publish_primary_compaction for each subtask
+            // - Internal conflict check is performed per subtask
+            // - Light publish uses subtask's lcrm_file
+            // - Primary index and metadata are updated
+            RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, *_metadata, _tablet,
+                                                                             _index_entry, &_builder, _base_version));
+        }
+
+        // Apply unified SST compaction results (if any)
+        // SST compaction is tablet-level, executed once after all subtasks complete
+        // Reuse apply_opcompaction by constructing a temporary OpCompaction from OpParallelCompaction
+        if (!op_parallel.input_sstables().empty() || op_parallel.has_output_sstable() ||
+            !op_parallel.output_sstables().empty()) {
+            TxnLogPB_OpCompaction sst_op;
+            for (const auto& input_sst : op_parallel.input_sstables()) {
+                sst_op.add_input_sstables()->CopyFrom(input_sst);
+            }
+            if (op_parallel.has_output_sstable()) {
+                sst_op.mutable_output_sstable()->CopyFrom(op_parallel.output_sstable());
+            }
+            for (const auto& output_sst : op_parallel.output_sstables()) {
+                sst_op.add_output_sstables()->CopyFrom(output_sst);
+            }
+            RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, sst_op));
+            _builder.remove_compacted_sst(sst_op);
+        }
+
+        return Status::OK();
+    }
+
+    // Helper function: check if all input rowsets exist in current metadata
+    bool _check_input_rowsets_exist(const TxnLogPB_OpCompaction& op) const {
+        for (uint32_t input_id : op.input_rowsets()) {
+            bool found = false;
+            for (const auto& rowset : _metadata->rowsets()) {
+                if (rowset.id() == input_id) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
@@ -462,36 +572,40 @@ private:
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
         } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            auto old_delvec_meta = std::move(*_metadata->mutable_delvec_meta());
+            auto old_sstable_meta = std::move(*_metadata->mutable_sstable_meta());
+            auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
+            _metadata->mutable_rowsets()->Clear();
+            _metadata->mutable_delvec_meta()->Clear();
+            _metadata->mutable_sstable_meta()->Clear();
+            _metadata->mutable_dcg_meta()->Clear();
+
             if (op_replication.has_tablet_metadata()) {
-                // Same logic for pk and non-pk tables
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+                // Lake replication (replication from shared-data cluster) with tablet metadata provided.
+                // Mark this as a lake replication transaction
+                _is_lake_replication = true;
 
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                if (copied_tablet_meta.rowsets_size() > 0) {
-                    _metadata->mutable_rowsets()->Clear();
-                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
-                }
-
-                if (copied_tablet_meta.has_dcg_meta()) {
-                    _metadata->mutable_dcg_meta()->Clear();
-                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
-                }
-
-                if (copied_tablet_meta.has_sstable_meta()) {
-                    _metadata->mutable_sstable_meta()->Clear();
-                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
-                }
-
-                if (copied_tablet_meta.has_delvec_meta()) {
-                    _metadata->mutable_delvec_meta()->Clear();
-                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
-                }
+                _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
+                _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
+                _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
+                _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                _metadata->set_cumulative_point(0);
-                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
-
-                _tablet.update_mgr()->unload_primary_index(_tablet.id());
+                // In lake replication scenario, we need to carefully handle compaction_inputs.
+                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                std::unordered_set<uint32_t> new_rowset_ids;
+                for (const auto& rowset : _metadata->rowsets()) {
+                    new_rowset_ids.insert(rowset.id());
+                }
+                for (auto&& old_rowset : old_rowsets) {
+                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    }
+                }
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
                         << ", base_version: " << _base_version << ", new_version: " << _new_version
@@ -499,10 +613,7 @@ private:
                         << ", next_rowset_id: " << _metadata->next_rowset_id()
                         << ", rowsets size: " << _metadata->rowsets_size();
             } else {
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-                _metadata->mutable_rowsets()->Clear();
-                _metadata->mutable_delvec_meta()->Clear();
-
+                // Non-Lake replication (replication from shared-nothing cluster).
                 auto new_next_rowset_id = _metadata->next_rowset_id();
                 for (const auto& op_write : op_replication.op_writes()) {
                     auto rowset = _metadata->add_rowsets();
@@ -512,20 +623,66 @@ private:
                     new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id,
                                                             new_rowset_id + std::max(1, rowset->segments_size()));
                 }
-
                 for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
                     auto delvec = std::make_shared<DelVector>();
                     RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
                     _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
                 }
-
                 _metadata->set_next_rowset_id(new_next_rowset_id);
-                _metadata->set_cumulative_point(0);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
-
-                _tablet.update_mgr()->unload_primary_index(_tablet.id());
             }
 
+            _metadata->set_cumulative_point(0);
+
+            // In lake replication scenario, build set of files still referenced by new metadata.
+            // These files should not be added to orphan_files to avoid being deleted by vacuum.
+            std::unordered_set<std::string> new_referenced_files;
+            if (_is_lake_replication) {
+                for (const auto& [ver, f] : _metadata->delvec_meta().version_to_file()) {
+                    new_referenced_files.insert(f.name());
+                }
+                for (const auto& sst : _metadata->sstable_meta().sstables()) {
+                    new_referenced_files.insert(sst.filename());
+                }
+                for (const auto& [sid, dcg] : _metadata->dcg_meta().dcgs()) {
+                    for (const auto& cf : dcg.column_files()) {
+                        new_referenced_files.insert(cf);
+                    }
+                }
+            }
+
+            // Clear delvec_meta and add to orphan files.
+            for (const auto& [version, file] : old_delvec_meta.version_to_file()) {
+                if (new_referenced_files.count(file.name()) > 0) continue;
+                FileMetaPB file_meta;
+                file_meta.set_name(file.name());
+                file_meta.set_size(file.size());
+                file_meta.set_shared(file.shared());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            // Clear sstable_meta and add to orphan files.
+            for (const auto& sstable : old_sstable_meta.sstables()) {
+                if (new_referenced_files.count(sstable.filename()) > 0) continue;
+                FileMetaPB file_meta;
+                file_meta.set_name(sstable.filename());
+                file_meta.set_size(sstable.filesize());
+                file_meta.set_shared(sstable.shared());
+                _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+            }
+            // Clear dcg_meta and add to orphan files.
+            for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
+                for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+                    if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
+                    FileMetaPB file_meta;
+                    file_meta.set_name(dcg_ver.column_files(i));
+                    if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
+                        file_meta.set_shared(dcg_ver.shared_files(i));
+                    }
+                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+                }
+            }
+
+            _tablet.update_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
@@ -549,6 +706,8 @@ private:
     // True when finalize meta file success.
     bool _has_finalized = false;
     bool _rebuild_pindex = false;
+    // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
+    bool _is_lake_replication = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -560,11 +719,19 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        // Tablet id check for cross publish
+        if (log.tablet_id() != _metadata->id()) {
+            return Status::InternalError("Tablet id in txn log and metadata are not the same");
+        }
+
         if (log.has_op_write()) {
             RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
+        }
+        if (log.has_op_parallel_compaction()) {
+            RETURN_IF_ERROR(apply_parallel_compaction_log(log.op_parallel_compaction()));
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -596,6 +763,11 @@ public:
         // Traverse all transaction logs and collect op_write information
         VLOG(2) << "Collecting op_write information from transaction logs for tablet " << _tablet.id();
         for (const auto& log : txn_logs) {
+            // Tablet id check for cross publish
+            if (log->tablet_id() != _metadata->id()) {
+                return Status::InternalError("Tablet id in txn log and metadata are not the same");
+            }
+
             if (log->has_op_write()) {
                 const auto& op_write = log->op_write();
                 RETURN_IF_ERROR(update_metadata_schema(op_write, log->txn_id(), _metadata, _tablet.tablet_mgr()));
@@ -732,6 +904,39 @@ private:
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction) {
+        // Single output compaction (standard format)
+        return apply_compaction_log_single_output(op_compaction);
+    }
+
+    // Apply parallel compaction log: process multiple subtask compactions
+    // Each subtask has its own OpCompaction in subtask_compactions.
+    // Reuses apply_compaction_log_single_output for each subtask.
+    //
+    // NOTE: Parallel compaction only supports:
+    // 1. PK tables (cumulative_point is always 0)
+    // 2. Non-PK tables with size-tiered compaction strategy (cumulative_point is always 0)
+    // Non-PK tables with default (base+cumulative) strategy are NOT supported and will
+    // fallback to normal compaction in TabletParallelCompactionManager.
+    // Therefore, we don't need complex cumulative_point calculation here.
+    Status apply_parallel_compaction_log(const TxnLogPB_OpParallelCompaction& op_parallel) {
+        // Process each subtask's OpCompaction by reusing apply_compaction_log_single_output
+        // All errors (including missing rowsets) are propagated immediately.
+        for (int subtask_idx = 0; subtask_idx < op_parallel.subtask_compactions_size(); subtask_idx++) {
+            const auto& subtask_op = op_parallel.subtask_compactions(subtask_idx);
+            RETURN_IF_ERROR(apply_compaction_log_single_output(subtask_op));
+            VLOG(1) << "Applied parallel compaction subtask " << subtask_idx << ", tablet=" << _metadata->id();
+        }
+
+        // Set cumulative point to 0.
+        // Parallel compaction only supports PK tables and size-tiered non-PK tables,
+        // both of which don't use cumulative_point (always 0).
+        _metadata->set_cumulative_point(0);
+
+        return Status::OK();
+    }
+
+    // Apply compaction with single merged output (standard format)
+    Status apply_compaction_log_single_output(const TxnLogPB_OpCompaction& op_compaction) {
         // It's ok to have a compaction log without input rowset and output rowset.
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
@@ -910,52 +1115,35 @@ private:
                       << ", base_version: " << base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_meta.txn_id();
         } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            _metadata->mutable_rowsets()->Clear();
             if (op_replication.has_tablet_metadata()) {
-                // Same logic for pk and non-pk tables
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-
+                // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
-                if (copied_tablet_meta.rowsets_size() > 0) {
-                    _metadata->mutable_rowsets()->Clear();
-                    _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
-                }
-
-                if (copied_tablet_meta.has_dcg_meta()) {
-                    _metadata->mutable_dcg_meta()->Clear();
-                    _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
-                }
-
-                if (copied_tablet_meta.has_sstable_meta()) {
-                    _metadata->mutable_sstable_meta()->Clear();
-                    _metadata->mutable_sstable_meta()->CopyFrom(copied_tablet_meta.sstable_meta());
-                }
-
-                if (copied_tablet_meta.has_delvec_meta()) {
-                    _metadata->mutable_delvec_meta()->Clear();
-                    _metadata->mutable_delvec_meta()->CopyFrom(copied_tablet_meta.delvec_meta());
-                }
+                _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                _metadata->set_cumulative_point(0);
-                old_rowsets.Swap(_metadata->mutable_compaction_inputs());
-
-                VLOG(3) << "Apply replication log with tablet metadata provided. tablet_id: " << _tablet.id()
-                        << ", base_version: " << base_version << ", new_version: " << _new_version
-                        << ", txn_id: " << txn_meta.txn_id() << ", metadata id: " << _metadata->id()
-                        << ", next_rowset_id: " << _metadata->next_rowset_id()
-                        << ", rowsets size: " << _metadata->rowsets_size();
+                // In lake replication scenario, we need to carefully handle compaction_inputs.
+                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
+                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
+                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                std::unordered_set<uint32_t> new_rowset_ids;
+                for (const auto& rowset : _metadata->rowsets()) {
+                    new_rowset_ids.insert(rowset.id());
+                }
+                for (auto&& old_rowset : old_rowsets) {
+                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
+                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    }
+                }
             } else {
-                auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-                _metadata->mutable_rowsets()->Clear();
-
+                // Non-Lake replication (replication from shared-nothing cluster).
                 for (const auto& op_write : op_replication.op_writes()) {
                     RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
                 }
-
-                _metadata->set_cumulative_point(0);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
-
+            _metadata->set_cumulative_point(0);
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_meta.txn_id();

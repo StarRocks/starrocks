@@ -333,6 +333,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: StarRocks が CPU に依存する判断（スレッドプールのサイズ設定やランタイムスケジューリングなど）で使用する CPU コア数を制御します。値が 0 の場合は自動検出が有効になり、StarRocks は /proc/cpuinfo を読み取り、利用可能な全コアを使用します。正の整数 (> 0) に設定すると、その値が CpuInfo::init 内で検出されたコア数を上書きして有効なコア数になります。コンテナ内で実行している場合、cgroup の cpuset や CPU クォータ設定によって使用可能なコアがさらに制限されることがあり、CpuInfo はそれらの cgroup 制限も尊重します。この設定は起動時にのみ適用され、変更するにはサーバーの再起動が必要です。
 - 導入バージョン: v3.2.0
 
+##### plugin_path
+
+- デフォルト: `${STARROCKS_HOME}/plugin`
+- タイプ: string
+- 単位: Path
+- 変更可能: No
+- 説明: StarRocks が外部プラグイン（動的ライブラリ、コネクタアーティファクト、UDF バイナリなど）をロードするファイルシステム上のディレクトリ。`plugin_path` は BE プロセスからアクセス可能なディレクトリ（読み取りおよび実行権限）を指し、プラグインがロードされる前に存在している必要があります。テストコード（be/src/testutil/init_config.h）は起動時にこのディレクトリを作成します。`plugin_path` を変更した場合は、新しいパスを反映させるためにプロセスを再起動する必要があります。所有権が正しいこと、プラグインファイルがプラットフォームのネイティブなバイナリ拡張子（例：Linux の .so）を使用していることを確認してください。
+- 導入バージョン: v3.2.0
+
 ##### priority_networks
 
 - デフォルト: 空の文字列
@@ -422,6 +431,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE の UpdateManager にある "update_apply" スレッドプール（主キーテーブルの rowset を適用するプール）の最小スレッド数を設定します。値が 0 の場合は固定の最小値が無効（下限なし）となります。`transaction_apply_worker_count` も 0 のときはプールの最大スレッド数はデフォルトで CPU コア数になり、実効的なワーカー数は CPU コア数と等しくなります。トランザクション適用時のベースラインの並行度を保証するために増やすことができますが、あまり高く設定すると CPU 競合が増える可能性があります。変更は update_config HTTP ハンドラを通じてランタイムで適用されます（apply スレッドプールの update_min_threads を呼び出します）。
 - 導入バージョン: v3.2.11
 
+##### transaction_publish_version_thread_pool_num_min
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: Threads
+- 変更可能: Yes
+- 説明: AgentServer の "publish_version" 動的スレッドプール（トランザクションバージョンの公開 / TTaskType::PUBLISH_VERSION タスクの処理に使用）で確保される最小スレッド数を設定します。起動時、プールは min = max(config value, MIN_TRANSACTION_PUBLISH_WORKER_COUNT) (MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 1) で作成されるため、デフォルトの 0 は最小で 1 スレッドになります。ランタイムでこの値を変更すると更新コールバックが呼び出され ThreadPool::update_min_threads を実行し、プールの保証最小数を増減します（ただし強制される最小値 1 を下回りません）。transaction_publish_version_worker_count（最大スレッド）および transaction_publish_version_thread_pool_idle_time_ms（アイドルタイムアウト）と調整してください。
+- 導入バージョン: v3.2.11
+
 ### メタデータとクラスタ管理
 
 ##### cluster_id
@@ -432,6 +450,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 変更可能: No
 - 説明: この StarRocks backend のグローバルクラスタ識別子。起動時に StorageEngine は config::cluster_id を実効クラスタ ID として読み取り、すべての data root パスが同じクラスタ ID を含んでいることを検証します（StorageEngine::_check_all_root_path_cluster_id を参照）。値が -1 の場合は「未設定」を意味し、エンジンは既存のデータディレクトリまたはマスターのハートビートから実効 ID を導出することがあります。非負の ID が設定されている場合、設定された ID とデータディレクトリに格納されている ID の不一致は起動時の検証に失敗を引き起こします（Status::Corruption）。一部の root に ID が欠けており、エンジンが ID の書き込みを許可されている場合（options.need_write_cluster_id）、それらの root に実効 ID を永続化します。この設定は不変であるため、変更するには異なる設定でプロセスを再起動する必要があります。
 - 導入バージョン: 3.2.0
+
+##### consistency_max_memory_limit
+
+- デフォルト: 10G
+- タイプ: String
+- 単位: -
+- 変更可能: No
+- 説明: CONSISTENCY メモリトラッカー用のメモリサイズ指定。
+- 導入バージョン: v3.2.0
 
 ##### retry_apply_interval_second
 
@@ -450,6 +477,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 変更可能: No
 - 説明: BE の "update_schema" 動的 ThreadPool で TTaskType::UPDATE_SCHEMA タスクを処理するワーカースレッドの最大数を設定します。ThreadPool は起動時に agent_server 内で作成され、最小 0 スレッド（アイドル時にゼロまでスケールダウン可能）、最大はこの設定値と等しくなります。プールはデフォルトのアイドルタイムアウトと事実上無制限のキューを使用します。より多くの同時スキーマ更新タスクを許可するにはこの値を増やします（CPU とメモリ使用量が増加します）。並列スキーマ操作を制限したい場合は値を下げます。このオプションはランタイムで変更できないため、変更には BE の再起動が必要です。
 - 導入バージョン: 3.2.3
+
+##### update_tablet_meta_info_worker_count
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: -
+- 変更可能: Yes
+- 説明: BE が tablet のメタデータ更新タスクを処理する動的スレッドプールの最大ワーカースレッド数を設定します。スレッドプールは起動時に作成され、最小 0 スレッド（アイドル時にゼロまでスケールダウン可能）、最大はこの設定値（最小 1 にクランプ）となります。ランタイムでこの値を変更するとスレッドプールの最大スレッド数が更新されます。並列度を上げたい場合は値を増やし、制限したい場合は下げてください。
+- 導入バージョン: v4.1.0, v4.0.6, v3.5.13
 
 ### ユーザー、ロール、および権限
 
@@ -955,15 +991,6 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 挿入行を処理する際の列モード部分更新におけるバッチサイズ。この項目が `0` または負の数値に設定されている場合、無限ループを回避するため `1` に制限されます。この項目は各バッチで処理される新規挿入行の数を制御します。大きな値は書き込みパフォーマンスを向上させますが、より多くのメモリを消費します。
 - 導入バージョン: v3.5.10, v4.0.2
 
-##### enable_stream_load_verbose_log
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
-- 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
-
 ##### enable_load_spill_parallel_merge
 
 - デフォルト: true
@@ -972,6 +999,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: 単一タブレット内で並列スピルマージを有効にするかどうかを指定します。これを有効にすると、データロード中のスピルマージのパフォーマンスが向上します。
 - 導入バージョン: -
+
+##### enable_stream_load_verbose_log
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: Stream Load ジョブの HTTP リクエストとレスポンスをログに記録するかどうかを指定します。
+- 導入バージョン: v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
 ##### flush_thread_num_per_store
 
@@ -1148,6 +1184,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 有効にすると、load-channel の open RPC（例: PTabletWriterOpen）の処理が BRPC ワーカーから専用のスレッドプールへオフロードされます。リクエストハンドラは ChannelOpenTask を生成して内部 `_async_rpc_pool` に投入し、`LoadChannelMgr::_open` をインラインで実行しません。これにより BRPC スレッド内の作業量とブロッキングが減少し、`load_channel_rpc_thread_pool_num` と `load_channel_rpc_thread_pool_queue_size` で同時実行性を調整できるようになります。スレッドプールへの投入が失敗する（プールが満杯またはシャットダウン済み）と、リクエストはキャンセルされエラー状態が返されます。プールは `LoadChannelMgr::close()` でシャットダウンされるため、有効化する際は容量とライフサイクルを考慮し、リクエストの拒否や処理遅延を避けるようにしてください。
 - 導入バージョン: v3.5.0
 
+##### enable_load_segment_parallel
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: 有効にすると、rowset セグメントの読み込みと rowset レベルの読み取りが StarRocks のバックグラウンドスレッドプール（ExecEnv::load_segment_thread_pool と ExecEnv::load_rowset_thread_pool）を使って並行して実行されます。Rowset::load_segments および TabletReader::get_segment_iterators は各セグメントまたは各 rowset のタスクをこれらのプールにサブミットし、サブミッションに失敗した場合は直列読み込みにフォールバックして警告をログに出します。大きな rowset に対する読み取り／ロードレイテンシを削減できますが、CPU/IO の並列度とメモリプレッシャーが増加します。注意: 並列ロードはセグメントの読み込み完了順序を変える可能性があり、そのため部分コンパクションを防ぎます（コードは `_parallel_load` をチェックし、有効時は部分コンパクションを無効化します）。セグメント順序に依存する操作への影響を考慮してください。
+- 導入バージョン: v3.3.0, v3.4.0, v3.5.0
+
 ##### enable_streaming_load_thread_pool
 
 - デフォルト: true
@@ -1193,6 +1238,33 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: LoadChannelMgr によって作成される Load チャネル RPC スレッドプールの保留タスク最大キューサイズを設定します。このスレッドプールは `enable_load_channel_rpc_async` が有効なときに非同期の `open` リクエストを実行し、プールサイズは `load_channel_rpc_thread_pool_num` と組になっています。大きなデフォルト値（1024000）は、同期処理から非同期処理への切り替え後も動作が保たれるように brpc ワーカーのデフォルトに合わせたものです。キューが満杯になると ThreadPool::submit() は失敗し、到着した open RPC はエラーでキャンセルされ、呼び出し元は拒否を受け取ります。大量の同時 `open` リクエストをバッファしたい場合はこの値を増やしてください；逆に小さくするとバックプレッシャーが強まり、負荷時に拒否が増える可能性があります。
 - 導入バージョン: v3.5.0
 
+##### load_diagnose_rpc_timeout_profile_threshold_ms
+
+- デフォルト: 60000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: Yes
+- 説明: ロード RPC がタイムアウトしたとき（エラーに "[E1008]Reached timeout" が含まれる）かつ `enable_load_diagnose` が true の場合、フルプロファイリング診断を要求するかどうかを制御する閾値です。リクエスト単位の RPC タイムアウト `_rpc_timeout_ms` が `load_diagnose_rpc_timeout_profile_threshold_ms` より大きい場合、その診断でプロファイリングが有効になります。より小さい `_rpc_timeout_ms` の場合、リアルタイム／短タイムアウトのロードで頻繁な重い診断が発生しないよう、20 回のタイムアウトにつき 1 回だけプロファイリングをサンプリングします。この値は送信される `PLoadDiagnoseRequest` の `profile` フラグに影響します。スタックトレースの振る舞いは `load_diagnose_rpc_timeout_stack_trace_threshold_ms`、送信タイムアウトは `load_diagnose_send_rpc_timeout_ms` によって別途制御されます。
+- 導入バージョン: v3.5.0
+
+##### load_diagnose_rpc_timeout_stack_trace_threshold_ms
+
+- デフォルト: 600000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: Yes
+- 説明: 長時間実行されている load RPC に対してリモートのスタックトレースを要求するかどうかを決定する閾値（ミリ秒）。load RPC がタイムアウトエラーでタイムアウトし、有効な RPC タイムアウト（_rpc_timeout_ms）がこの値を超える場合、`OlapTableSink`/`NodeChannel` はターゲット BE への `load_diagnose` RPC に `stack_trace=true` を含め、BE がデバッグ用のスタックトレースを返せるようにします。`LocalTabletsChannel::SecondaryReplicasWaiter` は、セカンダリレプリカの待機がこの間隔を超えた場合に、プライマリからベストエフォートのスタックトレース診断をトリガーします。この動作は `enable_load_diagnose` を必要とし、診断 RPC のタイムアウトには `load_diagnose_send_rpc_timeout_ms` を使用します；プロファイリングは `load_diagnose_rpc_timeout_profile_threshold_ms` によって別途制御されます。この値を下げると、スタックトレース要求がより積極的になります。
+- 導入バージョン: v3.5.0
+
+##### load_fp_brpc_timeout_ms
+
+- デフォルト: -1
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: Yes
+- 説明: `node_channel_set_brpc_timeout` の fail point がトリガーされたときに OlapTableSink が使用するチャネルごとの brpc RPC タイムアウトを上書きします。正の値に設定すると、NodeChannel は内部の `_rpc_timeout_ms` をこの値（ミリ秒）に設定し、open/add-chunk/cancel RPC が短いタイムアウトを使うようになり、"[E1008]Reached timeout" エラーを発生させる brpc タイムアウトのシミュレーションが可能になります。デフォルト（`-1`）は上書きを無効にします。この値の変更はテストとフォールトインジェクションを目的としており、小さい値は偽のタイムアウトを発生させてロード診断をトリガーする可能性があります（`enable_load_diagnose`、`load_diagnose_rpc_timeout_profile_threshold_ms`、`load_diagnose_rpc_timeout_stack_trace_threshold_ms`、`load_diagnose_send_rpc_timeout_ms` を参照）。
+- 導入バージョン: v3.5.0
+
 ##### load_fp_tablets_channel_add_chunk_block_ms
 
 - デフォルト: -1
@@ -1230,6 +1302,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: ストレージボリュームの状態を報告する時間間隔。これには、ボリューム内のデータサイズが含まれます。
 - 導入バージョン: -
+
+##### report_resource_usage_interval_ms
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: Milliseconds
+- 変更可能: Yes
+- 説明: BE エージェントが FE (master) に送信する定期的なリソース使用状況レポートの間隔（ミリ秒）。エージェントのワーカースレッドは TResourceUsage（実行中クエリ数、使用中メモリ/制限、CPU 使用 permille、resource-group の使用状況）を収集して report_task を呼び出し、この設定された間隔だけスリープします（task_worker_pool を参照）。値を小さくすると報告の即時性は向上しますが CPU、ネットワーク、master の負荷が増加します。値を大きくするとオーバーヘッドは減りますがリソース情報の最新性は低下します。報告は関連するメトリクス（report_resource_usage_requests_total、report_resource_usage_requests_failed）を更新します。クラスタ規模や FE の負荷に応じて調整してください。
+- 導入バージョン: v3.2.0
 
 ##### report_tablet_interval_seconds
 
@@ -1341,6 +1422,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 同時コンパクションタスクに使用される最大スレッド数。この設定は v3.1.7 および v3.2.2 以降、動的に変更されました。
 - 導入バージョン: v3.0.0
 
+##### compaction_max_memory_limit_percent
+
+- デフォルト: 100
+- タイプ: Int
+- 単位: Percent
+- 変更可能: No
+- 説明: compaction に使用できる BE プロセスメモリの割合。このパーセントに基づき BE は `compaction_max_memory_limit` と（プロセスメモリ上限 × このパーセント / 100）の小さい方を compaction メモリ上限として計算します。この値が < 0 または > 100 の場合は 100 と見なされます。`compaction_max_memory_limit` < 0 の場合は代わりにプロセスメモリ上限が使用されます。計算は `mem_limit` から導出される BE プロセスメモリも考慮します。`compaction_memory_limit_per_worker`（ワーカーごとの上限）と組み合わせて、この設定は compaction に利用可能な総メモリを制御し、したがって compaction の並列度や OOM リスクに影響します。
+- 導入バージョン: v3.2.0
+
 ##### compaction_memory_limit_per_worker
 
 - デフォルト: 2147483648
@@ -1413,6 +1503,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: DeleteTaskWorkerPool 内で HIGH-priority の削除スレッドとして割り当てられるワーカースレッドの数。起動時に AgentServer は total threads = delete_worker_count_normal_priority + delete_worker_count_high_priority で削除プールを作成し、最初の delete_worker_count_high_priority スレッドは専ら TPriority::HIGH タスクをポップしようとするようにマークされます（高優先度削除タスクがない場合はポーリングしてスリープ/ループします）。この値を増やすと高優先度削除リクエストの並列性が高まり、減らすと専用容量が減って高優先度削除のレイテンシが増加する可能性があります。
 - 導入バージョン: v3.2.0
 
+##### dictionary_encoding_ratio
+
+- デフォルト: 0.7
+- タイプ: Double
+- 単位: -
+- 変更可能: No
+- 説明: StringColumnWriter が encode-speculation フェーズでチャンクに対して dictionary (DICT_ENCODING) と plain (PLAIN_ENCODING) のどちらを選択するかを判断するために使用する比率（0.0–1.0）。コードは max_card = row_count * `dictionary_encoding_ratio` を計算し、チャンクの distinct key 数をスキャンします；distinct count が max_card を超えると writer は PLAIN_ENCODING を選びます。このチェックはチャンクサイズが `dictionary_speculate_min_chunk_size` を超えた場合（かつ row_count > dictionary_min_rowcount のとき）にのみ行われます。値を大きくすると dictionary encoding が有利になり（より多くの distinct key を許容）、値を小さくすると早めに plain encoding へフォールバックします。値が 1.0 の場合は事実上 dictionary encoding を強制します（distinct count は常に row_count を超え得ないため）。
+- 導入バージョン: v3.2.0
+
 ##### disk_stat_monitor_interval
 
 - デフォルト: 5
@@ -1451,11 +1550,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### drop_tablet_worker_count
 
-- デフォルト: 3
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: タブレットを削除するために使用されるスレッドの数。
+- 説明: タブレットを削除するために使用されるスレッドの数。`0` はノード内の CPU コアの半数を示します。
 - 導入バージョン: -
 
 ##### enable_check_string_lengths
@@ -1496,29 +1595,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### enable_pk_index_parallel_compaction
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
 - 説明: 共有データモードでプライマリキーインデックスの並列コンパクションを有効にするかどうか。
 - 導入バージョン: -
 
-##### enable_pk_index_parallel_get
-
-- デフォルト: false
-- タイプ: Boolean
-- 単位: -
-- 可変: はい
-- 説明: 共有データモードでプライマリキーインデックスの並列取得を有効にするかどうか。
-- 導入バージョン: -
-
-##### enable_pk_parallel_execution
+##### enable_pk_index_parallel_execution
 
 - デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 可変: はい
-- 説明: Primary Key テーブルの並列実行戦略を有効にするかどうかを決定します。有効化されると、インポートおよびコンパクションの段階で PK インデックスファイルが生成されます。
+- 説明: 共有データモードでプライマリキーインデックス操作の並列実行を有効にするかどうか。有効化されると、システムは公開操作中にスレッドプールを使用してセグメントを並行処理し、大規模なテーブルのパフォーマンスを大幅に向上させます。
+- 導入バージョン: -
+
+##### enable_pk_index_eager_build
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 可変: はい
+- 説明: データインポートおよびコンパクションの段階で、Primary Key インデックスファイルを即座に構築するかどうかを決定します。有効化されると、システムはデータ書き込み時に永続的な PK インデックスファイルを直接生成し、後続のクエリパフォーマンスを向上させます。
 - 導入バージョン: -
 
 ##### enable_pk_size_tiered_compaction_strategy
@@ -1791,6 +1890,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: BE 上の各ストレージパスに割り当てられる並列 clone ワーカースレッドの数。BE 起動時にクローンスレッドプールの max threads は max(number_of_store_paths * parallel_clone_task_per_path, MIN_CLONE_TASK_THREADS_IN_POOL) として計算されます。例えばストレージパスが4つでデフォルト=8 の場合、クローンプールの max = 32 になります。この設定は BE が処理する CLONE タスク（tablet レプリカのコピー）の並列度を直接制御します：値を増やすと並列クローンスループットが向上しますが CPU、ディスク、ネットワークの競合も増えます；値を減らすと同時実行クローンタスクが制限され、FE がスケジュールしたクローン操作をスロットルする可能性があります。値は動的 clone スレッドプールに適用され、update-config パス経由でランタイムに変更可能です（agent_server がクローンプールの max threads を更新します）。
 - 導入バージョン: v3.2.0
 
+##### path_gc_check
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: No
+- 説明: 有効にすると、StorageEngine は各データディレクトリごとにパス走査とガベージコレクションを定期的に行うバックグラウンドスレッドを起動します。起動時に `start_bg_threads()` は `_path_scan_thread_callback`（`DataDir::perform_path_scan` と `perform_tmp_path_scan` を呼び出す）および `_path_gc_thread_callback`（`DataDir::perform_path_gc_by_tablet`、`DataDir::perform_path_gc_by_rowsetid`、`DataDir::perform_delta_column_files_gc`、`DataDir::perform_crm_gc` を呼び出す）を生成します。走査と GC の間隔は `path_scan_interval_second` と `path_gc_check_interval_second` で制御され、CRM ファイルのクリーンアップは `unused_crm_file_threshold_second` を使用します。自動のパス単位クリーンアップを無効にすると、孤立ファイルや一時ファイルは手動で管理する必要があります。フラグを変更するにはプロセスの再起動が必要です。
+- 導入バージョン: v3.2.0
+
+##### path_gc_check_interval_second
+
+- デフォルト: 86400
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: No
+- 説明: ストレージエンジンのパスガベージコレクション用バックグラウンドスレッドが実行される間隔（秒）。スレッドが起床するたびに DataDir はタブレット単位のパス GC、rowset id 単位のパス GC、デルタカラムファイルの GC、および CRM GC を実行します（CRM GC 呼び出しは `unused_crm_file_threshold_second` を使用します）。非正の値に設定すると、コードは間隔を 1800 秒（30 分）に強制し、警告を出力します。ディスク上の一時ファイルやダウンロード済みファイルがどの頻度でスキャン・削除されるかを調整するためにこの値を調整してください。
+- 導入バージョン: v3.2.0
+
 ##### pending_data_expire_time_sec
 
 - デフォルト: 1800
@@ -1827,18 +1944,27 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データモードでのプライマリキーインデックス early sst コンパクションの閾値。
 - 導入バージョン: -
 
+##### pk_index_map_shard_size
+
+- デフォルト: 4096
+- タイプ: Int
+- 単位: Count
+- 変更可能: No
+- 説明: lake の UpdateManager におけるプライマリキーインデックスシャードマップで使用されるシャード数。UpdateManager はこのサイズの `PkIndexShard` ベクトルを割り当て、ビットマスク (tablet_id & (`pk_index_map_shard_size` - 1)) を使って tablet id をシャードにマップします。`pk_index_map_shard_size` を増やすと、本来同じシャードを共有しているタブレット間のロック競合を低減できますが、ミューテックスオブジェクトの数が増えメモリ使用量がやや増加します。コードはビットマスクによるインデックス化に依存しているため、値は 2 の累乗でなければなりません。サイズ決定の参考は `tablet_map_shard_size` のヒューリスティックを参照してください: total_num_of_tablets_in_BE / 512.
+- 導入バージョン: v3.2.0
+
 ##### pk_index_memtable_flush_threadpool_max_threads
 
-- デフォルト: 4
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックス Memtable フラッシュ用のスレッドプールの最大スレッド数。
+- 説明: 共有データモードでのプライマリキーインデックス Memtable フラッシュ用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
 ##### pk_index_memtable_max_count
 
-- デフォルト: 1
+- デフォルト: 2
 - タイプ: Int
 - 単位: -
 - 可変: はい
@@ -1865,29 +1991,29 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### pk_index_parallel_compaction_threadpool_max_threads
 
-- デフォルト: 4
+- デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのクラウドネイティブプライマリキーインデックス並列コンパクション用のスレッドプールの最大スレッド数。
+- 説明: 共有データモードでのクラウドネイティブプライマリキーインデックス並列コンパクション用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
-##### pk_index_parallel_get_min_rows
+##### pk_index_parallel_execution_min_rows
 
 - デフォルト: 16384
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでプライマリキーインデックスの並列取得を有効にするための最小行数閾値。
+- 説明: 共有データモードでプライマリキーインデックス操作の並列実行を有効にするための最小行数閾値。
 - 導入バージョン: -
 
-##### pk_index_parallel_get_threadpool_max_threads
+##### pk_index_parallel_execution_threadpool_max_threads
 
 - デフォルト: 0
 - タイプ: Int
 - 単位: -
 - 可変: はい
-- 説明: 共有データモードでのプライマリキーインデックス並列取得用のスレッドプールの最大スレッド数。0 は自動設定を意味します。
+- 説明: 共有データモードでのプライマリキーインデックス並列実行用のスレッドプールの最大スレッド数。0 は CPU コア数の半分に自動設定されることを意味します。
 - 導入バージョン: -
 
 ##### pk_index_size_tiered_level_multiplier
@@ -1935,13 +2061,13 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: 共有データモードでのプライマリキーインデックスのターゲットファイルサイズ。デフォルトは 64MB です。
 - 導入バージョン: -
 
-##### pk_parallel_execution_threshold_bytes
+##### pk_index_eager_build_threshold_bytes
 
 - デフォルト: 104857600
 - タイプ: Int
-- 単位: -
+- 単位: Bytes
 - 可変: はい
-- 説明: enable_pk_parallel_execution が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えると、Primary Key テーブルの並列実行戦略が有効になります。デフォルトは 100MB です。
+- 説明: `enable_pk_index_eager_build` が true に設定されている場合、インポートまたはコンパクションで生成されるデータがこの閾値を超えたときのみ、システムは PK インデックスファイルを即座に構築します。デフォルトは 100MB です。
 - 導入バージョン: -
 
 ##### primary_key_limit_size
@@ -2051,6 +2177,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: スナップショットファイルの有効期限。
 - 導入バージョン: -
+
+##### stale_memtable_flush_time_sec
+
+- デフォルト: 0
+- タイプ: long
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: sender ジョブのメモリ使用量が高いとき、`stale_memtable_flush_time_sec` 秒より長く更新されていない memtable はメモリ圧力を下げるためにフラッシュされます。この動作はメモリ制限に近づいている場合（`limit_exceeded_by_ratio(70)` 以上）のみ考慮されます。`LocalTabletsChannel` ではさらに高いメモリ使用時（`limit_exceeded_by_ratio(95)`）に、`write_buffer_size / 4` より大きいサイズの memtable をフラッシュする追加パスが存在します。値が `0` の場合、年齢に基づく stale-memtable のフラッシュは無効になります（immutable-partition の memtable はアイドル時や高メモリ時に即座にフラッシュされます）。
+- 導入バージョン: v3.2.0
 
 ##### storage_flood_stage_left_capacity_bytes
 
@@ -2162,6 +2297,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: はい
 - 説明: タブレット統計キャッシュが更新される時間間隔。
 - 導入バージョン: -
+
+##### transaction_apply_worker_count
+
+- デフォルト: 0
+- タイプ: Int
+- 単位: Threads
+- 変更可能: Yes
+- 説明: UpdateManager の "update_apply" スレッドプール（トランザクション、特に primary-key テーブルの rowset を適用するプール）で使用されるワーカースレッドの最大数を制御します。値が `>0` の場合は固定の最大スレッド数を設定し、0（デフォルト）の場合はプールサイズが CPU コア数と同じになります。設定値は起動時（UpdateManager::init）に適用され、update-config HTTP アクションを通じてランタイムで変更でき、プールの最大スレッド数が更新されます。適用の同時実行性（スループット）を上げるか、CPU/メモリの競合を抑えるためにチューニングしてください。最小スレッド数とアイドルタイムアウトはそれぞれ transaction_apply_thread_pool_num_min と transaction_apply_worker_idle_time_ms によって管理されます。
+- 導入バージョン: v3.2.0
 
 ##### trash_file_expire_time_sec
 
@@ -2720,6 +2864,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 説明: FE に exec RPC リクエストを報告する際の RPC リクエストの再試行回数です。デフォルト値は 10 で、fragment instance finish RPC の場合に限り失敗した際に最大10回再試行されます。Report exec RPC request は load job にとって重要で、もしある fragment instance の finish 報告が失敗すると、load job はタイムアウトするまでハングする可能性があります。
 - 導入バージョン: -
 
+##### sleep_one_second
+
+- デフォルト: 1
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: No
+- 説明: マスターアドレス/ハートビートがまだ利用できない場合や短いリトライ/バックオフが必要な場合に、BE エージェントのワーカースレッドが 1 秒間の一時停止として使用する小さなグローバルスリープ間隔（秒）。コードベースではいくつかのレポートワーカープール（例: ReportDiskStateTaskWorkerPool、ReportOlapTableTaskWorkerPool、ReportWorkgroupTaskWorkerPool）から参照され、ビジーウェイトを避けてリトライ中の CPU 消費を低減します。この値を増やすとリトライ頻度とマスターへの応答性が遅くなり、減らすとポーリング率と CPU 使用率が上がります。応答性とリソース使用のトレードオフを意識してのみ調整してください。
+- 導入バージョン: v3.2.0
+
 ##### small_file_dir
 
 - デフォルト: `${STARROCKS_HOME}/lib/small_file/`
@@ -2746,4 +2899,3 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 可変: いいえ
 - 説明: ユーザー定義関数 (UDF) を保存するために使用されるディレクトリ。
 - 導入バージョン: -
-

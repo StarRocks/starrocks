@@ -704,6 +704,31 @@ displayed_sidebar: docs
 - 单位：Byte
 - 描述：扫描的总字节数。
 
+### starrocks_be_files_scan_num_files_read
+
+- 单位：个
+- 描述：从外部存储（CSV, Parquet, ORC, JSON, Avro）读取的文件数量。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_bytes_read
+
+- 单位：Byte
+- 描述：从外部存储读取的总字节数。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_raw_rows_read
+
+- 单位：个
+- 描述：从外部存储读取的原始行总数（包括格式错误的行，过滤和谓词过滤之前）。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_valid_rows_read
+
+- 单位：个
+- 描述：读取的有效行数（排除格式错误的行）。标签：`file_format`, `scan_type`。
+
+### starrocks_be_files_scan_num_rows_return
+
+- 单位：个
+- 描述：谓词过滤后返回的行数。标签：`file_format`, `scan_type`。
+
 ### disk_reads_completed
 
 - 单位：个
