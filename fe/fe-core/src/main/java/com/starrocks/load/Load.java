@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -238,6 +239,7 @@ public class Load {
         connectContext.setDatabase(dbName);
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         return connectContext;
     }
 
