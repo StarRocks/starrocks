@@ -483,16 +483,20 @@ public class StatisticsCollectJobFactory {
         // Use predicate columns if suitable
         TableName tableName = new TableName(db.getOriginName(), table.getName());
         int numColumns = table.getColumns().size();
-        List<String> predicateColNames = null;
+        List<String> predicateColNames = List.of();
         boolean existsPredicateColumns = false;
         boolean enablePredicateColumnStrategy = false;
+        boolean needRecollectPredicateColumnsOnUnpartitioned = false;
         if (basicStatsMeta != null && !basicStatsMeta.isInitJobMeta() && useBasicStats &&
                 Config.statistic_auto_collect_predicate_columns_threshold > 0 &&
                 CollectionUtils.isEmpty(columnNames) && table.isNativeTableOrMaterializedView()) {
             List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
             if (CollectionUtils.isNotEmpty(predicateColumns) && predicateColumns.size() <= numColumns) {
                 OlapTable olap = (OlapTable) table;
-                predicateColNames = predicateColumns.stream().flatMap(x -> x.getOlapColumnName(olap).stream()).toList();
+                predicateColNames = predicateColumns.stream()
+                        .flatMap(x -> x.getOlapColumnName(olap).stream())
+                        .distinct()
+                        .toList();
                 existsPredicateColumns = true;
                 if (numColumns > Config.statistic_auto_collect_predicate_columns_threshold) {
                     enablePredicateColumnStrategy = true;
@@ -500,15 +504,37 @@ public class StatisticsCollectJobFactory {
             }
         }
 
+
         if (basicStatsMeta != null) {
+            if (table.isUnPartitioned() && CollectionUtils.isNotEmpty(predicateColNames)) {
+                List<String> fullCols = basicStatsMeta.getAnalyzedColumns().values().stream()
+                        .filter(x -> x.getType() == StatsConstants.AnalyzeType.FULL)
+                        .map(ColumnStatsMeta::getColumnName)
+                        .toList();
+                Set<String> fullColSet = Set.copyOf(fullCols);
+                boolean missingPredicateColumns = predicateColNames.stream().anyMatch(c -> !fullColSet.contains(c));
+                if (missingPredicateColumns) {
+                    needRecollectPredicateColumnsOnUnpartitioned = true;
+                    columnNames = java.util.stream.Stream.concat(predicateColNames.stream(), fullCols.stream())
+                            .distinct()
+                            .toList();
+                    columnTypes = columnNames.stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                    analyzeType = StatsConstants.AnalyzeType.FULL;
+                }
+            }
+
             // 1. if the table has no update after the stats collection
-            if (useBasicStats && basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
+            if (!needRecollectPredicateColumnsOnUnpartitioned &&
+                    useBasicStats && basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
                 LOG.debug("statistics job doesn't work on non-update table: {}, " +
                                 "last update time: {}, last collect time: {}",
                         table.getName(), tableUpdateTime, basicStatsMeta.getUpdateTime());
                 return;
             }
-            if (!useBasicStats && !isInitJob && statsUpdateTime.isAfter(tableUpdateTime)) {
+            if (!needRecollectPredicateColumnsOnUnpartitioned &&
+                    !useBasicStats && !isInitJob && statsUpdateTime.isAfter(tableUpdateTime)) {
                 return;
             }
 
@@ -518,7 +544,7 @@ public class StatisticsCollectJobFactory {
                             Config.statistic_auto_collect_ratio);
 
             healthy = basicStatsMeta.getHealthy();
-            if (healthy > statisticAutoCollectRatio) {
+            if (!needRecollectPredicateColumnsOnUnpartitioned && healthy > statisticAutoCollectRatio) {
                 LOG.debug("statistics job doesn't work on health table: {}, healthy: {}, collect healthy limit: <{}",
                         table.getName(), healthy, statisticAutoCollectRatio);
                 return;
@@ -541,7 +567,8 @@ public class StatisticsCollectJobFactory {
 
             long timeInterval = PropertyUtil.propertyAsLong(jobProperties, STATISTIC_AUTO_COLLECT_INTERVAL, defaultInterval);
 
-            if (!isInitJob && statsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+            if (!needRecollectPredicateColumnsOnUnpartitioned &&
+                    !isInitJob && statsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table size: {}MB",
                         table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));
@@ -550,6 +577,7 @@ public class StatisticsCollectJobFactory {
 
             // 4. frequent-update big table without predicate column, choose sample strategy to collect statistics
             if (analyzeType != StatsConstants.AnalyzeType.HISTOGRAM &&
+                    !needRecollectPredicateColumnsOnUnpartitioned &&
                     healthy < Config.statistic_auto_collect_sample_threshold &&
                     sumDataSize > Config.statistic_auto_collect_small_table_size) {
                 if (!(Config.statistic_auto_collect_use_full_predicate_column_for_sample && existsPredicateColumns &&
@@ -583,7 +611,8 @@ public class StatisticsCollectJobFactory {
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             createHistogramJob(allTableJobMap, job, db, table, columnNames, columnTypes, priority);
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.FULL)) {
-            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columnNames, columnTypes, priority);
+            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columnNames, columnTypes, priority,
+                    needRecollectPredicateColumnsOnUnpartitioned);
         } else {
             throw new StarRocksPlannerException("Unknown analyze type " + analyzeType, ErrorType.INTERNAL_ERROR);
         }
@@ -626,14 +655,22 @@ public class StatisticsCollectJobFactory {
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
                                            NativeAnalyzeJob job, BasicStatsMeta stats,
                                            Database db, Table table, List<String> columnNames, List<Type> columnTypes,
-                                           StatisticsCollectJob.Priority priority) {
+                                           StatisticsCollectJob.Priority priority,
+                                           boolean forceRecollect) {
         StatsConstants.AnalyzeType analyzeType;
-        List<Partition> partitionList = table.getPartitions().stream()
-                .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, stats))
-                .toList();
+        List<Partition> partitionList;
+        if (forceRecollect) {
+            partitionList = table.getPartitions().stream()
+                    .filter(p -> p.hasData() && !p.getName().startsWith(SHADOW_PARTITION_PREFIX))
+                    .toList();
+        } else {
+            partitionList = table.getPartitions().stream()
+                    .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, stats))
+                    .toList();
+        }
 
         long totalDataSize = partitionList.stream().mapToLong(Partition::getDataSize).sum();
-        if (job.isDefaultJob() && totalDataSize > Config.statistic_max_full_collect_data_size) {
+        if (!forceRecollect && job.isDefaultJob() && totalDataSize > Config.statistic_max_full_collect_data_size) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
             LOG.debug("statistics job choose sample on table: {}, partition data size greater than config: {}",
                     table.getName(), Config.statistic_max_full_collect_data_size);
