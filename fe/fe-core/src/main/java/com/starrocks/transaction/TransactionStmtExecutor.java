@@ -52,6 +52,8 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -78,22 +80,72 @@ public class TransactionStmtExecutor {
     private static final Logger LOG = LogManager.getLogger(TransactionStmtExecutor.class);
 
     public static void beginStmt(ConnectContext context, BeginStmt stmt) {
+<<<<<<< HEAD
+=======
+        beginStmt(context, stmt, TransactionState.LoadJobSourceType.INSERT_STREAMING);
+    }
+
+    public static void beginStmt(ConnectContext context, BeginStmt stmt,
+                                 TransactionState.LoadJobSourceType sourceType) {
+        beginStmt(context, stmt, sourceType, null);
+    }
+
+    // Overload allowing explicit label override for creating the transaction state.
+    // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
+    public static void beginStmt(ConnectContext context, BeginStmt stmt,
+                                 TransactionState.LoadJobSourceType sourceType,
+                                 String labelOverride) {
+>>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         if (context.getTxnId() != 0) {
             //Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-            String label = explicitTxnState.getTransactionState().getLabel();
+            String existingLabel = explicitTxnState.getTransactionState().getLabel();
             long transactionId = explicitTxnState.getTransactionState().getTransactionId();
+<<<<<<< HEAD
             context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
+=======
+
+            // If user explicitly specifies a different label, throw an error
+            String requestedLabel = stmt.getLabel();
+            if (requestedLabel != null && !requestedLabel.isEmpty() && !requestedLabel.equals(existingLabel)) {
+                throw new SemanticException("Transaction already exists with label '" + existingLabel +
+                        "', cannot begin with different label '" + requestedLabel + "'");
+            }
+
+            context.getState().setOk(0, 0,
+                    buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
+>>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
             return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getTransactionIDGenerator().getNextTransactionId();
+<<<<<<< HEAD
         String label = DebugUtil.printId(context.getExecutionId());
         TransactionState transactionState = new TransactionState(transactionId, label, null,
                 TransactionState.LoadJobSourceType.INSERT_STREAMING,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+=======
+        // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
+        String stmtLabel = stmt.getLabel();
+        String label;
+        if (stmtLabel != null && !stmtLabel.isEmpty()) {
+            FeNameFormat.checkLabel(stmtLabel);
+            label = stmtLabel;
+        } else if (labelOverride != null && !labelOverride.isEmpty()) {
+            label = labelOverride;
+        } else {
+            label = DebugUtil.printId(context.getExecutionId());
+        }
+        TransactionState transactionState = new TransactionState(
+                transactionId,
+                label,
+                null,
+                sourceType,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
+>>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
                 context.getExecTimeout() * 1000L);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
