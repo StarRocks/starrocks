@@ -526,12 +526,11 @@ SELECT
 FROM variant_test_unified
 WHERE test_scenario = 'variant_to_complex' AND id = 7;
 
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
-
 drop table variant_test_unified force;
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
 
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_1/${uuid0}/ > /dev/null
 
 -- use spark to generate those data files
 
