@@ -8,6 +8,8 @@ displayed_sidebar: docs
 
 该语句用于取消以高优先级修复指定表或分区。
 
+说明：仅支持存算一体表。
+
 :::tip
 
 该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../../account-management/GRANT.md) 为用户赋权。

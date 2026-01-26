@@ -6,6 +6,8 @@ displayed_sidebar: docs
 
 ADMIN CANCEL REPAIR is used to cancel repairing specified tables or partitions with high priority.
 
+Note: This statement only supports shared-nothing tables.
+
 :::tip
 
 This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
