@@ -81,19 +81,18 @@ public:
 
     RuntimeFilterSerializeType type() const override { return RuntimeFilterSerializeType::IN_FILTER; }
 
-    InRuntimeFilter() = default;
     ~InRuntimeFilter() override = default;
     const RuntimeFilter* get_in_filter() const override { return this; }
     const RuntimeFilter* get_min_max_filter() const override { return nullptr; }
 
-    InRuntimeFilter* create_empty(ObjectPool* pool) override {
-        auto* p = pool->add(new InRuntimeFilter());
-        return p;
-    }
+    InRuntimeFilter* create_empty(ObjectPool* pool) override { return InRuntimeFilter::create(pool); }
 
     static InRuntimeFilter* create(ObjectPool* pool) {
-        auto* rf = pool->add(new InRuntimeFilter());
+        auto rf = new InRuntimeFilter();
         rf->_always_true = true;
+        if (pool != nullptr) {
+            return pool->add(std::move(rf));
+        }
         return rf;
     }
 
@@ -264,6 +263,11 @@ public:
                 set.emplace(val);
             }
         }
+        auto update = [&](auto& dst) {
+            dst = std::move(set);
+            return true;
+        };
+        _values.Modify(update);
 
         return offset;
     }
@@ -282,7 +286,10 @@ public:
         throw std::runtime_error("not supported");
     }
 
-    void evaluate(const Column* input_column, RunningContext* ctx) const override {}
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
+        throw std::runtime_error("not supported");
+    }
+
     uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
                       uint16_t sel_size, uint16_t* dst_sel) const override {
         return sel_size;
@@ -291,6 +298,8 @@ public:
                   uint16_t from, uint16_t to) const override {}
 
 private:
+    InRuntimeFilter() = default;
+
     bool _is_not_in = false;
     mutable butil::DoublyBufferedData<HashSet> _values;
 };
