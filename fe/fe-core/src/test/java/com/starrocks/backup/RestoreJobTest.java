@@ -927,38 +927,6 @@ public class RestoreJobTest {
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
-<<<<<<< HEAD
-}
-=======
-
-    @Test
-    public void testRestoreAddFunction() {
-        backupMeta = new BackupMeta(Lists.newArrayList());
-        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
-                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
-
-        backupMeta.setFunctions(Lists.newArrayList(f1));
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                new BackupJobInfo(), false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
-
-        job.addRestoredFunctions(db);
-    }
-
-    @Test
-    public void testRestoreAddCatalog() {
-        backupMeta = new BackupMeta(Lists.newArrayList());
-        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
-
-        backupMeta.setCatalogs(Lists.newArrayList(catalog));
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                new BackupJobInfo(), false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
-        job.setRepo(repo);
-        job.addRestoredFunctions(db);
-        job.run();
-        job.run();
-    }
 
     @Test
     public void testReplayAddExpiredJob() {
@@ -987,4 +955,3 @@ public class RestoreJobTest {
         Assert.assertTrue(localBackupHandler.getJob(db.getId() + 999).isDone());
     }
 }
->>>>>>> 17d98fbcdd ([BugFix] Fix miss update job state when replaying restore log may cause restored table lost after FE restart (#59056))
