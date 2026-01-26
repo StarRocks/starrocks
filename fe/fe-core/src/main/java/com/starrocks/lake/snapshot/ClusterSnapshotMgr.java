@@ -239,9 +239,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         String restoredSnapshotName = restoredSnapshotInfo.getSnapshotName();
         long feJournalId = restoredSnapshotInfo.getFeJournalId();
         long starMgrJournalId = restoredSnapshotInfo.getStarMgrJournalId();
-        if (restoredSnapshotName == null) {
-            return;
+        ClusterSnapshotJob job = null;
+        if (restoredSnapshotName != null) {
+            job = getClusterSnapshotJobByName(restoredSnapshotName);
+        } else {
+            job = getUnfinishedClusterSnapshotJob();
         }
+<<<<<<< HEAD
 
         Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
         if (entry != null) {
@@ -254,6 +258,23 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 job.setDetailInfo("Finished time was reset after cluster restored");
                 job.logJob();
             }
+=======
+        // snapshot job may in init state, because it does not include the
+        // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
+        if (job != null && job.isInitializing()) {
+            job.setJournalIds(feJournalId, starMgrJournalId);
+            job.setDetailInfo("Finished time was reset after cluster restored");
+            ClusterSnapshotJob.persistStateChange(job, ClusterSnapshotJobState.FINISHED);
+        }
+    }
+
+    public void abortUnfinishedClusterSnapshotJob() {
+        ClusterSnapshotJob lastUnfinishedJob = getUnfinishedClusterSnapshotJob();
+        if (lastUnfinishedJob != null) {
+            lastUnfinishedJob.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
+            lastUnfinishedJob.setState(ClusterSnapshotJobState.ERROR);
+            ClusterSnapshotJob.persistStateChange(lastUnfinishedJob, ClusterSnapshotJobState.ERROR);
+>>>>>>> 35d8de1349 ([BugFix] Fix manually downloaded cluster snapshot restore metadata tracking (#68368))
         }
     }
 
