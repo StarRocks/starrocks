@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.type.IntegerType;
@@ -102,12 +103,16 @@ public class MaterializedIndexTest {
     }
 
     @Test
-    public void testGsonPostProcess() {
+    public void testMaterializedIndexUpgrade() {
         MaterializedIndex index = new MaterializedIndex();
         Deencapsulation.setField(index, "id", 1L);
         Assertions.assertEquals(1L, index.getId());
         Assertions.assertEquals(0L, index.getMetaId());
-        index.gsonPostProcess();
-        Assertions.assertEquals(1L, index.getMetaId());
+
+        // Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(index);
+        MaterializedIndex newIndex = GsonUtils.GSON.fromJson(json, MaterializedIndex.class);
+
+        Assertions.assertEquals(1L, newIndex.getMetaId());
     }
 }
