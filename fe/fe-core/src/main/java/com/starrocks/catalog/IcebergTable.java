@@ -303,8 +303,12 @@ public class IcebergTable extends Table {
 
     @Override
     public String getTableIdentifier() {
-        String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
-        return Joiner.on(":").join(name, uuid == null ? "" : uuid);
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        String uuid = null;
+        if (nativeTable instanceof BaseTable) {
+            uuid = ((BaseTable) nativeTable).operations().current().uuid();
+        }
+        return Joiner.on(":").join(catalogTableName, uuid == null ? "" : uuid);
     }
 
     public IcebergCatalogType getCatalogType() {
