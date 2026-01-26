@@ -689,6 +689,7 @@ public class FunctionSet {
                     .addAll(FloatType.FLOAT_TYPES)
                     .addAll(DecimalType.DECIMAL_TYPES)
                     .addAll(STRING_TYPES)
+                    .add(VarbinaryType.VARBINARY)
                     .add(DateType.DATE)
                     .add(DateType.DATETIME)
                     .add(DecimalType.DECIMALV2)

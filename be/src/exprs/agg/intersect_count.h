@@ -51,6 +51,11 @@ struct BitmapIntersectInternalKey<TYPE_CHAR> {
     using InternalKeyType = std::string;
 };
 
+template <>
+struct BitmapIntersectInternalKey<TYPE_BINARY> {
+    using InternalKeyType = Slice;
+};
+
 template <LogicalType LT>
 using BitmapRuntimeCppType = typename BitmapIntersectInternalKey<LT>::InternalKeyType;
 
