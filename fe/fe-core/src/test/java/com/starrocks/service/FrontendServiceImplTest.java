@@ -1859,4 +1859,56 @@ public class FrontendServiceImplTest {
             schemaService.verify(() -> TableSchemaService.getTableSchema(same(request2)));
         }
     }
+
+    @Test
+    public void testCreatePartitionSkipDroppedPartition() throws TException {
+        // Test that when a partition is dropped between create and get (e.g. by TTL cleaner),
+        // the partition should be skipped instead of causing NPE
+        final String droppedPartitionName = "p19900426";
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_day");
+
+        // Mock getPartition to return null for a specific partition name, simulating TTL drop
+        // This simulates the race condition where partition is created but then dropped by TTL cleaner
+        // before buildCreatePartitionResponse can retrieve it
+        new MockUp<OlapTable>() {
+            @Mock
+            public Partition getPartition(mockit.Invocation invocation, String partitionName, boolean isTemp) {
+                // Return null for the specific partition we're testing, simulating it was dropped by TTL
+                if (droppedPartitionName.equals(partitionName)) {
+                    return null;
+                }
+                // Call the real method for other partitions
+                return invocation.proceed(partitionName, isTemp);
+            }
+        };
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-26");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        // Should not throw NPE, should return OK
+        TCreatePartitionResult result = impl.createPartition(request);
+
+        // The request should succeed
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        // partitions should be empty since the created partition was "dropped" by TTL
+        Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
+    }
 }
