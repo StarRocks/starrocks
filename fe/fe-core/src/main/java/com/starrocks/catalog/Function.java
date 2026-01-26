@@ -908,6 +908,9 @@ public class Function implements Writable {
                 } else {
                     row.add("NULL");
                 }
+            } else if (this instanceof SqlFunction) {
+                row.add("SQL");
+                row.add("NULL");
             } else {
                 TableFunction tableFunc = (TableFunction) this;
                 row.add("Table");
