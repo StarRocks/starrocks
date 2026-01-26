@@ -1,4 +1,4 @@
--- name: test_flat_json_after_schema_change @cloud
+-- name: test_flat_json_after_schema_change
 -- Test flat JSON query after ADD/DROP COLUMN operations
 -- This tests the fix for duplicate column unique_id conflict
 -- where extended columns (flat JSON subfields) could get the same
