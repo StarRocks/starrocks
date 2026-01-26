@@ -188,6 +188,56 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+TEST_F(LakePersistentIndexTest, test_primary_key_encoding_type) {
+    const int64_t tablet_id = _tablet_metadata->id();
+
+    // No range -> V1
+    {
+        Tablet tablet(_tablet_mgr.get(), tablet_id);
+        auto res = tablet.primary_key_encoding_type();
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(PrimaryKeyEncodingType::V1, res.value());
+    }
+
+    // Update metadata to include a range -> V2
+    auto meta_with_range = std::make_shared<TabletMetadata>();
+    meta_with_range->CopyFrom(*_tablet_metadata);
+    meta_with_range->set_version(_tablet_metadata->version() + 1);
+    meta_with_range->mutable_range()->Clear();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*meta_with_range));
+
+    {
+        Tablet tablet(_tablet_mgr.get(), tablet_id);
+        tablet.set_version_hint(meta_with_range->version());
+        auto res = tablet.primary_key_encoding_type();
+        ASSERT_TRUE(res.ok());
+        ASSERT_EQ(PrimaryKeyEncodingType::V2, res.value());
+    }
+
+    // Metadata not found
+    {
+        Tablet tablet(_tablet_mgr.get(), next_id());
+        auto res = tablet.primary_key_encoding_type();
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_not_found());
+    }
+
+    // Not a primary key tablet
+    {
+        auto meta_dup = std::make_shared<TabletMetadata>();
+        meta_dup->CopyFrom(*_tablet_metadata);
+        meta_dup->set_id(next_id());
+        meta_dup->set_version(1);
+        meta_dup->mutable_schema()->set_keys_type(DUP_KEYS);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*meta_dup));
+
+        Tablet tablet(_tablet_mgr.get(), meta_dup->id());
+        auto res = tablet.primary_key_encoding_type();
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_internal_error());
+    }
+}
+
 TEST_F(LakePersistentIndexTest, test_replace) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;

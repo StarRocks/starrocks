@@ -233,7 +233,7 @@ StatusOr<PrimaryKeyEncodingType> Tablet::primary_key_encoding_type() const {
     if (metadata == nullptr) {
         return Status::NotFound("tablet metadata not found");
     }
-    if (_tablet_metadata->schema().keys_type() != KeysType::PRIMARY_KEYS) {
+    if (metadata->schema().keys_type() != KeysType::PRIMARY_KEYS) {
         return Status::InternalError("tablet is not a primary key tablet");
     }
 
