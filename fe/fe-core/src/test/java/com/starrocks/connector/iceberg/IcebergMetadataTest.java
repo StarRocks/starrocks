@@ -439,7 +439,7 @@ public class IcebergMetadataTest extends TableTestBase {
                 minTimes = 0;
 
                 icebergHiveCatalog.getTable(connectContext, "db", "tbl2");
-                result = new StarRocksConnectorException("not found");
+                result = new StarRocksConnectorException("Failed to get iceberg table db.tbl2");
             }
         };
 
