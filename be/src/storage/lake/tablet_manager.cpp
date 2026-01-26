@@ -41,6 +41,7 @@
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -213,6 +214,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
     tablet_metadata_pb->set_gtid(req.gtid);
+    if (req.__isset.range) {
+        ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(req.range));
+        *tablet_metadata_pb->mutable_range() = range_pb;
+    }
 
     if (req.__isset.enable_persistent_index) {
         tablet_metadata_pb->set_enable_persistent_index(req.enable_persistent_index);
