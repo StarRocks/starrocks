@@ -25,7 +25,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.GlueClientBuilder;
 
-import static com.starrocks.credential.aws.AwsCloudCredential.ensureSchemeInEndpoint;
+import static com.starrocks.connector.share.credential.AwsCredentialUtil.ensureSchemeInEndpoint;
 
 public final class AWSGlueClientFactory implements GlueClientFactory {
 

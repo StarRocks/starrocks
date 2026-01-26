@@ -23,6 +23,7 @@ import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.connector.share.credential.AwsCredentialUtil;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
@@ -49,7 +50,6 @@ import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
-import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 
@@ -88,8 +88,6 @@ public class AwsCloudCredential implements CloudCredential {
     private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER = AssumedRoleCredentialProvider.class.getName();
     private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();
     private static final String TEMPORARY_CREDENTIAL_PROVIDER = TemporaryAWSCredentialsProvider.class.getName();
-
-    public static final String HTTPS_SCHEME = "https://";
 
     private final boolean useAWSSDKDefaultBehavior;
 
@@ -177,7 +175,7 @@ public class AwsCloudCredential implements CloudCredential {
             stsClientBuilder.region(Region.of(region));
         }
         if (!endpoint.isEmpty()) {
-            stsClientBuilder.endpointOverride(ensureSchemeInEndpoint(endpoint));
+            stsClientBuilder.endpointOverride(AwsCredentialUtil.ensureSchemeInEndpoint(endpoint));
         }
 
         // Build AssumeRoleRequest
@@ -377,19 +375,4 @@ public class AwsCloudCredential implements CloudCredential {
         return region;
     }
 
-    /**
-     * Checks if the given 'endpoint' contains a scheme. If not, the default HTTPS scheme is added.
-     *
-     * @param endpoint The endpoint string to be checked
-     * @return The URI with the added scheme
-     */
-    public static URI ensureSchemeInEndpoint(String endpoint) {
-        // Check if endpoint contains a valid scheme (contains "://")
-        // This handles cases like "localhost:4566" where URI.create() incorrectly
-        // parses the hostname as a scheme
-        if (endpoint.contains("://")) {
-            return URI.create(endpoint);
-        }
-        return URI.create(HTTPS_SCHEME + endpoint);
-    }
 }
