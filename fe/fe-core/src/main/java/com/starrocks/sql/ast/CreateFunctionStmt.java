@@ -17,6 +17,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.catalog.Function;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.PrimitiveType;
@@ -54,9 +55,11 @@ public class CreateFunctionStmt extends DdlStmt {
     private final FunctionArgsDef argsDef;
     private final TypeDef returnType;
     private final Map<String, String> properties;
-    private final String content;
+    private String content;
     private final boolean shouldReplaceIfExists;
     private final boolean createIfNotExists;
+
+    private Expr expr;
 
     // needed item set after analyzed
     private Function function;
@@ -116,6 +119,32 @@ public class CreateFunctionStmt extends DdlStmt {
 
             this.properties = ImmutableSortedMap.copyOf(lowerCaseProperties, String.CASE_INSENSITIVE_ORDER);
         }
+    }
+
+    public CreateFunctionStmt(String functionType, FunctionRef functionRef, FunctionArgsDef argsDef, Expr expr,
+                              boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
+        super(pos);
+        this.functionRef = functionRef;
+        this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
+        this.isTable = functionType.equalsIgnoreCase("TABLE");
+        this.argsDef = argsDef;
+        this.returnType = null;
+        this.expr = expr;
+        this.shouldReplaceIfExists = shouldReplaceIfExists;
+        this.createIfNotExists = createIfNotExists;
+        this.properties = ImmutableSortedMap.of();
+    }
+
+    public boolean isBuildFunctionMode() {
+        return this.expr != null;
+    }
+
+    public boolean isUdfFunctionMode() {
+        return this.expr == null && (content != null || !properties.isEmpty());
+    }
+
+    public Expr getExpr() {
+        return expr;
     }
 
     public FunctionRef getFunctionRef() {
