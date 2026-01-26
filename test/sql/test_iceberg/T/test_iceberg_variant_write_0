@@ -117,8 +117,8 @@ from variant_write_test
 where case_id in (1, 2, 4)
 order by case_id;
 
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/ > /dev/null
-
 drop table variant_write_test force;
 drop table variant_source force;
 drop catalog iceberg_sql_test_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/ > /dev/null

@@ -133,9 +133,9 @@ select
 from variant_json_write
 order by id;
 
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/ > /dev/null
-
 drop table variant_json_roundtrip force;
 drop table variant_json_write force;
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_json/${uuid0}/ > /dev/null
