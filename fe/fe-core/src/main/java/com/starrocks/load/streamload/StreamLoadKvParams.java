@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static com.starrocks.http.rest.RestBaseAction.WAREHOUSE_KEY;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -59,6 +58,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEOUT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TIMEZONE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRANSMISSION_COMPRESSION_TYPE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_TRIM_SPACE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 
 /**
@@ -241,7 +241,7 @@ public class StreamLoadKvParams implements StreamLoadParams {
 
     @Override
     public Optional<String> getWarehouse() {
-        return Optional.ofNullable(params.get(WAREHOUSE_KEY));
+        return Optional.ofNullable(params.get(HTTP_WAREHOUSE));
     }
 
     @Override
