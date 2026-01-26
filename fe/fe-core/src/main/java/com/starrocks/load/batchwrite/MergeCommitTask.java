@@ -1205,11 +1205,7 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
 
     @VisibleForTesting
     public TUniqueId getLoadId() {
-        try {
-            return loadId;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        return loadId;
     }
 
     @VisibleForTesting
