@@ -1691,4 +1691,166 @@ public class FrontendServiceImplTest {
             Assertions.assertEquals(olapTable.isTempPartition(partitionId), meta.isIs_temp());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRefreshConnectionsSuccess() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsSuccessWithForce() throws TException {
+        ExecuteEnv.setup();
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(true);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+    }
+
+    @Test
+    public void testRefreshConnectionsWithException() throws TException {
+        new MockUp<com.starrocks.qe.VariableMgr>() {
+            @Mock
+            public void refreshConnectionsInternal(boolean force) {
+                throw new RuntimeException("Test exception");
+            }
+        };
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TRefreshConnectionsRequest request = new TRefreshConnectionsRequest();
+        request.setForce(false);
+        TRefreshConnectionsResponse response = impl.refreshConnections(request);
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, response.getStatus().getStatus_code());
+        Assertions.assertNotNull(response.getStatus().getError_msgs());
+        Assertions.assertFalse(response.getStatus().getError_msgs().isEmpty());
+    }
+
+    @Test
+    public void testGetTableSchema() {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        // Test with empty request list
+        TBatchGetTableSchemaRequest emptyRequest = new TBatchGetTableSchemaRequest();
+        TBatchGetTableSchemaResponse emptyResponse = impl.getTableSchema(emptyRequest);
+        Assertions.assertNotNull(emptyResponse);
+        Assertions.assertFalse(emptyResponse.isSetResponses());
+        Assertions.assertEquals(0, emptyResponse.getResponsesSize());
+
+        // Test with single request
+        try (org.mockito.MockedStatic<TableSchemaService> schemaService = mockStatic(TableSchemaService.class)) {
+            TGetTableSchemaRequest request1 = new TGetTableSchemaRequest();
+            TGetTableSchemaResponse response1 = new TGetTableSchemaResponse();
+            TStatus status1 = new TStatus(TStatusCode.OK);
+            response1.setStatus(status1);
+
+            schemaService.when(() -> TableSchemaService.getTableSchema(any(TGetTableSchemaRequest.class)))
+                    .thenReturn(response1);
+
+            TBatchGetTableSchemaRequest batchRequest = new TBatchGetTableSchemaRequest();
+            batchRequest.addToRequests(request1);
+            TBatchGetTableSchemaResponse batchResponse = impl.getTableSchema(batchRequest);
+
+            Assertions.assertNotNull(batchResponse);
+            Assertions.assertTrue(batchResponse.isSetStatus());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getStatus().getStatus_code());
+            Assertions.assertNotNull(batchResponse.getResponses());
+            Assertions.assertEquals(1, batchResponse.getResponsesSize());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
+
+            schemaService.verify(() -> TableSchemaService.getTableSchema(any(TGetTableSchemaRequest.class)));
+        }
+
+        // Test with multiple requests
+        try (org.mockito.MockedStatic<TableSchemaService> schemaService = mockStatic(TableSchemaService.class)) {
+            TGetTableSchemaRequest request1 = new TGetTableSchemaRequest();
+            TGetTableSchemaRequest request2 = new TGetTableSchemaRequest();
+            TGetTableSchemaResponse response1 = new TGetTableSchemaResponse();
+            TGetTableSchemaResponse response2 = new TGetTableSchemaResponse();
+            TStatus status1 = new TStatus(TStatusCode.OK);
+            TStatus status2 = new TStatus(TStatusCode.TABLE_NOT_EXIST);
+            response1.setStatus(status1);
+            response2.setStatus(status2);
+
+            schemaService.when(() -> TableSchemaService.getTableSchema(same(request1)))
+                    .thenReturn(response1);
+            schemaService.when(() -> TableSchemaService.getTableSchema(same(request2)))
+                    .thenReturn(response2);
+
+            TBatchGetTableSchemaRequest batchRequest = new TBatchGetTableSchemaRequest();
+            batchRequest.addToRequests(request1);
+            batchRequest.addToRequests(request2);
+            TBatchGetTableSchemaResponse batchResponse = impl.getTableSchema(batchRequest);
+
+            Assertions.assertNotNull(batchResponse);
+            Assertions.assertTrue(batchResponse.isSetStatus());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getStatus().getStatus_code());
+            Assertions.assertNotNull(batchResponse.getResponses());
+            Assertions.assertEquals(2, batchResponse.getResponsesSize());
+            Assertions.assertEquals(TStatusCode.OK, batchResponse.getResponses().get(0).getStatus().getStatus_code());
+            Assertions.assertEquals(TStatusCode.TABLE_NOT_EXIST,
+                    batchResponse.getResponses().get(1).getStatus().getStatus_code());
+
+            schemaService.verify(() -> TableSchemaService.getTableSchema(same(request1)));
+            schemaService.verify(() -> TableSchemaService.getTableSchema(same(request2)));
+        }
+    }
+
+    @Test
+    public void testCreatePartitionSkipDroppedPartition() throws TException {
+        // Test that when a partition is dropped between create and get (e.g. by TTL cleaner),
+        // the partition should be skipped instead of causing NPE
+        final String droppedPartitionName = "p19900426";
+
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_day");
+
+        // Mock getPartition to return null for a specific partition name, simulating TTL drop
+        // This simulates the race condition where partition is created but then dropped by TTL cleaner
+        // before buildCreatePartitionResponse can retrieve it
+        new MockUp<OlapTable>() {
+            @Mock
+            public Partition getPartition(mockit.Invocation invocation, String partitionName, boolean isTemp) {
+                // Return null for the specific partition we're testing, simulating it was dropped by TTL
+                if (droppedPartitionName.equals(partitionName)) {
+                    return null;
+                }
+                // Call the real method for other partitions
+                return invocation.proceed(partitionName, isTemp);
+            }
+        };
+
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-26");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        // Should not throw NPE, should return OK
+        TCreatePartitionResult result = impl.createPartition(request);
+
+        // The request should succeed
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        // partitions should be empty since the created partition was "dropped" by TTL
+        Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
+    }
+>>>>>>> 862ef56944 ([BugFix] Fix NPE when auto-created partition is dropped by TTL cleaner (#68257))
 }
