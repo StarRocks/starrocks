@@ -323,11 +323,6 @@ FROM variant_fallback_types_test;
 type_error	11	11	100.0000000
 path_error	10	10	100.0000000
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_fallback_paths_test force;
 -- result:
 -- !result
@@ -342,4 +337,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result
