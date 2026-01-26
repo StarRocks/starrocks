@@ -231,6 +231,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
+        // add check for column mapping
+        if (!scanOperator.getColRefToColumnMetaMap().keySet()
+                .containsAll(groupingKeys)) {
+            return false;
+        }
+
         // no predicate on agg operator
         if (aggregationOperator.getPredicate() != null) {
             return false;
