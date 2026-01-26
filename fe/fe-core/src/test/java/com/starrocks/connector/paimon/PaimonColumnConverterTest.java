@@ -65,7 +65,11 @@ public class PaimonColumnConverterTest {
 
     @Test
     public void testConvertVarchar() {
+<<<<<<< HEAD
         org.apache.paimon.types.VarCharType paimonType = new org.apache.paimon.types.VarCharType(20);
+=======
+        VarCharType paimonType = new VarCharType(20);
+>>>>>>> 057059450a ([BugFix] Fix incorrect length for VARCHAR field type in Paimon Catalog (#68383))
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Type srType = TypeFactory.createVarcharType(20);
         Assertions.assertEquals(result, srType);
