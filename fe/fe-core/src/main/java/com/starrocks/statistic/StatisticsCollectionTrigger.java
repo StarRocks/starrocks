@@ -221,12 +221,11 @@ public class StatisticsCollectionTrigger {
                 analyzeStatus.setStartTime(LocalDateTime.now());
                 StatisticExecutor statisticExecutor = new StatisticExecutor();
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                try {
+                try (var scope = statsConnectCtx.bindScope()){
                     // set session id for temporary table
                     if (table.isTemporaryTable()) {
                         statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
                     }
-                    statsConnectCtx.setThreadLocalInfo();
                     StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
                             new ArrayList<>(partitionIds), null, null,
                             analyzeType, StatsConstants.ScheduleType.ONCE,
@@ -241,8 +240,6 @@ public class StatisticsCollectionTrigger {
                         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
                         overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
                     }
-                } finally {
-                    ConnectContext.remove();
                 }
             };
 

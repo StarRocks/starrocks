@@ -589,8 +589,7 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        try {
-            statsConnectCtx.setThreadLocalInfo();
+        try (var scope = statsConnectCtx.bindScope()){
             statsConnectCtx.setStatisticsConnection(true);
 
             List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
@@ -599,8 +598,6 @@ public class AnalyzeMgr implements Writable {
             if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
                 pids.forEach(dropPartitionIds::remove);
             }
-        } finally {
-            ConnectContext.remove();
         }
     }
 
@@ -660,9 +657,8 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        try {
+        try (var scope = statsConnectCtx.bindScope()) {
             statsConnectCtx.setStatisticsConnection(true);
-            statsConnectCtx.setThreadLocalInfo();
             StatisticExecutor executor = new StatisticExecutor();
             statsConnectCtx.getSessionVariable().setExprChildrenLimit(partitionIds.size() * 3);
             boolean res = executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tableIds, partitionIds);
@@ -670,8 +666,6 @@ public class AnalyzeMgr implements Writable {
                 LOG.debug("failed to clean stale column statistics before time: {}", lastCleanTime);
             }
             lastCleanTime = LocalDateTime.now();
-        } finally {
-            ConnectContext.remove();
         }
     }
 
@@ -738,8 +732,7 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        try {
-            statsConnectCtx.setThreadLocalInfo();
+        try (var scope = statsConnectCtx.bindScope()){
             StatisticExecutor executor = new StatisticExecutor();
             List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
 
@@ -747,8 +740,6 @@ public class AnalyzeMgr implements Writable {
             if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
                 checkDbTableIds.forEach(checkTableIds::remove);
             }
-        } finally {
-            ConnectContext.remove();
         }
     }
 

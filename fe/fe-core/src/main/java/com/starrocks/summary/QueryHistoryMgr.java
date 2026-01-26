@@ -143,8 +143,7 @@ public class QueryHistoryMgr {
             }
 
             ConnectContext ctx = StatisticUtils.buildConnectContext();
-            try {
-                ctx.setThreadLocalInfo();
+            try (var scope = ctx.bindScope()){
                 for (QueryHistory query : list) {
                     try {
                         buffer.append(query.toJSON()).append(",");
@@ -183,8 +182,6 @@ public class QueryHistoryMgr {
                 } catch (Exception e) {
                     LOG.warn("Failed to load query history.", e);
                 }
-            } finally {
-                ConnectContext.remove();
             }
         });
     }

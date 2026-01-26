@@ -94,11 +94,8 @@ public class StatisticAutoCollector extends FrontendDaemon {
             List<StatisticsCollectJob> jobs = nativeAnalyzeJob.instantiateJobs();
             result.addAll(jobs);
             ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-            try {
-                statsConnectCtx.setThreadLocalInfo();
+            try (var scope = statsConnectCtx.bindScope()){
                 nativeAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
-            } finally {
-                ConnectContext.remove();
             }
         }
         LOG.info("auto collect statistic on analyze job[{}] end", analyzeJobIds);
@@ -113,13 +110,11 @@ public class StatisticAutoCollector extends FrontendDaemon {
             LOG.info("auto collect external statistic on analyze job[{}] start", jobIds);
             for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                try {
+                try (var scope = statsConnectCtx.bindScope()){
                     statsConnectCtx.setThreadLocalInfo();
                     List<StatisticsCollectJob> jobs = externalAnalyzeJob.instantiateJobs();
                     result.addAll(jobs);
                     externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
-                } finally {
-                    ConnectContext.remove();
                 }
             }
             LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);

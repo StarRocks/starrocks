@@ -61,7 +61,7 @@ public class DataCacheSelectExecutor {
             }
 
             ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
-            try {
+            try (var scope = subContext.bindScope()){
                 subContext.setCurrentComputeResource(computeResource);
                 StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
                 isFirstSubContext = false;
@@ -82,8 +82,6 @@ public class DataCacheSelectExecutor {
                     throw new StarRocksException(subContext.getState().getErrorMessage());
                 }
                 subStmtExecutors.add(subStmtExecutor);
-            } finally {
-                ConnectContext.remove();
             }
         }
 
@@ -145,12 +143,9 @@ public class DataCacheSelectExecutor {
             LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
         }
         context.setExecutionId(executionId);
-        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
-        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        context.setThreadLocalInfo();
 
         // clone an new session variable
-        SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
+        SessionVariable sessionVariable = connectContext.getSessionVariable().clone();
         // overwrite catalog
         sessionVariable.setCatalog(statement.getCatalog());
         // force enable datacache and populate

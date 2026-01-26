@@ -177,9 +177,6 @@ public class IcebergRewriteDataJob {
         executionId = new TUniqueId(queryId.hi, UUIDUtil.genUUID().getLeastSignificantBits());
         LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
         context.setExecutionId(executionId);
-        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
-        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        context.setThreadLocalInfo();
 
         // clone an new session variable
         SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
@@ -209,7 +206,7 @@ public class IcebergRewriteDataJob {
                 }
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
-                    try {
+                    try (var scope = subCtx.bindScope()){
                         IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
                         ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
         
@@ -237,8 +234,6 @@ public class IcebergRewriteDataJob {
                             exec.addFinishedQueryDetail();
                         }
                         return null;
-                    } finally {
-                        ConnectContext.remove();
                     }
                 }));
             }

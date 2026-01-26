@@ -186,11 +186,8 @@ public class RestBaseAction extends BaseAction {
         ctx.setNettyChannel(request.getContext());
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
-        try {
-            ctx.setThreadLocalInfo();
+        try (var scope = ctx.bindScope()){
             executeWithoutPassword(request, response);
-        } finally {
-            ConnectContext.remove();
         }
     }
 

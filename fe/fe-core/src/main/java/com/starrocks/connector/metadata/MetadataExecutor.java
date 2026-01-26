@@ -31,7 +31,7 @@ public class MetadataExecutor {
 
     public void asyncExecuteSQL(MetadataCollectJob job) {
         ConnectContext context = job.getContext();
-        try {
+        try (var scope = context.bindScope()){
             context.setThreadLocalInfo();
             String sql = job.getSql();
             ExecPlan execPlan;
@@ -52,8 +52,6 @@ public class MetadataExecutor {
 
             LOG.info("Start to execute metadata collect job on {}.{}.{}", job.getCatalogName(), job.getDbName(), job.getTableName());
             executor.executeStmtWithResultQueue(context, execPlan, job.getResultQueue());
-        } finally {
-            ConnectContext.remove();
         }
     }
 
