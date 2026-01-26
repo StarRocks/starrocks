@@ -124,6 +124,7 @@ public class RestoreClusterSnapshotMgr {
     private void downloadSnapshot() throws StarRocksException {
         ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
         if (clusterSnapshot == null) {
+            collectSnapshotInfoFromLocalImage();
             return;
         }
 
@@ -153,22 +154,16 @@ public class RestoreClusterSnapshotMgr {
         LOG.info("Download cluster snapshot {} to local dir {}", snapshotImagePath, localImagePath);
         HdfsUtil.copyToLocal(snapshotImagePath, localImagePath, clusterSnapshot.getStorageVolume().getProperties());
 
-        collectSnapshotInfoAfterDownloaded(snapshotImagePath, localImagePath);
+        collectSnapshotInfoAfterDownloaded(snapshotImagePath);
     }
 
-    private void collectSnapshotInfoAfterDownloaded(String snapshotImagePath, String localImagePath)
-            throws StarRocksException {
-        long feImageJournalId = 0L;
-        long starMgrImageJournalId = 0L;
+    private void collectSnapshotInfoFromLocalImage() throws StarRocksException {
+        restoredSnapshotInfo = buildRestoredSnapshotInfo(null);
+        LOG.info("Use local image for cluster snapshot restore, FE image version: {}, StarMgr image version: {}",
+                restoredSnapshotInfo.getFeJournalId(), restoredSnapshotInfo.getStarMgrJournalId());
+    }
 
-        try {
-            // Get image version, use image loader to support v2 image format
-            feImageJournalId = new ImageLoader(localImagePath).getImageJournalId();
-            starMgrImageJournalId = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR).getImageJournalId();
-        } catch (Exception e) {
-            throw new StarRocksException("Failed to get local image version", e);
-        }
-
+    private void collectSnapshotInfoAfterDownloaded(String snapshotImagePath) throws StarRocksException {
         int lastSlashIndex = snapshotImagePath.lastIndexOf('/');
         if (lastSlashIndex < 0) {
             throw new StarRocksException("Failed to get snapshot name from snapshot path " + snapshotImagePath);
@@ -176,11 +171,22 @@ public class RestoreClusterSnapshotMgr {
 
         String restoredSnapshotName = snapshotImagePath.substring(lastSlashIndex + 1);
 
-        restoredSnapshotInfo = new RestoredSnapshotInfo(restoredSnapshotName,
-                feImageJournalId, starMgrImageJournalId);
+        restoredSnapshotInfo = buildRestoredSnapshotInfo(restoredSnapshotName);
 
         LOG.info("Downloaded cluster snapshot {} successfully, FE image version: {}, StarMgr image version: {}",
-                restoredSnapshotName, feImageJournalId, starMgrImageJournalId);
+                restoredSnapshotName, restoredSnapshotInfo.getFeJournalId(), restoredSnapshotInfo.getStarMgrJournalId());
+    }
+
+    private RestoredSnapshotInfo buildRestoredSnapshotInfo(String snapshotName) throws StarRocksException {
+        try {
+            String localImagePath = GlobalStateMgr.getImageDirPath();
+            // Get image version, use image loader to support v2 image format
+            long feImageJournalId = new ImageLoader(localImagePath).getImageJournalId();
+            long starMgrImageJournalId = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR).getImageJournalId();
+            return new RestoredSnapshotInfo(snapshotName, feImageJournalId, starMgrImageJournalId);
+        } catch (Exception e) {
+            throw new StarRocksException("Failed to get local image version for restore", e);
+        }
     }
 
     private void updateFrontends() throws StarRocksException {
