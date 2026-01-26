@@ -124,6 +124,7 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.listener.LoadJobMVListener;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
@@ -1470,19 +1471,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
 
         if (!isTempPartition) {
-            try {
-                for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
-                    if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
-                        Database mvDb = getDb(mvId.getDbId());
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), materializedView.getName(), false, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
-                    }
-                }
-            } catch (MetaNotFoundException e) {
-                throw new DdlException("fail to refresh materialized views when dropping partition", e);
-            }
+            LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
         }
         LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}", existPartitions,
                 db.getFullName(), olapTable.getName(),
@@ -4541,12 +4530,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // Use session-aware lookup to support temporary tables.
         long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
         Locker locker = new Locker();
+        OlapTable olapTable = null;
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         try {
             // Retrieve the table again under the lock, make sure the table still exists.
-            OlapTable olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
+            olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
             if (!truncateEntireTable) {
                 for (String partName : tblRef.getPartitionDef().getPartitionNames()) {
                     Partition partition = olapTable.getPartition(partName);
@@ -4614,7 +4604,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         try {
             // The table could also be changed during the unlock-READ and lock-WRITE.
-            OlapTable olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
+            olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
             // check partitions
             for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
                 Partition partition = olapTable.getPartition(entry.getValue().getId());
@@ -4656,39 +4646,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
+
+            final OlapTable finalOlapTable = olapTable;
             GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info, wal -> {
                 // replace
-                truncateTableInternal(db.getId(), olapTable, newPartitions, truncateEntireTable, false);
+                truncateTableInternal(db.getId(), finalOlapTable, newPartitions, truncateEntireTable, false);
                 try {
-                    colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                    colocateTableIndex.updateLakeTableColocationInfo(finalOlapTable, true /* isJoin */,
                             null /* expectGroupId */);
                 } catch (DdlException e) {
-                    LOG.info("table {} update colocation info failed when truncate table, {}", olapTable.getId(), e.getMessage());
+                    LOG.info("table {} update colocation info failed when truncate table, {}",
+                            finalOlapTable.getId(), e.getMessage());
                 }
             });
-
-            // refresh mv
-            Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
-            for (MvId mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
-                if (materializedView == null) {
-                    LOG.warn("Table related materialized view {}.{} can not be found", mvId.getDbId(), mvId.getId());
-                    continue;
-                }
-                if (materializedView.isLoadTriggeredRefresh()) {
-                    Database mvDb = getDb(mvId.getDbId());
-                    refreshMaterializedView(mvDb.getFullName(), getTable(mvDb.getId(), mvId.getId()).getName(), false, null,
-                            Constants.TaskRunPriority.NORMAL.value(), true, false);
-                }
-            }
         } catch (DdlException e) {
             deleteUselessTablets(tabletIdSet);
             throw e;
-        } catch (MetaNotFoundException e) {
-            LOG.warn("Table related materialized view can not be found", e);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
+
+        LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
 
         LOG.info("finished to truncate table {}, partitions: {}",
                 tblRef.getTableName(), tblRef.getPartitionDef() != null ? tblRef.getPartitionDef().getPartitionNames() : null);
@@ -4882,6 +4860,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
             LOG.info("finished to replace partitions {} with temp partitions {} from table: {}",
                     clause.getPartitionNames(), clause.getTempPartitionNames(), tableName);
+
+            LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
