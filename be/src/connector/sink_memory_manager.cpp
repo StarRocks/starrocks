@@ -18,11 +18,12 @@
 
 namespace starrocks::connector {
 
-void SinkOperatorMemoryManager::init(std::map<PartitionKey, PartitionChunkWriterPtr>* partition_chunk_writers,
-                                     AsyncFlushStreamPoller* io_poller, CommitFunc commit_func) {
-    _candidates = partition_chunk_writers;
+Status SinkOperatorMemoryManager::init(std::vector<PartitionChunkWriterPtr>* writers, AsyncFlushStreamPoller* io_poller,
+                                       CommitFunc commit_func) {
+    _candidates = writers;
     _commit_func = std::move(commit_func);
     _io_poller = io_poller;
+    return Status::OK();
 }
 
 bool SinkOperatorMemoryManager::kill_victim() {
@@ -34,7 +35,7 @@ bool SinkOperatorMemoryManager::kill_victim() {
     // For buffered partition writer, choose the the writer with the largest file size.
     // For spillable partition writer, choose the the writer with the largest memory size that can be spilled.
     PartitionChunkWriterPtr victim = nullptr;
-    for (auto& [key, writer] : *_candidates) {
+    for (auto& writer : *_candidates) {
         int64_t flushable_bytes = writer->get_flushable_bytes();
         if (flushable_bytes == 0) {
             continue;
@@ -53,7 +54,6 @@ bool SinkOperatorMemoryManager::kill_victim() {
     const auto filename = victim->out_stream()->filename();
     size_t flush_bytes = victim->get_flushable_bytes();
     const auto result = victim->flush();
-    LOG(INFO) << "kill victim: " << filename << ", result: " << result << ", flushable_bytes: " << flush_bytes;
     return true;
 }
 
@@ -65,7 +65,7 @@ int64_t SinkOperatorMemoryManager::update_releasable_memory() {
 
 int64_t SinkOperatorMemoryManager::update_writer_occupied_memory() {
     int64_t writer_occupied_memory = 0;
-    for (auto& [_, writer] : *_candidates) {
+    for (auto& writer : *_candidates) {
         writer_occupied_memory += writer->get_flushable_bytes();
     }
     _writer_occupied_memory.store(writer_occupied_memory);
