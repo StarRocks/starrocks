@@ -33,15 +33,18 @@
 namespace starrocks::lake {
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
-                                     RuntimeProfile* profile) {
-    _writer = writer;
-    _pipeline_merge_context = std::make_unique<LoadSpillPipelineMergeContext>(_writer);
-    _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(block_manager, profile, _pipeline_merge_context.get());
+                                     RuntimeProfile* profile)
+        : _writer(writer),
+          _pipeline_merge_context(std::make_unique<LoadSpillPipelineMergeContext>(_writer)),
+          _load_chunk_spiller(
+                  std::make_unique<LoadChunkSpiller>(block_manager, profile, _pipeline_merge_context.get())) {
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" + std::to_string(writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
                                                       GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
+
+SpillMemTableSink::~SpillMemTableSink() = default;
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
                                       int64_t* flush_data_size, int64_t slot_idx) {

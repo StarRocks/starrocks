@@ -35,7 +35,7 @@ class TabletWriter;
 class SpillMemTableSink : public MemTableSink {
 public:
     SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
-    ~SpillMemTableSink() override = default;
+    ~SpillMemTableSink() override;
 
     // Spill chunk to temporary storage or write directly if eos and no prior spills
     // @param slot_idx: slot index for tracking flush order in parallel flush mode
