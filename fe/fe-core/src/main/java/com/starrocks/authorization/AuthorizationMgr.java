@@ -902,17 +902,34 @@ public class AuthorizationMgr {
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
         try {
-            // Use original(login) user context for IMPERSONATE checks if available.
-            // This allows chaining EXECUTE AS on the same session based on the original user's privileges.
             AccessControlContext acc = context.getAccessControlContext();
-            UserIdentity checkUser = acc.getOriginalUserIdentity();
-            Set<String> checkGroups = acc.getOriginalGroups();
-            Set<Long> checkRoleIds = acc.getOriginalRoleIds();
+            UserIdentity checkUser;
+            Set<String> checkGroups;
+            Set<Long> checkRoleIds;
 
-            if (checkUser == null) {
-                checkUser = context.getCurrentUserIdentity();
+            UserIdentity original = acc.getOriginalUserIdentity();
+            UserIdentity current = context.getCurrentUserIdentity();
+            if (original == null) {
+                // No original context (fallback): use current user/group/roles
+                checkUser = current;
                 checkGroups = context.getGroups();
                 checkRoleIds = context.getCurrentRoleIds();
+            } else if (current == null) {
+                // No current identity: use original
+                checkUser = original;
+                checkGroups = acc.getOriginalGroups();
+                checkRoleIds = acc.getOriginalRoleIds();
+            } else if (current.equals(original)) {
+                // Not impersonating (current == original): use current* to respect SET ROLE
+                checkUser = current;
+                checkGroups = context.getGroups();
+                checkRoleIds = context.getCurrentRoleIds();
+            } else {
+                // Impersonating: use original(login) user context for IMPERSONATE checks.
+                // This allows chaining EXECUTE AS on the same session based on the original user's privileges.
+                checkUser = original;
+                checkGroups = acc.getOriginalGroups();
+                checkRoleIds = acc.getOriginalRoleIds();
             }
 
             PrivilegeCollectionV2 collection = mergePrivilegeCollection(checkUser, checkGroups, checkRoleIds);

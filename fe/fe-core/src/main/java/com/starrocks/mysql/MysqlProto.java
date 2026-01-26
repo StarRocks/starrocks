@@ -59,6 +59,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -224,6 +225,8 @@ public class MysqlProto {
             Set<Long> previousRoleIds,
             String previousQualifiedUser,
             String previousResourceGroup,
+            Set<String> previousGroups,
+            String previousDistinguishedName,
             UserIdentity prevOriginalUserIdentity,
             Set<String> prevOriginalGroups,
             Set<Long> prevOriginalRoleIds) {
@@ -231,6 +234,8 @@ public class MysqlProto {
         context.setCurrentRoleIds(previousRoleIds);
         context.setQualifiedUser(previousQualifiedUser);
         context.getSessionVariable().setResourceGroup(previousResourceGroup);
+        context.setGroups(previousGroups != null ? previousGroups : Collections.emptySet());
+        context.setDistinguishedName(previousDistinguishedName != null ? previousDistinguishedName : "");
         if (prevOriginalUserIdentity != null) {
             context.getAccessControlContext().setOriginalUserContext(
                     prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
@@ -257,6 +262,8 @@ public class MysqlProto {
         Set<Long> previousRoleIds = context.getCurrentRoleIds();
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
+        Set<String> previousGroups = new HashSet<>(context.getGroups());
+        String previousDistinguishedName = context.getDistinguishedName();
 
         // Backup original user context before reset (for restoration on failure)
         var acc = context.getAccessControlContext();
@@ -280,7 +287,8 @@ public class MysqlProto {
             sendResponsePacket(context);
             context.getSerializer().setCapability(context.getCapability());
             restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
-                    previousResourceGroup, prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+                    previousResourceGroup, previousGroups, previousDistinguishedName,
+                    prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
             return false;
         }
         // set database
@@ -295,7 +303,8 @@ public class MysqlProto {
                 sendResponsePacket(context);
                 context.getSerializer().setCapability(context.getCapability());
                 restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
-                        previousResourceGroup, prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+                        previousResourceGroup, previousGroups, previousDistinguishedName,
+                        prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
                 return false;
             }
         }
@@ -308,7 +317,8 @@ public class MysqlProto {
             sendResponsePacket(context);
             context.getSerializer().setCapability(context.getCapability());
             restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
-                    previousResourceGroup, prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+                    previousResourceGroup, previousGroups, previousDistinguishedName,
+                    prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
             if (!context.getDatabase().equals(originalDb)) {
                 try {
                     context.changeCatalogDb(originalDb);

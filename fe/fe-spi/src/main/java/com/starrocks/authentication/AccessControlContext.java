@@ -40,8 +40,9 @@ public class AccessControlContext {
     private UserIdentity currentUserIdentity;
 
     // Original (login) user context snapshot.
-    // This is initialized once right after authentication succeeds and should not change even after EXECUTE AS.
-    // It is used for cases where permission checks (e.g. IMPERSONATE) need to be based on the original login user
+    // Set/updated after each successful authentication; reset before re-authentication (e.g. CHANGE USER).
+    // Unchanged by EXECUTE AS. Restored from backup when CHANGE USER fails.
+    // Used for permission checks (e.g. IMPERSONATE) that must be based on the original login user
     // instead of the current impersonated user.
     private UserIdentity originalUserIdentity = null;
     private Set<String> originalGroups = null;
