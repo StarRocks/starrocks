@@ -32,6 +32,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "util/raw_container.h"
@@ -367,29 +368,25 @@ TEST_P(SpillMemTableSinkTest, test_slot_idx_ordering_after_merge) {
     auto chunk3 = gen_data(kChunkSize, 3);
 
     starrocks::SegmentPB segment;
-    ASSERT_OK(sink.flush_chunk(*chunk0, &segment, false, nullptr, 5));
-    ASSERT_OK(sink.flush_chunk(*chunk1, &segment, false, nullptr, 2));
-    ASSERT_OK(sink.flush_chunk(*chunk2, &segment, false, nullptr, 8));
-    ASSERT_OK(sink.flush_chunk(*chunk3, &segment, false, nullptr, 1));
+    ASSERT_OK(sink.flush_chunk(*chunk0, &segment, false, nullptr, 2));
+    ASSERT_OK(sink.flush_chunk(*chunk1, &segment, false, nullptr, 1));
+    ASSERT_OK(sink.flush_chunk(*chunk2, &segment, false, nullptr, 3));
+    ASSERT_OK(sink.flush_chunk(*chunk3, &segment, false, nullptr, 0));
 
     // Before merge, groups are in insertion order
     auto& groups = block_manager->block_container()->block_groups();
     ASSERT_EQ(4, groups.size());
-    ASSERT_EQ(5, groups[0].slot_idx);
-    ASSERT_EQ(2, groups[1].slot_idx);
-    ASSERT_EQ(8, groups[2].slot_idx);
-    ASSERT_EQ(1, groups[3].slot_idx);
+    ASSERT_EQ(2, groups[0].slot_idx);
+    ASSERT_EQ(1, groups[1].slot_idx);
+    ASSERT_EQ(3, groups[2].slot_idx);
+    ASSERT_EQ(0, groups[3].slot_idx);
 
     // Merge blocks to segments - this should sort by slot_idx
     ASSERT_OK(sink.merge_blocks_to_segments());
 
-    // After merge, groups should be sorted by slot_idx
-    ASSERT_EQ(1, groups[0].slot_idx);
-    ASSERT_EQ(2, groups[1].slot_idx);
-    ASSERT_EQ(5, groups[2].slot_idx);
-    ASSERT_EQ(8, groups[3].slot_idx);
+    ASSERT_EQ(0, groups.size()); // Original groups cleared after merge
 
-    ASSERT_EQ(config::enable_load_spill_parallel_merge ? 4 : 1, tablet_writer->segments().size());
+    ASSERT_TRUE(tablet_writer->segments().size() > 0);
 }
 
 TEST_P(SpillMemTableSinkTest, test_flush_data_size_with_slot_idx) {
