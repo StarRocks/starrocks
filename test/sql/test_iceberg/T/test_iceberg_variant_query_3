@@ -253,14 +253,13 @@ SELECT
     SUM(CASE WHEN get_variant_string(variant_col, test_path) IS NULL THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as null_percentage
 FROM variant_fallback_types_test;
 
-
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/ > /dev/null
-
 drop table variant_fallback_paths_test force;
 drop table variant_fallback_types_test force;
 drop table variant_fallback_cast_test force;
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_3/${uuid0}/ > /dev/null
 
 
 -- use spark to generate those data files
