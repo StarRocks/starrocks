@@ -18,8 +18,16 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
+import com.starrocks.sql.analyzer.DropStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateFunctionStmt;
+import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -27,6 +35,7 @@ import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -149,4 +158,73 @@ public class UDFTest extends PlanTestBase {
         Assertions.assertEquals(tableFunction.getArgs()[0], tableFunctionReload.getArgs()[0]);
         Assertions.assertEquals(tableFunction.getLocation().toString(), tableFunctionReload.getLocation().toString());
     }
+
+    @Test
+    public void testSqlFunction1() throws Exception {
+        try {
+            String viewDef = "CREATE FUNCTION view_func(x string, y string) RETURNS concat(upper(x), lower(y));";
+            Config.enable_udf = true;
+            CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(viewDef, connectContext);
+            CreateFunctionAnalyzer analyzer = new CreateFunctionAnalyzer();
+            analyzer.analyze(createFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(createFunctionStmt, connectContext);
+
+            String sql = "select view_func(c_0_3, c_0_7) from tab0;";
+            String plan = getFragmentPlan(sql, viewDef);
+
+            assertContains(plan, "concat(upper(CAST(4: c_0_3 AS VARCHAR)), lower(CAST(8: c_0_7 AS VARCHAR)))");
+        } finally {
+            String dropViewFunc = "DROP FUNCTION IF EXISTS view_func(string, string);";
+            DropFunctionStmt dropFunctionStmt =
+                    (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(dropViewFunc, connectContext);
+            DropStmtAnalyzer.analyze(dropFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(dropFunctionStmt, connectContext);
+
+            Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select view_func(c_0_3, c_0_7) from tab0;";
+                getFragmentPlan(sql, dropViewFunc);
+            });
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testSqlFunction2() throws Exception {
+        try {
+            String viewDef = "CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(y));";
+            Config.enable_udf = true;
+            CreateFunctionStmt createFunctionStmt =
+                    (CreateFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(viewDef, connectContext);
+            CreateFunctionAnalyzer analyzer = new CreateFunctionAnalyzer();
+            analyzer.analyze(createFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(createFunctionStmt, connectContext);
+
+            String sql = "select view_func(c_0_7) from tab0;";
+            String plan = getFragmentPlan(sql, viewDef);
+
+            assertContains(plan, "concat('Name_', lower(CAST(8: c_0_7 AS VARCHAR)))");
+        } finally {
+            String dropViewFunc = "DROP FUNCTION IF EXISTS view_func(string);";
+            DropFunctionStmt dropFunctionStmt =
+                    (DropFunctionStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(dropViewFunc, connectContext);
+            DropStmtAnalyzer.analyze(dropFunctionStmt, connectContext);
+            DDLStmtExecutor.execute(dropFunctionStmt, connectContext);
+
+            Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select view_func(c_0_7) from tab0;";
+                getFragmentPlan(sql, dropViewFunc);
+            });
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testSqlFunctionDuplicate() {
+        AnalyzeTestUtil.connectContext = connectContext;
+        AnalyzeTestUtil.starRocksAssert = starRocksAssert;
+        AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string, y string) RETURNS concat('Name_', lower(y));");
+        AnalyzeTestUtil.analyzeFail("CREATE FUNCTION view_func(y string) RETURNS concat('Name_', lower(z));");
+    }
+
 }
