@@ -268,8 +268,8 @@ public class CachingIcebergCatalogTest {
         Mockito.when(meta.uuid()).thenReturn(uuid);
         // Mock all methods used by estimateTableWeightBytes to avoid NullPointerException
         Mockito.when(meta.schemas()).thenReturn(new ArrayList<>());
-        Mockito.when(meta.specs()).thenReturn(new HashMap<>());
-        Mockito.when(meta.sortOrders()).thenReturn(new HashMap<>());
+        Mockito.when(meta.specs()).thenReturn(new ArrayList<>());
+        Mockito.when(meta.sortOrders()).thenReturn(new ArrayList<>());
         Mockito.when(meta.properties()).thenReturn(new HashMap<>());
         Mockito.when(meta.refs()).thenReturn(new HashMap<>());
         if (spec != null) {
