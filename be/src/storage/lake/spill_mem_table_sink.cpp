@@ -24,6 +24,8 @@
 #include "storage/lake/tablet_internal_parallel_merge_task.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_context.h"
+#include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/storage_engine.h"
 #include "util/runtime_profile.h"
@@ -31,14 +33,18 @@
 namespace starrocks::lake {
 
 SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer,
-                                     RuntimeProfile* profile) {
-    _load_chunk_spiller = std::make_unique<LoadChunkSpiller>(block_manager, profile);
-    _writer = writer;
+                                     RuntimeProfile* profile)
+        : _writer(writer),
+          _pipeline_merge_context(std::make_unique<LoadSpillPipelineMergeContext>(_writer)),
+          _load_chunk_spiller(
+                  std::make_unique<LoadChunkSpiller>(block_manager, profile, _pipeline_merge_context.get())) {
     std::string tracker_label =
             "LoadSpillMerge-" + std::to_string(writer->tablet_id()) + "-" + std::to_string(writer->txn_id());
     _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
                                                       GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
+
+SpillMemTableSink::~SpillMemTableSink() = default;
 
 Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
                                       int64_t* flush_data_size, int64_t slot_idx) {
@@ -55,6 +61,50 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     // record append bytes to `flush_data_size`
     if (flush_data_size != nullptr) {
         *flush_data_size = res.value();
+    }
+
+    // EAGER MERGE OPTIMIZATION: When spilled data accumulates to a threshold, proactively
+    // start merging blocks in the background BEFORE all flushes complete. This provides:
+    // 1. Better parallelism - merge tasks run concurrently with ongoing memtable flushes
+    // 2. Reduced final merge time - much of the merge work completes during the load phase
+    // 3. Lower memory pressure - blocks get merged and reclaimed earlier
+    //
+    // WHY THIS THRESHOLD: pk_index_eager_build_threshold_bytes indicates bulk load scenario
+    // where parallel merge benefits outweigh task coordination overhead.
+    if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes &&
+        config::enable_load_spill_parallel_merge) {
+        // Disable auto-flush to manually control segment finalization timing
+        _writer->set_auto_flush(false);
+
+        // For PK tables in bulk load, eagerly build primary key index during merge
+        // instead of waiting until commit. This parallelizes expensive index construction.
+        _writer->try_enable_pk_index_eager_build();
+
+        // Lazy initialization: create thread pool token only when first needed
+        _pipeline_merge_context->create_thread_pool_token();
+        if (!_pipeline_merge_context->token()) {
+            // Thread pool exhausted - cannot submit merge tasks now
+            // Skip eager merge for this flush
+            return Status::OK();
+        }
+
+        // Generate ONE merge task eagerly (not all tasks). This allows pipeline execution
+        // where merge tasks are generated and submitted incrementally as resources allow,
+        // rather than all upfront which would consume excessive memory.
+        // final_round=false means this merges to intermediate blocks, not final tablet.
+        LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
+                                                     _pipeline_merge_context->quit_flag(), false /* final_round */);
+        task_iterator.init();
+        if (task_iterator.has_more()) {
+            auto current_task = task_iterator.current_task();
+            _pipeline_merge_context->add_merge_task(current_task);
+            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
+            if (!submit_st.ok()) {
+                // Submit failure doesn't fail the flush - task will report error when checked later
+                current_task->update_status(submit_st);
+            }
+        }
+        RETURN_IF_ERROR(task_iterator.status());
     }
     return Status::OK();
 }
@@ -75,102 +125,66 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
     return Status::OK();
 }
 
-Status SpillMemTableSink::merge_blocks_to_segments_parallel(bool do_agg, const SchemaPtr& schema) {
-    auto token =
-            StorageEngine::instance()->load_spill_block_merge_executor()->create_tablet_internal_parallel_merge_token();
-    // 1. Get all spill block iterators
-    ASSIGN_OR_RETURN(auto spill_block_iterator_tasks,
-                     _load_chunk_spiller->generate_spill_block_input_tasks(config::load_spill_max_merge_bytes,
-                                                                           config::load_spill_memory_usage_per_merge,
-                                                                           true /* do_sort */, do_agg));
-    // 2. Prepare all tablet writers
-    std::vector<std::unique_ptr<TabletWriter>> writers;
-    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
-        ASSIGN_OR_RETURN(auto writer, _writer->clone());
-        writers.push_back(std::move(writer));
-    }
-    // 3. Prepare all parallel merge tasks
-    QuitFlag quit_flag;
-    std::vector<std::shared_ptr<TabletInternalParallelMergeTask>> tasks;
-    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
-        tasks.push_back(std::make_shared<TabletInternalParallelMergeTask>(
-                writers[i].get(), spill_block_iterator_tasks.iterators[i].get(), schema.get(), i, &quit_flag,
-                get_spiller()->metrics().write_io_timer));
-    }
-    // 4. Submit all tasks to thread pool
-    for (size_t i = 0; i < spill_block_iterator_tasks.iterators.size(); ++i) {
-        auto submit_st = token->submit(tasks[i]);
-        if (!submit_st.ok()) {
-            tasks[i]->update_status(submit_st);
-            break;
-        }
-    }
-    token->wait();
-    // 5. check all task status
-    for (const auto& task : tasks) {
-        RETURN_IF_ERROR(task->status());
-    }
-    // 6. merge all writers' result
-    RETURN_IF_ERROR(_writer->merge_other_writers(writers));
-
-    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeInputGroups", TUnit::UNIT),
-                   spill_block_iterator_tasks.group_count);
-    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeInputBytes", TUnit::BYTES),
-                   spill_block_iterator_tasks.total_block_bytes);
-    COUNTER_UPDATE(ADD_COUNTER(_load_chunk_spiller->profile(), "SpillMergeCount", TUnit::UNIT),
-                   spill_block_iterator_tasks.iterators.size());
-    return Status::OK();
-}
-
-Status SpillMemTableSink::merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema) {
-    auto char_field_indexes = ChunkHelper::get_char_field_indexes(*schema);
-    auto* spiller = get_spiller();
-    auto write_func = [&char_field_indexes, schema, spiller, this](Chunk* chunk) {
-        SCOPED_TIMER(spiller->metrics().write_io_timer);
-        ChunkHelper::padding_char_columns(char_field_indexes, *schema, _writer->tablet_schema(), chunk);
-        return _writer->write(*chunk, nullptr);
-    };
-    auto flush_func = [spiller, this]() {
-        SCOPED_TIMER(spiller->metrics().write_io_timer);
-        return _writer->flush();
-    };
-
-    Status st = _load_chunk_spiller->merge_write(config::load_spill_max_merge_bytes,
-                                                 config::load_spill_memory_usage_per_merge, true /* do_sort */, do_agg,
-                                                 write_func, flush_func);
-    LOG_IF(WARNING, !st.ok()) << fmt::format(
-            "SpillMemTableSink merge blocks to segment failed, txn:{} tablet:{} msg:{}", _writer->txn_id(),
-            _writer->tablet_id(), st.message());
-    return st;
-}
-
 Status SpillMemTableSink::merge_blocks_to_segments() {
     TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     RETURN_IF(_load_chunk_spiller->empty(), Status::OK());
-    // merge process needs to control _writer's flush behavior manually
-    _writer->set_auto_flush(false);
 
-    SchemaPtr schema = _load_chunk_spiller->schema();
-    bool do_agg = schema->keys_type() == KeysType::AGG_KEYS || schema->keys_type() == KeysType::UNIQUE_KEYS;
+    // Manual flush control needed because we're coordinating multiple parallel writers
+    _writer->set_auto_flush(false);
 
     if (_load_chunk_spiller->total_bytes() >= config::pk_index_eager_build_threshold_bytes) {
         // When bulk load happens, try to enable eager PK index build
         _writer->try_enable_pk_index_eager_build();
-        // When eager PK index build is enabled, it will generate sst files when data loading,
-        // so we need to make sure no duplicate keys exist in segment files and sst files.
-        // That means we need to do aggregation when spill merge.
-        if (_writer->enable_pk_index_eager_build()) {
-            do_agg = true;
-        }
     }
 
     SCOPED_TIMER(ADD_TIMER(_load_chunk_spiller->profile(), "SpillMergeTime"));
+
+    // Lazy token creation: may already exist from eager merge in flush_chunk()
     if (config::enable_load_spill_parallel_merge) {
-        return merge_blocks_to_segments_parallel(do_agg, schema);
-    } else {
-        return merge_blocks_to_segments_serial(do_agg, schema);
+        _pipeline_merge_context->create_thread_pool_token();
     }
+
+    // FINAL MERGE PHASE: Merge all remaining spilled blocks to final tablet segments.
+    // final_round=true ensures ALL remaining blocks are consumed (no partial batches left).
+    // This iterator generates tasks lazily - one at a time as we iterate, enabling
+    // dynamic load balancing and memory control.
+    LoadSpillPipelineMergeIterator task_iterator(_load_chunk_spiller.get(), _writer,
+                                                 _pipeline_merge_context->quit_flag(), true /* final_round */);
+
+    // PIPELINE EXECUTION MODEL: Generate tasks on-demand and submit for parallel execution.
+    // Each task processes a batch of block groups (up to load_spill_max_merge_bytes).
+    // This approach balances parallelism (multiple tasks running concurrently) with
+    // memory efficiency (not creating all tasks upfront).
+    for (task_iterator.init(); task_iterator.has_more(); task_iterator.next()) {
+        auto current_task = task_iterator.current_task();
+        _pipeline_merge_context->add_merge_task(current_task);
+
+        if (_pipeline_merge_context->token()) {
+            // PARALLEL PATH: Submit to thread pool for async execution
+            auto submit_st = _pipeline_merge_context->token()->submit(current_task);
+            if (!submit_st.ok()) {
+                current_task->update_status(submit_st);
+                break; // Stop submitting new tasks if thread pool is unavailable
+            }
+        } else {
+            // SERIAL PATH: Fallback when parallel merge is disabled or token unavailable.
+            // Executes task synchronously in current thread. This ensures correctness
+            // even if thread pool is exhausted or config disables parallelism.
+            current_task->run();
+            if (!current_task->status().ok()) {
+                break; // Stop on first error
+            }
+        }
+    }
+
+    // RESULT CONSOLIDATION: Check all task statuses and merge their tablet writer results
+    // into the parent writer. This is the critical phase that combines all parallel work.
+    // Any task failure here will cause the entire load to fail.
+    RETURN_IF_ERROR(_pipeline_merge_context->merge_task_results());
+
+    // Return iterator status to catch any errors during task generation
+    return task_iterator.status();
 }
 
 int64_t SpillMemTableSink::txn_id() {
