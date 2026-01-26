@@ -298,11 +298,12 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         String restoredSnapshotName = restoredSnapshotInfo.getSnapshotName();
         long feJournalId = restoredSnapshotInfo.getFeJournalId();
         long starMgrJournalId = restoredSnapshotInfo.getStarMgrJournalId();
-        if (restoredSnapshotName == null) {
-            return;
+        ClusterSnapshotJob job = null;
+        if (restoredSnapshotName != null) {
+            job = getClusterSnapshotJobByName(restoredSnapshotName);
+        } else {
+            job = getUnfinishedClusterSnapshotJob();
         }
-
-        ClusterSnapshotJob job = getClusterSnapshotJobByName(restoredSnapshotName);
         // snapshot job may in init state, because it does not include the
         // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
         if (job != null && job.isInitializing()) {
