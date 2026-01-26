@@ -130,7 +130,6 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
-import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
@@ -202,7 +201,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final IcebergCatalog icebergCatalog;
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
-    private final Map<TableIdentifier, org.apache.iceberg.Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
@@ -385,7 +383,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         executor.execute();
 
         synchronized (this) {
-            tables.remove(TableIdentifier.of(dbName, tableName));
             try {
                 icebergCatalog.refreshTable(dbName, tableName, context, jobPlanningExecutor);
             } catch (Exception exception) {
@@ -443,7 +440,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         icebergCatalog.dropTable(context, stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
-        tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
@@ -459,15 +455,8 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
-
         try {
-            org.apache.iceberg.Table icebergTable;
-            if (tables.containsKey(identifier)) {
-                icebergTable = tables.get(identifier);
-            } else {
-                icebergTable = icebergCatalog.getTable(context, dbName, tblName);
-            }
+            org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(context, dbName, tblName);
 
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             // Hive/Glue catalog table name is case-insensitive, normalize it to lower case
@@ -479,11 +468,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable table =
                     IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
-            tables.put(identifier, icebergTable);
             updateTableProperty(db, table);
             return table;
         } catch (StarRocksConnectorException e) {
-            LOG.error("Failed to get iceberg table {}", identifier, e);
+            LOG.error("Failed to get iceberg table {}.{}", dbName, tblName, e);
             throw e;
         } catch (NoSuchTableException e) {
             return getView(context, dbName, tblName);
@@ -1257,7 +1245,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable icebergTable = (IcebergTable) table;
             String dbName = icebergTable.getCatalogDBName();
             String tableName = icebergTable.getCatalogTableName();
-            tables.remove(TableIdentifier.of(dbName, tableName));
             try {
                 icebergCatalog.refreshTable(dbName, tableName, new ConnectContext(), jobPlanningExecutor);
             } catch (Exception e) {
@@ -1349,7 +1336,6 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     private void invalidateCacheAfterCommit(String dbName, String tableName) {
         // Invalidate cache after commit
-        tables.remove(TableIdentifier.of(dbName, tableName));
         icebergCatalog.invalidateTableCache(dbName, tableName);
         icebergCatalog.invalidatePartitionCache(dbName, tableName);
     }
@@ -1543,7 +1529,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void clear() {
         splitTasks.clear();
         databases.clear();
-        tables.clear();
         scannedTables.clear();
     }
 

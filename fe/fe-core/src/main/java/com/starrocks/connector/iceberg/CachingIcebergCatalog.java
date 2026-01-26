@@ -71,6 +71,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final int MEMORY_FILE_SAMPLES = 100;
     private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
     private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
+    // Approximate weight for one snapshot's in-memory metadata footprint (bytes).
+    // This is intentionally a rough upper bound so that tables with many snapshots
+    // get evicted earlier and don't cause FE OOM.
+    private static final long APPROX_BYTES_PER_SNAPSHOT = 8L * 1024L;
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -104,17 +108,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
                 .executor(executorService)
                 .maximumWeight(tableCacheSize)
-                .weigher((Weigher<IcebergTableName, Table>) (IcebergTableName key, Table table) -> {
-                    long size = SizeEstimator.estimate(key);
-                    if (table != null) {
-                        size += 1L * countSnapshotsSafe(table) * MEMORY_SNAPSHOT_SIZE;
-                        if (((BaseTable) table).operations().current().currentSnapshot() != null) {
-                            size += 1L * (((BaseTable) table).operations().current().currentSnapshot()
-                                    .allManifests(((BaseTable) table).operations().io()).size() * MEMORY_MANIFEST_SIZE);
-                        }
-                    }
-                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
-                })
+                .weigher((Weigher<IcebergTableName, Table>) CachingIcebergCatalog::estimateTableWeightBytes)
                 .removalListener((IcebergTableName key, Table value, RemovalCause cause) -> {
                     if (key != null) {
                         LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
@@ -664,6 +658,38 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .mapToLong(Set::size)
                 .sum());
         return counter;
+    }
+
+    /**
+     * Estimates the weight (memory footprint) of a cached Iceberg table in bytes.
+     * This calculation considers the number of snapshots, history entries, schemas,
+     * partition specs, sort orders, properties, and refs to prevent OOM issues
+     * when caching tables with many snapshots.
+     */
+    private static int estimateTableWeightBytes(IcebergTableName key, Table table) {
+        long weight = 1L;
+        if (table instanceof BaseTable) {
+            TableOperations ops = ((BaseTable) table).operations();
+            TableMetadata meta = ops != null ? ops.current() : null;
+            if (meta != null) {
+                // Snapshots are the primary memory consumer - use higher weight
+                // Each snapshot includes manifest lists and metadata, so use 8KB per snapshot
+                weight += (long) meta.snapshots().size() * APPROX_BYTES_PER_SNAPSHOT;
+                // Snapshot history (estimated - snapshots list size gives us a proxy)
+                weight += (long) meta.snapshots().size() * 128L;
+                // Schemas can be large with many columns
+                weight += (long) meta.schemas().size() * 2048L;
+                // Partition specs with transform definitions
+                weight += (long) meta.specs().size() * 1024L;
+                // Sort orders
+                weight += (long) meta.sortOrders().size() * 512L;
+                // Table properties (key-value pairs)
+                weight += (long) meta.properties().size() * 256L;
+                // Branch/tag references
+                weight += (long) meta.refs().size() * 256L;
+            }
+        }
+        return (weight > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) weight;
     }
 
     private long countSnapshotsSafe(Table table) {
