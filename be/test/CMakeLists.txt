@@ -556,6 +556,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_persistent_index_size_tiered_compaction_strategy_test.cpp
     ./storage/lake/tablet_write_log_manager_test.cpp
     ./storage/load_spill_block_manager_test.cpp
+    ./storage/load_spill_pipeline_merge_test.cpp
     ./storage/memtable_flush_executor_test.cpp
     ./storage/memtable_test.cpp
     ./storage/merge_iterator_test.cpp
