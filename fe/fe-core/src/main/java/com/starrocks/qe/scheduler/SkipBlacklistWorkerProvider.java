@@ -17,11 +17,9 @@ package com.starrocks.qe.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,13 +39,13 @@ public class SkipBlacklistWorkerProvider extends DefaultWorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public SkipBlacklistWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
-                                     boolean preferComputeNode, int numUsedComputeNodes,
-                                     ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
-                                     ComputeResource computeResource) {
+                                                                   boolean preferComputeNode, int numUsedComputeNodes,
+                                                                   ComputationFragmentSchedulingPolicy schedulingPolicy,
+                                                                   ComputeResource computeResource) {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
-                    buildComputeNodeInfoSkipBlacklist(systemInfoService, numUsedComputeNodes, 
-                                         computationFragmentSchedulingPolicy, computeResource);
+                    buildComputeNodeInfoSkipBlacklist(systemInfoService, numUsedComputeNodes,
+                            schedulingPolicy, computeResource);
 
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
@@ -63,7 +61,7 @@ public class SkipBlacklistWorkerProvider extends DefaultWorkerProvider {
             }
 
             return new SkipBlacklistWorkerProvider(idToBackend, idToComputeNode,
-                    filterAvailableWorkersSkipBlacklist(idToBackend), 
+                    filterAvailableWorkersSkipBlacklist(idToBackend),
                     filterAvailableWorkersSkipBlacklist(idToComputeNode),
                     preferComputeNode, computeResource);
         }
@@ -91,7 +89,8 @@ public class SkipBlacklistWorkerProvider extends DefaultWorkerProvider {
             } else {
                 for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                     ComputeNode computeNode =
-                            getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex, computeResource);
+                            getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex,
+                                    computeResource);
                     Preconditions.checkNotNull(computeNode);
                     if (!isWorkerAvailableSkipBlacklist(computeNode)) {
                         continue;
@@ -132,11 +131,11 @@ public class SkipBlacklistWorkerProvider extends DefaultWorkerProvider {
     }
 
     protected SkipBlacklistWorkerProvider(ImmutableMap<Long, ComputeNode> id2Backend,
-                                   ImmutableMap<Long, ComputeNode> id2ComputeNode,
-                                   ImmutableMap<Long, ComputeNode> availableID2Backend,
-                                   ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                   boolean preferComputeNode, ComputeResource computeResource) {
-        super(id2Backend, id2ComputeNode, availableID2Backend, availableID2ComputeNode, 
-              preferComputeNode, computeResource);
+                                          ImmutableMap<Long, ComputeNode> id2ComputeNode,
+                                          ImmutableMap<Long, ComputeNode> availableID2Backend,
+                                          ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
+                                          boolean preferComputeNode, ComputeResource computeResource) {
+        super(id2Backend, id2ComputeNode, availableID2Backend, availableID2ComputeNode,
+                preferComputeNode, computeResource);
     }
 }

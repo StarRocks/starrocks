@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -36,7 +35,7 @@ import java.util.TreeMap;
 import java.util.function.Supplier;
 
 public class SkipBlacklistSharedDataWorkerProviderTest {
-    
+
     private static <C extends ComputeNode> ImmutableMap<Long, C> genWorkers(long startId, long endId,
                                                                             Supplier<C> factory, boolean halfDead) {
         Map<Long, C> res = new TreeMap<>();
@@ -69,37 +68,22 @@ public class SkipBlacklistSharedDataWorkerProviderTest {
                 return blacklistWorkerIds.contains(backendId);
             }
         };
-
-        // Mock GlobalStateMgr and WarehouseManager
-        new MockUp<GlobalStateMgr>() {
+        
+        new MockUp<WarehouseManager>() {
             @Mock
-            public com.starrocks.server.NodeMgr getNodeMgr() {
-                return new MockUp<com.starrocks.server.NodeMgr>() {
-                    @Mock
-                    public SystemInfoService getClusterInfo() {
-                        return new MockUp<SystemInfoService>() {
-                            @Mock
-                            public ComputeNode getBackendOrComputeNode(long nodeId) {
-                                return id2ComputeNode.get(nodeId);
-                            }
-                        }.getMockInstance();
-                    }
-                }.getMockInstance();
+            public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
+                return Arrays.asList(10L, 11L, 12L, 13L, 14L);
             }
-
+        };
+        new MockUp<SystemInfoService>() {
             @Mock
-            public WarehouseManager getWarehouseMgr() {
-                return new MockUp<WarehouseManager>() {
-                    @Mock
-                    public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
-                        return Arrays.asList(10L, 11L, 12L, 13L, 14L);
-                    }
-                }.getMockInstance();
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return id2ComputeNode.get(nodeId);
             }
         };
 
         // Test SkipBlacklistSharedDataWorkerProvider - should select blacklisted node as backup
-        SkipBlacklistSharedDataWorkerProvider.Factory skipFactory = 
+        SkipBlacklistSharedDataWorkerProvider.Factory skipFactory =
                 new SkipBlacklistSharedDataWorkerProvider.Factory();
         SkipBlacklistSharedDataWorkerProvider skipProvider =
                 skipFactory.captureAvailableWorkers(
@@ -114,7 +98,7 @@ public class SkipBlacklistSharedDataWorkerProviderTest {
                 "Backup worker should be node 11 (in blacklist) when skip_black_list is enabled");
 
         // Test DefaultSharedDataWorkerProvider - should NOT select blacklisted node as backup
-        DefaultSharedDataWorkerProvider.Factory defaultFactory = 
+        DefaultSharedDataWorkerProvider.Factory defaultFactory =
                 new DefaultSharedDataWorkerProvider.Factory();
         DefaultSharedDataWorkerProvider defaultProvider =
                 defaultFactory.captureAvailableWorkers(
