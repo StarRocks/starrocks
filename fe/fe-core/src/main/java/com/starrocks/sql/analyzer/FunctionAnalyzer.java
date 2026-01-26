@@ -942,9 +942,20 @@ public class FunctionAnalyzer {
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
+<<<<<<< HEAD
             Preconditions.checkState(argumentTypes.length == 2);
             Type[] args = new Type[] {argumentTypes[0], Type.INT};
             fn = Expr.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+=======
+            if (argumentTypes.length != 2) {
+                String functionName = fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, "");
+                throw new SemanticException(String.format(
+                        "Function '%s' requires exactly 2 arguments: column and number, but got %d argument(s)",
+                        functionName, argumentTypes.length));
+            }
+            Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
+            fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+>>>>>>> 9bb54a30ff ([Enhancement] improve error handling for iceberg transform functions (#68349))
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }
