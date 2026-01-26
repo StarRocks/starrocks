@@ -124,6 +124,8 @@ public:
 
     int64_t tablet_id() const { return _tablet_id; }
 
+    StatusOr<Tablet> get_tablet() const { return _tablet_mgr->get_tablet(_tablet_id); }
+
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
     bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }

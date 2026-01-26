@@ -104,9 +104,9 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         bool expected = (hashes % 2 == 0);
 
         MutableColumnPtr encoded_columns;
-        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
-        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
-        auto key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns, PrimaryKeyEncodingType::V1));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get(), PrimaryKeyEncodingType::V1);
+        auto key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, PrimaryKeyEncodingType::V1);
         Slice key(encoded_columns->continuous_data(), key_size);
         std::string row = key.to_string();
 
@@ -144,8 +144,8 @@ TEST_F(SstablePredicateTest, basicSstablePredicateTest) {
         bool expected = (hashes % 2 == 0);
 
         MutableColumnPtr encoded_columns;
-        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns));
-        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get());
+        ASSERT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &encoded_columns, PrimaryKeyEncodingType::V1));
+        PrimaryKeyEncoder::encode(pkey_schema, *pk_chunk, 0, 1, encoded_columns.get(), PrimaryKeyEncodingType::V1);
         ASSERT_TRUE(encoded_columns->is_binary() || encoded_columns->is_large_binary());
         std::string row = reinterpret_cast<const Slice*>(encoded_columns->raw_data())->to_string();
 

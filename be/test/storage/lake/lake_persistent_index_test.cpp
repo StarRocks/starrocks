@@ -309,8 +309,8 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V1));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), PrimaryKeyEncodingType::V1);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -726,8 +726,8 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
         chunk->append_column(std::move(col), (SlotId)0);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), PrimaryKeyEncodingType::V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -771,8 +771,8 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), PrimaryKeyEncodingType::V2);
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
