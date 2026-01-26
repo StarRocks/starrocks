@@ -515,7 +515,7 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(VarCharType varCharType) {
-            return TypeFactory.createDefaultCatalogString();
+            return TypeFactory.createVarcharType(varCharType.getLength());
         }
 
         public Type visit(BooleanType booleanType) {
