@@ -63,6 +63,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.Load;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
@@ -194,6 +195,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected long dbId;
     @SerializedName("t")
     protected long tableId;
+    // TODO: record user identity
     // this code is used to verify be task request
     protected long authCode;
     //    protected RoutineLoadDesc routineLoadDesc; // optional
@@ -921,8 +923,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
             info.setTxnId(txnId);
             StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, info);
+                    new StreamLoadPlanner(Load.createLoadConnectContext(db.getFullName()), db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
+
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 

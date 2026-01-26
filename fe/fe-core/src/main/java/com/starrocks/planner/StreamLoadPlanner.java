@@ -103,11 +103,11 @@ public class StreamLoadPlanner {
 
     private ComputeResource computeResource;
 
-    public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
+    public StreamLoadPlanner(ConnectContext context, Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
-        this.connectContext = new ConnectContext();
+        this.connectContext = context;
         this.computeResource = streamLoadInfo.getComputeResource();
     }
 
@@ -132,8 +132,14 @@ public class StreamLoadPlanner {
         return computeResource;
     }
 
-    // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
     public TExecPlanFragmentParams plan(TUniqueId loadId) throws StarRocksException {
+        try (final var scope = connectContext.bindScope()) {
+            return do_plan(loadId);
+        }
+    }
+
+    // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
+    public TExecPlanFragmentParams do_plan(TUniqueId loadId) throws StarRocksException {
         boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink

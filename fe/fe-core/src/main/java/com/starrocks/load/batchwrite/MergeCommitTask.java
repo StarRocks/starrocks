@@ -474,7 +474,7 @@ public class MergeCommitTask extends AbstractTxnStateChangeCallback implements R
                         String.format("Timed out acquiring read lock. db=%s, table=%s, timeoutMs=%s",
                                 tableRef.getDbName(), tableRef.getTableName(), timeoutMs));
             }
-            try {
+            try (var scope = connectContext.bindScope()) {
                 LoadPlanner loadPlanner = new LoadPlanner(taskId, loadId, txnId, database.getId(),
                         tableRef.getDbName(), table, streamLoadInfo.isStrictMode(), streamLoadInfo.getTimezone(),
                         streamLoadInfo.isPartialUpdate(), connectContext, null,
