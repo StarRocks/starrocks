@@ -279,7 +279,7 @@ SELECT
     numeric_type,
     variant_typeof(variant_query(variant_col, '$')) as detected_type,
     CASE
-        WHEN numeric_type = 'INT' AND variant_typeof(variant_query(variant_col, '$')) in 'Int32' THEN 'PASS'
+        WHEN numeric_type = 'INT' AND variant_typeof(variant_query(variant_col, '$')) = 'Int32' THEN 'PASS'
         WHEN numeric_type = 'BIGINT' AND variant_typeof(variant_query(variant_col, '$')) = 'Int64' THEN 'PASS'
         WHEN numeric_type = 'SMALLINT' AND variant_typeof(variant_query(variant_col, '$')) = 'Int16' THEN 'PASS'
         WHEN numeric_type = 'DOUBLE' AND variant_typeof(variant_query(variant_col, '$')) = 'Double' THEN 'PASS'
@@ -306,15 +306,13 @@ FROM variant_boundary_arrays_test
 WHERE test_id <= 3
 ORDER BY element_count;
 
-
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/ > /dev/null
-
 drop table variant_boundary_arrays_test force;
 drop table variant_boundary_nesting_test force;
 drop table variant_boundary_numeric_test force;
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
 
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/ > /dev/null
 
 -- use spark to generate those data files
 
