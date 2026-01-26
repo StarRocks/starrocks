@@ -631,6 +631,10 @@ CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
 CONF_Int32(load_segment_thread_pool_queue_size, "10240");
 
+// Enable segment metadata filter for lake tables.
+// When enabled, segments whose sort key range does not intersect with query predicates will be skipped.
+CONF_mBool(enable_lake_segment_metadata_filter, "true");
+
 // Fragment thread pool
 CONF_Int32(fragment_pool_thread_num_min, "64");
 CONF_Int32(fragment_pool_thread_num_max, "4096");

@@ -70,6 +70,7 @@ public:
     // No thread safe, UT only
     spill::BlockPtr get_block(size_t gid, size_t bid);
     std::vector<BlockGroupPtrWithSlot>& block_groups() { return _block_groups; }
+    std::mutex* block_groups_mutex() { return &_mutex; }
     size_t total_bytes() const { return _total_bytes; }
 
 private:

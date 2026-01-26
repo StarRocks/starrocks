@@ -22,6 +22,8 @@ namespace starrocks {
 
 class RuntimeState;
 class LoadSpillBlockManager;
+class ThreadPoolToken;
+class LoadSpillPipelineMergeContext;
 
 namespace lake {
 
@@ -33,7 +35,7 @@ class TabletWriter;
 class SpillMemTableSink : public MemTableSink {
 public:
     SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
-    ~SpillMemTableSink() override = default;
+    ~SpillMemTableSink() override;
 
     // Spill chunk to temporary storage or write directly if eos and no prior spills
     // @param slot_idx: slot index for tracking flush order in parallel flush mode
@@ -48,10 +50,6 @@ public:
 
     Status merge_blocks_to_segments();
 
-    // Parallel merge spill blocks to segments when config enable_load_spill_parallel_merge is true
-    Status merge_blocks_to_segments_parallel(bool do_agg, const SchemaPtr& schema);
-    Status merge_blocks_to_segments_serial(bool do_agg, const SchemaPtr& schema);
-
     spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }
 
     int64_t txn_id() override;
@@ -59,8 +57,18 @@ public:
 
 private:
     TabletWriter* _writer;
-    // used for spill merge, parent trakcer is compaction tracker
+
+    // Memory tracker for merge operations, parent is compaction tracker.
+    // RATIONALE: Merge phase uses separate memory budget from normal load operations
+    // to prevent OOM. Parent is compaction tracker since merge is similar to compaction.
     std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
+
+    // Coordinates parallel merge tasks and consolidates their results.
+    // Collects tasks from both eager merge (in flush_chunk) and final merge phases,
+    // ensuring all task results are properly merged into the tablet writer.
+    std::unique_ptr<LoadSpillPipelineMergeContext> _pipeline_merge_context = nullptr;
+
+    // Manages spilling chunks to disk and provides merge capabilities
     std::unique_ptr<LoadChunkSpiller> _load_chunk_spiller = nullptr;
 };
 
