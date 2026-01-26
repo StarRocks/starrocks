@@ -19,8 +19,19 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.NodePosition;
 
 public class BeginStmt extends StatementBase {
+    private final String label;
+
     public BeginStmt(NodePosition pos) {
+        this(pos, null);
+    }
+
+    public BeginStmt(NodePosition pos, String label) {
         super(pos);
+        this.label = label;
+    }
+
+    public String getLabel() {
+        return label;
     }
 
     @Override
