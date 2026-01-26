@@ -111,7 +111,6 @@ public class StatisticAutoCollector extends FrontendDaemon {
             for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 try (var scope = statsConnectCtx.bindScope()) {
-                    statsConnectCtx.setThreadLocalInfo();
                     List<StatisticsCollectJob> jobs = externalAnalyzeJob.instantiateJobs();
                     result.addAll(jobs);
                     externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
