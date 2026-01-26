@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.Expr;
@@ -34,8 +35,12 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
+<<<<<<< HEAD
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
+=======
+import com.starrocks.catalog.SqlFunction;
+>>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.combinator.AggStateCombinator;
@@ -55,12 +60,14 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SPMFunctions;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -732,7 +739,39 @@ public class FunctionAnalyzer {
                 }
             }
         }
+
+        if (fn instanceof SqlFunction) {
+            fn = analyzeSqlFunction((SqlFunction) fn, node, session);
+        }
         return fn;
+    }
+
+    private static Function analyzeSqlFunction(SqlFunction fn, FunctionCallExpr node, ConnectContext context) {
+        Expr expr;
+        if (node.getChildren().size() != fn.getArgNames().length) {
+            throw new SemanticException("View function " + fn.getFunctionName() + " expected "
+                    + fn.getArgNames().length + " arguments, but got " + node.getChildren().size(), node.getPos());
+        }
+        try {
+            Map<String, Type> argsMap = Maps.newHashMap();
+            for (int i = 0; i < node.getChildren().size(); i++) {
+                argsMap.put(fn.getArgNames()[i], fn.getArgs()[i]);
+            }
+
+            expr = SqlParser.parseExpression(fn.getSql(), context.getSessionVariable());
+            ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
+                if (!argsMap.containsKey(slotRef.getColName())) {
+                    throw new SemanticException("Cannot find argument %s in function args", slotRef.getColName());
+                }
+                slotRef.setType(argsMap.get(slotRef.getColName()));
+            });
+        } catch (Exception e) {
+            throw new SemanticException("Failed to parse view definition: " + fn.getSql());
+        }
+        SqlFunction v = (SqlFunction) fn.copy();
+        v.setAnalyzeExpr(expr);
+        v.setRetType(expr.getType());
+        return v;
     }
 
     /**

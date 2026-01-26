@@ -20,7 +20,12 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Function;
+<<<<<<< HEAD
 import com.starrocks.catalog.PrimitiveType;
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.TypeDef;
+>>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.HashMap;
@@ -56,9 +61,11 @@ public class CreateFunctionStmt extends DdlStmt {
     private final FunctionArgsDef argsDef;
     private final TypeDef returnType;
     private final Map<String, String> properties;
-    private final String content;
+    private String content;
     private final boolean shouldReplaceIfExists;
     private final boolean createIfNotExists;
+
+    private Expr expr;
 
     // needed item set after analyzed
     private Function function;
@@ -120,8 +127,39 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
+<<<<<<< HEAD
     public FunctionName getFunctionName() {
         return functionName;
+=======
+    public CreateFunctionStmt(String functionType, FunctionRef functionRef, FunctionArgsDef argsDef, Expr expr,
+                              boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
+        super(pos);
+        this.functionRef = functionRef;
+        this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
+        this.isTable = functionType.equalsIgnoreCase("TABLE");
+        this.argsDef = argsDef;
+        this.returnType = null;
+        this.expr = expr;
+        this.shouldReplaceIfExists = shouldReplaceIfExists;
+        this.createIfNotExists = createIfNotExists;
+        this.properties = ImmutableSortedMap.of();
+    }
+
+    public boolean isBuildFunctionMode() {
+        return this.expr != null;
+    }
+
+    public boolean isUdfFunctionMode() {
+        return this.expr == null && (content != null || !properties.isEmpty());
+    }
+
+    public Expr getExpr() {
+        return expr;
+    }
+
+    public FunctionRef getFunctionRef() {
+        return functionRef;
+>>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558))
     }
 
     public Function getFunction() {

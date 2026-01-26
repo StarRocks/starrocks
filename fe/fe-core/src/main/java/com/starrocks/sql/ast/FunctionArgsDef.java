@@ -23,6 +23,7 @@ import java.util.List;
 public class FunctionArgsDef {
     private final List<TypeDef> argTypeDefs;
     private final boolean isVariadic;
+    private final List<String> argNames;
 
     // set after analyze
     private Type[] argTypes;
@@ -30,6 +31,13 @@ public class FunctionArgsDef {
     public FunctionArgsDef(List<TypeDef> argTypeDefs, boolean isVariadic) {
         this.argTypeDefs = argTypeDefs;
         this.isVariadic = isVariadic;
+        this.argNames = List.of();
+    }
+
+    public FunctionArgsDef(List<TypeDef> argTypeDefs, List<String> argNames) {
+        this.argTypeDefs = argTypeDefs;
+        this.isVariadic = false;
+        this.argNames = argNames;
     }
 
     public Type[] getArgTypes() {
@@ -52,4 +60,15 @@ public class FunctionArgsDef {
     public void setArgTypes(Type[] argTypes) {
         this.argTypes = argTypes;
     }
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/FunctionArgsDef.java
+=======
+
+    public List<TypeDef> getArgTypeDefs() {
+        return argTypeDefs;
+    }
+
+    public List<String> getArgNames() {
+        return argNames;
+    }
+>>>>>>> f05c6bc084 ([Feature] support create sql udf (#67558)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/FunctionArgsDef.java
 }
