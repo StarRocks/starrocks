@@ -509,7 +509,11 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(VarCharType varCharType) {
+<<<<<<< HEAD
             return ScalarType.createDefaultCatalogString();
+=======
+            return TypeFactory.createVarcharType(varCharType.getLength());
+>>>>>>> 057059450a ([BugFix] Fix incorrect length for VARCHAR field type in Paimon Catalog (#68383))
         }
 
         public Type visit(BooleanType booleanType) {
