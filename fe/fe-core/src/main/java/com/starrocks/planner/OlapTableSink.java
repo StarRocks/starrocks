@@ -277,7 +277,8 @@ public class OlapTableSink extends DataSink {
     public List<Long> getOpenPartitions() {
         // if load start after shema change, we should open all of the partitions to avoid different schema during schema change
         // if load start before schema change, it will be finished in waiting_txn state
-        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL
+                && dstTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             return partitionIds;
         }
         if (enableAutomaticPartition && enableDynamicOverwrite) {
