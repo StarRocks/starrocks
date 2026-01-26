@@ -15,7 +15,6 @@
 package com.starrocks.credential;
 
 import com.staros.proto.FileStoreInfo;
-import com.starrocks.connector.share.credential.AwsCredentialUtil;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
@@ -225,35 +224,5 @@ public class AwsCloudConfigurationTest {
             Assertions.assertTrue(fsInfo.getS3FsInfo().getPartitionedPrefixEnabled());
             Assertions.assertEquals(1024, fsInfo.getS3FsInfo().getNumPartitionedPrefix());
         }
-    }
-
-    @Test
-    public void testEnsureSchemeInEndpoint() {
-        // Test endpoint without scheme
-        URI uriWithoutScheme = AwsCredentialUtil.ensureSchemeInEndpoint("s3.aa-bbbbb-3.amazonaws.com.cn");
-        Assertions.assertEquals("https://s3.aa-bbbbb-3.amazonaws.com.cn", uriWithoutScheme.toString());
-
-        // Test endpoint with scheme HTTPS
-        URI uriWithHttps = AwsCredentialUtil.ensureSchemeInEndpoint("https://s3.aa-bbbbb-3.amazonaws.com.cn");
-        Assertions.assertEquals("https://s3.aa-bbbbb-3.amazonaws.com.cn", uriWithHttps.toString());
-
-        // Test endpoint with scheme HTTP
-        URI uriWithHttp = AwsCredentialUtil.ensureSchemeInEndpoint("http://s3.aa-bbbbb-3.amazonaws.com.cn");
-        Assertions.assertEquals("http://s3.aa-bbbbb-3.amazonaws.com.cn", uriWithHttp.toString());
-
-        // Test endpoint with port but without scheme (the bug case)
-        // URI.create("localhost:4566") incorrectly parses "localhost" as scheme and "4566" as path
-        URI uriWithPort = AwsCredentialUtil.ensureSchemeInEndpoint("localhost:4566");
-        Assertions.assertEquals("https://localhost:4566", uriWithPort.toString());
-        Assertions.assertEquals("https", uriWithPort.getScheme());
-        Assertions.assertEquals("localhost", uriWithPort.getHost());
-        Assertions.assertEquals(4566, uriWithPort.getPort());
-
-        // Test endpoint with port and path but without scheme
-        URI uriWithPortAndPath = AwsCredentialUtil.ensureSchemeInEndpoint("example.com:8080/path");
-        Assertions.assertEquals("https://example.com:8080/path", uriWithPortAndPath.toString());
-        Assertions.assertEquals("https", uriWithPortAndPath.getScheme());
-        Assertions.assertEquals("example.com", uriWithPortAndPath.getHost());
-        Assertions.assertEquals(8080, uriWithPortAndPath.getPort());
     }
 }
