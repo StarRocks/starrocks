@@ -761,6 +761,9 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
             // set baseIndexMetaId
             baseIndexMetaId = baseIndex.getMetaId();
+
+            // reset baseIndex to null
+            baseIndex = null;
         }
     }
 }
