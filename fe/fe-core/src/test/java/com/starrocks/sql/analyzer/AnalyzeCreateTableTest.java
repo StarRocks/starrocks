@@ -392,6 +392,15 @@ public class AnalyzeCreateTableTest {
                         + "(k1 int, k2 date) partition by bucket(k2, 1)");
         analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 datetime) partition by bucket(k2, 1)");
+
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int) partition by (k2)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int) partition by (k1)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int) partition by (k3)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int, k3 int, k4 int) partition by (k2, k3)");
     }
 
     @Test

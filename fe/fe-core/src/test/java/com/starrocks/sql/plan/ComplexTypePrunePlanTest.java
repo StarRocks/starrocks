@@ -70,7 +70,7 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
                 "  2:EXCHANGE");
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar(10)>)");
+        assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar>)");
 
         sql = "select index_struct[1].`index` from index_struct_nest";
         plan = getFragmentPlan(sql);

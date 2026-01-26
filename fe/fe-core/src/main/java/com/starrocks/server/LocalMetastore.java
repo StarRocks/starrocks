@@ -3939,6 +3939,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterTableQueryTimeout(OlapTable table,
+                                       Map<String, String> properties,
+                                       List<Runnable> appliers) throws DdlException {
+        try {
+            int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+            appliers.add(() -> table.setTableQueryTimeout(tableQueryTimeout));
+        } catch (AnalysisException ex) {
+            throw new DdlException(ex.getMessage());
+        }
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3975,6 +3986,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
             alterLakeCompactionMaxParallel(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            alterTableQueryTimeout(table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -4521,6 +4535,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             view.setComment(stmt.getComment());
             view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
                     ConnectContext.get().getSessionVariable().getSqlMode());
+            view.setOriginalViewDef(stmt.getOriginalViewDefineSql());
 
             if (stmt.isSecurity()) {
                 view.setSecurity(stmt.isSecurity());

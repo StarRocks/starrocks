@@ -37,6 +37,7 @@
 #include <map>
 #include <memory>
 #include <roaring/roaring.hh>
+#include <type_traits>
 #include <utility>
 
 #include "fs/fs.h"
@@ -403,7 +404,12 @@ private:
         IndexedColumnWriter dict_column_writer(options, _typeinfo, wfile);
         RETURN_IF_ERROR(dict_column_writer.init());
         for (auto const& dict : sorted_dicts) {
-            RETURN_IF_ERROR(dict_column_writer.add(&dict));
+            if constexpr (std::is_same_v<CppType, bool>) {
+                bool value = static_cast<bool>(dict);
+                RETURN_IF_ERROR(dict_column_writer.add(&value));
+            } else {
+                RETURN_IF_ERROR(dict_column_writer.add(&dict));
+            }
         }
         return dict_column_writer.finish(meta);
     }

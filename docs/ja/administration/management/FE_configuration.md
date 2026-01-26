@@ -1465,11 +1465,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_query_queue_v2
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: boolean
 - 単位: -
 - 変更可能: いいえ
-- 説明: true の場合、FE のスロットベースのクエリスケジューラを Query Queue V2 に切り替えます。フラグはスロットマネージャとトラッカー（例: `BaseSlotManager.isEnableQueryQueueV2` や `SlotTracker#createSlotSelectionStrategy`）で参照され、従来の戦略の代わりに `SlotSelectionStrategyV2` を選択します。`query_queue_v2_xxx` の設定オプションおよび `QueryQueueOptions` はこのフラグが有効な場合にのみ有効になります。ランタイムで値が静的であるため、有効化にはリーダー FE の再起動が必要であり、クラスター全体のクエリスケジューリング、同時実行制限、およびキューイング動作が変更される可能性があります。
+- 説明: true の場合、FE のスロットベースのクエリスケジューラを Query Queue V2 に切り替えます。フラグはスロットマネージャとトラッカー（例: `BaseSlotManager.isEnableQueryQueueV2` や `SlotTracker#createSlotSelectionStrategy`）で参照され、従来の戦略の代わりに `SlotSelectionStrategyV2` を選択します。`query_queue_v2_xxx` の設定オプションおよび `QueryQueueOptions` はこのフラグが有効な場合にのみ有効になります。v4.1 以降、デフォルト値が `false` から `true` に変更されました。
 - 導入バージョン: v3.3.4, v3.4.0, v3.5.0
 
 ##### enable_sql_blacklist

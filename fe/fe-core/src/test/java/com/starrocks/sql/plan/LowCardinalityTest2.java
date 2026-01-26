@@ -1183,15 +1183,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "        union select 1,2\n" +
                 "    ) sys";
         plan = getFragmentPlan(sql);
-        assertContains(plan, plan, "  20:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 30: S_ADDRESS, 31: S_COMMENT\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "  |  \n" +
-                "  |----19:EXCHANGE\n" +
-                "  |    \n" +
-                "  16:EXCHANGE");
+        assertContains(plan, plan, "  20:AGGREGATE (update serialize)\n"
+                + "  |  STREAMING\n"
+                + "  |  group by: 32: cast, 33: cast\n"
+                + "  |  \n"
+                + "  0:UNION\n"
+                + "  |  \n"
+                + "  |----19:EXCHANGE\n"
+                + "  |    \n"
+                + "  16:EXCHANGE");
         assertContains(plan, plan, "Decode");
         plan = getThriftPlan(sql);
         assertNotContains(plan.split("\n")[1], "query_global_dicts");
@@ -1648,8 +1648,8 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan;
         sql = "select t1a from test_all_type group by t1a union all select v4 from t1 where false";
         plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  2:Project\n" +
-                "  |  <slot 15> : DictDecode(16: t1a, [<place-holder>])"), plan);
+        Assertions.assertTrue(plan.contains("  2:Project\n"
+                + "  |  <slot 16> : DictDecode(17: t1a, [<place-holder>])"), plan);
 
         // COW Case
         sql = "SELECT 'all', 'allx' where 1 = 2 union all select distinct S_ADDRESS, S_ADDRESS from supplier;";
@@ -1663,20 +1663,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
         sql = "SELECT 'all', 'all', 'all', 'all' where 1 = 2 union all " +
                 "select distinct S_ADDRESS, S_SUPPKEY + 1, S_SUPPKEY + 1, S_ADDRESS + 1 from supplier;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:Project\n" +
-                "  |  <slot 20> : DictDecode(24: S_ADDRESS, [<place-holder>])\n" +
-                "  |  <slot 21> : 25: cast\n" +
-                "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  <slot 23> : CAST(DictDecode(24: S_ADDRESS, [CAST(<place-holder> AS DOUBLE)]) + 1.0 AS VARCHAR)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 25> : CAST(15: expr AS VARCHAR)\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 24: S_ADDRESS, 15: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 15> : CAST(7: S_SUPPKEY AS BIGINT) + 1\n" +
-                "  |  <slot 24> : 24: S_ADDRESS");
+        assertContains(plan, "  3:Project\n"
+                + "  |  <slot 20> : DictDecode(24: S_ADDRESS, [<place-holder>])\n"
+                + "  |  <slot 21> : 25: cast\n"
+                + "  |  <slot 22> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  <slot 23> : CAST(DictDecode(24: S_ADDRESS, [CAST(<place-holder> AS DOUBLE)]) + 1.0 AS VARCHAR)\n"
+                + "  |  common expressions:\n"
+                + "  |  <slot 25> : CAST(14: expr AS VARCHAR)\n"
+                + "  |  \n"
+                + "  2:AGGREGATE (update finalize)\n"
+                + "  |  group by: 24: S_ADDRESS, 14: expr\n"
+                + "  |  \n"
+                + "  1:Project\n"
+                + "  |  <slot 14> : CAST(6: S_SUPPKEY AS BIGINT) + 1\n"
+                + "  |  <slot 24> : 24: S_ADDRESS");
 
     }
 
@@ -2123,21 +2123,20 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "WHERE c_mr IN ('02', '03') AND D_DATE>concat(year(str_to_date('2023-03-26', '%Y-%m-%d'))-1, '1231') " +
                 "AND d_date<='2023-03-26' GROUP BY c_mr;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  0:UNION\n" +
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  12:Decode\n" +
+                "  |  <dict id 59> : <string id 40>\n" +
+                "  |  <dict id 60> : <string id 42>\n" +
+                "  |  <dict id 61> : <string id 43>\n" +
                 "  |  \n" +
-                "  |----12:Decode\n" +
-                "  |    |  <dict id 56> : <string id 36>\n" +
-                "  |    |  <dict id 57> : <string id 37>\n" +
-                "  |    |  <dict id 58> : <string id 38>\n" +
-                "  |    |  <dict id 59> : <string id 29>\n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----11:Decode\n" +
+                "  |    |  <dict id 62> : <string id 29>\n" +
                 "  |    |  \n" +
-                "  |    11:EXCHANGE\n" +
+                "  |    10:EXCHANGE\n" +
                 "  |    \n" +
-                "  6:Decode\n" +
-                "  |  <dict id 50> : <string id 2>\n" +
-                "  |  <dict id 51> : <string id 3>\n" +
-                "  |  <dict id 52> : <string id 4>\n" +
-                "  |  \n" +
                 "  5:EXCHANGE\n");
     }
 
@@ -2607,9 +2606,162 @@ public class LowCardinalityTest2 extends PlanTestBase {
                     "     distribution type: SHUFFLE\n" +
                     "     partition exprs: [2: c_user, VARCHAR, true], [3: c_dept, VARCHAR, true]\n" +
                     "     cardinality: 1");
-            
+
         } finally {
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testUnionAll() throws Exception {
+        String sql = """
+                SELECT * FROM (
+                    SELECT
+                        S_ADDRESS
+                    FROM
+                        supplier
+                    UNION ALL
+                    SELECT
+                        C_USER
+                    FROM
+                        low_card_t1
+                ) T
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    24: DictDefine(22: S_ADDRESS, [<place-holder>])\n" +
+                "    25: DictDefine(22: S_ADDRESS, [<place-holder>])\n" +
+                "\n" +
+                "  6:Decode\n" +
+                "  |  <dict id 24> : <string id 21>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [24, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: cast, INT, true]\n" +
+                "  |      [23: c_user, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2");
+    }
+
+    @Test
+    public void testUnionDistinct() throws Exception {
+        String sql = """
+                SELECT * FROM (
+                    SELECT
+                        S_ADDRESS
+                    FROM
+                        supplier
+                    UNION DISTINCT
+                    SELECT
+                        C_USER
+                    FROM
+                        low_card_t1
+                ) T
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [21, VARCHAR(50), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [9: cast, VARCHAR, false]\n" +
+                "  |      [11: c_user, VARCHAR(50), true]", plan);
+    }
+
+    @Test
+    public void testUnionWithProjection() throws Exception {
+        String sql = """
+                WITH TB1 AS (
+                    (
+                        SELECT
+                            C_USER
+                        FROM
+                            low_card_t1
+                    )
+                    UNION ALL
+                    (
+                        SELECT
+                            C_USER
+                        FROM
+                            low_card_t1
+                    )
+                )
+                SELECT
+                    NULL
+                FROM
+                    TB1
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  5:Project\n" +
+                "  |  output columns:\n" +
+                "  |  24 <-> NULL\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [27, INT, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [25: c_user, INT, true]\n" +
+                "  |      [26: c_user, INT, true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 2", plan);
+    }
+
+    @Test
+    public void testUnionWithProjection2() throws Exception {
+        String sql = """
+                WITH TB1 AS (
+                  SELECT
+                     C_USER
+                  FROM
+                    low_card_t1
+                ),
+                TB2 AS (
+                  (
+                    SELECT
+                      C_USER ,
+                      CAST(1 AS BIGINT) AS CI
+                    FROM
+                      TB1
+                  )
+                  UNION ALL
+                  (
+                    SELECT
+                      C_USER,
+                      CAST(2 AS BIGINT) AS CI
+                    FROM
+                      TB1
+                  )
+                )
+                SELECT
+                  C_USER,
+                  CASE CI WHEN  1  THEN C_USER ELSE  NULL  END
+                FROM
+                  TB2
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    41: DictDefine(39: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  8:Decode\n" +
+                "  |  <dict id 41> : <string id 36>\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  7:Project\n" +
+                "  |  output columns:\n" +
+                "  |  38 <-> if[([37: cast, BIGINT, false] = 1, DictDecode([41: c_user, INT, true], " +
+                "[<place-holder>]), NULL); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR(50); args nullable: true;" +
+                " result nullable: true]\n" +
+                "  |  41 <-> [41: c_user, INT, true]\n" +
+                "  |  cardinality: 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [41, INT, true] | [37, BIGINT, false]\n" +
+                "  |  child exprs:\n" +
+                "  |      [39: c_user, INT, true] | [23: cast, BIGINT, false]\n" +
+                "  |      [40: c_user, INT, true] | [35: cast, BIGINT, false]", plan);
     }
 }

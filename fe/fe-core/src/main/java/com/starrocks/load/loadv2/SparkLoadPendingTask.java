@@ -90,7 +90,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.PrimitiveType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -190,14 +189,6 @@ public class SparkLoadPendingTask extends LoadTask {
                             tableIdToPartitionIds.get(tableId));
                     etlTable = new EtlTable(etlIndexes, etlPartitionInfo);
                     tables.put(tableId, etlTable);
-
-                    // add table indexes to transaction state
-                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                            .getTransactionState(dbId, transactionId);
-                    if (txnState == null) {
-                        throw new LoadException("txn does not exist. id: " + transactionId);
-                    }
-                    txnState.addTableIndexes(table);
                 }
 
                 // file group

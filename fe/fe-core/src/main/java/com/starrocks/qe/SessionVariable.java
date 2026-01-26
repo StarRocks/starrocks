@@ -53,6 +53,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -411,6 +413,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
     public static final String LOW_CARDINALITY_OPTIMIZE_ON_LAKE = "low_cardinality_optimize_on_lake";
     public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
+    public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL =
+                    "enable_low_cardinality_optimize_for_union_all";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -554,10 +558,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // when writing to fewer partitions. Therefore, we introduce a new invisible session variable with a default
     // false value temporarily. Once we can handle the shuffle behavior automatically to avoid some bad cases,
     // We will make it be controlled by the common connector session.
+    // Deprecated: Use connector_sink_shuffle_mode instead
     public static final String ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE = "enable_iceberg_sink_global_shuffle";
+
+    // Control global shuffle mode for connector table sink (Iceberg, Hive, File, etc.)
+    // Supports three modes:
+    // - force: Always enable global shuffle
+    // - auto: Automatically decide based on partition count and backend count (adaptive)
+    // - never: Never enable global shuffle
+    // Default is "auto" for adaptive optimization.
+    public static final String CONNECTOR_SINK_SHUFFLE_MODE = "connector_sink_shuffle_mode";
+
+    // The absolute threshold of partition count to enable adaptive global shuffle.
+    // When the estimated partition count is >= this value, adaptive shuffle will be enabled.
+    // Default is 500 partitions.
+    public static final String CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD = "connector_sink_shuffle_partition_threshold";
+
+    // The ratio of partition count to backend count to enable adaptive global shuffle.
+    // When estimated partition count >= backend count * this ratio, adaptive shuffle will be enabled.
+    // Default is 2.0 (i.e., enable shuffle when partitions >= backends * 2).
+    public static final String CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO = "connector_sink_shuffle_partition_node_ratio";
 
     public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
+    public static final String CONNECTOR_SINK_SORT_SCOPE = "connector_sink_sort_scope";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -845,6 +869,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
     public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
     public static final String DATA_SKEW_ROW_PERCENTAGE_THRESHOLD = "data_skew_row_percentage_threshold";
+    public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -1430,13 +1455,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
 
+    // Deprecated: Use connector_sink_shuffle_mode instead
     @VariableMgr.VarAttr(name = ENABLE_ICEBERG_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableIcebergSinkGlobalShuffle = false;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_MODE)
+    private String connectorSinkShuffleMode = ConnectorSinkShuffleMode.AUTO.modeName();
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_PARTITION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long connectorSinkShufflePartitionThreshold = 500;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_PARTITION_NODE_RATIO, flag = VariableMgr.INVISIBLE)
+    private double connectorSinkShufflePartitionNodeRatio = 2.0;
+
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_SPILL, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkSpill = true;
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double connectorSinkSpillMemLimitThreshold = 0.5;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SORT_SCOPE)
+    private String connectorSinkSortScope = ConnectorSinkSortScope.FILE.scopeName();
 
     // execute sql don't return result, for performance test
     @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
@@ -1689,6 +1728,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_JOIN)
     private boolean enableLowCardinalityOptimizeForJoin = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOW_CARDINALITY_OPTIMIZE_FOR_UNION_ALL)
+    private boolean enableLowCardinalityOptimizeForUnionAll = true;
 
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
     private boolean useLowCardinalityOptimizeV2 = true;
@@ -2490,6 +2532,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorSinkTargetMaxFileSize;
     }
 
+    public String getConnectorSinkSortScope() {
+        return connectorSinkSortScope;
+    }
+
+    public void setConnectorSinkSortScope(String connectorSinkSortScope) {
+        this.connectorSinkSortScope = connectorSinkSortScope;
+    }
+
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
     private boolean enableFileMetaCache = true;
 
@@ -2733,6 +2783,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DATA_SKEW_ROW_PERCENTAGE_THRESHOLD)
     private double dataSkewRowPercentageThreshold = 0.2;
+
+    @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
+    private boolean enableSplitWindowSkewToUnion = false;
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
@@ -3284,6 +3337,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public double getDataSkewRowPercentageThreshold() {
         return dataSkewRowPercentageThreshold;
+    }
+
+    public boolean isEnableSplitWindowSkewToUnion() {
+        return enableSplitWindowSkewToUnion;
+    }
+
+    public void setEnableSplitWindowSkewToUnion(boolean enableSplitWindowSkewToUnion) {
+        this.enableSplitWindowSkewToUnion = enableSplitWindowSkewToUnion;
     }
 
     public boolean getHudiMORForceJNIReader() {
@@ -4280,8 +4341,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorSinkGlobalShuffle;
     }
 
+    public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+        ConnectorSinkShuffleMode mode = ConnectorSinkShuffleMode.fromName(this.connectorSinkShuffleMode);
+        // Backward compatibility: legacy iceberg-only boolean implies FORCE when new mode stays at default AUTO.
+        if (mode == ConnectorSinkShuffleMode.AUTO && enableIcebergSinkGlobalShuffle) {
+            return ConnectorSinkShuffleMode.FORCE;
+        }
+        return mode;
+    }
+
     public boolean isEnableIcebergSinkGlobalShuffle() {
         return enableIcebergSinkGlobalShuffle;
+    }
+
+    public long getConnectorSinkShufflePartitionThreshold() {
+        return connectorSinkShufflePartitionThreshold;
+    }
+
+    public double getConnectorSinkShufflePartitionNodeRatio() {
+        return connectorSinkShufflePartitionNodeRatio;
     }
 
     public boolean isEnableConnectorSinkSpill() {
@@ -4409,6 +4487,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLowCardinalityOptimizeForJoin() {
         return enableLowCardinalityOptimizeForJoin;
+    }
+
+    public boolean isEnableLowCardinalityOptimizeForUnionAll() {
+        return enableLowCardinalityOptimizeForUnionAll;
+    }
+
+    public void setEnableLowCardinalityOptimizeForUnionAll(boolean enableLowCardinalityOptimizeForUnionAll) {
+        this.enableLowCardinalityOptimizeForUnionAll = enableLowCardinalityOptimizeForUnionAll;
     }
 
     public boolean isUseLowCardinalityOptimizeV2() {

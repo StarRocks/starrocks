@@ -479,6 +479,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid lake_compaction_max_parallel value: " + value + ". Value must be an integer.");
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

@@ -28,6 +28,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
@@ -357,54 +358,68 @@ struct RectifyDecimalType<DecimalV2Value> {
 template <typename T>
 using rectify_decimal_type = typename RectifyDecimalType<T>::type;
 VALUE_GUARD(LogicalType, ArrowDecimalOfAnyVersionLTGuard, arrow_lt_is_decimal_of_any_version, TYPE_DECIMAL,
-            TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
+            TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_DECIMAL256)
 
-template <LogicalType LT, bool is_nullable, bool is_strict>
-struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::Guard,
-                      ArrowDecimalOfAnyVersionLTGuard<LT>> {
-    static constexpr ArrowTypeId AT = ArrowTypeId::DECIMAL;
+VALUE_GUARD(ArrowTypeId, ArrowDecimalATGuard, at_is_decimal, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
+            ArrowTypeId::DECIMAL64, ArrowTypeId::DECIMAL256)
+
+template <ArrowTypeId AT>
+struct ArrowDecimalCppType {};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL32> {
+    using type = int32_t;
+};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL64> {
+    using type = int64_t;
+};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL> {
+    using type = int128_t;
+};
+
+template <>
+struct ArrowDecimalCppType<ArrowTypeId::DECIMAL256> {
+    using type = int256_t;
+};
+
+template <ArrowTypeId AT>
+using ArrowDecimalCppTypeT = typename ArrowDecimalCppType<AT>::type;
+
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrowDecimalATGuard<AT>, ArrowDecimalOfAnyVersionLTGuard<LT>> {
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
-    using ArrowCppType = ArrowTypeIdToCppType<AT>;
+    using SrcType = ArrowDecimalCppTypeT<AT>;
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
 
-    static void optimize_decimal128_with_same_scale(const arrow::Decimal128Array* array, size_t array_start_idx,
-                                                    size_t num_elements, ColumnType* column, size_t column_start_idx) {
-        column->resize(column->size() + num_elements);
-        auto* data = &column->get_data().front() + column_start_idx;
-        auto* arrow_data = array->raw_values() + sizeof(CppType) * array_start_idx;
-        strings::memcpy_inlined(data, arrow_data, sizeof(CppType) * num_elements);
-    }
-
     template <bool is_aligned>
-    static void copy_int128_t(int128_t* dst, const uint8_t* src) {
+    static void copy_decimal_value(SrcType* dst, const uint8_t* src) {
         if constexpr (is_aligned) {
-            *dst = *(int128_t*)src;
+            *dst = *reinterpret_cast<const SrcType*>(src);
         } else {
-            memcpy(dst, src, sizeof(int128_t));
+            memcpy(dst, src, sizeof(SrcType));
         }
-    }
-
-    static Status cast_error(int bits, int dst_scale, int src_scale, int128_t value) {
-        std::string s = DecimalV3Cast::to_string<int128_t>(value, decimal_precision_limit<int128_t>, src_scale);
-        return Status::InternalError(strings::Substitute("Decimal$0(*,$1) cannot hold $2", bits, dst_scale, s));
     }
 
     template <bool is_aligned, typename T>
     static Status fill_column(T* data, const uint8_t* arrow_data, const size_t num_elements, int dst_scale,
                               int src_scale, [[maybe_unused]] uint8_t* null_data,
                               [[maye_unused]] uint8_t* filter_data) {
-        int128_t datum;
+        SrcType datum;
         const uint8_t* arrow_p = arrow_data;
         int adjust_scale = dst_scale - src_scale;
         if (adjust_scale == 0) {
-            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(int128_t)) {
+            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(SrcType)) {
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) continue;
                 }
-                copy_int128_t<is_aligned>(&datum, arrow_p);
-                auto overflow = DecimalV3Cast::to_decimal_trivial<int128_t, T, true>(datum, data + i);
+                copy_decimal_value<is_aligned>(&datum, arrow_p);
+                auto overflow = DecimalV3Cast::to_decimal_trivial<SrcType, T, true>(datum, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
@@ -415,12 +430,12 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
             }
         } else if (adjust_scale > 0) {
             const auto scale_factor = get_scale_factor<T>(adjust_scale);
-            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(int128_t)) {
+            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(SrcType)) {
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) continue;
                 }
-                copy_int128_t<is_aligned>(&datum, arrow_p);
-                auto overflow = DecimalV3Cast::to_decimal<int128_t, T, T, true, true>(datum, scale_factor, data + i);
+                copy_decimal_value<is_aligned>(&datum, arrow_p);
+                auto overflow = DecimalV3Cast::to_decimal<SrcType, T, T, true, true>(datum, scale_factor, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
@@ -430,14 +445,14 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
                 }
             }
         } else {
-            const auto scale_factor = get_scale_factor<int128_t>(-adjust_scale);
-            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(int128_t)) {
+            const auto scale_factor = get_scale_factor<SrcType>(-adjust_scale);
+            for (auto i = 0; i < num_elements; ++i, arrow_p += sizeof(SrcType)) {
                 if constexpr (is_nullable) {
                     if (null_data[i] == DATUM_NULL) continue;
                 }
-                copy_int128_t<is_aligned>(&datum, arrow_p);
+                copy_decimal_value<is_aligned>(&datum, arrow_p);
                 auto overflow =
-                        DecimalV3Cast::to_decimal<int128_t, T, int128_t, false, true>(datum, scale_factor, data + i);
+                        DecimalV3Cast::to_decimal<SrcType, T, SrcType, false, true>(datum, scale_factor, data + i);
                 if (UNLIKELY(overflow)) {
                     if constexpr (is_nullable && !is_strict) {
                         null_data[i] = DATUM_NULL;
@@ -464,18 +479,18 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
             dst_scale = concrete_column->scale();
         }
 
+        using RectifiedCppType = rectify_decimal_type<CppType>;
         if constexpr (!is_nullable) {
-            if constexpr (lt_is_decimal128<LT> || lt_is_decimalv2<LT>) {
-                if (src_scale == dst_scale) {
-                    optimize_decimal128_with_same_scale(concrete_array, array_start_idx, num_elements, concrete_column,
-                                                        column_start_idx);
-                    return Status::OK();
-                }
+            if (src_scale == dst_scale && sizeof(SrcType) == sizeof(RectifiedCppType)) {
+                concrete_column->resize(column->size() + num_elements);
+                auto* data = (RectifiedCppType*)(&concrete_column->get_data().front() + column_start_idx);
+                auto* arrow_data = concrete_array->raw_values() + array_start_idx * concrete_type->byte_width();
+                strings::memcpy_inlined(data, arrow_data, sizeof(RectifiedCppType) * num_elements);
+                return Status::OK();
             }
         }
 
         concrete_column->resize(column->size() + num_elements);
-        using RectifiedCppType = rectify_decimal_type<CppType>;
         auto* data = (RectifiedCppType*)(&concrete_column->get_data().front() + column_start_idx);
         auto* arrow_data = concrete_array->raw_values() + array_start_idx * concrete_type->byte_width();
         bool is_aligned = ((uintptr_t)arrow_data & (concrete_type->byte_width() - 1)) == 0;
@@ -901,8 +916,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
         DCHECK_EQ(conv_func->field_names.size(), conv_func->children.size());
         for (size_t i = 0; i < conv_func->field_names.size(); i++) {
             const auto& child_name = conv_func->field_names[i];
-
-            auto* child_col = struct_col->field_column_raw_ptr(child_name);
+            ASSIGN_OR_RETURN(auto* child_col, struct_col->field_column_raw_ptr(child_name));
             auto child_array = struct_array->GetFieldByName(child_name);
 
             if (child_array == nullptr) {
@@ -971,7 +985,9 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
                                   ArrowTypeId::LARGE_BINARY, ArrowTypeId::FIXED_SIZE_BINARY),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL, ArrowTypeId::DECIMAL32,
+                                  ArrowTypeId::DECIMAL64),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL256, ArrowTypeId::DECIMAL256),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_ARRAY, ArrowTypeId::LIST, ArrowTypeId::LARGE_LIST, ArrowTypeId::FIXED_SIZE_LIST),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
@@ -1006,7 +1022,13 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::DATE32, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::DATE64, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::TIMESTAMP, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
-        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                         TYPE_DECIMAL256),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL32, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                         TYPE_DECIMAL256),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL64, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+                         TYPE_DECIMAL256),
+        ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL256, TYPE_DECIMAL256),
 
         // JSON converters
         ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_MAP, TYPE_JSON),

@@ -646,6 +646,15 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - Description: Sets the maximum number of worker threads in the backend's "update_schema" dynamic ThreadPool that processes TTaskType::UPDATE_SCHEMA tasks. The ThreadPool is created in agent_server during startup with a minimum of 0 threads (it can scale down to zero when idle) and a max equal to this setting; the pool uses the default idle timeout and an effectively unlimited queue. Increase this value to allow more concurrent schema-update tasks (higher CPU and memory usage), or lower it to limit parallel schema operations.
 - Introduced in: v3.2.3
 
+##### update_tablet_meta_info_worker_count
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Sets the maximum number of worker threads in the backend thread pool that handles tablet metadata update tasks. The thread pool is created during backend startup with a minimum of 0 threads (it can scale down to zero when idle) and a max equal to this setting (clamped to at least 1). Updating this value at runtime adjusts the pool's max threads. Increase it to allow more concurrent metadata-update tasks, or lower it to limit concurrency.
+- Introduced in: v4.1.0, v4.0.6, v3.5.13
+
 ### User, role, and privilege
 
 ##### ssl_certificate_path
@@ -3455,4 +3464,3 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: No
 - Description: Maximum number of bytes to read from the INFO logfile and show on the BE debug webserver's log page. The handler uses this value to compute a seek offset (showing the last N bytes) to avoid reading or serving very large log files. If the logfile is smaller than this value the whole file is shown. Note: in the current implementation the code that reads and serves the INFO log is commented out and the handler reports that the INFO log file couldn't be opened, so this parameter may have no effect unless the log-serving code is enabled.
 - Introduced in: v3.2.0
-
