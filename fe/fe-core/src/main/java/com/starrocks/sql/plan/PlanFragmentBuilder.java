@@ -1542,6 +1542,30 @@ public class PlanFragmentBuilder {
             return buildIcebergScanNode(optExpression, context);
         }
 
+        private boolean isIcebergDeleteOperation(PhysicalScanOperator node) {
+            List<ColumnRefOperator> outputColumns = node.getOutputColumns();
+            if (outputColumns == null || outputColumns.isEmpty()) {
+                return false;
+            }
+
+            boolean hasFilePath = false;
+            boolean hasPos = false;
+
+            for (ColumnRefOperator columnRef : outputColumns) {
+                String colName = columnRef.getName();
+
+                // Check file path column
+                if (colName.equals(IcebergTable.FILE_PATH)) {
+                    hasFilePath = true;
+                } else if (colName.equals(IcebergTable.ROW_POSITION)) {
+                    // Check position column
+                    hasPos = true;
+                }
+            }
+
+            return hasFilePath || hasPos;
+        }
+
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
             Table referenceTable = node.getTable();
@@ -1598,6 +1622,9 @@ public class PlanFragmentBuilder {
                             icebergScanNode.setBucketProperties(descBP.getBucketProperties());
                         }
                     }
+                }
+                if (isIcebergDeleteOperation(node)) {
+                    icebergScanNode.setUsedForDelete(true);
                 }
                 icebergScanNode.setupScanRangeLocations(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
