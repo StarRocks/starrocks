@@ -43,7 +43,7 @@ public:
         return *this;
     }
 
-    CopiedDatum& operator=(CopiedDatum&& other) {
+    CopiedDatum& operator=(CopiedDatum&& other) noexcept {
         if (this != &other) {
             release();
             _datum = other._datum;
