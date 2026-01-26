@@ -153,11 +153,12 @@ public class QueryQueueManager {
         long groupId = group == null ? LogicalSlot.ABSENT_GROUP_ID : group.getId();
 
         long nowMs = context.getStartTime();
+        long queryTimeoutSecond = coord.getJobSpec().getQueryOptions().getQuery_timeout();
         final BaseSlotManager slotManager = GlobalStateMgr.getCurrentState().getSlotManager();
-        long queryQueuePendingTimeoutSecond =
+        int queryQueuePendingTimeoutSecond =
                 slotManager.getQueryQueuePendingTimeoutSecond(context.getCurrentWarehouseId());
         long expiredPendingTimeMs = nowMs + queryQueuePendingTimeoutSecond * 1000L;
-        long expiredAllocatedTimeMs = nowMs + queryQueuePendingTimeoutSecond * 1000L;
+        long expiredAllocatedTimeMs = expiredPendingTimeMs + queryTimeoutSecond * 1000L;
 
         int numFragments = coord.getFragments().size();
         int pipelineDop = coord.getJobSpec().getQueryOptions().getPipeline_dop();

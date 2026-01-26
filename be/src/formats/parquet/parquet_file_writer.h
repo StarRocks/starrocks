@@ -44,7 +44,6 @@
 #include <vector>
 
 #include "arrow_memory_pool.h"
-#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"

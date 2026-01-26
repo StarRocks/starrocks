@@ -410,6 +410,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Only default compaction strategy is allowed for non-pk table.");
                 }
                 table.setCompactionStrategy(compactionStrategy);
+
+                // analyze lake_compaction_max_parallel property
+                try {
+                    int lakeCompactionMaxParallel = PropertyAnalyzer.analyzeLakeCompactionMaxParallel(properties);
+                    table.setLakeCompactionMaxParallel(lakeCompactionMaxParallel);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
             }
 
             try {
@@ -767,6 +775,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
                 table.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
+            }
+
+            // analyze table_query_timeout
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                try {
+                    int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+                    table.setTableQueryTimeout(tableQueryTimeout);
+                } catch (AnalysisException ex) {
+                    throw new DdlException(ex.getMessage());
+                }
             }
 
             try {

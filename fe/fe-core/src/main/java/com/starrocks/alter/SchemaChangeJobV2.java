@@ -72,8 +72,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.journal.JournalTask;
-import com.starrocks.persist.EditLog;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -115,6 +113,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -139,31 +138,31 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     // physical partition id -> (shadow index meta id -> (shadow tablet id -> origin tablet id))
     @SerializedName(value = "partitionIndexTabletMap")
-    private Table<Long, Long, Map<Long, Long>> physicalPartitionIndexTabletMap = HashBasedTable.create();
+    protected Table<Long, Long, Map<Long, Long>> physicalPartitionIndexTabletMap = HashBasedTable.create();
     // physical partition id -> (shadow index meta id -> shadow index))
     @SerializedName(value = "partitionIndexMap")
-    private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
+    protected Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
     // shadow index meta id -> origin index meta id
     @SerializedName(value = "indexIdMap")
-    private Map<Long, Long> indexMetaIdMap = Maps.newHashMap();
+    protected Map<Long, Long> indexMetaIdMap = Maps.newHashMap();
     // shadow index meta id -> shadow index name(__starrocks_shadow_xxx)
     @SerializedName(value = "indexIdToName")
-    private Map<Long, String> indexMetaIdToName = Maps.newHashMap();
+    protected Map<Long, String> indexMetaIdToName = Maps.newHashMap();
     // shadow index meta id -> index schema
     @SerializedName(value = "indexSchemaMap")
-    private Map<Long, List<Column>> indexMetaIdToSchema = Maps.newHashMap();
+    protected Map<Long, List<Column>> indexMetaIdToSchema = Maps.newHashMap();
     // shadow index meta id -> (shadow index schema version : schema hash)
     @SerializedName(value = "indexSchemaVersionAndHashMap")
-    private Map<Long, SchemaVersionAndHash> indexMetaIdToSchemaVersionAndHash = Maps.newHashMap();
+    protected Map<Long, SchemaVersionAndHash> indexMetaIdToSchemaVersionAndHash = Maps.newHashMap();
     // shadow index meta id -> shadow index short key count
     @SerializedName(value = "indexShortKeyMap")
-    private Map<Long, Short> indexMetaIdToShortKey = Maps.newHashMap();
+    protected Map<Long, Short> indexMetaIdToShortKey = Maps.newHashMap();
 
     // bloom filter info
     @SerializedName(value = "hasBfChange")
     private boolean hasBfChange;
     @SerializedName(value = "bfColumns")
-    private Set<ColumnId> bfColumns = null;
+    protected Set<ColumnId> bfColumns = null;
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
@@ -171,7 +170,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
     @SerializedName(value = "indexes")
-    private List<Index> indexes = null;
+    protected List<Index> indexes = null;
 
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
@@ -204,6 +203,53 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // for deserialization
     private SchemaChangeJobV2() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    protected SchemaChangeJobV2(SchemaChangeJobV2 job) {
+        super(job);
+        if (job.physicalPartitionIndexTabletMap != null) {
+            this.physicalPartitionIndexTabletMap = HashBasedTable.create();
+            for (Cell<Long, Long, Map<Long, Long>> cell : job.physicalPartitionIndexTabletMap.cellSet()) {
+                Map<Long, Long> tabletMap = Maps.newHashMap();
+                if (cell.getValue() != null) {
+                    tabletMap.putAll(cell.getValue());
+                }
+                this.physicalPartitionIndexTabletMap.put(cell.getRowKey(), cell.getColumnKey(), tabletMap);
+            }
+        } else {
+            this.physicalPartitionIndexTabletMap = null;
+        }
+        if (job.physicalPartitionIndexMap != null) {
+            this.physicalPartitionIndexMap = HashBasedTable.create();
+            this.physicalPartitionIndexMap.putAll(job.physicalPartitionIndexMap);
+        } else {
+            this.physicalPartitionIndexMap = null;
+        }
+        this.indexMetaIdMap = job.indexMetaIdMap == null ? null : Maps.newHashMap(job.indexMetaIdMap);
+        this.indexMetaIdToName = job.indexMetaIdToName == null ? null : Maps.newHashMap(job.indexMetaIdToName);
+        if (job.indexMetaIdToSchema != null) {
+            this.indexMetaIdToSchema = Maps.newHashMap();
+            for (Map.Entry<Long, List<Column>> entry : job.indexMetaIdToSchema.entrySet()) {
+                List<Column> columns = entry.getValue() == null ? null : new ArrayList<>(entry.getValue());
+                this.indexMetaIdToSchema.put(entry.getKey(), columns);
+            }
+        } else {
+            this.indexMetaIdToSchema = null;
+        }
+        this.indexMetaIdToSchemaVersionAndHash = job.indexMetaIdToSchemaVersionAndHash == null ? null
+                : Maps.newHashMap(job.indexMetaIdToSchemaVersionAndHash);
+        this.indexMetaIdToShortKey = job.indexMetaIdToShortKey == null ? null : Maps.newHashMap(job.indexMetaIdToShortKey);
+        this.hasBfChange = job.hasBfChange;
+        this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
+        this.bfFpp = job.bfFpp;
+        this.indexChange = job.indexChange;
+        this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
+        this.watershedTxnId = job.watershedTxnId;
+        this.startTime = job.startTime;
+        this.sortKeyIdxes = job.sortKeyIdxes == null ? null : new ArrayList<>(job.sortKeyIdxes);
+        this.sortKeyUniqueIds = job.sortKeyUniqueIds == null ? null : new ArrayList<>(job.sortKeyUniqueIds);
+        this.disableReplicatedStorageForGIN = job.disableReplicatedStorageForGIN;
+        this.historySchema = job.historySchema;
     }
 
     public void addTabletIdMap(long physicalPartitionId, long shadowIdxMetaId, long shadowTabletId, long originTabletId) {
@@ -316,7 +362,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
      * clear some date structure in this job to save memory
      * these data structures must not used in getInfo method
      */
-    private void pruneMeta() {
+    @Override
+    public void pruneMeta() {
         physicalPartitionIndexTabletMap.clear();
         physicalPartitionIndexMap.clear();
         indexMetaIdToSchema.clear();
@@ -483,22 +530,21 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-            addShadowIndexToCatalog(tbl);
-            if (disableReplicatedStorageForGIN) {
-                tbl.setEnableReplicatedStorage(false);
-            }
+            final OlapTable finalTbl = tbl;
+            this.watershedTxnId =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            persistStateChange(this, JobState.WAITING_TXN, () -> {
+                addShadowIndexToCatalog(finalTbl);
+                if (disableReplicatedStorageForGIN) {
+                    finalTbl.setEnableReplicatedStorage(false);
+                }
+            });
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
-        this.watershedTxnId =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-        this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
-
-        // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
     }
@@ -788,9 +834,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * all tasks are finished. check the integrity.
          * we just check whether all new replicas are healthy.
          */
-        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        JournalTask journalTask;
-
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         try {
@@ -837,23 +880,20 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             } // end for partitions
 
-            // all partitions are good
-            onFinished(tbl);
-
-            // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(tbl, modifiedColumns);
-
-            pruneMeta();
-            tbl.onReload();
-            this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
+            // all partitions are good
+            persistStateChange(this, JobState.FINISHED, true, () -> {
+                onFinished(tbl);
+                // If schema changes include fields which defined in related mv, set those mv state to inactive.
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(tbl, modifiedColumns);
 
-            journalTask = editLog.logAlterJobNoWait(this);
+                pruneMeta();
+                tbl.onReload();
+            });
+
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
-
-        EditLog.waitInfinity(journalTask);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
@@ -922,15 +962,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
                     // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                     // in globalStateMgr.
-                    MaterializedIndex shadowIdx = physicalPartition.getIndex(shadowIdxMetaId);
+                    MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(shadowIdxMetaId);
                     Preconditions.checkNotNull(shadowIdx, shadowIdxMetaId);
-                    MaterializedIndex droppedIdx = null;
-                    if (originIdxMetaId == physicalPartition.getBaseIndex().getMetaId()) {
-                        droppedIdx = physicalPartition.getBaseIndex();
-                    } else {
-                        droppedIdx = physicalPartition.deleteRollupIndex(originIdxMetaId);
-                    }
-                    Preconditions.checkNotNull(droppedIdx, originIdxMetaId + " vs. " + shadowIdxMetaId);
+                    List<MaterializedIndex> droppedIndices = physicalPartition.deleteMaterializedIndexByMetaId(originIdxMetaId);
+                    Preconditions.checkState(!droppedIndices.isEmpty(), originIdxMetaId + " vs. " + shadowIdxMetaId);
 
                     // Add to TabletInvertedIndex.
                     // Even thought we have added the tablet to TabletInvertedIndex on pending state, but the pending state
@@ -947,12 +982,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         }
                     }
 
-                    physicalPartition.visualiseShadowIndex(
-                            shadowIdxMetaId, originIdxMetaId == physicalPartition.getBaseIndex().getMetaId());
+                    physicalPartition.visualiseShadowIndex(shadowIdx.getId(), originIdxMetaId == tbl.getBaseIndexMetaId());
 
                     // the origin tablet created by old schema can be deleted from FE meta data
-                    for (Tablet originTablet : droppedIdx.getTablets()) {
-                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
+                    for (MaterializedIndex droppedIdx : droppedIndices) {
+                        for (Tablet originTablet : droppedIdx.getTablets()) {
+                            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
+                        }
                     }
                 }
             }
@@ -1021,13 +1057,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return false;
         }
 
-        cancelInternal();
-
-        pruneMeta();
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+
+        persistStateChange(this, JobState.CANCELLED, true, this::cancelInternal);
+
+        pruneMeta();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;
@@ -1055,7 +1091,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             for (Tablet shadowTablet : shadowIdx.getTablets()) {
                                 invertedIndex.deleteTablet(shadowTablet.getId());
                             }
-                            physicalPartition.deleteRollupIndex(shadowIdx.getMetaId());
+                            physicalPartition.deleteMaterializedIndexByMetaId(shadowIdx.getMetaId());
                         }
                     }
                     for (String shadowIndexName : indexMetaIdToName.values()) {
@@ -1071,7 +1107,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
 
-        jobState = JobState.CANCELLED;
+        // Job state is updated after WAL is persisted.
+    }
+
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new SchemaChangeJobV2(this);
     }
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
@@ -1278,9 +1319,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
         return taskInfos;
     }
-
-
-
 
     @Override
     public Optional<Long> getTransactionId() {

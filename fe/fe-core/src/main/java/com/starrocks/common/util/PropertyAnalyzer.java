@@ -212,6 +212,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
 
+    // default: same as cluster query_timeout
+    public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
+
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
@@ -271,6 +274,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FILE_BUNDLING = "file_bundling";
 
     public static final String PROPERTIES_COMPACTION_STRATEGY = "compaction_strategy";
+
+    // Maximum number of parallel compaction subtasks per tablet
+    // 0 means disable parallel compaction, positive value enables it
+    public static final String PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL = "lake_compaction_max_parallel";
 
     public static final String PROPERTIES_TABLET_RESHARD_TARGET_SIZE = "tablet_reshard_target_size";
 
@@ -1349,6 +1356,37 @@ public class PropertyAnalyzer {
         return val;
     }
 
+    /**
+     * Analyze table_query_timeout property.
+     * @param properties table properties
+     * @return table query timeout in seconds, -1 means use cluster query_timeout
+     * @throws AnalysisException if the value is invalid
+     */
+    public static int analyzeTableQueryTimeout(Map<String, String> properties)
+            throws AnalysisException {
+        if (properties == null || !properties.containsKey(PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            return -1;
+        }
+        String tableQueryTimeoutStr = properties.get(PROPERTIES_TABLE_QUERY_TIMEOUT);
+        properties.remove(PROPERTIES_TABLE_QUERY_TIMEOUT);
+        int tableQueryTimeout;
+        try {
+            tableQueryTimeout = Integer.parseInt(tableQueryTimeoutStr);
+            // -1 means unset table_query_timeout and fallback to default behavior (cluster/session timeout).
+            if (tableQueryTimeout == -1) {
+                return -1;
+            }
+            if (tableQueryTimeout <= 0) {
+                throw new AnalysisException("Property " + PROPERTIES_TABLE_QUERY_TIMEOUT
+                        + " must be greater than 0, or -1 to reset to default, got: " + tableQueryTimeoutStr);
+            }
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("Property " + PROPERTIES_TABLE_QUERY_TIMEOUT
+                    + " must be a valid integer, got: " + tableQueryTimeoutStr);
+        }
+        return tableQueryTimeout;
+    }
+
     public static List<UniqueConstraint> analyzeUniqueConstraint(Map<String, String> properties, Database db, Table table) {
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
@@ -1616,6 +1654,28 @@ public class PropertyAnalyzer {
             }
         }
         return TCompactionStrategy.DEFAULT;
+    }
+
+    // Analyze lake_compaction_max_parallel property
+    // Returns the max parallel value (default 3, 0 means disabled)
+    public static int analyzeLakeCompactionMaxParallel(Map<String, String> properties) throws AnalysisException {
+        int defaultValue = 3;
+        if (properties != null && properties.containsKey(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            String value = properties.get(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            properties.remove(PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            try {
+                int maxParallel = Integer.parseInt(value);
+                if (maxParallel < 0) {
+                    throw new AnalysisException("Invalid lake_compaction_max_parallel value: " + value +
+                            ". Value must be non-negative.");
+                }
+                return maxParallel;
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Invalid lake_compaction_max_parallel value: " + value +
+                        ". Value must be an integer.");
+            }
+        }
+        return defaultValue;
     }
 
     public static long analyzeTabletReshardTargetSize(Map<String, String> properties, boolean removeProperties)

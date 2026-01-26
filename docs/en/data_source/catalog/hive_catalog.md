@@ -953,7 +953,7 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT ../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.mdELECT.md), or [CREATE TABL../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md_LIKE.md) statement to create a managed table in that Hive database.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/user_privs/authorization/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md), [CREATE TABLE AS SELECT](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md), or [CREATE TABLE LIKE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_LIKE.md) statement to create a managed table in that Hive database.
 
 This feature is supported since v3.2 in which version StarRocks only supports creating Parquet-formatted Hive tables. From v3.3 onwards, StarRocks also supports creating ORC- and Textfile-formatted Hive tables.
 
@@ -1155,6 +1155,56 @@ The following DMLs use the default file format Parquet as an example.
 
    ```SQL
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
+   ```
+
+## Truncate a Hive table
+
+You can use the [TRUNCATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/TRUNCATE_TABLE.md) statement to quickly delete all data from Hive managed tables. This operation supports:
+
+- Truncating all data in non-partitioned tables
+- Truncating all partitions in a partitioned table
+- Truncating specific partitions in a partitioned table
+
+### Syntax
+
+```SQL
+TRUNCATE TABLE <table_name>
+
+TRUNCATE TABLE <table_name> PARTITION (partition_name = partition_value [, ...])
+```
+
+### Parameters
+
+- `table_name`: The name of the Hive table that you want to truncate data from. You need to [Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it) before you truncate the table in that database.
+- `partition_name = partition_value`: The name and value of the partition column(s) to identify which partition(s) to truncate.
+
+### Examples
+
+Switch to a Hive catalog and a database in it, and then use the following statements to truncate a Hive table in that database.
+
+1. Truncate a non-partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_table;
+   ```
+
+2. Truncate all partitions of a partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table;
+   ```
+
+3. Truncate a single-partition partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01');
+   ```
+
+4. Truncate specific partitions of a multi-partition partitioned table:
+
+   ```SQL
+   TRUNCATE TABLE my_partitioned_table PARTITION (dt='2023-09-01', id=1);
+   TRUNCATE TABLE my_multi_part_table PARTITION (k2='2020-01-02', k3='b');
    ```
 
 ## Drop a Hive table

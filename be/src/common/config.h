@@ -156,6 +156,8 @@ CONF_Int32(storage_medium_migrate_count, "3");
 CONF_mInt32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
+// The count of thread to update tablet meta info.
+CONF_mInt32(update_tablet_meta_info_worker_count, "1");
 // The count of thread to upload.
 CONF_mInt32(upload_worker_count, "0");
 // The count of thread to download.
@@ -473,6 +475,13 @@ CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");
 CONF_mInt64(pk_index_size_tiered_max_level, "5");
 // Used to control the sampling interval size for SSTable files.
 CONF_mInt64(pk_index_sstable_sample_interval_bytes, "16777216");
+// Controls merge condition evaluation behavior within the same transaction for primary key tables.
+// When enabled (true), allows load spilling and parallel execution optimizations for condition updates
+// by skipping merge condition checks on data from the same transaction. This improves performance
+// when ingesting large batches with condition updates, as same-transaction conflicts don't need
+// complex comparison logic.
+// Default: false (conservative, validates all conditions even within same transaction)
+CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -1253,6 +1262,20 @@ CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
 CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
+
+// Maximum data volume (bytes) per parallel compaction subtask.
+// If total picked rowsets data size is less than this threshold, parallel compaction
+// will be skipped and fallback to normal compaction flow.
+// Default: 5GB
+CONF_mInt64(lake_compaction_max_bytes_per_subtask, "5368709120");
+
+// Maximum rowset size (bytes) for compaction consideration.
+// Non-overlapped rowsets larger than this threshold are considered "well-compacted"
+// and will be skipped in compaction score calculation (treated as score 0).
+// This is also used in split_rowsets_into_groups to skip large non-overlapped rowsets.
+// Default: 4GB
+CONF_mInt64(lake_compaction_max_rowset_size, "4294967296");
+
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");

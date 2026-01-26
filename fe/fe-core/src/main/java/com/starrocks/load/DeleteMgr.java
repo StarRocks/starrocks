@@ -73,6 +73,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.proto.TableSchemaKeyPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
@@ -231,7 +232,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                                 List<Partition> partitions)
             throws DdlException, AnalysisException, RunningTxnExceedException {
         // check table state
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());
         }
 
@@ -292,7 +294,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         DeleteJob deleteJob = null;
 
         if (olapTable.isCloudNativeTable()) {
-            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, computeResource);
+            TableSchemaKeyPB schemaKey = new TableSchemaKeyPB();
+            schemaKey.setDbId(db.getId());
+            schemaKey.setTableId(olapTable.getId());
+            schemaKey.setSchemaId(olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaId());
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, schemaKey, deleteInfo, computeResource);
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
@@ -518,7 +524,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         // only need check the first partition because each partition has same materialized view
         Map<Long, List<Column>> indexMetaIdToSchema = table.getIndexMetaIdToSchema();
         PhysicalPartition partition = partitions.get(0).getDefaultPhysicalPartition();
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             if (table.getBaseIndexMetaId() == index.getMetaId()) {
                 continue;
             }

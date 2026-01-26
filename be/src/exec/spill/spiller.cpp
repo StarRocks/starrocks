@@ -114,8 +114,8 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
     skew_mem_table_count = ADD_CHILD_COUNTER(profile, "SkewMemTableCount", TUnit::UNIT, parent);
     skew_mem_table_skew_ratio = profile->AddLowWaterMarkCounter(
-            "SkewMemTableSkewRatio", TUnit::DOUBLE_VALUE,
-            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), parent);
+            "SkewMemTableSkewRatio", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            parent);
     skew_mem_table_merge_timer = ADD_CHILD_TIMER(profile, "SkewMemTableMergeTime", parent);
     skew_mem_table_input_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableInputBytes", TUnit::BYTES, parent);
     skew_mem_table_output_bytes = ADD_CHILD_COUNTER(profile, "SkewMemTableOutputBytes", TUnit::BYTES, parent);

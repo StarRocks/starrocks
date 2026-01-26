@@ -90,7 +90,7 @@ cd build-mac
 编译完成后，BE 产物位于：
 
 ```
-be/output/
+output/be/
 ├── bin/              # 启动脚本
 ├── conf/             # 配置文件
 ├── lib/              # starrocks_be 二进制文件
@@ -102,25 +102,13 @@ be/output/
 
 ### 配置 FE
 
-修改 `output/fe/conf/fe.conf` 文件：
-
-```properties
-# 网络配置 - 指定 FE 监听的网络范围
-# 根据你的本机网络配置调整
-priority_networks = 10.10.10.0/24;192.168.0.0/16
-
-# 默认副本数设置为 1（单机开发环境）
-default_replication_num = 1
-
-# 重置选举组（编译IP变动影响FE选主）
-bdbje_reset_election_group = true
-```
+`build-mac/start_fe.sh` 会自动写入必要的默认配置（如 `priority_networks`、`default_replication_num`、`bdbje_reset_election_group`）。如需自定义，请修改 `output/fe/conf/fe.conf`。
 
 ### 启动 FE
 
 ```bash
-cd output/fe
-./bin/start_fe.sh --daemon
+cd build-mac
+./start_fe.sh --daemon
 ```
 
 ### 查看 FE 日志
@@ -133,47 +121,19 @@ tail -f output/fe/log/fe.log
 
 ### 配置 BE
 
-修改 `be/output/conf/be.conf` 文件：
-
-```properties
-# 网络配置 - 与 FE 保持一致
-priority_networks = 10.10.10.0/24;192.168.0.0/16
-
-# 禁用 datacache（macOS 暂不支持）
-datacache_enable = false
-
-# 禁用系统指标收集（macOS 部分功能不支持）
-enable_system_metrics = false
-enable_table_metrics = false
-enable_collect_table_metrics = false
-
-# 日志详细模式（调试时使用）
-sys_log_verbose_modules = *
-```
+`build-mac/start_be.sh` 会自动设置运行所需环境变量，并写入必要的默认配置（如 `priority_networks`、`datacache_enable`、`enable_system_metrics`、`sys_log_verbose_modules`）。如需自定义，请修改 `output/be/conf/be.conf`。
 
 ### 启动 BE
 
-在 macOS 上启动 BE 需要设置一些环境变量：
-
 ```bash
-cd be/output
-
-# 设置环境变量并启动 BE
-export ASAN_OPTIONS=detect_container_overflow=0
-export STARROCKS_HOME=/Users/kks/git/starrocks/be/output
-export PID_DIR=/Users/kks/git/starrocks/be/output/bin
-export UDF_RUNTIME_DIR=/Users/kks/git/starrocks/be/output/lib
-
-# 后台启动 BE
-./lib/starrocks_be &
+cd build-mac
+./start_be.sh
 ```
-
-> **注意**：请将路径 `/Users/kks/git/starrocks` 替换为你实际的 StarRocks 代码路径。
 
 ### 查看 BE 日志
 
 ```bash
-tail -f be/output/log/be.INFO
+tail -f output/be/log/be.INFO
 ```
 
 ### 停止 BE

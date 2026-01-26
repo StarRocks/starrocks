@@ -12,6 +12,7 @@ keywords:
 # BROKER LOAD
 
 import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.mdx'
+import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
 StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/Loading_intro.md).
 
@@ -656,6 +657,8 @@ StarRocks supports loading JSON data from v3.2.3 onwards. The parameters are as 
   > By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct StarRocks not to check the JSON body size.
 -->
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
+
+<LoadWarehouse />
 
 ## Column mapping
 

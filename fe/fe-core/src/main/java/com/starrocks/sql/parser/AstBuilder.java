@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.AddPartitionColumnClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AddSqlDigestBlackListStmt;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -80,6 +81,7 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -757,6 +759,15 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     AlterDatabaseQuotaStmt.QuotaType.REPLICA,
                     quotaValue, pos);
         }
+    }
+
+    @Override
+    public ParseNode visitAlterDatabaseSetStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterDatabaseSetStatementContext context) {
+        String dbName = normalizeName(((Identifier) visit(context.identifier())).getValue());
+        NodePosition pos = createPos(context);
+        Map<String, String> properties = getCaseSensitivePropertyList(context.propertyList());
+        return new AlterDatabaseSetStmt(dbName, properties, pos);
     }
 
     @Override
@@ -1814,7 +1825,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
 
-        return new CreateViewStmt(
+        CreateViewStmt stmt = new CreateViewStmt(
                 context.IF() != null,
                 context.REPLACE() != null,
                 targetTableRef,
@@ -1825,6 +1836,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())
                 );
+        stmt.setQueryStartIndex(context.queryStatement().start.getStartIndex());
+        stmt.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
+        return stmt;
     }
 
     @Override
@@ -1857,6 +1871,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
             AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            alterClause.setQueryStartIndex(context.queryStatement().start.getStartIndex());
+            alterClause.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
             return new AlterViewStmt(targetTableRef, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
@@ -2889,13 +2905,24 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.svName != null) {
             svName = getIdentifierName(context.svName);
         }
-        return new AdminSetAutomatedSnapshotOnStmt(svName, createPos(context));
+        IntervalLiteral intervalLiteral = null;
+        if (context.interval() != null) {
+            intervalLiteral = (IntervalLiteral) visit(context.interval());
+        }
+        return new AdminSetAutomatedSnapshotOnStmt(svName, intervalLiteral, createPos(context));
     }
 
     @Override
     public ParseNode visitAdminSetAutomatedSnapshotOffStatement(
             com.starrocks.sql.parser.StarRocksParser.AdminSetAutomatedSnapshotOffStatementContext context) {
         return new AdminSetAutomatedSnapshotOffStmt(createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAdminAlterAutomatedSnapshotIntervalStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminAlterAutomatedSnapshotIntervalStatementContext context) {
+        IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+        return new AdminAlterAutomatedSnapshotIntervalStmt(intervalLiteral, createPos(context));
     }
 
     // ------------------------------------------- Cluster Management Statement ----------------------------------------
@@ -6552,8 +6579,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitCreateFunctionStatement(
-            com.starrocks.sql.parser.StarRocksParser.CreateFunctionStatementContext context) {
+    public ParseNode visitCreateUdfFunctionStmt(com.starrocks.sql.parser.StarRocksParser.CreateUdfFunctionStmtContext context) {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
@@ -6563,7 +6589,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(TypeParser.getType(context.returnType), createPos(context.returnType));
 
@@ -6589,6 +6614,38 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new CreateFunctionStmt(functionType, functionRef,
                 getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent,
                 replaceIfExists, createIfNotExists);
+    }
+
+    @Override
+    public ParseNode visitCreateInternalFunctionStmt(
+            com.starrocks.sql.parser.StarRocksParser.CreateInternalFunctionStmtContext context) {
+        String functionType = "SCALAR";
+        boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
+        boolean isGlobal = context.GLOBAL() != null;
+        boolean createIfNotExists = context.ifNotExists() != null && context.ifNotExists().EXISTS() != null;
+
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+
+        if (isGlobal && qualifiedName.getParts().size() > 1) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
+        }
+        Expr expr = (Expr) visit(context.expression());
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
+        return new CreateFunctionStmt(functionType, functionRef, getFunctionArgsDef(context.functionArgsList()),
+                expr, replaceIfExists, createIfNotExists, createPos(context));
+    }
+
+    public FunctionArgsDef getFunctionArgsDef(com.starrocks.sql.parser.StarRocksParser.FunctionArgsListContext ctx) {
+        List<TypeDef> typeDefList = new ArrayList<>();
+        List<String> argNames = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.TypeContext typeContext : ctx.type()) {
+            typeDefList.add(new TypeDef(TypeParser.getType(typeContext)));
+        }
+
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext identifierContext : ctx.identifier()) {
+            argNames.add(((Identifier) visit(identifierContext)).getValue());
+        }
+        return new FunctionArgsDef(typeDefList, argNames);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------

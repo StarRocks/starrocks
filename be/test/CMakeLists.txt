@@ -33,6 +33,7 @@ set(EXEC_FILES
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./common/cow_test.cpp
+        ./connector/benchmark_connector_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
@@ -92,6 +93,7 @@ set(EXEC_FILES
         ./exec/schema_task_runs_scanner_test.cpp
         ./exec/schema_scanner/schema_be_tablet_write_log_scanner_test.cpp
         ./exec/schema_scanner/schema_scanner_test.cpp
+        ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
@@ -105,6 +107,7 @@ set(EXEC_FILES
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
+        ./exec/benchmark_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
@@ -213,6 +216,7 @@ set(EXEC_FILES
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
+        ./formats/csv/output_stream_file_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
@@ -384,6 +388,7 @@ set(EXEC_FILES
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
         ./util/memcmp_test.cpp
+        ./util/metrics/file_scan_metrics_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
         ./util/new_metrics_test.cpp
@@ -427,6 +432,7 @@ set(EXEC_FILES
         ./util/byte_stream_split_test.cpp
         ./util/url_coding_test.cpp
         ./util/url_parser_test.cpp
+        ./util/slice_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp
@@ -489,6 +495,7 @@ SET(DW_TEST_FILES
     ./storage/convert_helper_test.cpp
     ./storage/cumulative_compaction_test.cpp
     ./storage/data_dir_test.cpp
+    ./storage/datum_variant_test.cpp
     ./storage/decimal12_test.cpp
     ./storage/default_compaction_policy_test.cpp
     ./storage/delete_handler_test.cpp
@@ -529,6 +536,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
     ./storage/lake/schema_change_test.cpp
@@ -536,10 +544,14 @@ SET(DW_TEST_FILES
     ./storage/lake/spill_mem_table_sink_test.cpp
     ./storage/lake/starlet_location_provider_test.cpp
     ./storage/lake/tablet_manager_test.cpp
+    ./storage/lake/tablet_range_helper_test.cpp
+    ./storage/lake/sst_seek_range_test.cpp
+    ./storage/lake/tablet_parallel_compaction_manager_test.cpp
     ./storage/lake/tablet_reader_test.cpp
     ./storage/lake/tablet_retain_info_test.cpp
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
+    ./storage/lake/delete_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp

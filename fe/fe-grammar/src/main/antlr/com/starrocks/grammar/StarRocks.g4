@@ -36,6 +36,7 @@ statement
     | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
+    | alterDatabaseSetStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
@@ -129,6 +130,7 @@ statement
     | executeScriptStatement
     | adminSetAutomatedSnapshotOnStatement
     | adminSetAutomatedSnapshotOffStatement
+    | adminAlterAutomatedSnapshotIntervalStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -289,6 +291,17 @@ statement
     | dropFileStatement
     | showSmallFilesStatement
 
+    // Warehouse Statement
+    | createWarehouseStatement
+    | dropWarehouseStatement
+    | suspendWarehouseStatement
+    | resumeWarehouseStatement
+    | setWarehouseStatement
+    | showWarehousesStatement
+    | showClustersStatement
+    | showNodesStatement
+    | alterWarehouseStatement
+
     // Set Statement
     | setStatement
     | setUserPropertyStatement
@@ -333,17 +346,6 @@ statement
     | truncatePlanAdvisorStatement
     | alterPlanAdvisorDropStatement
     | showPlanAdvisorStatement
-
-    // Warehouse Statement
-    | createWarehouseStatement
-    | dropWarehouseStatement
-    | suspendWarehouseStatement
-    | resumeWarehouseStatement
-    | setWarehouseStatement
-    | showWarehousesStatement
-    | showClustersStatement
-    | showNodesStatement
-    | alterWarehouseStatement
 
     // CNGroup Statement
     | createCNGroupStatement
@@ -396,6 +398,10 @@ showDatabasesStatement
 alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
+alterDatabaseSetStatement
+    : ALTER DATABASE identifier SET propertyList
     ;
 
 createDbStatement
@@ -789,11 +795,15 @@ syncStatement
     ;
 
 adminSetAutomatedSnapshotOnStatement
-    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (STORAGE VOLUME svName=identifier)?
+    : ADMIN SET AUTOMATED CLUSTER SNAPSHOT ON (interval)? (STORAGE VOLUME svName=identifier)?
     ;
 
 adminSetAutomatedSnapshotOffStatement
     : ADMIN SET AUTOMATED CLUSTER SNAPSHOT OFF
+    ;
+
+adminAlterAutomatedSnapshotIntervalStatement
+    : ADMIN ALTER AUTOMATED CLUSTER SNAPSHOT SET interval
     ;
 
 // ------------------------------------------- Cluster Management Statement ---------------------------------------------
@@ -1537,7 +1547,8 @@ dropFunctionStatement
     ;
 
 createFunctionStatement
-    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction? #createUdfFunctionStmt
+    | CREATE orReplace GLOBAL? FUNCTION ifNotExists qualifiedName '(' functionArgsList ')' RETURNS expression #createInternalFunctionStmt
     ;
 inlineFunction
     : AS ATTACHMENT
@@ -1545,6 +1556,10 @@ inlineFunction
 
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
+functionArgsList
+    : (identifier type)? (',' identifier type)*
     ;
 
 // ------------------------------------------- Load Statement ----------------------------------------------------------

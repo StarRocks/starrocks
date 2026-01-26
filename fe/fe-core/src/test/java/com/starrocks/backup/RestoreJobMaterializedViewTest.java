@@ -227,16 +227,6 @@ public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
             }
 
             {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        logSysInfo("log backup job: " + job);
-                    }
-                };
-            }
-
-            {
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;
@@ -334,7 +324,7 @@ public class RestoreJobMaterializedViewTest extends StarRocksTestBase {
             tblInfo.partitions.put(partInfo.name, partInfo);
 
             for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    .getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = olapTable.getIndexNameByMetaId(index.getMetaId());

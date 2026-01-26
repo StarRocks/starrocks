@@ -45,7 +45,6 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"

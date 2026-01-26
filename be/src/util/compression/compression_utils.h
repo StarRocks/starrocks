@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <string>
+
+#include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 
@@ -54,6 +57,8 @@ public:
             return CompressionTypePB::GZIP;
         } else if (ext == "bz2") {
             return CompressionTypePB::BZIP2;
+        } else if (ext == "zlib") {
+            return CompressionTypePB::ZLIB;
         } else if (ext == "deflate") {
             return CompressionTypePB::DEFLATE;
         } else if (ext == "lz4") {
@@ -66,6 +71,35 @@ public:
             return CompressionTypePB::ZSTD;
         } else {
             return CompressionTypePB::UNKNOWN_COMPRESSION;
+        }
+    }
+
+    static StatusOr<std::string> to_compression_ext(TCompressionType::type compression_type) {
+        switch (compression_type) {
+        case TCompressionType::NO_COMPRESSION:
+            return std::string();
+        case TCompressionType::GZIP:
+            return ".gz";
+        case TCompressionType::ZSTD:
+            return ".zst";
+        case TCompressionType::LZ4:
+            return ".lz4";
+        case TCompressionType::LZ4_FRAME:
+            // LZ4_FRAME and LZ4 share the same extension; read path auto-detects the format.
+            return ".lz4";
+        case TCompressionType::SNAPPY:
+            return ".snappy";
+        case TCompressionType::DEFLATE:
+            return ".deflate";
+        case TCompressionType::ZLIB:
+            return ".zlib";
+        case TCompressionType::BZIP2:
+            return ".bz2";
+        case TCompressionType::DEFAULT_COMPRESSION:
+            return std::string();
+        default:
+            return Status::InvalidArgument("Unsupported compression type: " +
+                                           std::to_string(static_cast<int>(compression_type)));
         }
     }
 };

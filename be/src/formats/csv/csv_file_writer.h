@@ -18,6 +18,13 @@
 #include "formats/csv/output_stream.h"
 #include "formats/file_writer.h"
 
+namespace starrocks {
+class ColumnEvaluator;
+class FileSystem;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
+
 namespace starrocks::formats {
 
 struct CSVWriterOptions : FileWriterOptions {
@@ -43,8 +50,7 @@ public:
     CSVFileWriter(std::string location, std::shared_ptr<csv::OutputStream> output_stream,
                   std::vector<std::string> column_names, std::vector<TypeDescriptor> types,
                   std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
-                  TCompressionType::type compression_type, std::shared_ptr<CSVWriterOptions> writer_options,
-                  std::function<void()> rollback_action);
+                  std::shared_ptr<CSVWriterOptions> writer_options, std::function<void()> rollback_action);
 
     ~CSVFileWriter() override;
 
@@ -66,7 +72,6 @@ private:
     const std::vector<std::string> _column_names;
     const std::vector<TypeDescriptor> _types;
     std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
-    TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<CSVWriterOptions> _writer_options;
     const std::function<void()> _rollback_action;
     std::shared_ptr<csv::Converter::Options> _converter_options;

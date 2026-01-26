@@ -17,7 +17,7 @@
 #include <atomic>
 #include <ostream>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"

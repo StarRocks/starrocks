@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -36,19 +37,67 @@ public abstract class JDBCSchemaResolver {
 
     boolean supportPartitionInformation = false;
 
+    /**
+     * Get the query timeout in seconds for JDBC statement execution.
+     *
+     * For jdbc_query_timeout_ms > 0, uses Math.ceil to round up sub-second values to minimum 1 second,
+     * because 0 is a special value meaning "no timeout limit".
+     * It is reasonable because sub-second query timeouts are uncommon in practice.
+     *
+     * @return query timeout in seconds
+     */
+    protected int getQueryTimeoutSeconds() {
+        return (int) Math.ceil(Config.jdbc_query_timeout_ms / 1000.0);
+    }
+
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_SCHEM");
                 // skip internal schemas
-                if (!schemaName.equalsIgnoreCase("information_schema")) {
+                if (!isInternalSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
             }
             return schemaNames.build();
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    /**
+     * Check if a schema is an internal system schema that should be hidden from users.
+     * Subclasses can override this method to define their own internal schemas.
+     *
+     * @param schemaName the schema name to check
+     * @return true if the schema is an internal system schema, false otherwise
+     */
+    protected boolean isInternalSchema(String schemaName) {
+        return schemaName.equalsIgnoreCase("information_schema");
+    }
+
+    /**
+     * Check if a database/schema exists in the external JDBC system.
+     *
+     * @param connection JDBC connection
+     * @param dbName database name to check
+     * @return true if database exists, false otherwise
+     * @throws SQLException if a database access error occurs
+     */
+    public boolean databaseExists(Connection connection, String dbName) throws SQLException {
+        // Skip internal schemas to maintain consistency with listSchemas()
+        if (isInternalSchema(dbName)) {
+            return false;
+        }
+        try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
+            while (resultSet.next()) {
+                String schemaName = resultSet.getString("TABLE_SCHEM");
+                if (schemaName.equals(dbName)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

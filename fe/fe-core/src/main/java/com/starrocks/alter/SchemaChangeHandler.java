@@ -2156,18 +2156,16 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         }
 
-        // set table state
-        if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
-            olapTable.setState(OlapTableState.OPTIMIZE);
-        } else {
-            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
-        }
-
-        // 2. add schemaChangeJob
-        addAlterJobV2(schemaChangeJob);
-
-        // 3. write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob);
+        // 2. write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob, wal -> {
+            // set table state
+            if (schemaChangeJob.getType() == AlterJobV2.JobType.OPTIMIZE) {
+                olapTable.setState(OlapTableState.OPTIMIZE);
+            } else {
+                olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+            }
+            addAlterJobV2(schemaChangeJob);
+        });
         LOG.info("finished to create schema change job: {}", schemaChangeJob.getJobId());
         return null;
     }
@@ -2234,6 +2232,21 @@ public class SchemaChangeHandler extends AlterHandler {
                 compactionStrategy = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                         TableProperty.DEFAULT_COMPACTION_STRATEGY);
                 metaType = TTabletMetaType.COMPACTION_STRATEGY;
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+                // lake_compaction_max_parallel is a pure FE property, only needs to update TableProperty
+                // It will be read when FE sends compaction requests to BE
+                String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+                int maxParallel = Integer.parseInt(value);
+                int oldMaxParallel = olapTable.getLakeCompactionMaxParallel();
+                if (maxParallel == oldMaxParallel) {
+                    LOG.info("table: {} lake_compaction_max_parallel is {}, nothing need to do",
+                            olapTable.getName(), maxParallel);
+                    return null;
+                }
+                GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                LOG.info("updated table: {} lake_compaction_max_parallel from {} to {}",
+                        olapTable.getName(), oldMaxParallel, maxParallel);
+                return null;
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 return processAlterCloudNativeFastSchemaEvolutionV2Property(db, olapTable, properties).orElse(null);
             } else {
@@ -2259,14 +2272,13 @@ public class SchemaChangeHandler extends AlterHandler {
         if (alterMetaJob == null) {
             return null;
         }
-        // set table state
-        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
 
-        // 2. add schemaChangeJob
-        addAlterJobV2(alterMetaJob);
-
-        // 3. write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterMetaJob);
+        // 2. write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterMetaJob, wal -> {
+            // set table state
+            olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+            addAlterJobV2(alterMetaJob);
+        });
         LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(),
                 olapTable.getName());
         return null;
@@ -2597,7 +2609,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
+                MaterializedIndex baseIndex = physicalPartition.getLatestBaseIndex();
                 for (Tablet tablet : baseIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
@@ -2684,7 +2696,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             Set<Long> tabletSet = beIdToTabletSet.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());

@@ -121,6 +121,19 @@ SELECT
 FROM iceberg_catalog.db.table_with_variants;
 ```
 
+### 将 SQL 类型转换为 VARIANT
+
+您可以将 SQL 值转换为 VARIANT。支持的输入类型包括 BOOLEAN、整数类型、FLOAT/DOUBLE、DECIMAL、STRING/CHAR/VARCHAR、JSON、DATE/DATETIME/TIME，以及复杂类型（ARRAY、MAP、STRUCT）。对于 MAP，编码时会将键转换为字符串。HLL、BITMAP、PERCENTILE 和 VARBINARY 暂不支持。
+
+```SQL
+SELECT
+    CAST(123 AS VARIANT) AS v_int,
+    CAST(3.14 AS VARIANT) AS v_double,
+    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST('hello' AS VARIANT) AS v_string,
+    CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
+```
+
 ## VARIANT 函数
 
 VARIANT 函数可用于查询和提取 VARIANT 列中的数据。有关详细信息,请参阅各个函数的文档:
@@ -173,5 +186,5 @@ $.config[\"key\"]        -- Map 风格访问
 - VARIANT 类型支持从带有 variant 编码的 Parquet 格式 Iceberg 表中读取数据，并支持通过 StarRocks 文件写入器写出 Parquet 文件（未分片的 variant 编码）。
 - VARIANT 值的大小限制为 16 MB。
 - 当前仅支持读写未分片的 variant 值。
-- 目前只能通过 JSON 值转换生成 VARIANT（例如 `CAST(parse_json(...) AS VARIANT)`）。
+- VARIANT 可通过 JSON 值或支持的 SQL 类型（包括 ARRAY、MAP、STRUCT）转换生成。
 - 嵌套结构的最大深度取决于底层 Parquet 文件结构。

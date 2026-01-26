@@ -88,7 +88,11 @@ protected:
         TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
-        return std::make_unique<CSVScanner>(state, profile, *broker_scan_range, counter);
+        auto scanner = std::make_unique<CSVScanner>(state, profile, *broker_scan_range, counter);
+        EXPECT_EQ("csv", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
@@ -199,6 +203,7 @@ TEST_P(CSVScannerTest, test_scalar_types) {
 
     ASSERT_GT(scanner->TEST_scanner_counter()->file_read_count, 0);
     ASSERT_GT(scanner->TEST_scanner_counter()->file_read_ns, 0);
+    ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_P(CSVScannerTest, test_adaptive_nullable_column1) {
@@ -674,6 +679,8 @@ TEST_P(CSVScannerTest, test_start_offset) {
 
     EXPECT_EQ(6, chunk->get(0)[1].get_int32());
     EXPECT_EQ(8, chunk->get(1)[1].get_int32());
+    // the start_offset is not 0, so the num_files_read is not increased.
+    EXPECT_EQ(0, scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_P(CSVScannerTest, test_split_multi_scan_ranges) {
