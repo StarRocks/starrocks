@@ -401,6 +401,38 @@ public class AnalyzeCreateTableTest {
                         + "(k1 int, k2 int, k3 int) partition by (k3)");
         analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 int, k3 int, k4 int) partition by (k2, k3)");
+
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testIcebergPartitionTransformError() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
+                result = new Database();
+                minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
+                result = false;
+            }
+        };
+
+        AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 int) partition by bucket(k2)",
+                "Function 'bucket' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
+                        + "(k1 int, k2 varchar(10)) partition by truncate(k2)",
+                "Function 'truncate' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 
     @Test
