@@ -206,16 +206,17 @@ public class IcebergRewriteDataJob {
                 }
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
-                    try (var scope = subCtx.bindScope()){
+                    try (var scope = subCtx.bindScope()) {
                         IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
                         ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
-        
+
                         List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
                                 .flatMap(f -> f.collectScanNodes().values().stream())
-                                .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .filter(s -> s instanceof IcebergScanNode &&
+                                        "IcebergScanNode".equals(s.getPlanNodeName()))
                                 .map(s -> (IcebergScanNode) s)
                                 .collect(Collectors.toList());
-        
+
                         if (localScanNodes.isEmpty()) {
                             LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
                             return null;
@@ -223,7 +224,7 @@ public class IcebergRewriteDataJob {
                         for (IcebergScanNode sn : localScanNodes) {
                             sn.rebuildScanRange(res);
                         }
-        
+
                         StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
                         if (context.getExecutor() != null) {
                             context.getExecutor().registerSubStmtExecutor(exec);

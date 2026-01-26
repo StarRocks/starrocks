@@ -61,7 +61,7 @@ public class DataCacheSelectExecutor {
             }
 
             ConnectContext subContext = buildCacheSelectConnectContext(statement, connectContext, isFirstSubContext);
-            try (var scope = subContext.bindScope()){
+            try (var scope = subContext.bindScope()) {
                 subContext.setCurrentComputeResource(computeResource);
                 StmtExecutor subStmtExecutor = StmtExecutor.newInternalExecutor(subContext, insertStmt);
                 isFirstSubContext = false;

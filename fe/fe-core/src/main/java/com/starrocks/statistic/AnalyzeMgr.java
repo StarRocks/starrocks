@@ -589,10 +589,10 @@ public class AnalyzeMgr implements Writable {
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        try (var scope = statsConnectCtx.bindScope()){
+        try (var scope = statsConnectCtx.bindScope()) {
             statsConnectCtx.setStatisticsConnection(true);
-
-            List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
+            List<Long> pids =
+                    dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
 
             StatisticExecutor executor = new StatisticExecutor();
             if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
@@ -732,7 +732,7 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        try (var scope = statsConnectCtx.bindScope()){
+        try (var scope = statsConnectCtx.bindScope()) {
             StatisticExecutor executor = new StatisticExecutor();
             List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
 

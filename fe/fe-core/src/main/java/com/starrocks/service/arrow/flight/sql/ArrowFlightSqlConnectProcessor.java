@@ -225,8 +225,9 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         try {
             ArrowFlightSqlServiceImpl.submitTask(() -> {
-                final boolean prevUseLowCardinalityOptimizeOnLake = ctx.getSessionVariable().isUseLowCardinalityOptimizeOnLake();
-                try (var scope = ctx.bindScope()){
+                final boolean prevUseLowCardinalityOptimizeOnLake =
+                        ctx.getSessionVariable().isUseLowCardinalityOptimizeOnLake();
+                try (var scope = ctx.bindScope()) {
                     ctx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
                     executor.execute();
                     deploymentFinished.complete(null);

@@ -712,7 +712,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
             // 1. context for plan
             ConnectContext context = buildConnectContext();
-            try (var scope = context.bindScope()){
+            try (var scope = context.bindScope()) {
                 // 2. get statement througth sql string
                 QueryStatement stmt = getStatement(dictionary.buildQuery(), context);
 

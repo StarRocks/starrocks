@@ -1016,7 +1016,7 @@ public class DDLStmtExecutor {
                     statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                             context.getSessionVariable().getStatisticCollectParallelism());
                     Thread thread = new Thread(() -> {
-                        try (var scope = statsConnectCtx.bindScope()){
+                        try (var scope = statsConnectCtx.bindScope()) {
                             statsConnectCtx.setThreadLocalInfo();
                             StatisticExecutor statisticExecutor = new StatisticExecutor();
                             analyzeJob.run(statsConnectCtx, statisticExecutor);

@@ -143,7 +143,7 @@ public class QueryHistoryMgr {
             }
 
             ConnectContext ctx = StatisticUtils.buildConnectContext();
-            try (var scope = ctx.bindScope()){
+            try (var scope = ctx.bindScope()) {
                 for (QueryHistory query : list) {
                     try {
                         buffer.append(query.toJSON()).append(",");

@@ -221,7 +221,7 @@ public class StatisticsCollectionTrigger {
                 analyzeStatus.setStartTime(LocalDateTime.now());
                 StatisticExecutor statisticExecutor = new StatisticExecutor();
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                try (var scope = statsConnectCtx.bindScope()){
+                try (var scope = statsConnectCtx.bindScope()) {
                     // set session id for temporary table
                     if (table.isTemporaryTable()) {
                         statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
