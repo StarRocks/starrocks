@@ -51,8 +51,11 @@ import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.VarcharType;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -508,6 +511,71 @@ public class OlapTableTest {
         Assertions.assertEquals("true", result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE));
         Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR));
         Assertions.assertNull(result5.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR));
+    }
+
+    @Test
+    public void testIsRangeDistribution() throws AnalysisException {
+        // Test case 1: Table with RangeDistributionInfo
+        Database db = new Database(1L, "test_db");
+        
+        // Create columns for the table
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("k1", IntegerType.INT));
+        columns.add(new Column("k2", VarcharType.VARCHAR));
+        columns.add(new Column("v1", FloatType.DOUBLE));
+        
+        // Create range distribution info
+        List<Column> partitionColumns = Lists.newArrayList(columns.get(0)); // k1 as partition column
+        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo();
+        
+        // Create hash distribution info for comparison
+        HashDistributionInfo hashDistInfo = new HashDistributionInfo(1, Lists.newArrayList(columns.get(0)));
+        
+        // Create range partition info
+        RangePartitionInfo rangePartitionInfo = new RangePartitionInfo(partitionColumns);
+        
+        // Test with range distribution table
+        OlapTable rangeTable = new OlapTable(1L, "range_table", columns, 
+                KeysType.AGG_KEYS, rangePartitionInfo, rangeDistInfo);
+        Assertions.assertTrue(rangeTable.isRangeDistribution());
+        
+        // Test with hash distribution table
+        OlapTable hashTable = new OlapTable(2L, "hash_table", columns,
+                KeysType.AGG_KEYS, rangePartitionInfo, hashDistInfo);
+        Assertions.assertFalse(hashTable.isRangeDistribution());
+        
+        // Test with random distribution table
+        RandomDistributionInfo randomDistInfo = new RandomDistributionInfo(10);
+        OlapTable randomTable = new OlapTable(3L, "random_table", columns,
+                KeysType.AGG_KEYS, rangePartitionInfo, randomDistInfo);
+        Assertions.assertFalse(randomTable.isRangeDistribution());
+    }
+
+    @Test
+    public void testIsRangeDistributionWithNullDistribution() {
+        // Test edge case: table with null distribution info (should not happen in practice)
+        OlapTable tableWithNullDist = new OlapTable();
+        // Since defaultDistributionInfo is null by default
+        Assertions.assertFalse(tableWithNullDist.isRangeDistribution());
+    }
+
+    @Test 
+    public void testIsRangeDistributionAfterSetDistribution() {
+        OlapTable table = new OlapTable();
+        
+        // Initially no distribution
+        Assertions.assertFalse(table.isRangeDistribution());
+        
+        // Set range distribution
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT));
+        RangeDistributionInfo rangeDistInfo = new RangeDistributionInfo();
+        table.setDefaultDistributionInfo(rangeDistInfo);
+        Assertions.assertTrue(table.isRangeDistribution());
+        
+        // Change to hash distribution
+        HashDistributionInfo hashDistInfo = new HashDistributionInfo(1, columns);
+        table.setDefaultDistributionInfo(hashDistInfo);
+        Assertions.assertFalse(table.isRangeDistribution());
     }
 
 }
