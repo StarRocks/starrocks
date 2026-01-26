@@ -34,6 +34,7 @@ jobs:
     outputs:
       PR_NUMBER: ${{ steps.pr_details.outputs.PR_NUMBER }}
       BASE_REF: ${{ steps.pr_details.outputs.BASE_REF }}
+      HEAD_REF: ${{ steps.pr_details.outputs.HEAD_REF }}
       PR_STATE: ${{ steps.pr_details.outputs.PR_STATE }}
       BUCKET_PREFIX: ${{ steps.bucket_info.outputs.bucket_prefix }}
       SKIP_COV: ${{ steps.pr_details.outputs.SKIP_COV }}
@@ -68,11 +69,13 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           PR_NUMBER=`echo ${PR_NUMBER}`
-          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,state,title`
+          pr_info=`gh pr view ${PR_NUMBER} -R ${REPO} --json baseRefName,headRefName,state,title`
           base_ref=$(echo ${pr_info} | jq -r .baseRefName)
+          head_ref=$(echo ${pr_info} | jq -r .headRefName)
           pr_state=$(echo ${pr_info} | jq -r .state)
           pr_title=$(echo ${pr_info} | jq -r .title)
           echo "BASE_REF=${base_ref}" >> $GITHUB_OUTPUT
+          echo "HEAD_REF=${head_ref}" >> $GITHUB_OUTPUT
           echo "PR_STATE=${pr_state}" >> $GITHUB_OUTPUT
           echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
@@ -97,6 +100,8 @@ jobs:
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
       SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
+    outputs:
+      FE_INCREMENTAL_RESULT: ${{ steps.fe_incremental_check.outputs.fe_incremental_check }}
     steps:
       - name: CLEAN
         run: |
@@ -185,6 +190,7 @@ jobs:
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
         if: steps.generate-xml-report.outcome == 'success'
+        id: fe_incremental_check
         env:
           fe_path: ${{ github.workspace }}/fe
         run: |
@@ -196,10 +202,13 @@ jobs:
               --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
               -d ${fe_path}/diff.txt -dt file
+
+            echo "fe_incremental_check=SUCCESS" >> $GITHUB_OUTPUT
           else
             java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
               --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            echo "fe_incremental_check=FAILURE" >> $GITHUB_OUTPUT
           fi
           rm -rf coverchecker
           rm -rf ci-tools
@@ -224,6 +233,99 @@ jobs:
         if: always()
         run: |
           rm -rf ${{ github.workspace }}/*
+
+  # sonarcloud-fe-checker:
+  SONAR_FE_CHECKER:
+    runs-on: ubuntu-latest
+    needs: 
+      - FE-REPORT
+      - INFO
+    if: needs.FE-REPORT.outputs.FE_INCREMENTAL_RESULT == 'SUCCESS' && github.repository == 'StarRocks/starrocks' && needs.INFO.outputs.BASE_REF == 'main'
+    name: FE Sonarcloud Check
+    timeout-minutes: 60
+    env:
+      CODE_PATH: ${{ github.workspace }}
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
+      BRANCH: ${{ needs.INFO.outputs.BASE_REF }}
+      HEAD_REF: ${{ needs.INFO.outputs.HEAD_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        id: checkout_code
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        id: checkout_pr
+        run: |
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        id: setup_java
+        if: steps.checkout_pr.outcome == 'success'
+        with:
+          java-version: 17
+          distribution: "adopt"
+
+      - name: Cache SonarCloud packages
+        id: cache_sonarcloud_packages
+        if: steps.setup_java.outcome == 'success'
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven packages
+        id: cache_maven_packages
+        if: steps.cache_sonarcloud_packages.outcome == 'success'
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
+      - name: Install Apache Thrift 0.13
+        id: install_thrift_0_13
+        if: steps.cache_maven_packages.outcome == 'success'
+        run: |
+          mkdir -p ./.setup-thrift/oras
+          mkdir -p ./.setup-thrift/thrift
+          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
+          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
+          ln -sf $(pwd)/oras /usr/local/bin/oras
+          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
+          tar zxf ./thrift.v0.13.0.tar.gz -C .
+          ln -sf $(pwd)/thrift /usr/local/bin/thrift
+
+      - name: Analyze FE
+        id: analyze_fe
+        if: steps.install_thrift_0_13.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          thrift --version
+          whereis thrift
+          export STARROCKS_HOME=${{ github.workspace }}
+          source env.sh
+          mkdir -p thirdparty/installed/bin/
+          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
+          cd ${{ github.workspace }}/fe
+          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
+          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ env.PR_NUMBER }} \
+            -Dsonar.pullrequest.base=${{ env.BRANCH }} -Dsonar.pullrequest.branch=${{ env.HEAD_REF }}
 
   BE-REPORT:
     runs-on: [self-hosted, quick]
