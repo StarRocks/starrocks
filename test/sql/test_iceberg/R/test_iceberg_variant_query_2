@@ -372,11 +372,6 @@ array_100_elements	100	ACCESSIBLE
 array_1000_elements	1000	ACCESSIBLE
 array_10000_elements	10000	ACCESSIBLE
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_boundary_arrays_test force;
 -- result:
 -- !result
@@ -391,4 +386,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result
