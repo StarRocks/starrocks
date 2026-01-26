@@ -33,6 +33,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 
 import java.util.List;
 
@@ -151,20 +153,20 @@ public class TvrOpUtils {
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + encodeRowIdFuncName + " not found");
         }
-        ScalarOperator rowIdScalarOp = new CallOperator(encodeRowIdFuncName, Type.VARBINARY, uniqueKeys, newFunc);
+        ScalarOperator rowIdScalarOp = new CallOperator(encodeRowIdFuncName, VarbinaryType.VARBINARY, uniqueKeys, newFunc);
         // varbinary to varchar
         return fromBinaryToVarchar(rowIdScalarOp);
     }
 
     private static ScalarOperator fromBinaryToVarchar(ScalarOperator rowIdScalarOp) {
-        Type[] argTypes = new Type[] { rowIdScalarOp.getType(), Type.VARCHAR };
+        Type[] argTypes = new Type[] { rowIdScalarOp.getType(), VarcharType.VARCHAR };
         Function newFunc = ExprUtils.getBuiltinFunction(FunctionSet.FROM_BINARY, argTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + FunctionSet.FROM_BINARY + " not found");
         }
         List<ScalarOperator> args = Lists.newArrayList(rowIdScalarOp, ConstantOperator.createVarchar("encode64"));
-        return new CallOperator(FunctionSet.FROM_BINARY, Type.VARCHAR, args, newFunc);
+        return new CallOperator(FunctionSet.FROM_BINARY, VarcharType.VARCHAR, args, newFunc);
     }
 
     public static ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,

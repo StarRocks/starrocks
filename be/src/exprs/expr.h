@@ -267,6 +267,16 @@ public:
 #endif
     SlotId max_used_slot_id() const;
 
+    // For each child of this expression, call the callback function.
+    // NOTE: This method only call the callback function for the children of this expression no recursively.
+    // If you want to call it recursively, you can do it like this:
+    // Status do_action(Expr* expr) {
+    //     RETURN_IF_ERROR(action_impl(expr));
+    //     RETURN_IF_ERROR(expr->do_for_each_child(do_action));
+    //     return Status::OK();
+    // }
+    virtual Status do_for_each_child(const std::function<Status(Expr*)>& callback);
+
 protected:
     friend class MathFunctions;
     friend class StringFunctions;
@@ -277,6 +287,7 @@ protected:
     friend class ColumnPredicateRewriter;
     friend class LambdaFunction;
     friend class ArrayMapExpr;
+    friend class ArraySortLambdaExpr;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
@@ -342,6 +353,8 @@ protected:
 
     // In storage engine, Is this expr only used for index filter(so expr filter phase will skip this expr). This info is passed from FE
     bool _is_index_only_filter = false;
+
+    bool _is_nondeterministic = false;
 
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;

@@ -39,11 +39,13 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -76,6 +78,8 @@ public abstract class ScanNode extends PlanNode {
     // NOTE: To avoid trigger a new compute resource creation, set the value when the scan node needs to use it.
     // The compute resource used by this scan node.
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    // the scan node's version range to scan
+    protected TvrVersionRange tvrVersionRange;
 
     private Map<SlotId, Expr> heavyExprs = Maps.newHashMap();
 
@@ -153,10 +157,14 @@ public abstract class ScanNode extends PlanNode {
      */
     protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
         if (!slotDesc.getType().matchesType(expr.getType())) {
-            return expr.castTo(slotDesc.getType());
+            return ExprCastFunction.castTo(expr, slotDesc.getType());
         } else {
             return expr;
         }
+    }
+
+    public void setTvrVersionRange(TvrVersionRange tvrVersionRange) {
+        this.tvrVersionRange = tvrVersionRange;
     }
 
     /**

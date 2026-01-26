@@ -162,6 +162,10 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
             }
         }
     } else if (parquet_field->type == ColumnType::STRUCT) {
+        if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
+            return true;
+        }
+
         std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema{};
         std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type{};
         for (const auto& field : field_schema->children) {

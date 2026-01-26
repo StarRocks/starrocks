@@ -1472,7 +1472,7 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
     auto chunk = ChunkHelper::new_chunk(schema, size);
-    auto& cols = chunk->columns();
+    auto cols = chunk->mutable_columns();
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {
             cols[0]->append_datum(Datum(varlen_keys[i]));
@@ -1542,7 +1542,7 @@ void build_persistent_index_from_tablet(size_t N) {
         LOG(WARNING) << "failed to load rowset update state: " << st.to_string();
         ASSERT_TRUE(false);
     }
-    const std::vector<MutableColumnPtr>& upserts = state.upserts();
+    const MutableColumns& upserts = state.upserts();
 
     PersistentIndex persistent_index(kPersistentIndexDir);
     ASSERT_TRUE(persistent_index.load_from_tablet(tablet.get()).ok());
@@ -3255,6 +3255,14 @@ TEST_P(PersistentIndexTest, pindex_compaction_schedule_with_migration) {
     });
     sleep(2);
     ASSERT_FALSE(mgr.is_running(tablet->tablet_id()));
+}
+
+TEST_P(PersistentIndexTest, pindex_compaction_stop_is_idempotent) {
+    PersistentIndexCompactionManager mgr;
+    ASSERT_OK(mgr.init());
+    mgr.stop();
+    // stop() should be safe to call multiple times.
+    mgr.stop();
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_update) {

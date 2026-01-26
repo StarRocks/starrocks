@@ -26,13 +26,14 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.feedback.OperatorTuningGuides;
 import com.starrocks.qe.feedback.PlanTuningAdvisor;
 import com.starrocks.sql.Explain;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
@@ -90,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
@@ -313,6 +315,11 @@ public class QueryOptimizer extends Optimizer {
         Set<Long> currentSqlDbIds = context.getConnectContext().getCurrentSqlDbIds();
         mvScan.stream().map(scan -> ((MaterializedView) scan.getTable()).getDbId()).forEach(currentSqlDbIds::add);
 
+        if (connectContext.getSessionVariable().isEnableGlobalLateMaterialization()) {
+            LateMaterializationRewriter lateMaterializationRewriter = new LateMaterializationRewriter();
+            finalPlan = lateMaterializationRewriter.rewrite(finalPlan, context);
+        }
+
         try (Timer ignored = Tracers.watchScope("PlanValidate")) {
             rootTaskContext.getPlanValidator().enableAllCheckers();
             // valid the final plan
@@ -462,7 +469,6 @@ public class QueryOptimizer extends Optimizer {
         if (mvRewriteStrategy.enableViewBasedRewrite && viewBasedMvRuleRewrite(tree, rootTaskContext)) {
             return;
         }
-
         if (mvRewriteStrategy.enableForceRBORewrite) {
             // use rule based mv rewrite strategy to do mv rewrite for multi tables query
             if (mvRewriteStrategy.enableMultiTableRewrite) {
@@ -515,7 +521,6 @@ public class QueryOptimizer extends Optimizer {
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
 
-        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
         // see JoinPredicatePushdown
         if (sessionVariable.isEnableRboTablePrune()) {
             context.setEnableJoinEquivalenceDerive(false);
@@ -556,6 +561,11 @@ public class QueryOptimizer extends Optimizer {
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
 
+        // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES because it introduces filter expressions
+        if (sessionVariable.isEnableSplitWindowSkewToUnion()) {
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+            scheduler.rewriteOnce(tree, rootTaskContext, SplitWindowSkewToUnionRule.getInstance());
+        }
         // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES
         scheduler.rewriteOnce(tree, rootTaskContext, new LargeInPredicateToJoinRule());
 
@@ -576,6 +586,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggFunctionRule.getInstance());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
+
+        tree = convertDistinctAggOverWindowToNullSafeEqualJoin(tree, rootTaskContext);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAsofJoinTemporalExpressionToChildProject());
@@ -830,7 +842,8 @@ public class QueryOptimizer extends Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
-            if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+            boolean hasAgg = Util.getStream(tree).anyMatch(op -> op instanceof LogicalAggregationOperator);
+            if (hasAgg && context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
                 if (pushDistinctBelowWindowFlag) {
                     deriveLogicalProperty(tree);
                 }
@@ -840,11 +853,13 @@ public class QueryOptimizer extends Optimizer {
                 joinReorder = true;
             }
 
-            PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
-            rule.getRewriter().collectRewriteContext(tree);
-            if (rule.getRewriter().isNeedRewrite()) {
-                pushAggFlag = true;
-                tree = rule.rewrite(tree, rootTaskContext);
+            if (hasAgg) {
+                PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
+                rule.getRewriter().collectRewriteContext(tree);
+                if (rule.getRewriter().isNeedRewrite()) {
+                    pushAggFlag = true;
+                    tree = rule.rewrite(tree, rootTaskContext);
+                }
             }
         }
 
@@ -914,6 +929,9 @@ public class QueryOptimizer extends Optimizer {
 
     private OptExpression convertDistinctAggOverWindowToNullSafeEqualJoin(OptExpression tree,
                                                                           TaskContext rootTaskContext) {
+        if (!rootTaskContext.getOptimizerContext().getSessionVariable().isEnableDistinctAggOverWindow()) {
+            return tree;
+        }
         if (Util.getStream(tree).noneMatch(op -> op instanceof LogicalWindowOperator)) {
             return tree;
         }
@@ -932,6 +950,7 @@ public class QueryOptimizer extends Optimizer {
         context.setInMemoPhase(true);
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        CTEUtils.collectCteOperators(tree, context);
         // add CboTablePruneRule
         if (Utils.countJoinNodeSize(tree, CboTablePruneRule.JOIN_TYPES) < 10 &&
                 sessionVariable.isEnableCboTablePrune()) {

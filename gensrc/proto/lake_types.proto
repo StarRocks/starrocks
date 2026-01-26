@@ -34,6 +34,14 @@ message DelvecPagePB {
     optional uint64 offset = 2;
     optional uint64 size = 3;
     optional uint32 crc32c = 4;
+    // For upgrade compatibility.
+    optional int64 crc32c_gen_version = 5;
+}
+
+message PersistentIndexSstableRangePB {
+    // key range is [start_key, end_key].
+    optional bytes start_key = 1;
+    optional bytes end_key = 2;
 }
 
 message PersistentIndexSstablePB {
@@ -53,6 +61,9 @@ message PersistentIndexSstablePB {
     optional int64 shared_version = 9;
     // For sstable generated during compaction process.
     optional DelvecPagePB delvec = 10;
+    optional PersistentIndexSstableRangePB range = 11;
+    // This file's fileset id. All files under same fileset should be non-overlapped.
+    optional PUniqueId fileset_id = 12;
 }
 
 message PersistentIndexSstableMetaPB {
@@ -120,6 +131,12 @@ message DelfileWithRowsetId {
     optional bool shared = 5 [default=false];
 }
 
+message SegmentMetadataPB {
+    optional TuplePB sort_key_min = 1;
+    optional TuplePB sort_key_max = 2;
+    optional int64 num_rows = 3;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -146,6 +163,7 @@ message RowsetMetadataPB {
     repeated bool shared_segments = 15;
     // Record Predicate use for filtering all segments for the current rowset
     optional RecordPredicatePB record_predicate = 16;
+    repeated SegmentMetadataPB segment_metas = 17;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -201,6 +219,8 @@ message TabletMetadataPB {
     optional CompactionStrategyPB compaction_strategy = 20;
     // flat json
     optional FlatJsonConfigPB flat_json_config = 21;
+    // Indicates sort key range for range distribution table only
+    optional TabletRangePB range = 22;
 }
 
 message MetadataUpdateInfoPB {
@@ -220,6 +240,7 @@ message BundleTabletMetadataPB {
 }
 
 message TxnLogPB {
+
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
         // some txn semantic information bind to this rowset
@@ -229,6 +250,9 @@ message TxnLogPB {
         repeated string rewrite_segments = 4;
         repeated bytes del_encryption_metas = 5;
         repeated FileMetaPB ssts = 6;
+        repeated PersistentIndexSstableRangePB sst_ranges = 7;
+        // The specific table schema used to generate this rowset
+        optional TableSchemaKeyPB schema_key = 8;
     }
 
     message OpCompaction {
@@ -247,6 +271,36 @@ message TxnLogPB {
         optional int32 new_segment_offset = 6;
         optional int32 new_segment_count = 7;
         repeated FileMetaPB ssts = 8;
+        repeated PersistentIndexSstableRangePB sst_ranges = 9;
+        // Pk index compaction may generate multi sstables in latest impl.
+        repeated PersistentIndexSstablePB output_sstables = 10;
+        // Lake Compaction Rows Mapper file metadata (.lcrm on remote storage)
+        // WHY: Store mapper file metadata in txn log to enable light publish optimization
+        // during parallel pk index execution. The file maps input rowset rows to output
+        // rowset rows, allowing quick conflict resolution without re-reading all data.
+        // DESIGN: FileMetaPB includes both name and size to avoid expensive get_size()
+        // calls to S3/HDFS during publish phase (~10-50ms saved per file access).
+        optional FileMetaPB lcrm_file = 11;
+        // Subtask ID for parallel compaction. Only set when this OpCompaction is part of
+        // OpParallelCompaction. For normal compaction, this field is not set.
+        optional int32 subtask_id = 12;
+    }
+
+    // Parallel compaction operation: contains multiple subtask compaction results.
+    // Each subtask generates an independent OpCompaction that can be processed using
+    // the standard publish_primary_compaction logic.
+    message OpParallelCompaction {
+        // Each successful subtask's standard OpCompaction.
+        // Contains input_rowsets, output_rowset, and lcrm_file for each subtask.
+        // SST compaction fields (input_sstables/output_sstable) should be empty in subtask OpCompactions.
+        repeated OpCompaction subtask_compactions = 1;
+        // List of successful subtask IDs for tracking.
+        repeated int32 success_subtask_ids = 2;
+        // Unified SST compaction results (executed once after all subtasks complete).
+        repeated PersistentIndexSstablePB input_sstables = 3;
+        optional PersistentIndexSstablePB output_sstable = 4;
+        // Pk index compaction may generate multi sstables in latest impl.
+        repeated PersistentIndexSstablePB output_sstables = 5;
     }
 
     message OpSchemaChange {
@@ -274,6 +328,8 @@ message TxnLogPB {
         repeated OpWrite op_writes = 2;
         map<uint32, DelvecDataPB> delvecs = 3;
         optional TabletSchemaPB source_schema = 4;
+        // used for shared-data replication to store the tablet meta replicated
+        optional TabletMetadataPB tablet_metadata = 5;
     }
 
     optional int64 tablet_id = 1;
@@ -285,6 +341,7 @@ message TxnLogPB {
     optional OpReplication op_replication = 7;
     optional int64 partition_id = 8;
     optional PUniqueId load_id = 9;
+    optional OpParallelCompaction op_parallel_compaction = 10;
 }
 
 message CombinedTxnLogPB {
@@ -320,8 +377,8 @@ message IdenticalTabletInfoPB {
     optional int64 new_tablet_id = 2;
 }
 
-message DynamicTabletsInfoPB {
-    repeated SplittingTabletInfoPB splitting_tablet_infos = 1;
-    repeated MergingTabletInfoPB merging_tablet_infos = 2;
-    repeated IdenticalTabletInfoPB identical_tablet_infos = 3;
+message ReshardingTabletInfoPB {
+    optional SplittingTabletInfoPB splitting_tablet_info = 1;
+    optional MergingTabletInfoPB merging_tablet_info = 2;
+    optional IdenticalTabletInfoPB identical_tablet_info = 3;
 }

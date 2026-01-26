@@ -36,18 +36,19 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 /*
  Create routine Load statement,  continually load data from a streaming app
@@ -267,7 +268,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                                  NodePosition pos) {
         super(pos);
         this.labelName = labelName;
-        this.tableName = normalizeName(tableName);
+        this.tableName = tableName;
         this.loadPropertyList = loadPropertyList;
         this.jobProperties = jobProperties == null ? Maps.newHashMap() : jobProperties;
         this.typeName = typeName.toUpperCase();
@@ -323,7 +324,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     }
 
     public void setDBName(String dbName) {
-        this.dbName = normalizeName(dbName);
+        this.dbName = dbName;
     }
 
     public String getTableName() {
@@ -488,7 +489,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         RowDelimiter rowDelimiter = null;
         ImportColumnsStmt importColumnsStmt = null;
         ImportWhereStmt importWhereStmt = null;
-        PartitionNames partitionNames = null;
+        PartitionRef partitionNames = null;
         for (ParseNode parseNode : loadPropertyList) {
             if (parseNode instanceof ColumnSeparator) {
                 // check column separator
@@ -514,16 +515,24 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of where predicate");
                 }
                 importWhereStmt = (ImportWhereStmt) parseNode;
-                if (importWhereStmt.isContainSubquery()) {
+
+                ArrayList<Expr> matched = new ArrayList<>();
+                importWhereStmt.getExpr().collect(Subquery.class, matched);
+                if (matched.size() != 0) {
                     throw new AnalysisException("the predicate cannot contain subqueries");
                 }
-            } else if (parseNode instanceof PartitionNames) {
+            } else if (parseNode instanceof PartitionRef) {
                 // check partition names
                 if (partitionNames != null) {
                     throw new AnalysisException("repeat setting of partition names");
                 }
-                partitionNames = (PartitionNames) parseNode;
-                partitionNames.analyze();
+                partitionNames = (PartitionRef) parseNode;
+                if (partitionNames.getPartitionNames().isEmpty()) {
+                    throw new AnalysisException("No partition specifed in partition lists");
+                }
+                if (partitionNames.getPartitionNames().stream().anyMatch(Strings::isNullOrEmpty)) {
+                    throw new AnalysisException("there are empty partition name");
+                }
             }
         }
         return new RoutineLoadDesc(columnSeparator, rowDelimiter, importColumnsStmt, importWhereStmt,

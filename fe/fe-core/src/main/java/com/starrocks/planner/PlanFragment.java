@@ -41,13 +41,13 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.TreeNode;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.TreeNode;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -189,6 +189,19 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private List<Integer> collectExecStatsIds;
 
+    // If all scan nodes in the entire plan are OLAP scan nodes and at most one tablet is used,
+    // then all fragments will have at most one instance (running on a single BE).
+    // In this case, there is no need to put the ResultSink in a dedicated gather fragment.
+    //
+    // CN mode(prefer_compute_node is true or share-data mode) needs special handling here, because its strategy for selecting
+    // BE/CN nodes for remote fragments (whose left-deep node is not a scan node) is different from non-CN mode:
+    // - CN mode: selects all CN nodes as instances, which will be more than 1 here,
+    //   causing the fragment that contains the ResultSink to also have more than 1 instance.
+    // - None-CN mode: selects the BE node(s) where the child fragment is running.
+    //
+    // Therefore, if isSingleTabletGatherOutputFragment is true, CN mode should use the same selection strategy as none-CN mode.
+    private boolean isSingleTabletGatherOutputFragment = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -260,11 +273,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            ConnectContext connectContext = ConnectContext.get();
+            SessionVariable sv = connectContext.getSessionVariable();
+            if (sv.isEnablePipelineEngine()) {
                 this.parallelExecNum = 1;
-                this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                this.pipelineDop = sv.getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
             } else {
-                this.parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+                this.parallelExecNum = sv.getParallelExecInstanceNum();
                 this.pipelineDop = 1;
             }
         }
@@ -475,7 +490,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setPlan(planRoot.treeToThrift());
         }
         if (outputExprs != null) {
-            result.setOutput_exprs(ExprToThriftVisitor.treesToThrift(outputExprs));
+            result.setOutput_exprs(ExprToThrift.treesToThrift(outputExprs));
         }
         if (sink != null) {
             result.setOutput_sink(sink.toThrift());
@@ -488,7 +503,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (MapUtils.isNotEmpty(queryGlobalDictExprs)) {
             Preconditions.checkState(!queryGlobalDicts.isEmpty(), "Global dict expression error!");
             Map<Integer, TExpr> exprs = Maps.newHashMap();
-            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, ExprToThriftVisitor.treeToThrift(v)));
+            queryGlobalDictExprs.forEach((k, v) -> exprs.put(k, ExprToThrift.treeToThrift(v)));
             result.setQuery_global_dict_exprs(exprs);
         }
         if (!loadGlobalDicts.isEmpty()) {
@@ -1049,4 +1064,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean isSingleTabletGatherOutputFragment() {
+        return isSingleTabletGatherOutputFragment;
+    }
+
+    public void setSingleTabletGatherOutputFragment(boolean singleTabletGatherOutputFragment) {
+        isSingleTabletGatherOutputFragment = singleTabletGatherOutputFragment;
+    }
 }

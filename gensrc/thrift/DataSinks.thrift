@@ -58,7 +58,9 @@ enum TDataSinkType {
     BLACKHOLE_TABLE_SINK,
     DICTIONARY_CACHE_SINK,
     MULTI_OLAP_TABLE_SINK,
-    SPLIT_DATA_STREAM_SINK
+    SPLIT_DATA_STREAM_SINK,
+    NOOP_SINK,
+    ICEBERG_DELETE_SINK
 }
 
 enum TResultSinkType {
@@ -189,6 +191,10 @@ struct TExportSink {
 
     // export file name prefix
     30: optional string file_name_prefix
+    // column names for CSV header row
+    31: optional list<string> column_names
+    // whether to include header row in CSV output
+    32: optional bool with_header = false
 }
 
 struct TDictionaryCacheSink {
@@ -244,6 +250,7 @@ struct TSchemaTableSink {
 }
 
 struct TIcebergTableSink {
+    // table location
     1: optional string location
     2: optional string file_format
     3: optional i64 target_table_id
@@ -252,6 +259,7 @@ struct TIcebergTableSink {
     6: optional CloudConfiguration.TCloudConfiguration cloud_configuration
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
+    9: optional string data_location
 }
 
 struct THiveTableSink {

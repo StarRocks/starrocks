@@ -42,13 +42,16 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TRoutineLoadTask;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -61,8 +64,16 @@ public class RoutineLoadTaskSchedulerTest {
 
     @Mocked
     private RoutineLoadMgr routineLoadManager;
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
+
+    @BeforeEach
+    public void setUp() {
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
 
     @Test
     public void testRunOneCycle(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob1,
@@ -88,15 +99,10 @@ public class RoutineLoadTaskSchedulerTest {
 
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
 
+        GlobalStateMgr.getCurrentState().setRoutineLoadMgr(routineLoadManager);
+
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-                globalStateMgr.getRoutineLoadMgr();
-                minTimes = 0;
-                result = routineLoadManager;
-
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
@@ -155,15 +161,10 @@ public class RoutineLoadTaskSchedulerTest {
 
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
 
+        GlobalStateMgr.getCurrentState().setRoutineLoadMgr(routineLoadManager);
+
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-                globalStateMgr.getRoutineLoadMgr();
-                minTimes = 0;
-                result = routineLoadManager;
-
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;
@@ -237,15 +238,10 @@ public class RoutineLoadTaskSchedulerTest {
 
         Deencapsulation.setField(routineLoadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
 
+        GlobalStateMgr.getCurrentState().setRoutineLoadMgr(routineLoadManager);
+
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-                globalStateMgr.getRoutineLoadMgr();
-                minTimes = 0;
-                result = routineLoadManager;
-
                 routineLoadManager.getClusterIdleSlotNum();
                 minTimes = 0;
                 result = 1;

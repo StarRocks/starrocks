@@ -19,9 +19,12 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/config.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/rowset.h"
 
@@ -34,11 +37,22 @@ LakeMetaReader::~LakeMetaReader() = default;
 Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     _params = read_params;
 
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(
-                                          read_params.tablet_id, read_params.version.second));
+    lake::TabletManager* tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ASSIGN_OR_RETURN(auto tablet, tablet_manager->get_tablet(read_params.tablet_id, read_params.version.second));
+
+    TabletSchemaCSPtr base_schema;
+    if (read_params.schema_key.has_value()) {
+        auto runtime_state = read_params.runtime_state;
+        ASSIGN_OR_RETURN(base_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
+                                              *read_params.schema_key, read_params.tablet_id, runtime_state->query_id(),
+                                              runtime_state->fragment_ctx()->fe_addr(), tablet.metadata()));
+    } else {
+        // no schema key indicates FE has not been upgraded to use fast schema evolution v2,
+        // so fallback to the old way to get schema from tablet metadata
+        base_schema = tablet.get_schema();
+    }
 
     // Build and possibly extend tablet schema using access paths
-    TabletSchemaCSPtr base_schema = tablet.get_schema();
     TabletSchemaCSPtr tablet_schema = base_schema;
     if (read_params.column_access_paths != nullptr && !read_params.column_access_paths->empty()) {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*base_schema);
@@ -62,11 +76,7 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
         tablet_schema = tmp_schema;
     }
 
-    // Store the effective schema into params for downstream collectors
-    _params.desc_tbl = read_params.desc_tbl;
-    _collect_context.seg_collecter_params.tablet_schema = tablet_schema;
-
-    RETURN_IF_ERROR(_build_collect_context(tablet, read_params));
+    RETURN_IF_ERROR(_build_collect_context(tablet_schema, read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(tablet, read_params));
 
     _collect_context.cursor_idx = 0;
@@ -75,13 +85,8 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     return Status::OK();
 }
 
-Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& tablet,
+Status LakeMetaReader::_build_collect_context(const TabletSchemaCSPtr& tablet_schema,
                                               const LakeMetaReaderParams& read_params) {
-    auto tablet_schema = tablet.get_schema();
-    // If schema was extended in init(), prefer that one
-    if (_collect_context.seg_collecter_params.tablet_schema != nullptr) {
-        tablet_schema = _collect_context.seg_collecter_params.tablet_schema;
-    }
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
@@ -113,12 +118,14 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
 
         // only collect the field of dict need read data page
         // others just depend on footer
-        if (collect_field == "dict_merge") {
+        if (collect_field == META_DICT_MERGE || collect_field == META_COUNT_COL ||
+            collect_field == META_COLUMN_COMPRESSED_SIZE) {
             _collect_context.seg_collecter_params.read_page.emplace_back(true);
         } else {
             _collect_context.seg_collecter_params.read_page.emplace_back(false);
         }
-        _has_count_agg |= (collect_field == "count");
+        _has_count_agg |= (collect_field == META_COUNT_ROWS);
+        _has_count_agg |= (collect_field == META_COUNT_COL);
     }
     _collect_context.seg_collecter_params.tablet_schema = tablet_schema;
     return Status::OK();
@@ -127,21 +134,38 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
 Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& tablet,
                                                  const LakeMetaReaderParams& params) {
     std::vector<SegmentSharedPtr> segments;
-    RETURN_IF_ERROR(_get_segments(tablet, &segments));
-    for (auto& segment : segments) {
+    std::vector<SegmentMetaCollectOptions> options_list;
+    RETURN_IF_ERROR(_get_segments(tablet, &segments, &options_list));
+    for (int i = 0; i < segments.size(); ++i) {
+        auto& segment = segments[i];
+        auto& options = options_list[i];
         auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
 
-        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
+        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params, options));
         _collect_context.seg_collecters.emplace_back(std::move(seg_collecter));
     }
 
     return Status::OK();
 }
 
-Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments) {
+Status LakeMetaReader::_get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments,
+                                     std::vector<SegmentMetaCollectOptions>* options_list) {
     auto rowsets = tablet.get_rowsets();
     for (const auto& rowset : rowsets) {
         ASSIGN_OR_RETURN(auto rowset_segs, rowset->segments(true));
+        for (int seg_id = 0; seg_id < rowset_segs.size(); ++seg_id) {
+            SegmentMetaCollectOptions options;
+            options.is_primary_keys = tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS;
+            // In shared-data arch, only primary key table support delta column group for now.
+            if (options.is_primary_keys) {
+                options.tablet_id = tablet.metadata()->id();
+                options.version = tablet.version();
+                options.segment_id = seg_id;
+                options.pk_rowsetid = rowset->id();
+                options.dcg_loader = std::make_shared<lake::LakeDeltaColumnGroupLoader>(tablet.metadata());
+            }
+            options_list->emplace_back(std::move(options));
+        }
         segments->insert(segments->end(), rowset_segs.begin(), rowset_segs.end());
     }
     return Status::OK();

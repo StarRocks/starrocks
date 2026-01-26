@@ -15,9 +15,12 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
@@ -36,7 +39,11 @@ import com.starrocks.planner.TupleId;
 import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
@@ -44,9 +51,12 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
@@ -107,10 +117,14 @@ public class CoordinatorTest extends PlanTestBase {
         execFragment.addInstance(instance2);
 
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(6, Collections.emptyList()));
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
-        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node");
+        OlapScanNode scanNode = new OlapScanNode(new PlanNodeId(0), desc, "test-scan-node", table.getBaseIndexMetaId());
         scanNode.setSelectedPartitionIds(ImmutableList.of(0L, 1L));
         execFragment.getOrCreateColocatedAssignment(scanNode);
 
@@ -133,6 +147,56 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
+    public void testTimeoutHintUsesTableQueryTimeout() {
+        // Cover DefaultCoordinator timeout hint branch:
+        // DefaultCoordinator.java:960-963, 967-975
+
+        // Prepare an executor with table timeout info
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        Deencapsulation.setField(executor, "tableQueryTimeoutTableName", "test.t0");
+        Deencapsulation.setField(executor, "tableQueryTimeoutValue", 120);
+        ctx.setExecutor(executor);
+
+        // Make jobSpec.query_timeout match the table timeout, so DefaultCoordinator uses table_query_timeout hint.
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(120);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        Assertions.assertTrue(ex.getMessage().contains("table_query_timeout"));
+        Assertions.assertTrue(ex.getMessage().contains("please increase"));
+    }
+
+    @Test
+    public void testTimeoutHintFallbackWhenBuildHintThrows() {
+        // Force DefaultCoordinator.java:967-969 (catch) and 975 (reportTimeoutException) to execute.
+        // Ensure executor is present so the code enters the try-block.
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+        new Expectations(executor) {
+            {
+                executor.getTableQueryTimeoutInfo();
+                result = new RuntimeException("mock exception for hint building");
+                minTimes = 0;
+            }
+        };
+
+        JobSpec jobSpec = Deencapsulation.getField(coordinator, "jobSpec");
+        jobSpec.getQueryOptions().setQuery_timeout(120);
+
+        Status timeoutStatus = new Status(TStatusCode.TIMEOUT, "timeout");
+        com.starrocks.common.TimeoutException ex = Assertions.assertThrows(
+                com.starrocks.common.TimeoutException.class,
+                () -> Deencapsulation.invoke(coordinator, "dealStatusToTryRetry", timeoutStatus));
+        // After catch, hint falls back to session variable query_timeout.
+        Assertions.assertTrue(ex.getMessage().contains("query_timeout"));
+        Assertions.assertTrue(ex.getMessage().contains("please increase"));
+    }
+
+    @Test
     public void testBinlogScan() throws Exception {
         PlanFragmentId fragmentId = new PlanFragmentId(0);
         PlanNodeId planNodeId = new PlanNodeId(1);
@@ -140,7 +204,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
-                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getLatestBaseIndex()
                                 .getTabletIdsInOrder().stream())
                         .collect(Collectors.toList());
         Assertions.assertFalse(olapTableTabletIds.isEmpty());
@@ -200,8 +264,8 @@ public class CoordinatorTest extends PlanTestBase {
         TupleDescriptor scanTuple = new TupleDescriptor(new TupleId(2));
         scanTuple.setTable(getOlapTable("t0"));
         TupleDescriptor aggTuple = new TupleDescriptor(new TupleId(3));
-        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", Type.INT, false);
-        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", Type.INT, false);
+        SlotDescriptor groupBySlot = new SlotDescriptor(new SlotId(4), "groupBy", IntegerType.INT, false);
+        SlotDescriptor aggFuncSlot = new SlotDescriptor(new SlotId(5), "aggFunc", IntegerType.INT, false);
         aggTuple.addSlot(groupBySlot);
         aggTuple.addSlot(aggFuncSlot);
 

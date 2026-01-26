@@ -40,6 +40,7 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.ShowStmtToSelectStmtConverter;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
@@ -94,9 +95,8 @@ public class ShowTableStmtTest {
 
         String sql = "show full tables where table_type !='VIEW'";
         stmt = (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
-
-        QueryStatement queryStatement = stmt.toSelectStmt();
+        QueryStatement queryStatement = ShowStmtToSelectStmtConverter.toSelectStmt(stmt);
+        Preconditions.notNull(queryStatement.getOrigStmt(), "stmt's original stmt should not be null");
         String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
                 "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
                 "information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";

@@ -102,7 +102,7 @@ protected:
     pipeline::ScanSplitContext* _split_context = nullptr;
 
     virtual Status _init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
-        *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
+        ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
         return Status::OK();
     }
 
@@ -199,6 +199,7 @@ enum ConnectorType {
     LAKE = 5,
     BINLOG = 6,
     ICEBERG = 7,
+    BENCHMARK = 8,
 };
 
 class Connector {
@@ -212,6 +213,7 @@ public:
     static const std::string LAKE;
     static const std::string BINLOG;
     static const std::string ICEBERG;
+    static const std::string BENCHMARK;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
@@ -227,6 +229,11 @@ public:
     //                                                         const std::string& table_handle) const;
 
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
+
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_delete_sink_provider() const {
         CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();
     }

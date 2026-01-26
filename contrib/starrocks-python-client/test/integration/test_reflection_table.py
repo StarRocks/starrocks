@@ -18,6 +18,7 @@ from sqlalchemy import Column, Integer, MetaData, String, Table, inspect, text
 from sqlalchemy.engine import Engine
 
 from starrocks.common.params import TableInfoKeyWithPrefix
+from starrocks.common.types import SystemRunMode
 from starrocks.engine.interfaces import ReflectedPartitionInfo
 
 
@@ -64,7 +65,7 @@ class TestReflectionTablesIntegration:
                 table_options = inspector.get_table_options(table_name)
                 logger.info("table_options: %s", table_options)
 
-                from test.unit.test_utils import normalize_sql
+                from test.test_utils import normalize_sql
                 # Assertions for all expected StarRocks table options
                 assert table_options[TableInfoKeyWithPrefix.ENGINE] == 'OLAP'
                 assert normalize_sql(table_options[TableInfoKeyWithPrefix.PRIMARY_KEY]) == 'id'
@@ -75,7 +76,10 @@ class TestReflectionTablesIntegration:
                 assert normalize_sql(table_options[TableInfoKeyWithPrefix.DISTRIBUTED_BY]) == normalize_sql('HASH(id) BUCKETS 8')
                 assert normalize_sql(table_options[TableInfoKeyWithPrefix.ORDER_BY]) == normalize_sql("id, name")
                 assert table_options[TableInfoKeyWithPrefix.PROPERTIES]['replication_num'] == '1'
-                assert table_options[TableInfoKeyWithPrefix.PROPERTIES]['storage_medium'] == 'SSD'
+                if sr_engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+                    assert "storage_medium" not in table_options or table_options[TableInfoKeyWithPrefix.PROPERTIES]['storage_medium'] == 'HDD'
+                else:
+                    assert table_options[TableInfoKeyWithPrefix.PROPERTIES]['storage_medium'] == 'SSD'
                 assert table_options[TableInfoKeyWithPrefix.COMMENT] == normalize_sql('Test table with all StarRocks options')
 
             finally:

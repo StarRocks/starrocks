@@ -36,9 +36,11 @@ package com.starrocks.catalog;
 
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,9 +65,9 @@ public class MaterializedIndexTest {
         indexId = 10000;
 
         columns = new LinkedList<Column>();
-        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.REPLACE, "", ""));
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        columns.add(new Column("k2", IntegerType.SMALLINT, true, null, "", ""));
+        columns.add(new Column("v1", IntegerType.INT, false, AggregateType.REPLACE, "", ""));
         index = new MaterializedIndex(indexId, IndexState.NORMAL);
 
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -79,7 +81,7 @@ public class MaterializedIndexTest {
     }
 
     @Test
-    public void testVisibleForTransaction() throws Exception {
+    public void testVisibleForTransaction() {
         index = new MaterializedIndex(10);
         Assertions.assertEquals(IndexState.NORMAL, index.getState());
         Assertions.assertTrue(index.visibleForTransaction(0));
@@ -98,5 +100,19 @@ public class MaterializedIndexTest {
         Assertions.assertFalse(index.visibleForTransaction(9));
         Assertions.assertTrue(index.visibleForTransaction(10));
         Assertions.assertTrue(index.visibleForTransaction(11));
+    }
+
+    @Test
+    public void testMaterializedIndexUpgrade() {
+        MaterializedIndex index = new MaterializedIndex();
+        Deencapsulation.setField(index, "id", 1L);
+        Assertions.assertEquals(1L, index.getId());
+        Assertions.assertEquals(0L, index.getMetaId());
+
+        // Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(index);
+        MaterializedIndex newIndex = GsonUtils.GSON.fromJson(json, MaterializedIndex.class);
+
+        Assertions.assertEquals(1L, newIndex.getMetaId());
     }
 }

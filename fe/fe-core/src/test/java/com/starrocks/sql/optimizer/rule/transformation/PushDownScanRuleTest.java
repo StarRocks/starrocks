@@ -28,7 +28,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +45,7 @@ public class PushDownScanRuleTest {
 
         OptExpression optExpression = new OptExpression(new LogicalFilterOperator(
                 new BinaryPredicateOperator(BinaryType.EQ,
-                        new ColumnRefOperator(1, Type.INT, "id", true),
+                        new ColumnRefOperator(1, IntegerType.INT, "id", true),
                         ConstantOperator.createInt(1))
         ));
 

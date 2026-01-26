@@ -29,6 +29,7 @@
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
+#include "simd/simd.h"
 #include "storage/range.h"
 
 namespace tparquet {

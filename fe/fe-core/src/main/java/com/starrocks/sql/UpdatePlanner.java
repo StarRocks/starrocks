@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -32,11 +33,12 @@ import com.starrocks.planner.SchemaTableSink;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -156,7 +158,8 @@ public class UpdatePlanner {
                 session.getSessionVariable().setPreferComputeNode(false);
                 session.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink olapTableSink = (OlapTableSink) dataSink;
-                TableName catalogDbTable = updateStmt.getTableName();
+                TableRef tableRef = updateStmt.getTableRef();
+                TableName catalogDbTable = TableName.fromTableRef(tableRef);
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
@@ -174,11 +177,12 @@ public class UpdatePlanner {
             }
             if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
-                if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                    sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                SessionVariable sv = session.getSessionVariable();
+                if (sv.getEnableAdaptiveSinkDop()) {
+                    long warehouseId = session.getCurrentComputeResource().getWarehouseId();
+                    sinkFragment.setPipelineDop(sv.getSinkDegreeOfParallelism(warehouseId));
                 } else {
-                    sinkFragment
-                            .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    sinkFragment.setPipelineDop(sv.getParallelExecInstanceNum());
                 }
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();

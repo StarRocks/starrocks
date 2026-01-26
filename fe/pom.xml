@@ -30,6 +30,7 @@ under the License.
 
     <modules>
         <module>fe-grammar</module>
+        <module>fe-type</module>
         <module>fe-parser</module>
         <module>fe-spi</module>
         <module>fe-utils</module>
@@ -45,14 +46,15 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.8.2</junit.version>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-        <parquet.version>1.15.2</parquet.version>
+        <parquet.version>1.16.0</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
-        <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
+        <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>1.0.2</hudi.version>
@@ -63,7 +65,7 @@ under the License.
         <odps.version>0.48.7-public</odps.version>
         <kudu.version>1.17.1</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
-        <kafka-clients.version>3.4.0</kafka-clients.version>
+        <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.128.Final</io.netty.version>
@@ -73,7 +75,7 @@ under the License.
         <dnsjava.version>3.6.3</dnsjava.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
-        <paimon.version>1.2.0</paimon.version>
+        <paimon.version>1.3.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
         <staros.version>4.0.0</staros.version>
@@ -86,6 +88,7 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
+        <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
     </properties>
@@ -184,6 +187,11 @@ under the License.
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>fe-grammar</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.starrocks</groupId>
+                <artifactId>fe-type</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -478,7 +486,7 @@ under the License.
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
-                <version>5.8.2</version>
+                <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
 
@@ -584,6 +592,13 @@ under the License.
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
+                <version>1.7.30</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>jul-to-slf4j</artifactId>
                 <version>1.7.30</version>
             </dependency>
 
@@ -735,6 +750,11 @@ under the License.
                         <groupId>org.eclipse.jetty</groupId>
                         <artifactId>jetty-security</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <artifactId>lz4-java</artifactId>
+                        <groupId>org.lz4</groupId>
+                    </exclusion>
+
                 </exclusions>
             </dependency>
 
@@ -1057,6 +1077,10 @@ under the License.
                         <groupId>org.apache.zookeeper</groupId>
                         <artifactId>zookeeper</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.lz4</groupId>
+                        <artifactId>lz4-java</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1227,6 +1251,10 @@ under the License.
                         <groupId>org.ini4j</groupId>
                         <artifactId>ini4j</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <groupId>org.lz4</groupId>
+                        <artifactId>lz4-pure-java</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -1320,6 +1348,20 @@ under the License.
                 <groupId>org.apache.paimon</groupId>
                 <artifactId>paimon-bundle</artifactId>
                 <version>${paimon.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>lz4-java</artifactId>
+                        <groupId>org.lz4</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.google.protobuf</groupId>
+                        <artifactId>protobuf-java</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.httpcomponents.client5</groupId>
+                        <artifactId>httpclient5</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -1525,6 +1567,14 @@ under the License.
                 <artifactId>async-profiler</artifactId>
                 <version>${async-profiler.version}</version>
             </dependency>
+
+            <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 

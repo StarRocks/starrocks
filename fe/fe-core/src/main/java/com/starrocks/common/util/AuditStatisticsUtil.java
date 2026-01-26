@@ -47,6 +47,8 @@ public class AuditStatisticsUtil {
                 pb.statsItems.add(pItem);
             }
         }
+        pb.readLocalCnt = tb.getRead_local_cnt();
+        pb.readRemoteCnt = tb.getRead_remote_cnt();
         return pb;
     }
 
@@ -126,6 +128,18 @@ public class AuditStatisticsUtil {
                 }
             }
         }
+        if (from.readLocalCnt != null) {
+            if (to.readLocalCnt == null) {
+                to.readLocalCnt = 0L;
+            }
+            to.readLocalCnt += from.readLocalCnt;
+        }
+        if (from.readRemoteCnt != null) {
+            if (to.readRemoteCnt == null) {
+                to.readRemoteCnt = 0L;
+            }
+            to.readRemoteCnt += from.readRemoteCnt;
+        }
     }
 
     public static TAuditStatistics toThrift(PQueryStatistics pb) {
@@ -168,6 +182,12 @@ public class AuditStatisticsUtil {
                 }
                 tb.addToStats_items(tItem);
             }
+        }
+        if (pb.readLocalCnt != null) {
+            tb.setRead_local_cnt(pb.readLocalCnt);
+        }
+        if (pb.readRemoteCnt != null) {
+            tb.setRead_remote_cnt(pb.readRemoteCnt);
         }
         return tb;
     }

@@ -22,12 +22,13 @@ set(CACHE_FILES
   disk_space_monitor.cpp
   mem_space_monitor.cpp
   datacache.cpp
+  datacache_metrics.cpp
   datacache_utils.cpp
+  data_cache_hit_rate_counter.hpp
   mem_cache/lrucache_engine.cpp
   mem_cache/page_cache.cpp
   disk_cache/block_cache.cpp
   disk_cache/io_buffer.cpp
-  disk_cache/block_cache_hit_rate_counter.hpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")

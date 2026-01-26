@@ -19,6 +19,8 @@
 #include <algorithm>
 #include <memory>
 #include <random>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "column/datum_tuple.h"
 #include "fs/fs_util.h"
@@ -42,7 +44,7 @@ namespace starrocks {
 using namespace std;
 
 static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nkey, KeysType key_type,
-                                                     std::vector<ColumnId> sort_key_idxes = {}) {
+                                                     const std::vector<ColumnId>& sort_key_idxes = {}) {
     TabletSchemaPB tspb;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     uint32_t cid = 0;
@@ -168,9 +170,9 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
     shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
-    auto& cols = ret->columns();
+    auto cols = ret->mutable_columns();
     for (int ci = 0; ci < cols.size(); ci++) {
-        ColumnPtr& c = cols[ci];
+        MutableColumnPtr& c = cols[ci];
         Datum v;
         string strv;
         for (size_t i = 0; i < size; i++) {
@@ -203,7 +205,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
 
 class MemTableTest : public ::testing::Test {
 public:
-    void MySetUp(const shared_ptr<TabletSchema> schema, const string& slot_desc, const string& root) {
+    void MySetUp(const shared_ptr<TabletSchema>& schema, const string& slot_desc, const string& root) {
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
@@ -272,7 +274,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -320,7 +322,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    std::shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -348,11 +350,11 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_int64(i);
-        chunk->get_column_by_index(0)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
         v.set_int32(i * 3);
-        chunk->get_column_by_index(1)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
         v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(2)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
     }
     vector<uint32_t> indexes;
     indexes.reserve(n);
@@ -378,12 +380,12 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     const size_t n = 10;
     shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
-        chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
-        chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
         if (i % 2) {
-            chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(i)));
+            chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(static_cast<int8_t>(i)));
         } else {
-            chunk->get_column_by_index(2)->append_nulls(1);
+            chunk->get_column_raw_ptr_by_index(2)->append_nulls(1);
         }
     }
     vector<uint32_t> indexes;
@@ -403,15 +405,15 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
 
     shared_ptr<Chunk> expected_chunk = ChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n / 2; i++) {
-        expected_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
-        expected_chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
-        expected_chunk->get_column_by_index(2)->append_nulls(1);
+        expected_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
+        expected_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
+        expected_chunk->get_column_raw_ptr_by_index(2)->append_nulls(1);
     }
 
     for (int i = 0; i < n / 2; i++) {
-        expected_chunk->get_column_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i + 1)));
-        expected_chunk->get_column_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 2 - 2 * i)));
-        expected_chunk->get_column_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
+        expected_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i + 1)));
+        expected_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 2 - 2 * i)));
+        expected_chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(static_cast<int8_t>(2 * i + 1)));
     }
 
     Schema read_schema = ChunkHelper::convert_schema(tablet_schema);
@@ -421,7 +423,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(read_schema, rs_opts);
-    std::shared_ptr<Chunk> read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
+    ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(read_chunk.get());
@@ -448,11 +450,11 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_slice(tmpstr);
-        chunk->get_column_by_index(0)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
         v.set_int32(i * 3);
-        chunk->get_column_by_index(1)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
         v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(2)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
     }
     vector<uint32_t> indexes;
     indexes.reserve(n);
@@ -479,17 +481,17 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_int32(42);
-        chunk->get_column_by_index(0)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(v);
         v.set_slice(tmpstr);
-        chunk->get_column_by_index(1)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(v);
         v.set_int16(42);
-        chunk->get_column_by_index(2)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(v);
         v.set_uint8(1);
-        chunk->get_column_by_index(3)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(3)->append_datum(v);
         v.set_int32(i * 3);
-        chunk->get_column_by_index(4)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(4)->append_datum(v);
         v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(5)->append_datum(v);
+        chunk->get_column_raw_ptr_by_index(5)->append_datum(v);
     }
     vector<uint32_t> indexes;
     indexes.reserve(n);

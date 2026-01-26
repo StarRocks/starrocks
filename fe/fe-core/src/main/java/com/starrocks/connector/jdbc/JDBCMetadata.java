@@ -16,6 +16,7 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
@@ -32,7 +33,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
@@ -44,6 +46,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
@@ -54,12 +58,15 @@ public class JDBCMetadata implements ConnectorMetadata {
     JDBCSchemaResolver schemaResolver;
     private String catalogName;
 
+    private JDBCMetaCache<String, Database> dbCache;
     private JDBCMetaCache<JDBCTableName, List<String>> partitionNamesCache;
     private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
 
     private HikariDataSource dataSource;
+    private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -118,6 +125,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     private void createMetaAsyncCacheInstances(Map<String, String> properties) {
+        dbCache = new JDBCMetaCache<>(properties, false);
         partitionNamesCache = new JDBCMetaCache<>(properties, false);
         tableIdCache = new JDBCMetaCache<>(properties, true);
         tableInstanceCache = new JDBCMetaCache<>(properties, false);
@@ -142,11 +150,23 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
         return new HikariDataSource(config);
     }
 
     public Connection getConnection() throws SQLException {
-        return dataSource.getConnection();
+        Connection connection = dataSource.getConnection();
+        try {
+            // Set network timeout only when it's configured (>=0)
+            if (Config.jdbc_network_timeout_ms >= 0L) {
+                int networkTimeoutMs = (int) Math.min(Config.jdbc_network_timeout_ms, (long) Integer.MAX_VALUE);
+                connection.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, networkTimeoutMs);
+            }
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
+        return connection;
     }
 
     @Override
@@ -165,13 +185,39 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     @Override
     public Database getDb(ConnectContext context, String name) {
-        try {
-            if (listDbNames(context).contains(name)) {
-                return new Database(0, name);
-            } else {
-                return null;
+        // NOTE: We use manual cache control (getIfPresent + put) instead of the lambda-based approach
+        // for the following reason:
+        //
+        // The lambda in getTable() can return null when the table doesn't exist, but JDBCMetaCache.get()
+        // uses Objects.requireNonNull() which throws NullPointerException when the lambda returns null.
+        //
+        // For getDb(), we need to return null for non-existent databases (a valid result, not an error),
+        // so we manually control the cache to avoid the NPE issue:
+        // 1. Use getIfPresent() to check cache without triggering the lambda
+        // 2. On cache miss, query directly and only cache successful (non-null) results
+        // 3. Return null for non-existent databases or SQLException without caching
+
+        // Check cache first
+        Database cached = dbCache.getIfPresent(name);
+        if (cached != null) {
+            return cached;
+        }
+
+        // Cache miss - query directly
+        try (Connection connection = getConnection()) {
+            if (schemaResolver.databaseExists(connection, name)) {
+                Database db = new Database(0, name);
+                // Only cache on success to avoid caching null values
+                dbCache.put(name, db);
+                return db;
             }
-        } catch (StarRocksConnectorException e) {
+            // Database doesn't exist - don't cache null
+            return null;
+        } catch (SQLException e) {
+            // From getConnection() or databaseExists()
+            LOG.warn("Failed to check database existence for {}.{}: {}",
+                    catalogName, name, e.getMessage());
+            // Exception occurred - don't cache null
             return null;
         }
     }
@@ -266,8 +312,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                     }
                 });
 
-        String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
-        String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+        String maxInt = IntLiteral.createMaxValue(IntegerType.INT).getStringValue();
+        String maxDate = DateLiteral.createMaxValue(DateType.DATE).getStringValue();
 
         ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
         if (partitions.isEmpty()) {

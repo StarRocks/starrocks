@@ -219,7 +219,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
                 const auto* col_pred = child_node.col_pred();
                 const auto cid = col_pred->column_id();
                 if (cid < tablet_schema->num_key_columns() && col_pred->type() == PredicateType::kEQ) {
-                    auto& column = keys->get_column_by_id(cid);
+                    auto* column = keys->get_column_raw_ptr_by_id(cid);
                     if (column->size() != 0) {
                         return Status::NotSupported(
                                 strings::Substitute("multiple eq predicates on same pk column columnId=$0", cid));
@@ -368,6 +368,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.vector_search_option = params.vector_search_option;
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
+    rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;

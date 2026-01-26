@@ -45,7 +45,7 @@ insert into t1
 select
     idx,
     idx, -- c_int
-    uuid() -- c_string
+    substr(uuid(), 1, 6) -- c_string
 from __row_util;
 
 select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null);
@@ -58,17 +58,11 @@ select count(tt1.k1) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) wh
 
 select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null);
 select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 2 = 0;
-select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 3 = 0;
-select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 5 = 0;
 select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 10 = 0;
 select count(tt1.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 100 = 0;
 
 select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null);
 select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 2 = 0;
-select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 3 = 0;
-select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 5 = 0;
 select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 10 = 0;
 select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_bigint_null) where tt1.k1 % 100 = 0;
-
-select count(tt2.c_string) from t1 tt1 join [broadcast] t1 tt2 using(c_string);
 

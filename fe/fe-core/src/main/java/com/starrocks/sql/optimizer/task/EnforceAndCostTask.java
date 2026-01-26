@@ -48,7 +48,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -157,7 +156,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 GroupExpression childBestExpr = childGroup.getBestExpression(childRequiredProperty);
 
                 if (childBestExpr == null && prevChildIndex >= curChildIndex) {
-                    // If there can not find best child expr or push child's OptimizeGroupTask, The child has been
+                    // If there can't find the best child expr or push child's OptimizeGroupTask, The child has been
                     // pruned because of UpperBound cost prune, and parent task can break here and return
                     recordLowerBoundCost(context.getUpperBoundCost() + 1);
                     break;
@@ -195,10 +194,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // Successfully optimize all child group
             if (curChildIndex == groupExpression.getInputs().size()) {
-                // check required CTE
-                if (!checkChildrenHasRequiredCTE(groupExpression, context.getRequiredProperty(), childrenOutputProperties)) {
-                    break;
-                }
                 // before we compute the property, here need to make sure that the plan is legal
                 ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context,
                         groupExpression,
@@ -236,31 +231,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
     private void recordLowerBoundCost(double cost) {
         groupExpression.getGroup().setCostLowerBound(context.getRequiredProperty(), cost);
-    }
-
-    private boolean checkChildrenHasRequiredCTE(GroupExpression groupExpression, PhysicalPropertySet requiredProperty,
-                                                List<PhysicalPropertySet> childrenOutputProperties) {
-        OperatorType operatorType = groupExpression.getOp().getOpType();
-        switch (operatorType) {
-            case PHYSICAL_CTE_ANCHOR:
-            case PHYSICAL_NO_CTE:
-                Set<Integer> requiredCTE = requiredProperty.getCteProperty().getCteIds();
-                Set<Integer> groupUseCTE = groupExpression.getGroup().getLogicalProperty().getUsedCTEs().getCteIds();
-                if (groupUseCTE.stream().anyMatch(requiredCTE::contains)) {
-                    Set<Integer> childrenUseCteIds = childrenOutputProperties.stream()
-                            .map(prop -> prop.getCteProperty().getCteIds())
-                            .flatMap(Set::stream)
-                            .collect(Collectors.toSet());
-                    for (Integer cteId : requiredCTE) {
-                        if (groupUseCTE.contains(cteId) && !childrenUseCteIds.contains(cteId)) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            default:
-                return true;
-        }
     }
 
     private boolean checkCTEPropertyValid(GroupExpression groupExpression, PhysicalPropertySet requiredPropertySet) {

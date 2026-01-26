@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
-import static com.starrocks.http.HttpServerHandler.HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY;
+import static com.starrocks.http.HttpServerHandler.HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.mock;
@@ -79,7 +79,7 @@ public class HttpServerTestUtils {
             Attribute attribute = mock(Attribute.class);
             when(attribute.get()).thenReturn(null);
             this.channel = mock(Channel.class);
-            when(channel.attr(same(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY))).thenReturn(attribute);
+            when(channel.attr(same(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY))).thenReturn(attribute);
             this.channelFuture = mock(ChannelFuture.class);
         }
 

@@ -47,7 +47,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -58,6 +57,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -80,6 +80,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
@@ -100,10 +101,10 @@ import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -114,8 +115,9 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
-import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -156,8 +158,8 @@ public class ShowExecutorSimpleTest {
     public static void beforeClass() {
         FeConstants.runningUnitTest = true;
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -171,7 +173,7 @@ public class ShowExecutorSimpleTest {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
@@ -220,13 +222,9 @@ public class ShowExecutorSimpleTest {
                 minTimes = 0;
                 result = new RandomDistributionInfo(10);
 
-                table.getIndexIdByName(anyString);
+                table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
-
-                table.getStorageTypeByIndexId(0L);
-                minTimes = 0;
-                result = TStorageType.COLUMN;
 
                 table.getPartition(anyLong);
                 minTimes = 0;
@@ -551,8 +549,9 @@ public class ShowExecutorSimpleTest {
     @Test
     public void testShowCreateTableEmptyDb() {
         assertThrows(SemanticException.class, () -> {
-            ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
-                    ShowCreateTableStmt.CreateTableType.TABLE);
+            TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("emptyDb", "testTable")),
+                    null, NodePosition.ZERO);
+            ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
             ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -809,11 +808,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
+                Column columnYear = new Column("year", IntegerType.INT);
+                Column columnDt = new Column("dt", IntegerType.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -836,8 +835,9 @@ public class ShowExecutorSimpleTest {
             }
         };
 
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
@@ -863,11 +863,11 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
-                Column columnId = new Column("id", Type.INT, true);
+                Column columnId = new Column("id", IntegerType.INT, true);
                 columnId.setComment("id");
-                Column columnName = new Column("name", Type.VARCHAR);
-                Column columnYear = new Column("year", Type.INT);
-                Column columnDt = new Column("dt", Type.INT);
+                Column columnName = new Column("name", VarcharType.VARCHAR);
+                Column columnYear = new Column("year", IntegerType.INT);
+                Column columnDt = new Column("dt", IntegerType.INT);
                 fullSchema.add(columnId);
                 fullSchema.add(columnName);
                 fullSchema.add(columnYear);
@@ -891,8 +891,9 @@ public class ShowExecutorSimpleTest {
             }
         };
 
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("hive_catalog", "hive_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
@@ -1019,7 +1020,8 @@ public class ShowExecutorSimpleTest {
 
     @Test
     public void testShouldMarkIdleCheck() {
-        StmtExecutor stmtExecutor = new StmtExecutor(new ConnectContext(),
+        ConnectContext connectContext = new ConnectContext();
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext,
                 SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT));
 
         Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
@@ -1040,5 +1042,17 @@ public class ShowExecutorSimpleTest {
         Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
                 SqlParser.parseSingleStatement("admin set frontend config('proc_profile_cpu_enable' = 'true')",
                         SqlModeHelper.MODE_DEFAULT)));
+
+        Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select * from information_schema.tables",
+                        SqlModeHelper.MODE_DEFAULT)));
+
+        connectContext.setDatabase("information_schema");
+        Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select * from tables", SqlModeHelper.MODE_DEFAULT)));
+
+        connectContext.setDatabase("test");
+        Assertions.assertTrue(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select * from tables", SqlModeHelper.MODE_DEFAULT)));
     }
 }

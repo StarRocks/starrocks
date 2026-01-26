@@ -26,7 +26,9 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -62,7 +64,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -87,6 +88,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
+import com.starrocks.utframe.StarRocksTestExtension;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -96,6 +98,7 @@ import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -114,6 +117,7 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view tests.
  */
+@ExtendWith(StarRocksTestExtension.class)
 public abstract class MVTestBase extends StarRocksTestBase {
 
     public interface ExceptionRunnable {
@@ -219,7 +223,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-            mvTableName = createMaterializedViewStatement.getTableName();
+            mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Assertions.assertTrue(mvTableName != null);
 
             createAndRefreshMv(sql);
@@ -240,7 +244,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
         Assertions.assertTrue(mvTableName != null);
         String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? DB_NAME : mvTableName.getDb();
         String mvName = mvTableName.getTbl();
@@ -311,13 +315,17 @@ public abstract class MVTestBase extends StarRocksTestBase {
     }
 
     public static MvUpdateInfo getMvUpdateInfo(MaterializedView mv) {
-        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        OptimizerContext optimizerContext = OptimizerFactory.initContext(connectContext,
+                new ColumnRefFactory());
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(optimizerContext);
+        return MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, queryRewriteParams);
     }
 
     public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
-        MvUpdateInfo mvUpdateInfo = MvRefreshArbiter.getMVTimelinessUpdateInfo(mv, true);
+        MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
         Preconditions.checkState(mvUpdateInfo != null);
-        return mvUpdateInfo.getMvToRefreshPartitionNames().getPartitionNames();
+        return mvUpdateInfo.getMVToRefreshPCells().getPartitionNames();
     }
 
     public static void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
@@ -389,7 +397,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         Task task = taskManager.getTask(mv);
         if (task == null) {
             task = TaskBuilder.buildMvTask(mv, dbName);
-            taskManager.createTask(task, false);
+            taskManager.createTask(task);
         }
 
         Map<String, String> testProperties = task.getProperties();

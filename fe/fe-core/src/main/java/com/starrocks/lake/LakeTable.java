@@ -25,7 +25,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -34,7 +33,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.TableIndexes;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
@@ -42,13 +40,13 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.ast.KeysType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -89,9 +87,6 @@ public class LakeTable extends OlapTable {
 
     @Override
     public void setStorageInfo(FilePathInfo pathInfo, DataCacheInfo dataCacheInfo) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
         tableProperty.setStorageInfo(new StorageInfo(pathInfo, dataCacheInfo.getCacheInfo()));
     }
 
@@ -135,24 +130,22 @@ public class LakeTable extends OlapTable {
     public Map<String, String> getUniqueProperties() {
         Map<String, String> properties = Maps.newHashMap();
 
-        if (tableProperty != null) {
-            StorageInfo storageInfo = tableProperty.getStorageInfo();
-            if (storageInfo != null) {
-                // datacache.enable
-                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
-                        String.valueOf(storageInfo.isEnableDataCache()));
+        StorageInfo storageInfo = tableProperty.getStorageInfo();
+        if (storageInfo != null) {
+            // datacache.enable
+            properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE,
+                    String.valueOf(storageInfo.isEnableDataCache()));
 
-                // enable_async_write_back
-                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
-                        String.valueOf(storageInfo.isEnableAsyncWriteBack()));
-            }
+            // enable_async_write_back
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
+                    String.valueOf(storageInfo.isEnableAsyncWriteBack()));
+        }
 
-            // datacache partition duration
-            String partitionDuration =
-                    tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
-            if (partitionDuration != null) {
-                properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
-            }
+        // datacache partition duration
+        String partitionDuration =
+                tableProperty.getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+        if (partitionDuration != null) {
+            properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
         }
 
         // storage volume
@@ -164,11 +157,8 @@ public class LakeTable extends OlapTable {
                 && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
-
-        Boolean enableDynamicTablet = getEnableDynamicTablet();
-        if (enableDynamicTablet != null && enableDynamicTablet) {
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_DYNAMIC_TABLET, enableDynamicTablet.toString());
-        }
+        properties.put(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                String.valueOf(isFastSchemaEvolutionV2()));
 
         return properties;
     }
@@ -202,19 +192,16 @@ public class LakeTable extends OlapTable {
             return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isListPartition()) {
             return new RecycleLakeListPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else if (partitionInfo.isUnPartitioned()) {
             return new RecycleLakeUnPartitionInfo(dbId, id, partition,
                     partitionInfo.getDataProperty(partition.getId()),
                     partitionInfo.getReplicationNum(partition.getId()),
-                    partitionInfo.getIsInMemory(partition.getId()),
                     partitionInfo.getDataCacheInfo(partition.getId()));
         } else {
             throw new RuntimeException("Unknown partition type: " + partitionInfo.getType());
@@ -246,7 +233,7 @@ public class LakeTable extends OlapTable {
             .flatMap(partition -> partition.getSubPartitions().stream())
             .allMatch(physicalPartition -> {
                 long physicalPartitionId = physicalPartition.getId();
-                List<Long> shardIds = physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
+                List<Long> shardIds = physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
                         .flatMap(index -> index.getTablets().stream())
                         .map(tablet -> ((LakeTablet) tablet).getShardId())
                         .collect(Collectors.toList());
@@ -267,5 +254,16 @@ public class LakeTable extends OlapTable {
                         .map(id -> id == physicalPartitionId)
                         .orElse(false));
             });
+    }
+
+    public void setFastSchemaEvolutionV2(boolean enabled) {
+        tableProperty.modifyTableProperties(
+                PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,
+                Boolean.valueOf(enabled).toString());
+        tableProperty.buildCloudNativeFastSchemaEvolutionV2();
+    }
+
+    public boolean isFastSchemaEvolutionV2() {
+        return tableProperty.isCloudNativeFastSchemaEvolutionV2();
     }
 }

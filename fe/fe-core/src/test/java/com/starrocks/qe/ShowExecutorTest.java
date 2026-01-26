@@ -44,7 +44,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -56,6 +55,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.MaterializedViewsSystemTable;
@@ -64,25 +64,26 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -121,8 +122,8 @@ public class ShowExecutorTest {
         ctx = new ConnectContext(null);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
         column1.setIsKey(true);
         column2.setIsKey(true);
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
@@ -136,7 +137,7 @@ public class ShowExecutorTest {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
@@ -185,13 +186,9 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new RandomDistributionInfo(10);
 
-                table.getIndexIdByName(anyString);
+                table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
-
-                table.getStorageTypeByIndexId(0L);
-                minTimes = 0;
-                result = TStorageType.COLUMN;
 
                 table.getPartition(anyLong);
                 minTimes = 0;
@@ -452,8 +449,9 @@ public class ShowExecutorTest {
         };
 
         // Ok to test
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
-                null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
@@ -555,14 +553,18 @@ public class ShowExecutorTest {
     public void testShowColumnFromUnknownTable() {
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testUser");
-        ShowColumnStmt stmt = new ShowColumnStmt(new TableName("emptyDb", "testTable"), null, null, false);
+        TableRef emptyDbTableRef = new TableRef(QualifiedName.of(Lists.newArrayList("emptyDb", "testTable")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(emptyDbTableRef, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Throwable exception = assertThrows(SemanticException.class, () -> ShowExecutor.execute(stmt, ctx));
         assertThat(exception.getMessage(), containsString("Unknown database 'emptyDb'"));
 
         // empty table
-        ShowColumnStmt stmt2 = new ShowColumnStmt(new TableName("testDb", "emptyTable"), null, null, true);
+        TableRef emptyTableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "emptyTable")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt2 = new ShowColumnStmt(emptyTableRef, null, true);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
         ShowExecutor.execute(stmt2, ctx);
     }
@@ -637,18 +639,10 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowAlterTable() throws AnalysisException, DdlException {
-        ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
-        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(),
-                globalStateMgr.getLocalMetastore().getDb("testDb")));
-
-        ShowExecutor.execute(stmt, ctx);
-    }
-
-    @Test
     public void testShowKeysFromTable() {
-        ShowIndexStmt stmt = new ShowIndexStmt("test_db",
-                new TableName(null, "test_db", "test_table"));
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowIndexStmt stmt = new ShowIndexStmt(tableRef);
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assertions.assertEquals(0, resultSet.getResultRows().size());
     }

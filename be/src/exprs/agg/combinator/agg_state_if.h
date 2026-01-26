@@ -52,7 +52,7 @@ public:
     }
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         auto column_size = ctx->get_num_args() + 1;
         const Column* data_columns[column_size - 1];
         ColumnPtr new_nullable_column;
@@ -123,7 +123,7 @@ public:
             } else {
                 const auto nullable_predicate_null_col_data = nullable_predicate_column->immutable_null_column_data();
                 const auto nullable_predicate_data_col_data =
-                        down_cast<const UInt8Column*>(nullable_predicate_column->immutable_data_column())
+                        down_cast<const UInt8Column*>(nullable_predicate_column->data_column_raw_ptr())
                                 ->immutable_data();
                 // we treat false(0) as null(which is 1)
                 for (size_t i = 0; i < chunk_size; ++i) {
@@ -172,8 +172,7 @@ public:
         if (data_column->is_nullable()) {
             NullableColumn* original_nullable_column =
                     const_cast<NullableColumn*>(down_cast<const NullableColumn*>(data_column.get()));
-            new_nullable_column =
-                    NullableColumn::create(original_nullable_column->data_column_mutable_ptr(), fake_null_column);
+            new_nullable_column = NullableColumn::create(original_nullable_column->data_column(), fake_null_column);
         } else {
             new_nullable_column = NullableColumn::create(data_column, fake_null_column);
         }

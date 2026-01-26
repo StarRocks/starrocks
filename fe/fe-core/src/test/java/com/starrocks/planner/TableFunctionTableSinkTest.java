@@ -21,7 +21,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TableFunctionTableSinkTest {
     @Test
     public void testTableFunctionTableSink() {
-        List<Column> columns = ImmutableList.of(new Column("k1", Type.INT));
+        List<Column> columns = ImmutableList.of(new Column("k1", IntegerType.INT));
         Map<String, String> properties = new HashMap<>();
         properties.put("path", "s3://path/to/directory/");
         properties.put("format", "csv");

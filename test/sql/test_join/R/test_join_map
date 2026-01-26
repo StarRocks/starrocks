@@ -1,4 +1,4 @@
--- name: test_join_map
+-- name: test_join_map @no_arrow_flight_sql
 CREATE TABLE map_test (
 pk bigint not null ,
 map0  map<Int,string>,

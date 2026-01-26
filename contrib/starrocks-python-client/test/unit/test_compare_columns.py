@@ -17,7 +17,6 @@ from unittest.mock import Mock
 
 from alembic.autogenerate.api import AutogenContext
 import pytest
-from sqlalchemy.exc import NotSupportedError
 
 from starrocks.alembic.compare import (
     compare_starrocks_column_agg_type,
@@ -70,7 +69,7 @@ class TestAutogenerateColumnsAggType:
         )
 
         caplog.clear()
-        with pytest.raises(NotSupportedError) as exc_info:
+        with pytest.raises(NotImplementedError) as exc_info:
             compare_starrocks_column_agg_type(autogen_context, None, "test_schema", "t1", "val1", conn_col, meta_col_diff)
         logger.debug(f"exc_info.value: {exc_info.value}")
         assert (
@@ -114,7 +113,7 @@ class TestAutogenerateColumnsAutoIncrement:
         caplog.clear()
         compare_starrocks_column_autoincrement(self.autogen_context, None, "sch", "t1", "id", conn_col, meta_col)
         assert any(
-            "Detected AUTO_INCREMENT is changed" in str(r.getMessage()) and r.levelname == "WARNING"
+            "Detected AUTO_INCREMENT change" in str(r.getMessage()) and r.levelname == "WARNING"
             for r in caplog.records
         )
 
@@ -125,6 +124,6 @@ class TestAutogenerateColumnsAutoIncrement:
         caplog.clear()
         compare_starrocks_column_autoincrement(self.autogen_context, None, "sch", "t1", "id", conn_col2, meta_col2)
         assert any(
-            "Detected AUTO_INCREMENT is changed" in str(r.getMessage()) and r.levelname == "WARNING"
+            "Detected AUTO_INCREMENT change" in str(r.getMessage()) and r.levelname == "WARNING"
             for r in caplog.records
         )

@@ -144,11 +144,10 @@ public class LoadMgr implements MemoryTrackable {
                         "There are more than " + Config.desired_max_waiting_jobs + " load jobs in waiting queue, "
                                 + "please retry later.");
             }
-            createLoadJob(loadJob);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         } finally {
             writeUnlock();
         }
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
 
         // The job must be submitted after edit log.
         // It guarantee that load job has not been changed before edit log.
@@ -271,12 +270,8 @@ public class LoadMgr implements MemoryTrackable {
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
-        addLoadJob(loadJob);
-        if (!loadJob.isCompleted()) {
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
-        }
         // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob, wal -> createLoadJob((LoadJob) wal));
         return loadJob;
     }
 
@@ -500,6 +495,24 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
+    public void removeLoadJobsByDb(long dbId) {
+        writeLock();
+        try {
+            // Get all jobs belonging to the database
+            List<LoadJob> jobsToRemove = idToLoadJob.values().stream()
+                    .filter(job -> job.getDbId() == dbId)
+                    .collect(Collectors.toList());
+
+            // Remove each job
+            for (LoadJob job : jobsToRemove) {
+                LOG.info("remove load job {} of database {}", job.getLabel(), dbId);
+                unprotectedRemoveJobReleatedMeta(job);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     // only for those jobs which transaction is not started
     public void processTimeoutJobs() {
         idToLoadJob.values().stream().forEach(entity -> entity.processTimeout());
@@ -515,13 +528,13 @@ public class LoadMgr implements MemoryTrackable {
                         LOG.info("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                                         DataQualityException.QUALITY_FAIL_MSG),
-                                true, true);
+                                true);
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     } catch (StarRocksException e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
-                        job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+                        job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true);
                     } catch (Exception e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     }
@@ -536,7 +549,7 @@ public class LoadMgr implements MemoryTrackable {
                         ((SparkLoadJob) job).updateLoadingStatus();
                     } catch (StarRocksException e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
-                        job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+                        job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
                     } catch (Exception e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                     }

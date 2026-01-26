@@ -133,8 +133,8 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, 0);
-    ASSERT_EQ(stats.write_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
 
     // first read from cache
     for (int i = 0; i < block_count; ++i) {
@@ -142,7 +142,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, block_count);
 }
 
 TEST_F(CacheInputStreamTest, test_random_read) {
@@ -166,8 +166,8 @@ TEST_F(CacheInputStreamTest, test_random_read) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, 0);
-    ASSERT_EQ(stats.write_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
 
     // seek to a custom postion in second block, and read multiple block
     int64_t off_in_block = 100;
@@ -181,7 +181,7 @@ TEST_F(CacheInputStreamTest, test_random_read) {
     ASSERT_TRUE(check_data_content(buffer, block_size - off_in_block, 'a' + 1));
     ASSERT_TRUE(check_data_content(buffer + block_size - off_in_block, block_size, 'a' + 2));
 
-    ASSERT_EQ(stats.read_cache_count, 2);
+    ASSERT_EQ(stats.read_block_cache_count, 2);
 }
 
 TEST_F(CacheInputStreamTest, test_file_overwrite) {
@@ -205,8 +205,8 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, 0);
-    ASSERT_EQ(stats.write_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
 
     // first read from cache
     for (int i = 0; i < block_count; ++i) {
@@ -214,7 +214,7 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, block_count);
 
     // With different modification time, the old cache cannot be used
     io::CacheInputStream cache_stream2(sb_stream, file_name, data_size, 2000000);
@@ -225,7 +225,7 @@ TEST_F(CacheInputStreamTest, test_file_overwrite) {
         read_stream_data(&cache_stream2, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats2.read_cache_count, 0);
+    ASSERT_EQ(stats2.read_block_cache_count, 0);
 }
 
 TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
@@ -248,14 +248,14 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
     char buffer[block_size];
     read_stream_data(&cache_stream, 0, block_size, buffer);
     ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
-    ASSERT_EQ(stats.read_cache_count, 0);
-    ASSERT_EQ(stats.write_cache_count, 1);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, 1);
 
     // read the first 1024 bytes from cache, actually it will read the whole block from cache
     // and save it to block buffer.
     read_stream_data(&cache_stream, 0, 1024, buffer);
     ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
-    ASSERT_EQ(stats.read_cache_count, 1);
+    ASSERT_EQ(stats.read_block_cache_count, 1);
 
     read_stream_data(&cache_stream, 1024, 1024, buffer);
     ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
@@ -302,12 +302,12 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
     char buffer[block_size];
     read_stream_data(&cache_stream, 0, block_size, buffer);
     ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
-    ASSERT_EQ(stats.read_cache_count, 0);
-    ASSERT_EQ(stats.write_cache_count, 1);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, 1);
 
     // try read zero length data, expect no crash
     read_stream_data(&cache_stream, 0, 0, nullptr);
-    ASSERT_EQ(stats.read_cache_count, 0);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
@@ -345,8 +345,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         read_stream_data(&cache_stream, 0, read_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
-        ASSERT_EQ(stats.read_cache_count, 0);
-        ASSERT_EQ(stats.write_cache_count, block_count);
+        ASSERT_EQ(stats.read_block_cache_count, 0);
+        ASSERT_EQ(stats.write_block_cache_count, block_count);
     }
 
     auto cache = BlockCache::instance();
@@ -363,7 +363,7 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         read_stream_data(&cache_stream, 0, read_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
-        ASSERT_EQ(stats.read_cache_count, 0);
+        ASSERT_EQ(stats.read_block_cache_count, 0);
     }
 
     {
@@ -377,7 +377,7 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         read_stream_data(&cache_stream, 0, read_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
-        ASSERT_EQ(stats.read_cache_count, block_count);
+        ASSERT_EQ(stats.read_block_cache_count, block_count);
     }
     fs::remove_all(cache_dir);
 }
@@ -490,8 +490,8 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, 0);
-    ASSERT_EQ(stats.write_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
 
     // first read from local cache
     for (int i = 0; i < block_count; ++i) {
@@ -499,7 +499,7 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
         ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
     }
-    ASSERT_EQ(stats.read_cache_count, block_count);
+    ASSERT_EQ(stats.read_block_cache_count, block_count);
 }
 
 } // namespace starrocks::io

@@ -60,8 +60,8 @@ class LakeTabletsChannel : public TabletsChannel {
     using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
 
 public:
-    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
-                       MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+    LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key, MemTracker* mem_tracker,
+                       RuntimeProfile* parent_profile);
 
     ~LakeTabletsChannel() override;
 
@@ -246,7 +246,6 @@ private:
         }
     };
 
-    LoadChannel* _load_channel;
     lake::TabletManager* _tablet_manager;
 
     TabletsChannelKey _key;
@@ -315,11 +314,9 @@ private:
     std::unique_ptr<RuntimeProfile> _tablets_profile;
 };
 
-LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
-                                       const TabletsChannelKey& key, MemTracker* mem_tracker,
-                                       RuntimeProfile* parent_profile)
+LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                                       MemTracker* mem_tracker, RuntimeProfile* parent_profile)
         : TabletsChannel(),
-          _load_channel(load_channel),
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
@@ -579,6 +576,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     auto start_wait_writer_ts = watch.elapsed_time();
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
     count_down_latch.wait();
+    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
+        int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
+        if (timeout_ms > 0) {
+            bthread_usleep(timeout_ms * 1000);
+        }
+    });
 
     auto finish_wait_writer_ts = watch.elapsed_time();
 
@@ -646,7 +649,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
 
     if (close_channel) {
-        _load_channel->remove_tablets_channel(_key);
         if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
             _txn_log_collector.notify();
         }
@@ -809,6 +811,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_slot_descriptors(slots)
                                               .set_merge_condition(params.merge_condition())
                                               .set_miss_auto_increment_column(params.miss_auto_increment_column())
+                                              .set_db_id(_schema->db_id())
                                               .set_table_id(params.table_id())
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
@@ -967,64 +970,67 @@ void LakeTabletsChannel::update_profile() {
     }
 }
 
-#define ADD_AND_SET_COUNTER(profile, name, type, val) COUNTER_SET(ADD_COUNTER(profile, name, type), val)
-#define ADD_AND_UPDATE_COUNTER(profile, name, type, val) COUNTER_UPDATE(ADD_COUNTER(profile, name, type), val)
-#define ADD_AND_UPDATE_TIMER(profile, name, val) COUNTER_UPDATE(ADD_TIMER(profile, name), val)
+#define ADD_AND_SET_COUNTER(profile, name, type, val) \
+    COUNTER_SET(ADD_COUNTER(profile, name, type), static_cast<int64_t>(val))
+#define ADD_AND_SET_TIMER(profile, name, val) COUNTER_SET(ADD_TIMER(profile, name), static_cast<int64_t>(val))
 #define DEFAULT_IF_NULL(ptr, value, default_value) ((ptr) ? (value) : (default_value))
 
 void LakeTabletsChannel::_update_tablet_profile(const DeltaWriter* writer, RuntimeProfile* profile) const {
     const lake::DeltaWriterStat& writer_stat = writer->get_writer_stat();
-    ADD_AND_UPDATE_COUNTER(profile, "WriterTaskCount", TUnit::UNIT, writer_stat.task_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriterTaskPendingTime", writer_stat.pending_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "WriteCount", TUnit::UNIT, writer_stat.write_count);
-    ADD_AND_UPDATE_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteTime", writer_stat.write_time_ns);
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count);
-    ADD_AND_UPDATE_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.close_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FinishTime", writer_stat.finish_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FinishWaitFlushTime", writer_stat.finish_wait_flush_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FinishPrepareTxnLogTime", writer_stat.finish_prepare_txn_log_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FinishPutTxnLogTime", writer_stat.finish_put_txn_log_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "FinishPkPreloadTime", writer_stat.finish_pk_preload_time_ns);
+    ADD_AND_SET_COUNTER(profile, "WriterTaskCount", TUnit::UNIT, writer_stat.task_count.load());
+    ADD_AND_SET_TIMER(profile, "WriterTaskPendingTime", writer_stat.pending_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "WriteCount", TUnit::UNIT, writer_stat.write_count.load());
+    ADD_AND_SET_COUNTER(profile, "RowCount", TUnit::UNIT, writer_stat.row_count.load());
+    ADD_AND_SET_TIMER(profile, "WriteTime", writer_stat.write_time_ns.load());
+    ADD_AND_SET_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count.load());
+    ADD_AND_SET_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count.load());
+    ADD_AND_SET_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "CloseTime", writer_stat.close_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FinishTime", writer_stat.finish_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FinishWaitFlushTime", writer_stat.finish_wait_flush_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FinishPrepareTxnLogTime", writer_stat.finish_prepare_txn_log_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FinishPutTxnLogTime", writer_stat.finish_put_txn_log_time_ns.load());
+    ADD_AND_SET_TIMER(profile, "FinishPkPreloadTime", writer_stat.finish_pk_preload_time_ns.load());
 
     const FlushStatistic* flush_stat = writer->get_flush_stats();
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count, 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT,
-                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count, 0));
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->cur_flush_count.load(), 0));
     ADD_AND_SET_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT,
                         DEFAULT_IF_NULL(flush_stat, flush_stat->queueing_memtable_num.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns, 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_time_ns.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "MemtableFinalizeTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.finalize_time_ns.load(), 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableSortCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_count.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "MemtableSortTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_time_ns.load(), 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableAggCount", TUnit::UNIT,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_count.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "MemtableAggTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "MemtableFlushTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
-    ADD_AND_UPDATE_TIMER(profile, "MemtableIOTime",
-                         DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
-    ADD_AND_UPDATE_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,
-                           DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
+    ADD_AND_SET_TIMER(profile, "FlushTaskPendingTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->pending_time_ns.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_count.load(), 0));
+    ADD_AND_SET_TIMER(profile, "MemtableInsertTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.insert_time_ns.load(), 0));
+    ADD_AND_SET_TIMER(profile, "MemtableFinalizeTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.finalize_time_ns.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableSortCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_count.load(), 0));
+    ADD_AND_SET_TIMER(profile, "MemtableSortTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.sort_time_ns.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableAggCount", TUnit::UNIT,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_count.load(), 0));
+    ADD_AND_SET_TIMER(profile, "MemtableAggTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.agg_time_ns.load(), 0));
+    ADD_AND_SET_TIMER(profile, "MemtableFlushTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_time_ns.load(), 0));
+    ADD_AND_SET_TIMER(profile, "MemtableIOTime",
+                      DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.io_time_ns.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableMemorySize", TUnit::BYTES,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_memory_size.load(), 0));
+    ADD_AND_SET_COUNTER(profile, "MemtableDiskSize", TUnit::BYTES,
+                        DEFAULT_IF_NULL(flush_stat, flush_stat->memtable_stats.flush_disk_size.load(), 0));
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker,
                                                          RuntimeProfile* parent_profile) {
-    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker, parent_profile);
+    // NOTE: `load_channel` is not used for now, just keep it for now so that it could be used later and
+    // be consistent with LocalTabletsChannel.
+    return std::make_shared<LakeTabletsChannel>(tablet_manager, key, mem_tracker, parent_profile);
 }
 
 } // namespace starrocks

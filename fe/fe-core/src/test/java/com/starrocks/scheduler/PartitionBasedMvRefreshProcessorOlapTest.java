@@ -30,6 +30,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -1089,8 +1090,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
     }
 
     private void  assertPCellNameEquals(String expect, PCellSortedSet pCellWithNames) {
-        Assertions.assertTrue(pCellWithNames.size() == 1);
-        Assertions.assertEquals(expect, pCellWithNames.iterator().next().name());
+        Assertions.assertTrue(pCellWithNames.size() == 1, pCellWithNames.toString());
+        Assertions.assertEquals(expect, pCellWithNames.iterator().next().name(), pCellWithNames.toString());
     }
 
     @Test
@@ -1114,6 +1115,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
 
+        mv.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "1");
         mv.getTableProperty().setPartitionRefreshNumber(1);
 
         MVPCTBasedRefreshProcessor processor = createProcessor(taskRun, mv);
@@ -1773,7 +1775,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 MaterializedView materializedView =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(testDb.getFullName(), mvName));
-                                Assertions.assertEquals(2, materializedView.getPartitionExprMaps().size());
+                                Assertions.assertEquals(1, materializedView.getPartitionExprMaps().size());
 
                                 OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getTable(testDb.getFullName(), "tt1");
@@ -1860,7 +1862,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     MaterializedView materializedView =
                             ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                     .getTable(testDb.getFullName(), "mv_with_join0"));
-                    Assertions.assertEquals(2, materializedView.getPartitionExprMaps().size());
+                    Assertions.assertEquals(1, materializedView.getPartitionExprMaps().size());
                     TaskRun taskRun = buildMVTaskRun(materializedView, DB_NAME);
 
                     OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1957,7 +1959,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                     "partition by date_trunc('month',k1) \n" +
                                     "distributed by hash(k2) buckets 3 \n" +
                                     "refresh deferred manual\n" +
-                                    "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
+                                    "properties('replication_num' = '1', 'partition_refresh_number'='-1')\n" +
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
                                 Database testDb =
@@ -2687,6 +2689,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "MVRefreshPrepareRefreshPlan",
                             "MVRefreshParser",
                             "MVRefreshAnalyzer",
+                            "MVRefreshPartitionInfo",
                             "AnalyzeDatabase",
                             "AnalyzeTemporaryTable",
                             "AnalyzeTable",

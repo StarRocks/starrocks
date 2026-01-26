@@ -25,6 +25,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
@@ -200,10 +201,10 @@ public class QueryMaterializationContext {
 
     /**
      * Add related mvs about this query.
-     * @param mvs: related mvs
+     * @param mv: related mvs
      */
-    public void addRelatedMVs(Set<MaterializedView> mvs) {
-        relatedMVs.addAll(mvs);
+    public void addRelatedMV(MaterializedView mv) {
+        relatedMVs.add(mv);
     }
 
     /**
@@ -232,13 +233,14 @@ public class QueryMaterializationContext {
      * @param mv intput mv
      * @return MvUpdateInfo of the mv, null if mv is null or initialize fail
      */
-    public MvUpdateInfo getOrInitMVTimelinessInfos(MaterializedView mv) {
+    public MvUpdateInfo getOrInitMVTimelinessInfos(MaterializedView mv,
+                                                   MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         if (mv == null) {
             return null;
         }
         if (!mvTimelinessInfos.containsKey(mv)) {
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
-            MvUpdateInfo result = mvTimelinessMgr.getMVTimelinessInfo(mv);
+            MvUpdateInfo result = mvTimelinessMgr.getMVTimelinessInfo(mv, queryRewriteParams);
             mvTimelinessInfos.put(mv, result);
             return result;
         } else {

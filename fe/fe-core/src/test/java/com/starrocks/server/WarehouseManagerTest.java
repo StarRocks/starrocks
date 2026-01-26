@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -29,9 +30,12 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
@@ -51,6 +55,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class WarehouseManagerTest {
@@ -315,8 +320,8 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(123, 456, "aaa", index, null);
         ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
                         index, Collections.emptyList(), 1));
@@ -392,8 +397,8 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
-        Partition partition = new Partition(123, 456, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        Partition partition = new Partition(123, 456, "aaa", index, null);
         scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
         // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
         // getAliveComputeNodes.
@@ -403,9 +408,13 @@ public class WarehouseManagerTest {
     private OlapScanNode newOlapScanNode() {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(3, Collections.emptyList()));
         desc.setTable(table);
-        return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode");
+        return new OlapScanNode(new PlanNodeId(1), desc, "OlapScanNode", table.getBaseIndexMetaId());
     }
 
     @Test
@@ -541,5 +550,47 @@ public class WarehouseManagerTest {
         AtomicInteger result = warehouseManager.getNextComputeNodeIndexFromWarehouse(computeResource);
         Assertions.assertNotNull(result);
         Assertions.assertEquals(0, result.get());
+    }
+
+    @Test
+    public void testGetAliveWarehouseIds() {
+        Warehouse wh1 = new MockedWarehouse(1L, "wh1", true);
+        Warehouse wh2 = new MockedWarehouse(2L, "wh2", false);
+        Warehouse wh3 = new MockedWarehouse(3L, "wh3", true);
+        Warehouse wh4 = new MockedWarehouse(4L, "wh4", false);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.addWarehouse(wh1);
+        warehouseManager.addWarehouse(wh2);
+        warehouseManager.addWarehouse(wh3);
+        warehouseManager.addWarehouse(wh4);
+
+        Set<Long> aliveWarehouseIds = warehouseManager.getAliveWarehouseIds();
+        Assertions.assertEquals(2, aliveWarehouseIds.size());
+        Assertions.assertTrue(aliveWarehouseIds.contains(1L));
+        Assertions.assertTrue(aliveWarehouseIds.contains(3L));
+    }
+
+    @Test
+    public void testWarehouseMgrAetAllComputeNodeIdsAssignToTabletsExcepted() {
+        WarehouseManager warehouseManager = new WarehouseManager();
+        ComputeResource computeResource = WarehouseComputeResource.of(10086L);
+        ErrorReportException exception = Assertions.assertThrows(ErrorReportException.class, () ->
+                warehouseManager.getAllComputeNodeIdsAssignToTablets(computeResource, Lists.newArrayList()));
+        Assertions.assertEquals(ErrorCode.ERR_UNKNOWN_WAREHOUSE, exception.getErrorCode());
+    }
+
+    private static class MockedWarehouse extends DefaultWarehouse {
+        private final boolean isAvailable;
+
+        public MockedWarehouse(long id, String name, boolean isAvailable) {
+            super(id, name);
+            this.isAvailable = isAvailable;
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return isAvailable;
+        }
     }
 }

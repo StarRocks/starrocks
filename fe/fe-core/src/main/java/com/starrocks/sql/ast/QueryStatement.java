@@ -23,6 +23,8 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
 
 import java.util.HashMap;
@@ -145,7 +147,7 @@ public class QueryStatement extends StatementBase {
             if (binaryPredicate.getOp() != eqType) {
                 return null;
             }
-            Pair<SlotRef, Expr> slotRefExprPair = binaryPredicate.createSlotAndLiteralPair();
+            Pair<SlotRef, Expr> slotRefExprPair = createSlotAndLiteralPair(binaryPredicate);
             if (slotRefExprPair == null || result.containsKey(slotRefExprPair.first)) {
                 return null;
             }
@@ -155,6 +157,21 @@ public class QueryStatement extends StatementBase {
         } else {
             return null;
         }
+    }
+
+    public static Pair<SlotRef, Expr> createSlotAndLiteralPair(Expr expr) {
+        Expr leftExpr = expr.getChild(0);
+        Expr rightExpr = expr.getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
     }
 
     private SlotRef findSlotRef(Set<SlotRef> slotRefs, String colName) {

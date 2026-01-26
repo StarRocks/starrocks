@@ -25,11 +25,16 @@ import com.aliyun.odps.type.VarcharTypeInfo;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,35 +47,35 @@ public class EntityConvertUtilsTests {
     public void testConvertTypeCaseBigint() {
         TypeInfo typeInfo = TypeInfoFactory.BIGINT;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.BIGINT, result);
+        assertEquals(IntegerType.BIGINT, result);
     }
 
     @Test
     public void testConvertTypeCaseInt() {
         TypeInfo typeInfo = TypeInfoFactory.INT;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.INT, result);
+        assertEquals(IntegerType.INT, result);
     }
 
     @Test
     public void testConvertTypeCaseSmallint() {
         TypeInfo typeInfo = TypeInfoFactory.SMALLINT;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.SMALLINT, result);
+        assertEquals(IntegerType.SMALLINT, result);
     }
 
     @Test
     public void testConvertTypeCaseTinyint() {
         TypeInfo typeInfo = TypeInfoFactory.TINYINT;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.TINYINT, result);
+        assertEquals(IntegerType.TINYINT, result);
     }
 
     @Test
     public void testConvertTypeCaseFloat() {
         TypeInfo typeInfo = TypeInfoFactory.FLOAT;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.FLOAT, result);
+        assertEquals(FloatType.FLOAT, result);
     }
 
     @Test
@@ -101,7 +106,7 @@ public class EntityConvertUtilsTests {
     public void testConvertTypeCaseDouble() {
         TypeInfo typeInfo = TypeInfoFactory.DOUBLE;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.DOUBLE, result);
+        assertEquals(FloatType.DOUBLE, result);
     }
 
     @Test
@@ -132,7 +137,7 @@ public class EntityConvertUtilsTests {
     public void testConvertTypeCaseBinary() {
         TypeInfo typeInfo = TypeInfoFactory.BINARY;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.VARBINARY, result);
+        assertEquals(VarbinaryType.VARBINARY, result);
     }
 
     @Test
@@ -141,21 +146,21 @@ public class EntityConvertUtilsTests {
     public void testConvertTypeCaseBoolean() {
         TypeInfo typeInfo = TypeInfoFactory.BOOLEAN;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.BOOLEAN, result);
+        assertEquals(BooleanType.BOOLEAN, result);
     }
 
     @Test
     public void testConvertTypeCaseDate() {
         TypeInfo typeInfo = TypeInfoFactory.DATE;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.DATE, result);
+        assertEquals(DateType.DATE, result);
     }
 
     @Test
     public void testConvertTypeCaseTimestampAndDatetime() {
         TypeInfo typeInfo = TypeInfoFactory.TIMESTAMP;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        assertEquals(Type.DATETIME, result);
+        assertEquals(DateType.DATETIME, result);
     }
 
     @Test
@@ -164,7 +169,7 @@ public class EntityConvertUtilsTests {
         TypeInfo valueTypeInfo = TypeInfoFactory.INT;
         MapTypeInfo mapTypeInfo = TypeInfoFactory.getMapTypeInfo(keyTypeInfo, valueTypeInfo);
         Type result = EntityConvertUtils.convertType(mapTypeInfo);
-        Type expectedType = new MapType(TypeFactory.createDefaultCatalogString(), Type.INT);
+        Type expectedType = new MapType(TypeFactory.createDefaultCatalogString(), IntegerType.INT);
         assertEquals(expectedType, result);
     }
 
@@ -173,7 +178,7 @@ public class EntityConvertUtilsTests {
         TypeInfo elementTypeInfo = TypeInfoFactory.INT;
         ArrayTypeInfo arrayTypeInfo = TypeInfoFactory.getArrayTypeInfo(elementTypeInfo);
         Type result = EntityConvertUtils.convertType(arrayTypeInfo);
-        Type expectedType = new ArrayType(Type.INT);
+        Type expectedType = new ArrayType(IntegerType.INT);
         assertEquals(expectedType, result);
     }
 
@@ -186,7 +191,7 @@ public class EntityConvertUtilsTests {
                         ImmutableList.of(fieldTypeInfo1, fieldTypeInfo2));
         Type result = EntityConvertUtils.convertType(structTypeInfo);
         Type expectedType1 = TypeFactory.createDefaultCatalogString();
-        Type expectedType2 = Type.INT;
+        Type expectedType2 = IntegerType.INT;
         Type expectedType = new StructType(ImmutableList.of(expectedType1, expectedType2));
         assertEquals(expectedType, result);
     }
@@ -198,7 +203,7 @@ public class EntityConvertUtilsTests {
         TypeInfo typeInfo = TypeInfoFactory.INT;
         when(column.getTypeInfo()).thenReturn(typeInfo);
         Column result = EntityConvertUtils.convertColumn(column);
-        Column expectedColumn = new Column("test", Type.INT, true);
+        Column expectedColumn = new Column("test", IntegerType.INT, true);
         assertEquals(expectedColumn, result);
     }
 }

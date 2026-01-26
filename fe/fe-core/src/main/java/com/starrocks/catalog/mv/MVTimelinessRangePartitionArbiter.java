@@ -47,9 +47,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessRangePartitionArbiter.class);
 
-    public MVTimelinessRangePartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
-        this.differ = new RangePartitionDiffer(mv, isQueryRewrite, null);
+    public MVTimelinessRangePartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
+        this.differ = new RangePartitionDiffer(mv, queryRewriteParams, null);
     }
 
     @Override
@@ -89,7 +89,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Map<Table, PCellSortedSet> basePartitionNameToRangeMap;
 
         try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
-            basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
+            basePartitionNameToRangeMap = syncBaseTablePartitions(mvTimelinessInfo);
             if (basePartitionNameToRangeMap == null) {
                 logMVPrepare(mv, "Sync base table partition infos failed");
                 return MvUpdateInfo.fullRefresh(mv);
@@ -134,8 +134,8 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
             mvToBaseNameRef = differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
         }
-        mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
-        mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+        mvTimelinessInfo.getBasePartNameToMVPCells().putAll(baseToMvNameRef);
+        mvTimelinessInfo.getMVPartNameToBasePCells().putAll(mvToBaseNameRef);
 
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
 
@@ -150,7 +150,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
             }
         }
         // update mv's to refresh partitions
-        mvTimelinessInfo.addMvToRefreshPartitionNames(mvToRefreshPartitionNames);
+        mvTimelinessInfo.addMVToRefreshPartitionNames(mvToRefreshPartitionNames);
         return mvTimelinessInfo;
     }
 }

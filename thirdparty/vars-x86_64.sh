@@ -21,12 +21,6 @@
 # architecure-related.
 #####################################################
 
-# HADOOP
-HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.4.0/hadoop-3.4.0.tar.gz"
-HADOOP_NAME="hadoop-3.4.0.tar.gz"
-HADOOP_SOURCE="hadoop-3.4.0"
-HADOOP_MD5SUM="2f9244ab73169cf7bc0811d932067f6b"
-
 # OPEN JDK
 JDK_DOWNLOAD="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_NAME="OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
@@ -56,3 +50,9 @@ STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.5-rc4/star
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="996aef75dbbf1b1f231bb95f4402fc59"
+
+# pprof
+PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251124/pprof-linux-amd64.zip"
+PPROF_NAME="pprof.zip"
+PPROF_SOURCE="pprof"
+PPROF_MD5SUM="577dd8a01845a13b3ba76719cc2edb28"

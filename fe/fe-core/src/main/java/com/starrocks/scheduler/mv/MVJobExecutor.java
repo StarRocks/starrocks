@@ -38,7 +38,7 @@ public class MVJobExecutor extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(MVJobExecutor.class);
 
     public MVJobExecutor() {
-        super("MV Job Executor", EXECUTOR_INTERVAL_MILLIS);
+        super("mv-job-executor", EXECUTOR_INTERVAL_MILLIS);
     }
 
     @Override

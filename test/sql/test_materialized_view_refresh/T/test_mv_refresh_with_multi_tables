@@ -219,3 +219,46 @@ SELECT COUNT(1) FROM test_mv1;
 SELECT * FROM test_mv1 ORDER BY dt1 LIMIT 5;
 
 DROP database db_${uuid0};
+
+-- name: test_mv_refresh_with_multi_tables5
+CREATE TABLE t1 (dt1 date, int1 int) PARTITION BY date_trunc("day",dt1);
+CREATE TABLE t2 (dt2 date, int2 int) PARTITION BY date_trunc("month",dt2);
+INSERT INTO t1 VALUES ("2020-06-23",1),("2020-07-23",1),("2020-07-23",1),("2020-08-23",1),(null,null);
+INSERT INTO t2 VALUES ("2020-06-23",1),("2020-07-23",1),("2020-07-23",1),("2020-08-23",1),(null,null);
+
+CREATE MATERIALIZED VIEW mv1 
+PARTITION BY date_trunc("month",dt1) 
+REFRESH DEFERRED MANUAL
+PROPERTIES ("partition_refresh_number"="3") AS
+SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT * FROM mv1 ORDER BY dt1;
+function: print_hit_materialized_view("SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;", "mv1")
+SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;
+
+CREATE MATERIALIZED VIEW mv2 PARTITION BY date_trunc("month",dt1) 
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("partition_refresh_number"="3")
+AS SELECT dt1,sum(int1) from t1 group by dt1 union all
+SELECT dt2,sum(int2) from t2 group by dt2;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+SELECT * FROM mv2 ORDER BY dt1;
+function: print_hit_materialized_view("SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;", "mv2")
+SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;
+
+INSERT INTO t1 VALUES ("2020-06-23",1);
+
+function: print_hit_materialized_view("SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;", "mv1")
+SELECT dt1,dt2,sum(int1) FROM t1 JOIN t2 ON t1.dt1=t2.dt2 GROUP BY dt1,dt2 ORDER BY dt1;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+SELECT * FROM mv1 ORDER BY dt1;
+
+function: print_hit_materialized_view("SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;", "mv2")
+SELECT dt1,sum(int1) from t1 group by dt1 union all SELECT dt2,sum(int2) from t2 group by dt2 ORDER BY dt1;
+REFRESH MATERIALIZED VIEW mv2 WITH SYNC MODE;
+SELECT * FROM mv2 ORDER BY dt1;
+
+DROP MATERIALIZED VIEW mv1;
+DROP MATERIALIZED VIEW mv2;
+DROP TABLE t1;
+DROP TABLE t2;

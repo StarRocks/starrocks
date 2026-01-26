@@ -45,7 +45,7 @@
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
-        <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
+        <gcs.connector.version>3.0.13</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
         <arrow.version>17.0.0</arrow.version>
         <jackson.version>2.19.1</jackson.version>
@@ -59,6 +59,8 @@
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
         <kryo.version>4.0.2</kryo.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
+        <lz4-java.version>1.10.1</lz4-java.version>
+        <httpclient5.version>5.4.3</httpclient5.version>
     </properties>
 
     <dependencyManagement>
@@ -476,6 +478,20 @@
                 <artifactId>bundle</artifactId>
                 <version>${aws-v2-sdk.version}</version>
             </dependency>
+
+            <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>${httpclient5.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 

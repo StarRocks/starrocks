@@ -41,9 +41,9 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter {
     private static final Logger LOG = LogManager.getLogger(MVTimelinessListPartitionArbiter.class);
 
-    public MVTimelinessListPartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
-        super(mv, isQueryRewrite);
-        differ = new ListPartitionDiffer(mv, isQueryRewrite);
+    public MVTimelinessListPartitionArbiter(MaterializedView mv, QueryRewriteParams queryRewriteParams) {
+        super(mv, queryRewriteParams);
+        differ = new ListPartitionDiffer(mv, queryRewriteParams);
     }
 
     @Override
@@ -75,7 +75,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         // collect base table's partition infos
         Map<Table, PCellSortedSet> refBaseTablePartitionMap;
         try (Timer ignored = Tracers.watchScope("SyncBaseTablePartitions")) {
-            refBaseTablePartitionMap = syncBaseTablePartitions(mv);
+            refBaseTablePartitionMap = syncBaseTablePartitions(mvTimelinessInfo);
             if (refBaseTablePartitionMap == null) {
                 logMVPrepare(mv, "Sync base table partition infos failed");
                 return MvUpdateInfo.fullRefresh(mv);
@@ -97,7 +97,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         }
 
         // update into mv's to refresh partitions
-        final PCellSortedSet mvToRefreshPartitionNames = mvTimelinessInfo.getMvToRefreshPartitionNames();
+        final PCellSortedSet mvToRefreshPartitionNames = mvTimelinessInfo.getMVToRefreshPCells();
         mvToRefreshPartitionNames.addAll(diff.getDeletes());
         mvToRefreshPartitionNames.addAll(diff.getAdds());
 
@@ -117,8 +117,8 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         try (Timer ignored = Tracers.watchScope("GenerateMvRefMap")) {
             mvToBaseNameRef = differ.generateMvRefMap(mvPartitionNameToListMap, refBaseTablePartitionMap);
         }
-        mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
-        mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+        mvTimelinessInfo.getBasePartNameToMVPCells().putAll(baseToMvNameRef);
+        mvTimelinessInfo.getMVPartNameToBasePCells().putAll(mvToBaseNameRef);
 
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
 

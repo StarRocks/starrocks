@@ -18,6 +18,7 @@
 #include <mutex>
 #include <utility>
 
+#include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
@@ -71,10 +72,27 @@ struct RuntimeMembershipFilterBuildParam {
 // and every HashJoinBuildOperatorFactory has its corresponding RuntimeFilterCollector.
 struct RuntimeFilterCollector {
     RuntimeFilterCollector(RuntimeInFilterList&& in_filters, RuntimeMembershipFilterList&& bloom_filters)
-            : _in_filters(std::move(in_filters)), _bloom_filters(std::move(bloom_filters)) {}
-    RuntimeFilterCollector(RuntimeInFilterList in_filters) : _in_filters(std::move(in_filters)) {}
+            : _in_filters(std::move(in_filters)), _bloom_filters(std::move(bloom_filters)) {
+        for (auto filter : _in_filters) {
+            DCHECK(filter->opened());
+        }
+    }
+
+    RuntimeFilterCollector(RuntimeInFilterList in_filters) : _in_filters(std::move(in_filters)) {
+        for (auto filter : _in_filters) {
+            DCHECK(filter->opened());
+        }
+    }
 
     RuntimeInFilterList& get_in_filters() { return _in_filters; }
+
+    static Status prepare_runtime_in_filters(RuntimeState* state, RuntimeInFilterList& in_filters) {
+        for (auto& in_filter : in_filters) {
+            RETURN_IF_ERROR(in_filter->prepare(state));
+            RETURN_IF_ERROR(in_filter->open(state));
+        }
+        return Status::OK();
+    }
 
     // In-filters are constructed by a node and may be pushed down to its descendant node.
     // Different tuple id and slot id between descendant and ancestor nodes may be referenced to the same column,
@@ -121,9 +139,12 @@ private:
 class RuntimeFilterHolder {
 public:
     void set_collector(RuntimeFilterCollectorPtr&& collector) {
-        DCHECK(_collector.load(std::memory_order_acquire) == nullptr);
-        _collector_ownership = std::move(collector);
-        _collector.store(_collector_ownership.get(), std::memory_order_release);
+        RuntimeFilterCollector* expected = nullptr;
+
+        if (_collector.compare_exchange_strong(expected, collector.get(), std::memory_order_release,
+                                               std::memory_order_acquire)) {
+            _collector_ownership = std::move(collector);
+        }
     }
     RuntimeFilterCollector* get_collector() { return _collector.load(std::memory_order_acquire); }
     bool is_ready() { return get_collector() != nullptr; }

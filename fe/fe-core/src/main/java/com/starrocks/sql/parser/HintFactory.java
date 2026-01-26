@@ -34,7 +34,7 @@ import java.util.Map;
 
 import static com.starrocks.sql.ast.expression.SetVarHint.SET_VAR;
 import static com.starrocks.sql.ast.expression.UserVariableHint.SET_USER_VARIABLE;
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class HintFactory {
 

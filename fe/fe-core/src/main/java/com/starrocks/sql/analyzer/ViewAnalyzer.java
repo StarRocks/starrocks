@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -28,6 +32,8 @@ import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
+import org.apache.commons.collections4.MapUtils;
 
 import java.util.HashSet;
 import java.util.List;
@@ -42,10 +48,30 @@ public class ViewAnalyzer {
     static class ViewAnalyzerVisitor implements AstVisitorExtendInterface<Void, ConnectContext> {
         @Override
         public Void visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
-            // normalize & validate view name
-            stmt.getTableName().normalization(context);
-            final String tableName = stmt.getTableName().getTbl();
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table reference cannot be null");
+            }
+            tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+            stmt.setTableRef(tableRef);
+
+            final String catalog = tableRef.getCatalogName();
+            final String db = tableRef.getDbName();
+            final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
+
+            // Only allow setting properties for Iceberg views
+            if (!MapUtils.isEmpty(stmt.getProperties())) {
+                if (Strings.isNullOrEmpty(catalog) ||
+                        !GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
+                }
+                if (CatalogMgr.isInternalCatalog(catalog) ||
+                        ConnectorType.from(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalog)) !=
+                                ConnectorType.ICEBERG) {
+                    throw new SemanticException("Setting properties is only supported for Iceberg views");
+                }
+            }
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
@@ -54,21 +80,36 @@ public class ViewAnalyzer {
             }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
+
+            // reserve the original view sql
+
             String viewSql = AstToSQLBuilder.toSQLWithCredential(stmt.getQueryStatement());
             stmt.setInlineViewDef(viewSql);
+            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+            String originalViewDef = stmt.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+            Preconditions.checkArgument(stmt.getQueryStartIndex() >= 0 && stmt.getQueryStopIndex() >= stmt.getQueryStartIndex(),
+                    "View's query start or stop index is invalid");
+            stmt.setOriginalViewDefineSql(originalViewDef.substring(stmt.getQueryStartIndex(), stmt.getQueryStopIndex()));
             return null;
         }
 
         @Override
         public Void visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
-            // normalize & validate view name
-            stmt.getTableName().normalization(context);
-            final String tableName = stmt.getTableName().getTbl();
+            TableRef tableRef = stmt.getTableRef();
+            if (tableRef == null) {
+                throw new SemanticException("Table reference cannot be null");
+            }
+            tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+            stmt.setTableRef(tableRef);
+
+            final String catalog = tableRef.getCatalogName();
+            final String dbName = tableRef.getDbName();
+            final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getTable(context, stmt.getTableName().getCatalog(), stmt.getTableName().getDb(),
-                            stmt.getTableName().getTbl());
+                    .getTable(context, catalog, dbName, tableName);
             if (table == null) {
                 throw new SemanticException("Table %s is not found", tableName);
             }
@@ -95,6 +136,14 @@ public class ViewAnalyzer {
             alterViewClause.setColumns(viewColumns);
             String viewSql = AstToSQLBuilder.toSQL(alterViewClause.getQueryStatement());
             alterViewClause.setInlineViewDef(viewSql);
+            Preconditions.checkArgument(stmt.getOrigStmt() != null, "View's original statement is null");
+            String originalViewDef = stmt.getOrigStmt().originStmt;
+            Preconditions.checkArgument(originalViewDef != null, "View's original view definition is null");
+            Preconditions.checkArgument(alterViewClause.getQueryStartIndex() >= 0 &&
+                            alterViewClause.getQueryStopIndex() >= alterViewClause.getQueryStartIndex(),
+                    "View's query start or stop index is invalid");
+            alterViewClause.setOriginalViewDefineSql(
+                    originalViewDef.substring(alterViewClause.getQueryStartIndex(), alterViewClause.getQueryStopIndex()));
             return null;
         }
 

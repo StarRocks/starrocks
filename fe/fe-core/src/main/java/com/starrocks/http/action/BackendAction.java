@@ -35,7 +35,7 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.util.ListComparator;
+import com.google.common.collect.Lists;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -55,6 +55,22 @@ import java.util.List;
 
 public class BackendAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(BackendAction.class);
+
+    private static final ArrayList<String> BACKEND_TABLE_HEADER = Lists.newArrayList();
+
+    static {
+        BACKEND_TABLE_HEADER.add("HostName");
+        BACKEND_TABLE_HEADER.add("Id");
+        BACKEND_TABLE_HEADER.add("Host");
+        BACKEND_TABLE_HEADER.add("HeartbeatPort");
+        BACKEND_TABLE_HEADER.add("BePort");
+        BACKEND_TABLE_HEADER.add("HttpPort");
+        BACKEND_TABLE_HEADER.add("BrpcPort");
+        BACKEND_TABLE_HEADER.add("State");
+        BACKEND_TABLE_HEADER.add("StartTime");
+        BACKEND_TABLE_HEADER.add("LastReportTabletsTime");
+        BACKEND_TABLE_HEADER.add("Version");
+    }
 
     public BackendAction(ActionController controller) {
         super(controller);
@@ -76,11 +92,12 @@ public class BackendAction extends WebBaseAction {
     }
 
     private void appendKnownBackendsInfo(StringBuilder buffer) {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
-        List<List<Comparable>> backendInfos = new ArrayList<List<Comparable>>();
+        List<List<String>> backendRows = new ArrayList<List<String>>();
         for (Backend backend : backendMap.values()) {
-            List<Comparable> backendInfo = new ArrayList<Comparable>();
+            List<String> row = new ArrayList<String>();
             InetAddress address = null;
             try {
                 address = InetAddress.getByName(backend.getHost());
@@ -88,36 +105,38 @@ public class BackendAction extends WebBaseAction {
                 LOG.warn("unknown host: " + backend.getHost(), e);
                 continue;
             }
-            backendInfo.add(address.getHostName());
-            backendInfo.add(backend.getId());
-            backendInfo.add("host: " + backend.getHost()
-                    + ", heart_port: " + backend.getHeartbeatPort()
-                    + ", be_port: " + backend.getBePort()
-                    + ", http_port: " + backend.getHttpPort()
-                    + ", brpc_port: " + backend.getBrpcPort()
-                    + ", state: " + backend.getBackendState()
-                    + ", start_time: " + TimeUtils.longToTimeString(backend.getLastStartTime())
-                    + ", last_report_tablets_time: " + backend.getBackendStatus().lastSuccessReportTabletsTime
-                    + ", version: " + backend.getVersion());
+            row.add(address.getHostName());
+            row.add(String.valueOf(backend.getId()));
+            row.add(backend.getHost());
+            row.add(String.valueOf(backend.getHeartbeatPort()));
+            row.add(String.valueOf(backend.getBePort()));
+            row.add(String.valueOf(backend.getHttpPort()));
+            row.add(String.valueOf(backend.getBrpcPort()));
+            row.add(backend.getBackendState().toString());
+            row.add(TimeUtils.longToTimeString(backend.getLastStartTime()));
+            row.add(String.valueOf(backend.getBackendStatus().lastSuccessReportTabletsTime));
+            row.add(backend.getVersion());
 
-            backendInfos.add(backendInfo);
+            backendRows.add(row);
         }
 
         // sort by id
-        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(1);
-        Collections.sort(backendInfos, comparator);
+        Collections.sort(backendRows, (a, b) -> {
+            try {
+                long idA = Long.parseLong(a.get(1));
+                long idB = Long.parseLong(b.get(1));
+                return Long.compare(idA, idB);
+            } catch (NumberFormatException e) {
+                return a.get(1).compareTo(b.get(1));
+            }
+        });
 
         // set result
         buffer.append("<h2>Known Backends(" + backendMap.size() + ")</h2>");
 
-        buffer.append("<pre>");
-        for (List<Comparable> info : backendInfos) {
-            buffer.append(info.get(0));
-            buffer.append(" [id: " + info.get(1));
-            buffer.append(", " + info.get(2) + "]");
-            buffer.append(System.getProperty("line.separator"));
-        }
-        buffer.append("</pre>");
+        appendTableHeader(buffer, BACKEND_TABLE_HEADER);
+        appendTableBody(buffer, backendRows);
+        appendTableFooter(buffer);
     }
 
 }

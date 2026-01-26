@@ -25,6 +25,9 @@ java {
 group = "com.starrocks"
 
 dependencies {
+    implementation(project(":fe-grammar"))
+    implementation(project(":fe-type"))
+
     implementation("org.antlr:antlr4-runtime")
     implementation("org.apache.commons:commons-lang3")
     implementation("com.google.guava:guava")
@@ -49,9 +52,17 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
+tasks.named<JavaCompile>("compileJava") {
+    dependsOn("checkstyleMain")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
+}
+
 // Checkstyle configuration to match Maven behavior
 checkstyle {
-    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 

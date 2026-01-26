@@ -20,8 +20,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -40,18 +40,22 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,12 +70,17 @@ import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
+import static com.starrocks.type.BooleanType.BOOLEAN;
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.FloatType.DOUBLE;
+import static com.starrocks.type.IntegerType.BIGINT;
+import static com.starrocks.type.JsonType.JSON;
 
 public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
-        super("statistics meta manager", 60L * 1000L);
+        super("statistics-meta-manager", Config.statistic_manager_sleep_time_sec * 1000L);
     }
 
     private boolean checkDatabaseExist() {
@@ -148,8 +157,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
             KeysType keysType = KeysType.UNIQUE_KEYS;
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, SAMPLE_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, com.starrocks.sql.parser.NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(SAMPLE_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, KEY_COLUMN_NAMES),
@@ -180,8 +191,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, FULL_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, FULL_STATISTICS_KEY_COLUMNS),
@@ -210,8 +223,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, HISTOGRAM_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(HISTOGRAM_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, HISTOGRAM_KEY_COLUMNS),
@@ -247,8 +262,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, EXTERNAL_FULL_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(EXTERNAL_FULL_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, EXTERNAL_FULL_STATISTICS_KEY_COLUMNS),
@@ -276,8 +294,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, EXTERNAL_HISTOGRAM_KEY_COLUMNS),
@@ -313,8 +334,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName,
+                    tableRef,
                     StatisticUtils.buildStatsColumnDef(MULTI_COLUMN_STATISTICS_TABLE_NAME),
                     EngineType.defaultEngine().name(),
                     new KeysDesc(KeysType.PRIMARY_KEYS, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
@@ -347,22 +370,24 @@ public class StatisticsMetaManager extends FrontendDaemon {
         Map<String, String> properties = Maps.newHashMap();
         try {
             List<ColumnDef> columns = ImmutableList.of(
-                    new ColumnDef("id", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
-                    new ColumnDef("is_enable", new TypeDef(TypeFactory.createType(PrimitiveType.BOOLEAN))),
+                    new ColumnDef("id", new TypeDef(BIGINT)),
+                    new ColumnDef("is_enable", new TypeDef(BOOLEAN)),
                     new ColumnDef("bind_sql", new TypeDef(TypeFactory.createVarcharType(65530))),
                     new ColumnDef("bind_sql_digest", new TypeDef(TypeFactory.createVarcharType(65530))),
-                    new ColumnDef("bind_sql_hash", new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("bind_sql_hash", new TypeDef(BIGINT)),
                     new ColumnDef("plan_sql", new TypeDef(TypeFactory.createVarcharType(65530))),
-                    new ColumnDef("costs", new TypeDef(TypeFactory.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("query_ms", new TypeDef(TypeFactory.createType(PrimitiveType.DOUBLE))),
+                    new ColumnDef("costs", new TypeDef(DOUBLE)),
+                    new ColumnDef("query_ms", new TypeDef(DOUBLE)),
                     new ColumnDef("source", new TypeDef(TypeFactory.createVarcharType(100))),
-                    new ColumnDef("update_time", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME)))
+                    new ColumnDef("update_time", new TypeDef(DATETIME))
             );
 
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, SPM_BASELINE_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName, columns, EngineType.defaultEngine().name(),
+                    tableRef, columns, EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, List.of("id")), null,
                     new HashDistributionDesc(10, List.of("id")),
                     properties, null, "");
@@ -384,21 +409,23 @@ public class StatisticsMetaManager extends FrontendDaemon {
         Map<String, String> properties = Maps.newHashMap();
         try {
             List<ColumnDef> columns = ImmutableList.of(
-                    new ColumnDef("dt", new TypeDef(TypeFactory.createType(PrimitiveType.DATETIME))),
+                    new ColumnDef("dt", new TypeDef(DATETIME)),
                     new ColumnDef("frontend", new TypeDef(TypeFactory.createVarcharType(65530))),
                     new ColumnDef("db", new TypeDef(TypeFactory.createVarcharType(65530))),
                     new ColumnDef("sql_digest", new TypeDef(TypeFactory.createVarcharType(65530))),
                     new ColumnDef("sql", new TypeDef(TypeFactory.createVarcharType(65530))),
                     new ColumnDef("plan", new TypeDef(TypeFactory.createVarcharType(65530))),
-                    new ColumnDef("plan_costs", new TypeDef(TypeFactory.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("query_ms", new TypeDef(TypeFactory.createType(PrimitiveType.DOUBLE))),
-                    new ColumnDef("other", new TypeDef(TypeFactory.createType(PrimitiveType.JSON)))
+                    new ColumnDef("plan_costs", new TypeDef(DOUBLE)),
+                    new ColumnDef("query_ms", new TypeDef(DOUBLE)),
+                    new ColumnDef("other", new TypeDef(JSON))
             );
 
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
             properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName = QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, QUERY_HISTORY_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
             CreateTableStmt stmt = new CreateTableStmt(false, false,
-                    tableName, columns, EngineType.defaultEngine().name(),
+                    tableRef, columns, EngineType.defaultEngine().name(),
                     new KeysDesc(keysType, List.of("dt", "frontend")), null,
                     new HashDistributionDesc(10, List.of("dt")),
                     properties, null, "");
@@ -477,12 +504,17 @@ public class StatisticsMetaManager extends FrontendDaemon {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
-                    ColumnDef.DefaultValueDef defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral("-1"));
-                    ColumnDef columnDef = new ColumnDef(columnName, new TypeDef(TypeFactory.createType(PrimitiveType.BIGINT)),
+                    ColumnDef.DefaultValueDef defaultValueDef =
+                            new ColumnDef.DefaultValueDef(true, new StringLiteral("-1"));
+                    ColumnDef columnDef = new ColumnDef(columnName,
+                            new TypeDef(IntegerType.BIGINT),
                             false, null, null, true, defaultValueDef, "");
                     AddColumnClause addColumnClause = new AddColumnClause(columnDef, null, null, new HashMap<>());
+                    QualifiedName qualifiedName = QualifiedName.of(
+                            Arrays.asList(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, table.getName()));
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     AlterTableStmt alterTableStmt = new AlterTableStmt(
-                            new TableName(DEFAULT_INTERNAL_CATALOG_NAME, STATISTICS_DB_NAME, table.getName()),
+                            tableRef,
                             Lists.newArrayList(addColumnClause));
 
                     try {

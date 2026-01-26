@@ -81,20 +81,25 @@ SET runtime_profile_report_interval = 30;
 
 ```sql
 -- 启用 profiling 功能。
-set enable_profile = true;
--- 运行一个简单的查询。
-select 1;
+SET enable_profile = true;
+
+-- 运行一个包含扫描和聚合的查询以生成有意义的 Profile。
+-- （使用系统表确保该查询可在任何集群上运行）
+SELECT count(*) FROM information_schema.columns;
+
 -- 获取查询的 query_id。
-select last_query_id();
+SELECT last_query_id();
 +--------------------------------------+
 | last_query_id()                      |
 +--------------------------------------+
-| bd3335ce-8dde-11ee-92e4-3269eb8da7d1 |
+| 019b364f-10c4-704c-b79a-af2cc3a77b89 |
 +--------------------------------------+
+
 -- 获取 profile 列表
-show profilelist;
+SHOW PROFILELIST;
+
 -- 获取查询 profile。
-select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
+SELECT get_query_profile('019b364f-10c4-704c-b79a-af2cc3a77b89')\G
 ```
 
 ### 在托管版本中

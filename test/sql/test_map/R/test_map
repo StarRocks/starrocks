@@ -157,3 +157,31 @@ from (select c1 from (values(map())) as t(c1)) t;
 -- result:
 E: (1064, "Getting analyzing error from line 1, column 66 to line 1, column 105. Detail message: Map key don't supported type: ARRAY<NULL_TYPE>.")
 -- !result
+CREATE TABLE test_map(
+    col_int INT,
+    col_map MAP<VARCHAR(50),INT>
+  )
+DUPLICATE KEY(col_int)
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_map VALUES
+(1,map{"a":1,"b":2}),
+(2,map{"c":3}),
+(3,map{"d":4,"e":5});
+-- result:
+-- !result
+SELECT col_int, map_entries(col_map) FROM test_map ORDER BY col_int;
+-- result:
+1	[{"key":"a","value":1},{"key":"b","value":2}]
+2	[{"key":"c","value":3}]
+3	[{"key":"d","value":4},{"key":"e","value":5}]
+-- !result
+SELECT col_int, map_entries(col_map), unnest FROM test_map, unnest(map_entries(col_map)) as unnest  ORDER BY col_int;
+-- result:
+1	[{"key":"a","value":1},{"key":"b","value":2}]	{"key":"a","value":1}
+1	[{"key":"a","value":1},{"key":"b","value":2}]	{"key":"b","value":2}
+2	[{"key":"c","value":3}]	{"key":"c","value":3}
+3	[{"key":"d","value":4},{"key":"e","value":5}]	{"key":"d","value":4}
+3	[{"key":"d","value":4},{"key":"e","value":5}]	{"key":"e","value":5}
+-- !result

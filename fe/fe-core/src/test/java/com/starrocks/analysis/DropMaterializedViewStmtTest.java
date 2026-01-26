@@ -36,7 +36,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -44,8 +43,10 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -65,8 +66,8 @@ public class DropMaterializedViewStmtTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         Database db = new Database(50000L, "test");
 
-        Column column1 = new Column("col1", Type.BIGINT);
-        Column column2 = new Column("col2", Type.DOUBLE);
+        Column column1 = new Column("col1", IntegerType.BIGINT);
+        Column column2 = new Column("col2", FloatType.DOUBLE);
 
         List<Column> baseSchema = new LinkedList<>();
         baseSchema.add(column1);
@@ -75,7 +76,7 @@ public class DropMaterializedViewStmtTest {
         SinglePartitionInfo singlePartitionInfo = new SinglePartitionInfo();
         OlapTable table = new OlapTable(30000, "table",
                 baseSchema, KeysType.AGG_KEYS, singlePartitionInfo, null);
-        table.setBaseIndexId(100);
+        table.setBaseIndexMetaId(100);
         db.registerTableUnlocked(table);
         table.addPartition(new Partition(100, 101, "p",
                 new MaterializedIndex(200, MaterializedIndex.IndexState.NORMAL), null));

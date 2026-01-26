@@ -270,11 +270,11 @@ void DeletionVector::update_dv_file_io_counter(
                 ADD_CHILD_COUNTER(parent_profile, "DV_DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
 
         const io::CacheInputStream::Stats& stats = cache_input_stream->stats();
-        COUNTER_UPDATE(datacache_read_counter, stats.read_cache_count);
-        COUNTER_UPDATE(datacache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(datacache_read_counter, stats.read_block_cache_count);
+        COUNTER_UPDATE(datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(datacache_read_mem_bytes, stats.read_mem_cache_bytes);
         COUNTER_UPDATE(datacache_read_disk_bytes, stats.read_disk_cache_bytes);
-        COUNTER_UPDATE(datacache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(datacache_read_timer, stats.read_block_cache_ns);
         COUNTER_UPDATE(datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(datacache_skip_read_bytes, stats.skip_read_cache_bytes);
         COUNTER_UPDATE(datacache_read_peer_bytes, stats.read_peer_cache_bytes);
@@ -282,9 +282,9 @@ void DeletionVector::update_dv_file_io_counter(
         COUNTER_UPDATE(datacache_read_peer_timer, stats.read_peer_cache_ns);
         COUNTER_UPDATE(datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
         COUNTER_UPDATE(datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
-        COUNTER_UPDATE(datacache_write_counter, stats.write_cache_count);
-        COUNTER_UPDATE(datacache_write_bytes, stats.write_cache_bytes);
-        COUNTER_UPDATE(datacache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(datacache_write_counter, stats.write_block_cache_count);
+        COUNTER_UPDATE(datacache_write_bytes, stats.write_block_cache_bytes);
+        COUNTER_UPDATE(datacache_write_timer, stats.write_block_cache_ns);
         COUNTER_UPDATE(datacache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(datacache_read_block_buffer_counter, stats.read_block_buffer_count);

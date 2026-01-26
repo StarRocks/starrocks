@@ -450,10 +450,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
+            SCOPED_SET_TRACE_PLAN_NODE_ID(get_plan_node_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
             DUMP_TRACE_IF_TIMEOUT(config::pipeline_scan_timeout_guard_ms);
 
-            auto& chunk_source = _chunk_sources[chunk_source_index];
+            auto chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
 
             [[maybe_unused]] std::string category;
@@ -477,8 +478,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             // kick start this chunk source
             auto start_status = chunk_source->start(state);
             if (!start_status.ok()) {
-                LOG(ERROR) << "start chunk_source failed, fragment_instance_id="
-                           << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
+                LOG(WARNING) << "start chunk_source failed, fragment_instance_id="
+                             << print_id(state->fragment_instance_id()) << ", error=" << start_status.to_string();
                 _set_scan_status(start_status);
             }
             Status status;
@@ -488,8 +489,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             }
 
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
-                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
+                LOG_IF(WARNING, !status.is_suppressed())
+                        << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                        << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -503,6 +505,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             (void)query_trace_ctx;
         }
     };
+
+    task.set_query_type(state->query_options().query_type);
 
     bool submit_success;
     {

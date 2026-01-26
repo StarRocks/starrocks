@@ -17,12 +17,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -34,7 +34,6 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -49,6 +48,9 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import static com.starrocks.type.DateType.DATETIME;
+import static com.starrocks.type.IntegerType.BIGINT;
+
 public class TablesSystemTable extends SystemTable {
     public static final int MY_CS_NAME_SIZE = 32;
     private static final String NAME = "tables";
@@ -57,27 +59,27 @@ public class TablesSystemTable extends SystemTable {
 
     public TablesSystemTable(String catalogName) {
         super(catalogName, SystemId.TABLES_ID, NAME, Table.TableType.SCHEMA, builder()
-                .column("TABLE_CATALOG", TypeFactory.createVarchar(FN_REFLEN))
-                .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("TABLE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("ENGINE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                .column("VERSION", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("ROW_FORMAT", TypeFactory.createVarchar(10))
-                .column("TABLE_ROWS", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("AVG_ROW_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("DATA_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("MAX_DATA_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("INDEX_LENGTH", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("DATA_FREE", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("AUTO_INCREMENT", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("CREATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("UPDATE_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("CHECK_TIME", TypeFactory.createType(PrimitiveType.DATETIME))
-                .column("TABLE_COLLATION", TypeFactory.createVarchar(MY_CS_NAME_SIZE))
-                .column("CHECKSUM", TypeFactory.createType(PrimitiveType.BIGINT))
-                .column("CREATE_OPTIONS", TypeFactory.createVarchar(255))
-                .column("TABLE_COMMENT", TypeFactory.createVarchar(2048))
+                .column("TABLE_CATALOG", TypeFactory.createVarcharType(FN_REFLEN))
+                .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("TABLE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("ENGINE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                .column("VERSION", BIGINT)
+                .column("ROW_FORMAT", TypeFactory.createVarcharType(10))
+                .column("TABLE_ROWS", BIGINT)
+                .column("AVG_ROW_LENGTH", BIGINT)
+                .column("DATA_LENGTH", BIGINT)
+                .column("MAX_DATA_LENGTH", BIGINT)
+                .column("INDEX_LENGTH", BIGINT)
+                .column("DATA_FREE", BIGINT)
+                .column("AUTO_INCREMENT", BIGINT)
+                .column("CREATE_TIME", DATETIME)
+                .column("UPDATE_TIME", DATETIME)
+                .column("CHECK_TIME", DATETIME)
+                .column("TABLE_COLLATION", TypeFactory.createVarcharType(MY_CS_NAME_SIZE))
+                .column("CHECKSUM", BIGINT)
+                .column("CREATE_OPTIONS", TypeFactory.createVarcharType(255))
+                .column("TABLE_COMMENT", TypeFactory.createVarcharType(2048))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
 
@@ -154,9 +156,6 @@ public class TablesSystemTable extends SystemTable {
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(userIdentity);
         authInfo.setCatalog_name(this.getCatalogName());
-        if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(this.getCatalogName())) {
-            authInfo.setPattern(context.getDatabase());
-        }
         for (ScalarOperator conjunct : conjuncts) {
             BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
             ColumnRefOperator columnRef = binary.getChild(0).cast();
@@ -180,10 +179,9 @@ public class TablesSystemTable extends SystemTable {
             return result.getTables_infos().stream()
                     .map(t -> infoToScalar(this, t))
                     .collect(Collectors.toList());
-        } catch (Exception e) {
-            LOG.warn("Failed to query tables ", e);
-            // Return empty result if query failed
-            return Lists.newArrayList();
+        } catch (TException e) {
+            LOG.debug("Failed to get table info for table: {}, error: ", params.getTable_name(), e);
+            throw new SemanticException("Failed to get table info for table: " + params.getTable_name(), e);
         }
     }
 

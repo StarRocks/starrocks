@@ -1,6 +1,6 @@
 -- name: test_phased_schedule
 set enable_phased_scheduler = true;
-
+set cbo_max_reorder_node_use_dp=8;
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
   `c1` varchar(20) NULL COMMENT "",
@@ -98,8 +98,8 @@ set phased_scheduler_max_concurrency = 1;
 insert into TMP select * from small_table2 s1 union all select * from small_table2 s2 union all select * from small_table2 s3 union all select * from small_table2 s4 union all select * from small_table2 s4 union all select * from small_table2 s5;
 select count(*) from TMP;
 truncate table TMP;
-select * from small_table2 s1 union all select * from small_table2 s2 union all select * from small_table2 s3 union all select * from small_table2 s4 union all select * from small_table2 s4 union all select * from small_table2 s5;
-select c0,c1,c2 from small_table2 s1 group by 1,2,3 union all select c0,c1,c2 from small_table2 s2 group by 1,2,3  union all select c0,c1,c2 from small_table2 s3 group by 1,2,3  union all select c0,c1,c2 from small_table2 s4 group by 1,2,3 union all select c0,c1,c2 from small_table2 s4 group by 1,2,3 union all select c0,c1,c2 from small_table2 s5 group by 1,2,3;
+select * from small_table2 s1 union all select * from small_table2 s2 union all select * from small_table2 s3 union all select * from small_table2 s4 union all select * from small_table2 s4 union all select * from small_table2 s5 order by 1,2,3;
+select c0,c1,c2 from small_table2 s1 group by 1,2,3 union all select c0,c1,c2 from small_table2 s2 group by 1,2,3  union all select c0,c1,c2 from small_table2 s3 group by 1,2,3  union all select c0,c1,c2 from small_table2 s4 group by 1,2,3 union all select c0,c1,c2 from small_table2 s4 group by 1,2,3 union all select c0,c1,c2 from small_table2 s5 group by 1,2,3 order by 1,2,3;
 -- join cases
 select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0;
 -- short-circuit
@@ -124,4 +124,5 @@ with agged_table as ( select distinct c0, c1 from t0) select /*+SET_VAR(cbo_cte_
 set enable_profile=true;
 set enable_async_profile=true;
 set profile_timeout=300;
+set cbo_max_reorder_node_use_dp=10;
 select count(*) from small_table1 s1 join small_table2 s2 on s1.c0 = s2.c0 join small_table3 s3 on s1.c0 = s3.c0 where s3.c3 = 0;

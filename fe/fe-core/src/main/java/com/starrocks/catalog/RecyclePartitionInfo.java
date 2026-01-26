@@ -33,25 +33,28 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     protected DataProperty dataProperty;
     @SerializedName(value = "replicationNum")
     protected short replicationNum;
-    @SerializedName(value = "isInMemory")
-    protected boolean isInMemory;
     @SerializedName(value = "recoverable")
     protected boolean recoverable;
+
+    /**
+     * partition retention period in `second` unit
+     */
+    @SerializedName(value = "retentionPeriod")
+    protected long retentionPeriod = 0L;
 
     public RecyclePartitionInfo() {
         recoverable = true;
     }
 
     public RecyclePartitionInfo(long dbId, long tableId, Partition partition,
-                                   DataProperty dataProperty, short replicationNum,
-                                   boolean isInMemory) {
+                                DataProperty dataProperty, short replicationNum) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
         this.dataProperty = dataProperty;
         this.replicationNum = replicationNum;
-        this.isInMemory = isInMemory;
         this.recoverable = true;
+        this.retentionPeriod = 0L;
     }
 
     public long getDbId() {
@@ -74,10 +77,6 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         return replicationNum;
     }
 
-    public boolean isInMemory() {
-        return isInMemory;
-    }
-
     public void setDbId(long dbId) {
         this.dbId = dbId;
     }
@@ -90,6 +89,14 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
         this.recoverable = recoverable;
     }
 
+    public void setRetentionPeriod(long retentionPeriod) {
+        this.retentionPeriod = retentionPeriod;
+    }
+
+    public long getRetentionPeriod() {
+        return retentionPeriod;
+    }
+
     public boolean delete() {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
         return true;
@@ -99,31 +106,35 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     abstract DataCacheInfo getDataCacheInfo();
 
-    abstract void recover(OlapTable table) throws DdlException;
+    abstract void checkRecoverable(OlapTable table) throws DdlException;
 
-    protected static void recoverRangePartition(OlapTable table, RecyclePartitionInfo recyclePartitionInfo) throws DdlException {
-        Preconditions.checkState(recyclePartitionInfo.isRecoverable());
+    abstract void recover(OlapTable table);
+
+    public void checkRecoverableForRangePartition(OlapTable table) throws DdlException {
+        Preconditions.checkState(this.isRecoverable());
         // check if range is invalid
-        final String partitionName = recyclePartitionInfo.getPartition().getName();
-        Range<PartitionKey> recoverRange = recyclePartitionInfo.getRange();
+        final String partitionName = this.getPartition().getName();
+        Range<PartitionKey> recoverRange = this.getRange();
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         if (partitionInfo.getAnyIntersectRange(recoverRange, false) != null) {
             throw new DdlException("Cannot recover partition '" + partitionName + "': Range conflict.");
         }
+    }
 
+    protected void recoverRangePartition(OlapTable table) {
         // recover partition
-        Partition recoverPartition = recyclePartitionInfo.getPartition();
-        Preconditions.checkState(recoverPartition.getName().equalsIgnoreCase(partitionName));
+        Partition recoverPartition = this.getPartition();
         table.addPartition(recoverPartition);
 
         // recover partition info
+        Range<PartitionKey> recoverRange = this.getRange();
+        RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         long partitionId = recoverPartition.getId();
         partitionInfo.setRange(partitionId, false, recoverRange);
-        partitionInfo.setDataProperty(partitionId, recyclePartitionInfo.getDataProperty());
-        partitionInfo.setReplicationNum(partitionId, recyclePartitionInfo.getReplicationNum());
-        partitionInfo.setIsInMemory(partitionId, recyclePartitionInfo.isInMemory());
-        if (recyclePartitionInfo.getDataCacheInfo() != null) {
-            partitionInfo.setDataCacheInfo(partitionId, recyclePartitionInfo.getDataCacheInfo());
+        partitionInfo.setDataProperty(partitionId, this.getDataProperty());
+        partitionInfo.setReplicationNum(partitionId, this.getReplicationNum());
+        if (this.getDataCacheInfo() != null) {
+            partitionInfo.setDataCacheInfo(partitionId, this.getDataCacheInfo());
         }
     }
 }

@@ -17,7 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,7 +28,7 @@ public class ScalarOperatorToExprTest {
     @Test
     public void testVisitVariableReferenceWithNullExpr() {
         // Test the new exception handling when expr is null
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "test_col", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "test_col", true);
 
         ScalarOperatorToExpr.buildExprIgnoreSlot(columnRefOperator,
                 new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));

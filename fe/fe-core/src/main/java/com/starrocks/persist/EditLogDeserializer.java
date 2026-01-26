@@ -17,7 +17,7 @@ package com.starrocks.persist;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.dynamictablet.DynamicTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
@@ -53,6 +53,9 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.BatchRemoveBasicStatsMetaLog;
+import com.starrocks.statistic.BatchRemoveHistogramStatsMetaLog;
+import com.starrocks.statistic.BatchRemoveMultiColumnStatsMetaLog;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
@@ -160,22 +163,23 @@ public class EditLogDeserializer {
             .put(OperationType.OP_UPDATE_LOAD_JOB, LoadJob.LoadJobStateUpdateInfo.class)
             .put(OperationType.OP_CREATE_RESOURCE, Resource.class)
             .put(OperationType.OP_DROP_RESOURCE, DropResourceOperationLog.class)
+            .put(OperationType.OP_ALTER_RESOURCE, AlterResourceInfo.class)
             .put(OperationType.OP_RESOURCE_GROUP, ResourceGroupOpEntry.class)
+            .put(OperationType.OP_ALTER_RESOURCE_GROUP, AlterResourceGroupLog.class)
             .put(OperationType.OP_CREATE_TASK, Task.class)
-            .put(OperationType.OP_ALTER_TASK, Task.class)
+            .put(OperationType.OP_ALTER_TASK, AlterTaskInfo.class)
             .put(OperationType.OP_DROP_TASKS, DropTasksLog.class)
             .put(OperationType.OP_CREATE_TASK_RUN, TaskRunStatus.class)
             .put(OperationType.OP_UPDATE_TASK_RUN, TaskRunStatusChange.class)
             .put(OperationType.OP_UPDATE_TASK_RUN_STATE, TaskRunPeriodStatusChange.class)
             .put(OperationType.OP_ARCHIVE_TASK_RUNS, ArchiveTaskRunsLog.class)
             .put(OperationType.OP_CREATE_SMALL_FILE_V2, SmallFileMgr.SmallFile.class)
-            .put(OperationType.OP_DROP_SMALL_FILE_V2, SmallFileMgr.SmallFile.class)
+            .put(OperationType.OP_DROP_SMALL_FILE_V2, RemoveSmallFileLog.class)
             .put(OperationType.OP_ALTER_JOB_V2, AlterJobV2.class)
             .put(OperationType.OP_BATCH_ADD_ROLLUP_V2, BatchAlterJobPersistInfo.class)
             .put(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, TableInfo.class)
             .put(OperationType.OP_SET_REPLICA_STATUS, SetReplicaStatusOperationLog.class)
             .put(OperationType.OP_DYNAMIC_PARTITION, ModifyTablePropertyOperationLog.class)
-            .put(OperationType.OP_MODIFY_IN_MEMORY, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_HAS_DELETE, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_REPLICATION_NUM, ModifyTablePropertyOperationLog.class)
@@ -188,13 +192,14 @@ public class EditLogDeserializer {
             .put(OperationType.OP_MODIFY_DEFAULT_BUCKET_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_CONFIG, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, ModifyTablePropertyOperationLog.class)
+            .put(OperationType.OP_MODIFY_FLAT_JSON_CONFIG, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_ALTER_TABLE_PROPERTIES, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_REPLACE_TEMP_PARTITION, ReplacePartitionOperationLog.class)
             .put(OperationType.OP_INSTALL_PLUGIN, PluginInfo.class)
-            .put(OperationType.OP_UNINSTALL_PLUGIN, PluginInfo.class)
+            .put(OperationType.OP_UNINSTALL_PLUGIN, UninstallPluginLog.class)
             .put(OperationType.OP_REMOVE_ALTER_JOB_V2, RemoveAlterJobV2OperationLog.class)
             .put(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, AlterRoutineLoadJobOperationLog.class)
             .put(OperationType.OP_ALTER_LOAD_JOB, AlterLoadJobOperationLog.class)
@@ -209,14 +214,17 @@ public class EditLogDeserializer {
             .put(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB, ExternalAnalyzeJob.class)
             .put(OperationType.OP_ADD_BASIC_STATS_META, BasicStatsMeta.class)
             .put(OperationType.OP_REMOVE_BASIC_STATS_META, BasicStatsMeta.class)
+            .put(OperationType.OP_REMOVE_BASIC_STATS_META_BATCH, BatchRemoveBasicStatsMetaLog.class)
             .put(OperationType.OP_ADD_HISTOGRAM_STATS_META, HistogramStatsMeta.class)
             .put(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, HistogramStatsMeta.class)
+            .put(OperationType.OP_REMOVE_HISTOGRAM_STATS_META_BATCH, BatchRemoveHistogramStatsMetaLog.class)
             .put(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, ExternalBasicStatsMeta.class)
             .put(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META, ExternalBasicStatsMeta.class)
             .put(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META, ExternalHistogramStatsMeta.class)
             .put(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META, ExternalHistogramStatsMeta.class)
             .put(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
             .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, MultiColumnStatsMeta.class)
+            .put(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META_BATCH, BatchRemoveMultiColumnStatsMetaLog.class)
             .put(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, ModifyTableColumnOperationLog.class)
             .put(OperationType.OP_MODIFY_COLUMN_COMMENT, ModifyColumnCommentLog.class)
             .put(OperationType.OP_CREATE_CATALOG, Catalog.class)
@@ -235,16 +243,18 @@ public class EditLogDeserializer {
             .put(OperationType.OP_REVOKE_ROLE_FROM_GROUP, UpdateGroupToRoleLog.class)
             .put(OperationType.OP_MV_JOB_STATE, MVMaintenanceJob.class)
             .put(OperationType.OP_MV_EPOCH_UPDATE, MVEpoch.class)
-            .put(OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS, TableAddOrDropColumnsInfo.class)
+            .put(OperationType.OP_FAST_ALTER_TABLE_COLUMNS, TableColumnAlterInfo.class)
             .put(OperationType.OP_SET_DEFAULT_STORAGE_VOLUME, SetDefaultStorageVolumeLog.class)
             .put(OperationType.OP_DROP_STORAGE_VOLUME, DropStorageVolumeLog.class)
             .put(OperationType.OP_CREATE_STORAGE_VOLUME, StorageVolume.class)
             .put(OperationType.OP_UPDATE_STORAGE_VOLUME, StorageVolume.class)
             .put(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, TableStorageInfos.class)
             .put(OperationType.OP_PIPE, PipeOpEntry.class)
+            .put(OperationType.OP_ALTER_PIPE, AlterPipeLog.class)
             .put(OperationType.OP_CREATE_DICTIONARY, Dictionary.class)
             .put(OperationType.OP_DROP_DICTIONARY, DropDictionaryInfo.class)
             .put(OperationType.OP_MODIFY_DICTIONARY_MGR, DictionaryMgrInfo.class)
+            .put(OperationType.OP_MODIFY_DICTIONARY_MGR_V2, UpdateDictionaryMgrLog.class)
             .put(OperationType.OP_DECOMMISSION_DISK, DecommissionDiskInfo.class)
             .put(OperationType.OP_CANCEL_DECOMMISSION_DISK, CancelDecommissionDiskInfo.class)
             .put(OperationType.OP_DISABLE_DISK, DisableDiskInfo.class)
@@ -258,6 +268,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
+            .put(OperationType.OP_ADD_SQL_DIGEST_BLACK_LIST, SqlDigestBlackListPersistInfo.class)
+            .put(OperationType.OP_DELETE_SQL_DIGEST_BLACK_LIST, DeleteSqlDigestBlackLists.class)
             .put(OperationType.OP_CREATE_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_ALTER_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
@@ -265,8 +277,10 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
-            .put(OperationType.OP_UPDATE_DYNAMIC_TABLET_JOB_LOG, DynamicTabletJob.class)
-            .put(OperationType.OP_REMOVE_DYNAMIC_TABLET_JOB_LOG, RemoveDynamicTabletJobLog.class)
+            .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_DISABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
+            .put(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, TabletReshardJob.class)
+            .put(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, RemoveTabletReshardJobLog.class)
             .put(OperationType.OP_SAVE_NEXTID_V2, NextIdLog.class)
             .put(OperationType.OP_ERASE_DB_V2, EraseDbLog.class)
             .put(OperationType.OP_ERASE_PARTITION_V2, ErasePartitionLog.class)

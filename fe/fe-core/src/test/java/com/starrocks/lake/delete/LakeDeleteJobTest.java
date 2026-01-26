@@ -15,7 +15,10 @@
 package com.starrocks.lake.delete;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.proto.BinaryPredicatePB;
@@ -24,6 +27,7 @@ import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeletePredicatePB;
 import com.starrocks.proto.InPredicatePB;
 import com.starrocks.proto.IsNullPredicatePB;
+import com.starrocks.proto.TableSchemaKeyPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -32,7 +36,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -148,5 +151,83 @@ public class LakeDeleteJobTest {
         Assertions.assertEquals("colName", inPredicatePB.getColumnName());
         Assertions.assertFalse(inPredicatePB.isIsNotIn());
         Assertions.assertEquals(List.of("a"), inPredicatePB.getValues());
+    }
+
+    @Test
+    public void testDeleteDataRequestContainsSchemaKey(@Mocked LakeService lakeService) {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        TableName tblName = new TableName("test", "schema_key_table");
+        String createTableSql = "CREATE TABLE " + tblName + " (id INT, name String) DUPLICATE KEY(id) " +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1 " + "PROPERTIES('replication_num' = '1');";
+
+        // create test.schema_key_table
+        Assertions.assertDoesNotThrow(() -> starRocksAssert.withDatabase(tblName.getDb()).withTable(createTableSql));
+
+        // Get table and database to verify schema key values
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tblName.getDb());
+        Assertions.assertNotNull(db);
+        Table table = starRocksAssert.getTable(tblName.getDb(), tblName.getTbl());
+        Assertions.assertNotNull(table);
+        Assertions.assertInstanceOf(OlapTable.class, table);
+        OlapTable olapTable = (OlapTable) table;
+        long expectedDbId = db.getId();
+        long expectedTableId = olapTable.getId();
+        long expectedSchemaId = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId()).getSchemaId();
+
+        // Execute DELETE statement
+        String deleteSql = "DELETE FROM " + tblName + " WHERE id = 1;";
+        DeleteStmt deleteStmt;
+        try {
+            deleteStmt = (DeleteStmt) UtFrameUtils.parseStmtWithNewParser(deleteSql, ctx);
+        } catch (Exception e) {
+            Assertions.fail("Don't expect exception: " + e.getMessage());
+            return;
+        }
+
+        // Simulate one tablet failed, our purpose is to verify the request only.
+        // return a failed response to fail the job so that the following commit() will be skipped.
+        DeleteDataResponse response = new DeleteDataResponse();
+        response.failedTablets = List.of(1002L);
+
+        AtomicReference<DeleteDataRequest> capturedRequest = new AtomicReference<>();
+        LakeServiceWithMetrics wrappedLakeService = new LakeServiceWithMetrics(lakeService);
+        // Avoid directly mocking the LakeService, which is implemented by BrpcProxy reflection proxy.
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+                capturedRequest.set(request);
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) throws RpcException {
+                return wrappedLakeService;
+            }
+        };
+
+        DdlException exception = Assertions.assertThrows(DdlException.class,
+                () -> GlobalStateMgr.getCurrentState().getDeleteMgr().process(deleteStmt));
+        Assertions.assertEquals("Failed to execute delete. failed tablet num: 1", exception.getMessage());
+
+        // Verify DeleteDataRequest contains schemaKey
+        Assertions.assertNotNull(capturedRequest.get(), "DeleteDataRequest should be captured");
+        DeleteDataRequest request = capturedRequest.get();
+
+        // Verify schemaKey is present
+        Assertions.assertNotNull(request.getSchemaKey(), "DeleteDataRequest should contain schemaKey");
+        TableSchemaKeyPB schemaKey = request.getSchemaKey();
+        Assertions.assertNotNull(schemaKey, "schemaKey should not be null");
+
+        // Verify schemaKey values are correct
+        Assertions.assertEquals(expectedDbId, schemaKey.getDbId(),
+                "schemaKey.dbId should match database ID");
+        Assertions.assertEquals(expectedTableId, schemaKey.getTableId(),
+                "schemaKey.tableId should match table ID");
+        Assertions.assertEquals(expectedSchemaId, schemaKey.getSchemaId(),
+                "schemaKey.schemaId should match schema ID from base index meta");
     }
 }

@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.qe.StmtExecutor;
@@ -38,7 +39,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TruncateTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -251,8 +251,8 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = alterMvStmt.getMvName().getDb();
-        String mvName = alterMvStmt.getMvName().getTbl();
+        String dbName = alterMvStmt.getDbName();
+        String mvName = alterMvStmt.getMvName();
         Assertions.assertEquals("test", dbName);
         Assertions.assertEquals("mv_to_refresh", mvName);
 
@@ -307,7 +307,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         Partition p2 = table.getPartition("p2");
         if (p2.getDefaultPhysicalPartition().getVisibleVersion() == 3) {
             MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv1);
-            Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
+            Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.FULL);
             Assertions.assertTrue(!mvUpdateInfo.isValidRewrite());
             partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
             Assertions.assertTrue(partitionsToRefresh1.isEmpty());
@@ -627,15 +627,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb());
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                             long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
                             partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                             List<Tablet> tablets = baseIndex.getTablets();
                             for (Tablet tablet : tablets) {
                                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -731,15 +731,15 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getTableName().getDb());
+                    TableName tableName = com.starrocks.catalog.TableName.fromTableRef(insertStmt.getTableRef());
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb());
                     OlapTable tbl = ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .getTable(testDb.getFullName(), tableName.getTbl()));
                     for (Partition partition : tbl.getPartitions()) {
                         if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
                             long version = partition.getDefaultPhysicalPartition().getVisibleVersion() + 1;
                             partition.getDefaultPhysicalPartition().setVisibleVersion(version, System.currentTimeMillis());
-                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+                            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
                             List<Tablet> tablets = baseIndex.getTablets();
                             for (Tablet tablet : tablets) {
                                 List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

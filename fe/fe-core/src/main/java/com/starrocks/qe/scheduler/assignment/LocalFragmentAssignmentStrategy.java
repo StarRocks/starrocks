@@ -18,7 +18,9 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListUtil;
+import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -29,6 +31,7 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeParams;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,6 +82,16 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         // The fragment which only contains scan nodes without scan ranges,
         // such as SchemaScanNode, is assigned to an arbitrary worker.
         if (execFragment.getInstances().isEmpty()) {
+            PlanNode leftMostNode = execFragment.getLeftMostNode();
+            if (leftMostNode instanceof LookUpNode) {
+                // @TODO(silverbullet233): only assign to scan-related workers
+                for (ComputeNode worker : workerProvider.getAllWorkers()) {
+                    FragmentInstance instance = new FragmentInstance(worker, execFragment);
+                    execFragment.addInstance(instance);
+                }
+                return;
+            }
+
             long workerId = workerProvider.selectNextWorker();
             ComputeNode worker = workerProvider.getWorkerById(workerId);
             FragmentInstance instance = new FragmentInstance(worker, execFragment);
@@ -179,6 +192,13 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
         long instanceAvgScanRows = bucketScanRows / Math.max(1, workerIdToBucketSeqs.size() * expectedInstanceNum);
 
+        final Map<Long, FragmentInstance> fragmentInstanceMap = new HashMap<>();
+        if (!execFragment.getInstances().isEmpty()) {
+            for (FragmentInstance fragmentInstance : execFragment.getInstances()) {
+                fragmentInstanceMap.put(fragmentInstance.getWorkerId(), fragmentInstance);
+            }
+        }
+        
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
             ComputeNode worker = workerProvider.getWorkerById(workerId);
 
@@ -187,8 +207,13 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
             // 3.construct instanceExecParam add the scanRange should be scanned by instance
             bucketSeqsPerInstance.forEach(bucketSeqsOfInstance -> {
-                FragmentInstance instance = new FragmentInstance(worker, execFragment);
-                execFragment.addInstance(instance);
+                final boolean reuse = useIncrementalScanRanges && !fragmentInstanceMap.isEmpty();
+                final FragmentInstance instance = reuse
+                        ? fragmentInstanceMap.get(workerId)
+                        : new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                if (!reuse) {
+                    execFragment.addInstance(instance);
+                }
 
                 // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly
                 // when they are in different buckets
@@ -351,8 +376,7 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     minDataSize = dataSizePerGroup[i];
                 }
             }
-            dataSizePerGroup[minIndex] +=
-                    Math.max(1, scanRangeParam.getScan_range().getInternal_scan_range().getRow_count());
+            dataSizePerGroup[minIndex] += Math.max(1L, scanRangeRowCount(scanRangeParam));
             result.get(minIndex).add(scanRangeParam);
         }
 
@@ -367,13 +391,39 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
     private static long bucketScanRows(ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange) {
         return bucketSeqToScanRange.entrySet().stream().flatMap(entry -> entry.getValue().entrySet().stream())
                 .flatMap(item -> item.getValue().stream())
-                .map(scanRange -> scanRange.getScan_range().internal_scan_range.getRow_count())
+                .map(LocalFragmentAssignmentStrategy::scanRangeRowCount)
                 .reduce(0L, Long::sum);
     }
 
     private static long totalScanRows(List<TScanRangeParams> scanRangeParams) {
         return scanRangeParams.stream()
-                .map(scanRange -> scanRange.getScan_range().getInternal_scan_range().getRow_count())
+                .map(LocalFragmentAssignmentStrategy::scanRangeRowCount)
                 .reduce(0L, Long::sum);
+    }
+
+    private static long scanRangeRowCount(TScanRangeParams scanRangeParam) {
+        if (scanRangeParam == null) {
+            return 0L;
+        }
+        TScanRange scanRange = scanRangeParam.getScan_range();
+        if (scanRange == null) {
+            return 0L;
+        }
+        if (scanRange.isSetInternal_scan_range()) {
+            if (scanRange.getInternal_scan_range() != null && scanRange.getInternal_scan_range().isSetRow_count()) {
+                return scanRange.getInternal_scan_range().getRow_count();
+            }
+        }
+        if (scanRange.isSetBenchmark_scan_range()) {
+            if (scanRange.getBenchmark_scan_range() != null && scanRange.getBenchmark_scan_range().isSetRow_count()) {
+                long rowCount = scanRange.getBenchmark_scan_range().getRow_count();
+                if (rowCount < 0) {
+                    // TODO(AlvinZ): this stands for the last scan range, meaning reading all data left.
+                    return 1_000_000L;
+                }
+                return rowCount;
+            }
+        }
+        return 0L;
     }
 }

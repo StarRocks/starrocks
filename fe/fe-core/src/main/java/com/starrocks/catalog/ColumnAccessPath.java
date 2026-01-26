@@ -16,11 +16,12 @@ package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.thrift.TAccessPathType;
 import com.starrocks.thrift.TColumnAccessPath;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -201,14 +202,14 @@ public class ColumnAccessPath {
     public void clearUnusedValueType() {
         // only save leaf's value type
         if (!children.isEmpty()) {
-            this.valueType = Type.INVALID;
+            this.valueType = InvalidType.INVALID;
             children.forEach(ColumnAccessPath::clearUnusedValueType);
         }
     }
 
     private void explainImpl(String parent, List<String> allPaths) {
         boolean hasName = type == TAccessPathType.FIELD || type == TAccessPathType.ROOT;
-        boolean hasType = valueType != Type.INVALID;
+        boolean hasType = valueType != InvalidType.INVALID;
         String cur = parent + "/" + (hasName ? path : type.name())
                 + (hasType ? "(" + valueType.toSql() + ")" : "");
         if (children.isEmpty()) {
@@ -234,7 +235,7 @@ public class ColumnAccessPath {
     public TColumnAccessPath toThrift() {
         TColumnAccessPath tColumnAccessPath = new TColumnAccessPath();
         tColumnAccessPath.setType(type);
-        tColumnAccessPath.setPath(ExprToThriftVisitor.treeToThrift(new StringLiteral(path)));
+        tColumnAccessPath.setPath(ExprToThrift.treeToThrift(new StringLiteral(path)));
         tColumnAccessPath.setChildren(children.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList()));
         tColumnAccessPath.setFrom_predicate(fromPredicate);
         tColumnAccessPath.setExtended(extended);

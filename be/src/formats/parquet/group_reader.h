@@ -111,6 +111,8 @@ struct GroupReaderParam {
     const std::vector<SlotDescriptor*>* reserved_field_slots = nullptr;
     // used for global low cardinality optimization
     ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+
+    int32_t scan_range_id = -1;
 };
 
 class GroupReader {
@@ -163,7 +165,7 @@ private:
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                  std::vector<std::string>& sub_field_path, bool is_decode_needed);
 
-    void _init_read_chunk();
+    Status _init_read_chunk();
 
     Status _read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range, const Filter* filter,
                        ChunkPtr* chunk, bool ignore_reserved_field = false);

@@ -14,10 +14,14 @@
 
 package com.starrocks.sql.ast.expression;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.ExprExplainVisitor;
 import com.starrocks.sql.formatter.ExprVerboseVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
+
+import java.util.List;
 
 public class ExprToSql {
     /**
@@ -53,5 +57,84 @@ public class ExprToSql {
         } else {
             return toSql(expr);
         }
+    }
+
+    public static String toSql(OrderByElement orderByElement) {
+        Expr expr = orderByElement.getExpr();
+        boolean isAsc = orderByElement.getIsAsc();
+        Boolean nullsFirstParam = orderByElement.getNullsFirstParam();
+
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append(ExprToSql.toSql(expr));
+        strBuilder.append(isAsc ? " ASC" : " DESC");
+
+        if (nullsFirstParam != null) {
+            if (isAsc && !nullsFirstParam) {
+                strBuilder.append(" NULLS LAST");
+            } else if (!isAsc && nullsFirstParam) {
+                strBuilder.append(" NULLS FIRST");
+            }
+        }
+        return strBuilder.toString();
+    }
+
+    public static String explain(OrderByElement orderByElement) {
+        Expr expr = orderByElement.getExpr();
+        boolean isAsc = orderByElement.getIsAsc();
+        Boolean nullsFirstParam = orderByElement.getNullsFirstParam();
+
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append(ExprToSql.explain(expr));
+        strBuilder.append(isAsc ? " ASC" : " DESC");
+        if (nullsFirstParam != null) {
+            if (isAsc && !nullsFirstParam) {
+                strBuilder.append(" NULLS LAST");
+            } else if (!isAsc && nullsFirstParam) {
+                strBuilder.append(" NULLS FIRST");
+            }
+        }
+        return strBuilder.toString();
+    }
+
+    public static String toSql(AnalyticWindow window) {
+        Preconditions.checkNotNull(window);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(window.getType().toString()).append(" ");
+        AnalyticWindowBoundary rightBoundary = window.getRightBoundary();
+        if (rightBoundary == null) {
+            sb.append(toSql(window.getLeftBoundary()));
+        } else {
+            sb.append("BETWEEN ").append(toSql(window.getLeftBoundary())).append(" AND ");
+            sb.append(toSql(rightBoundary));
+        }
+
+        return sb.toString();
+    }
+
+    public static String toSql(AnalyticWindowBoundary boundary) {
+        StringBuilder sb = new StringBuilder();
+
+        if (boundary.getExpr() != null) {
+            sb.append(ExprToSql.toSql(boundary.getExpr())).append(" ");
+        }
+
+        sb.append(boundary.getBoundaryType().toString());
+        return sb.toString();
+    }
+
+    public static String getNamedArgStr(List<String> exprNames, List<Expr> exprs) {
+        Preconditions.checkNotNull(exprNames);
+        Preconditions.checkNotNull(exprs);
+        Preconditions.checkState(exprs.size() == exprNames.size());
+
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < exprs.size(); i++) {
+            if (i != 0) {
+                builder.append(",");
+            }
+            builder.append(exprNames.get(i)).append("=>").append(ExprToSql.toSql(exprs.get(i)));
+        }
+        return builder.toString();
     }
 }

@@ -36,7 +36,6 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.thrift.TGetTasksParams;
-import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -53,9 +52,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -146,7 +143,7 @@ public class TaskManagerTest {
         String realDbName = task.getDbName();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
-        taskManager.createTask(task, true);
+        taskManager.replayCreateTask(task);
         TaskRunManager taskRunManager = taskManager.getTaskRunManager();
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.setProcessor(new MockTaskRunProcessor());
@@ -240,8 +237,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -276,8 +273,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -313,8 +310,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun2, false);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -350,8 +347,8 @@ public class TaskManagerTest {
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
@@ -395,9 +392,9 @@ public class TaskManagerTest {
         taskRun3.initStatus("3", now + 10);
         taskRun3.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun3, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun3);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
         Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
@@ -513,8 +510,7 @@ public class TaskManagerTest {
     }
 
     private LocalDateTime parseLocalDateTime(String str) throws Exception {
-        Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
-        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+        return TimeUtils.parseDateTime(str);
     }
 
     @Test

@@ -23,13 +23,13 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -102,7 +103,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     private final Map<Long, Set<Integer>> tableIdToStringColumnIds = Maps.newHashMap();
     private final Map<Pair<Long, String>, ColumnDict> globalDictCache = Maps.newHashMap();
 
-    public static final Type ID_TYPE = Type.INT;
+    public static final Type ID_TYPE = IntegerType.INT;
 
     static class DecodeContext {
         // The parent operators whether it needs the child operators to encode
@@ -478,7 +479,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     PhysicalOlapScanOperator newOlapScan =
                             new PhysicalOlapScanOperator(scanOperator.getTable(), newColRefToColumnMetaMap,
                                     scanOperator.getDistributionSpec(), scanOperator.getLimit(), newPredicate,
-                                    scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
+                                    scanOperator.getSelectedIndexMetaId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
                                     newPrunedPredicates,
                                     scanOperator.getProjection(), scanOperator.isUsePkIndex(),
@@ -576,7 +577,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
                     operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
-                    operator.isEnforced(), predicate, operator.getProjection(), ImmutableMap.of());
+                    operator.isEnforced(), operator.isPerPipeline(), predicate, operator.getProjection(), ImmutableMap.of());
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,
@@ -777,6 +778,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
             newHashAggregator.setUsePerBucketOptmize(aggOperator.isUsePerBucketOptmize());
             newHashAggregator.setWithoutColocateRequirement(aggOperator.isWithoutColocateRequirement());
+            newHashAggregator.setLocalLimit(aggOperator.getLocalLimit());
             return newHashAggregator;
         }
 

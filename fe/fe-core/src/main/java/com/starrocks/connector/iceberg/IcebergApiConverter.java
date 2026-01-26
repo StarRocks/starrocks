@@ -40,12 +40,16 @@ import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.UnknownType;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
@@ -156,7 +160,8 @@ public class IcebergApiConverter {
         Set<String> addedSortKey = new HashSet<>();
         SortOrder.Builder builder = SortOrder.builderFor(schema);
         for (OrderByElement orderByElement : orderByElements) {
-            String columnName = orderByElement.castAsSlotRef();
+            Expr expr = orderByElement.getExpr();
+            String columnName = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
             Preconditions.checkNotNull(columnName);
             NullOrder nullOrder = orderByElement.getNullsFirstParam() ? NullOrder.NULLS_FIRST : NullOrder.NULLS_LAST;
             if (orderByElement.getIsAsc()) {
@@ -189,7 +194,7 @@ public class IcebergApiConverter {
             if (colName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 Expr partExpr = desc.getPartitionExprs().get(idx++);
                 if (partExpr instanceof FunctionCallExpr) {
-                    String fn = ((FunctionCallExpr) partExpr).getFnName().getFunction();
+                    String fn = ((FunctionCallExpr) partExpr).getFunctionName();
                     Expr child = ((FunctionCallExpr) partExpr).getChild(0);
                     if (child instanceof SlotRef) {
                         colName = ((SlotRef) child).getColumnName();
@@ -299,13 +304,24 @@ public class IcebergApiConverter {
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
     }
 
+    private static void addMetaColumns(List<Column> fullSchema) {
+        Column column = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+        column.setIsHidden(true);
+        fullSchema.add(column);
+
+        column = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true);
+        column.setIsHidden(true);
+        fullSchema.add(column);
+    }
+
     public static List<Column> toFullSchemas(Schema schema, Table table) {
         List<Column> fullSchema = toFullSchemas(schema);
         if (table instanceof BaseTable) {
+            addMetaColumns(fullSchema);
             if (((BaseTable) table).operations().current().formatVersion() >= 3) {
                 boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
                 if (!hasRowId) {
-                    Column column = new Column(IcebergTable.ROW_ID, Type.BIGINT, true);
+                    Column column = new Column(IcebergTable.ROW_ID, IntegerType.BIGINT, true);
                     column.setIsHidden(true);
                     fullSchema.add(column);
                 }
@@ -329,7 +345,7 @@ public class IcebergApiConverter {
                 srType = fromIcebergType(field.type());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert iceberg type {}", field.type().toString(), e);
-                srType = Type.UNKNOWN_TYPE;
+                srType = UnknownType.UNKNOWN_TYPE;
             }
             Column column = new Column(field.name(), srType, true);
             column.setComment(field.doc());
@@ -428,7 +444,12 @@ public class IcebergApiConverter {
         }
 
         for (Types.NestedField field : nativeTable.schema().columns()) {
-            if (field.type() instanceof Types.DecimalType || field.type() == Types.UUIDType.get()) {
+            // https://apache.googlesource.com/parquet-format/+/HEAD/LogicalTypes.md
+            // the decimal128/uuid data sinked with physical type fixed_len_byte_array will be stored as big endian
+            // decimal64/32 are sinked with physical type int as little endian
+            // iceberg data file's upper/lower bound treat decimal/uuid's byte buffer as big endian.
+            if (dataFile.getFormat().equalsIgnoreCase("PARQUET")
+                    && field.type() instanceof Types.DecimalType && ((Types.DecimalType) field.type()).precision() <= 18) {
                 //change to BigEndian
                 reverseBuffer(lowerBounds.get(field.fieldId()));
                 reverseBuffer(upperBounds.get(field.fieldId()));
@@ -463,7 +484,10 @@ public class IcebergApiConverter {
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
         }
-        tableProperties.put(TableProperties.FORMAT_VERSION, "2");
+
+        if (!createProperties.containsKey(TableProperties.FORMAT_VERSION)) {
+            tableProperties.put(TableProperties.FORMAT_VERSION, "2");
+        }
 
         return tableProperties.build();
     }
@@ -508,7 +532,7 @@ public class IcebergApiConverter {
         String viewName = icebergView.name();
         String location = icebergView.location();
         IcebergView view = new IcebergView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
-                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location);
+                columns, sqlView.sql(), defaultCatalogName, defaultDbName, location, icebergView.properties());
         view.setComment(comment);
         return view;
     }
@@ -639,14 +663,16 @@ public class IcebergApiConverter {
 
         String queryId = connectContext.getQueryId().toString();
 
-        Map<String, String> properties = com.google.common.collect.ImmutableMap.of(
-                "queryId", queryId,
-                "starrocksCatalog", catalogName,
-                "starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
-
+        Map<String, String> properties = new HashMap<>();
         if (!Strings.isNullOrEmpty(definition.getComment())) {
             properties.put(IcebergMetadata.COMMENT, definition.getComment());
         }
+        if (!MapUtils.isEmpty(definition.getProperties())) {
+            properties.putAll(definition.getProperties());
+        }
+        properties.put("queryId", queryId);
+        properties.put("starrocksCatalog", catalogName);
+        properties.put("starrocksVersion", GlobalStateMgr.getCurrentState().getNodeMgr().getMySelf().getFeVersion());
 
         return properties;
     }

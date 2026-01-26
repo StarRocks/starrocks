@@ -410,6 +410,7 @@ public class OptExternalPartitionPruner {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
+            partitionPruner.setScanOperator(operator);
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
@@ -431,7 +432,8 @@ public class OptExternalPartitionPruner {
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
             GetRemoteFilesParams params =
-                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames)
+                            .setTableVersionRange(operator.getTvrVersionRange()).build();
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
             if (fileInfos.isEmpty()) {
                 return;

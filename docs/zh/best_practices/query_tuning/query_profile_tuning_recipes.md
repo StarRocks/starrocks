@@ -17,11 +17,11 @@ keywords: ['profile', 'query']
    如果 `QueryPeakMemoryUsagePerNode > 80 %` 或 `QuerySpillBytes > 1 GB`，直接跳到内存和溢出方案。
 
 2. **找到最慢的 Pipeline / Operator**  
-   ⟶ 在 *Query Profile UI* 中点击 **Sort by OperatorTotalTime %**。  
+   ⟶ 在 _Query Profile UI_ 中点击 **Sort by OperatorTotalTime %**。  
    最热的 operator 告诉你接下来要阅读哪个方案块（Scan, Join, Aggregate, …）。
 
 3. **确认瓶颈子类型**  
-   每个方案以其*特征*指标模式开始。在尝试解决方案之前匹配这些模式。
+   每个方案以其_特征_指标模式开始。在尝试解决方案之前匹配这些模式。
 
 ---
 
@@ -47,17 +47,17 @@ Scan Operator 使用一个额外的线程池来执行 IO 任务。因此，该�
 
 #### 常见性能瓶颈
 
-**冷或慢存储** – 当 `BytesRead`、`ScanTime` 或 `IOTaskExecTime` 占主导地位且磁盘 I/O 徘徊在 80-100% 时，扫描正在命中冷或配置不足的存储。将热数据移动到 NVMe/SSD，启用存储缓存，或者如果你正在扫描 S3/HDFS，提高 `remote_cache_capacity`。
+**冷或慢存储** – 当 `BytesRead`、`ScanTime` 或 `IOTaskExecTime` 占主导且磁盘 I/O 徘徊在 80–100% 时，扫描命中了冷数据或规格不足的存储。将热点数据迁移到 NVMe/SSD，并启用 Data Cache。通过 BE `datacache_*`（或兼容的旧版 `block_cache_*`）参数进行容量配置，并通过会话变量 `enable_scan_datacache` 在扫描时使用缓存。
 
-**缺少过滤下推** – 如果 `PushdownPredicates` 接近 0 而 `ExprFilterRows` 很高，谓词没有到达存储层。将它们重写为简单比较（避免 `%LIKE%` 和宽 `OR` 链）或添加 zonemap/Bloom 索引或物化视图以便下推。
+**缺少谓词下推** – 若 `PushdownPredicates` 接近 0 且 `ExprFilterRows` 较高，说明谓词未下推到存储层。重写为简单比较（避免 `%LIKE%` 与过宽的 `OR` 链），或添加 Bloom 索引、物化视图以支持下推。
 
-**线程池饥饿** – 高 `IOTaskWaitTime` 以及低 `PeakIOTasks` 表明 I/O 线程池已饱和。增加 BE 上的 `max_io_threads` 或扩大缓存以让更多任务并行运行。
+**线程池饥饿** – 当 `IOTaskWaitTime` 高且 `PeakIOTasks` 低时，说明 I/O 并发已饱和。提高 BE 的 I/O 任务并行度并不能缓解。建议启用并合理配置 Data Cache（BE `datacache_*` 与会话 `enable_scan_datacache`），将热点数据迁移到更快的存储（NVMe/SSD），并降低上游并发（例如降低 `pipeline_dop` 或避免过多并发扫描）。
 
-**tablet 数据倾斜** – 最大和最小 `OperatorTotalTime` 之间的巨大差距意味着某些 tablets 的工作量比其他的多。重新分桶到更高基数的键或增加桶数以分散负载。
+**Tablet 数据倾斜** – 最大与最小 `OperatorTotalTime` 差距很大，说明部分 Tablet 负载远高于其它。可按更高基数键重分桶，或增加桶数以均衡负载。
 
-**Rowset/segment 碎片化** – 爆炸性的 `RowsetsReadCount`/`SegmentsReadCount` 加上长时间的 `SegmentInitTime` 表示有许多小的 rowsets。触发手动 compaction 并批量小型导入以便段提前合并。
+**Rowset/Segment 碎片化** – `RowsetsReadCount`/`SegmentsReadCount` 激增且 `SegmentInitTime` 较长，表明存在大量小 Rowset。执行手动 Compaction，并将小批量导入合并为批量写入，以便段提前合并。
 
-**累积的软删除** – 大量的 `DeleteFilterRows` 表示大量使用软删除。运行 BE compaction 以清除墓碑并合并删除位图。
+**软删除累积** – `DeleteFilterRows` 很大，说明软删除使用较多。运行 BE 的 Compaction 以清理软删除。
 
 ### 2.2 聚合  [[metrics]](./query_profile_operator_metrics.md#aggregate-operator)
 
@@ -137,13 +137,15 @@ StarRocks 依赖于一个向量化的、管道友好的哈希连接核心，可�
 
 ### 2.4 Exchange (网络)  [[metrics]](./query_profile_operator_metrics.md#exchange-operator)
 
-**过大的洗牌或广播** – 如果 `NetworkTime` 超过 30% 且 `BytesSent` 很大，查询正在传输过多的数据。重新评估连接策略或启用 exchange compaction（`pipeline_enable_exchange_compaction`）。
+**过大的洗牌或广播** – 如果 `NetworkTime` 超过 30% 且 `BytesSent` 很大，说明传输了过多数据。请重新评估连接策略并减少 Shuffle/广播体量（例如强制使用 Shuffle 替代 Broadcast，或在上游预过滤）。
 
 **接收器积压** – 接收器无法跟上时，接收器的高 `WaitTime` 以及发送者队列始终满。增加接收器线程池（`brpc_num_threads`）并确认 NIC 带宽和 QoS 设置。
 
+**启用传输压缩** – 当网络带宽成为瓶颈时，可压缩 Exchange 传输的数据以减少网络字节量。设置 `SET transmission_compression_type = 'zstd';`，并可选地将 `SET transmission_encode_level = 7;` 打开自适应列编码。需要权衡更高的 CPU 开销以换取更小的网络传输量。
+
 ### 2.5 排序 / 合并 / 窗口
 
-为了便于理解各种指标，合并可以表示为以下状态机制：
+为便于理解各类指标，可将 Merge 抽象为如下状态机：
 
 ```plaintext
                ┌────────── PENDING ◄──────────┐
@@ -155,13 +157,13 @@ StarRocks 依赖于一个向量化的、管道友好的哈希连接核心，可�
    INIT ──► PREPARE ──► SPLIT_CHUNK ──► FETCH_CHUNK ──► FINISHED
                ▲
                |
-               | one traverse from leaf to root
+               | 一次从叶到根的遍历
                |
                ▼
             PROCESS
 ```
 
-**排序溢出** – 当 `MaxBufferedBytes` 上升到大约 2 GB 以上或 `SpillBytes` 非零时，排序阶段正在溢出到磁盘。添加 `LIMIT`，在上游预聚合，或如果机器有足够的内存，提高 `sort_spill_threshold`。
+**排序溢出** – 当 `MaxBufferedBytes` 超过约 2 GB 或 `SpillBytes` 非零时，排序阶段发生磁盘溢出。可添加 `LIMIT`、在上游做预聚合，或在内存充足时提高会话 `full_sort_max_buffered_bytes`（以及/或 `full_sort_max_buffered_rows`）。
 
 **合并饥饿** – 高 `PendingStageTime` 表示合并正在等待上游块。首先优化生产者 operator 或扩大管道缓冲区。
 
@@ -174,7 +176,7 @@ StarRocks 依赖于一个向量化的、管道友好的哈希连接核心，可�
 | 阈值 | 关注点 | 实际行动 |
 | --- | --- | --- |
 | **80 %** 的 BE 内存 | `QueryPeakMemoryUsagePerNode` | 降低会话 `exec_mem_limit` 或增加 BE 内存 |
-| 检测到溢出（`SpillBytes` > 0） | `QuerySpillBytes`，每个 operator 的 `SpillBlocks` | 增加内存限制；升级到 SR 3.2+ 以获得混合哈希/合并溢出 |
+| 检测到溢出（`SpillBytes` > 0） | `QuerySpillBytes`，每个算子的 `SpillBlocks` | 提高内存上限；升级到 SR 3.2+ 以获得混合哈希/归并溢出 |
 
 ---
 

@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -33,9 +34,12 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.tree.JsonPathRewriteRule;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
@@ -69,6 +73,16 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             if (entry.getValue().getHints().contains(JsonPathRewriteRule.COLUMN_REF_HINT)) {
                 continue;
             }
+            // Allow constant columns for count(*) and count(constant), e.g., count(1)
+            // When count(1), Project outputs a constant column
+            // If there's any count aggregation, allow the constant column to pass
+            if (entry.getValue() instanceof ConstantOperator) {
+                boolean hasCountAgg = agg.getAggregations().values().stream()
+                        .anyMatch(aggCall -> aggCall.getFnName().equals(FunctionSet.COUNT));
+                if (hasCountAgg) {
+                    continue;
+                }
+            }
 
             return false;
         }
@@ -86,7 +100,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         }
 
         LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) input.inputAt(0).inputAt(0).getOp();
-        return metaScan.getAggColumnIdToNames().isEmpty();
+        return metaScan.getAggColumnIdToColumns().isEmpty();
     }
 
     @Override
@@ -98,7 +112,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
         Preconditions.checkState(agg.getGroupingKeys().isEmpty());
 
-        Map<Integer, String> aggColumnIdToNames = Maps.newHashMap();
+        Map<Integer, Pair<String, Column>> aggColumnIdToColumns = Maps.newHashMap();
         Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
@@ -108,32 +122,46 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             CallOperator aggCall = kv.getValue();
             ColumnRefOperator usedColumn;
 
+            String aggFuncName;
             String metaColumnName;
-            if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getChildren().isEmpty()) {
+            // For count(*) and count(constant), use rows_<column> meta column
+            // getUsedColumns().isEmpty() returns true for both count(*) and count(constant)
+            // because constants don't produce column references
+            if (aggCall.getFnName().equals(FunctionSet.COUNT) && aggCall.getUsedColumns().isEmpty()) {
                 usedColumn = metaScan.getOutputColumns().get(0);
+                aggFuncName = "rows";
                 metaColumnName = "rows_" + usedColumn.getName();
             } else if (MapUtils.isNotEmpty(project.getColumnRefMap())) {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 List<ColumnRefOperator> columnRefOperators = usedColumns.getColumnRefOperators(columnRefFactory);
-                usedColumn = (ColumnRefOperator) project.getColumnRefMap().get(columnRefOperators.get(0));
-                metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
+                ScalarOperator projectValue = project.getColumnRefMap().get(columnRefOperators.get(0));
+                // If Project outputs a constant (e.g., count(1)), treat it as count(*) and use rows_ meta column
+                if (aggCall.getFnName().equals(FunctionSet.COUNT) && projectValue instanceof ConstantOperator) {
+                    usedColumn = metaScan.getOutputColumns().get(0);
+                    aggFuncName = "rows";
+                    metaColumnName = "rows_" + usedColumn.getName();
+                } else {
+                    usedColumn = (ColumnRefOperator) projectValue;
+                    aggFuncName = aggCall.getFnName();
+                    metaColumnName = aggFuncName + "_" + usedColumn.getName();
+                }
             } else {
                 ColumnRefSet usedColumns = aggCall.getUsedColumns();
                 Preconditions.checkArgument(usedColumns.cardinality() == 1);
                 usedColumn = columnRefFactory.getColumnRef(usedColumns.getFirstId());
-                metaColumnName = aggCall.getFnName() + "_" + usedColumn.getName();
+                aggFuncName = aggCall.getFnName();
+                metaColumnName = aggFuncName + "_" + usedColumn.getName();
             }
 
             Type columnType = aggCall.getType();
             // DictMerge meta aggregate function is special, need change the column type from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
-                columnType = Type.ARRAY_VARCHAR;
+                columnType = ArrayType.ARRAY_VARCHAR;
             }
 
             ColumnRefOperator metaColumn = columnRefFactory.create(metaColumnName, columnType, true);
-            aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
 
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
             Column copiedColumn = c.deepCopy();
@@ -142,16 +170,17 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // this variable is introduced to solve compatibility issues,
                 // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
-                copiedColumn.setType(Type.BIGINT);
+                copiedColumn.setType(IntegerType.BIGINT);
             }
             copiedColumn.setIsAllowNull(true);
             newScanColumnRefs.put(metaColumn, copiedColumn);
+            aggColumnIdToColumns.put(metaColumn.getId(), Pair.create(aggFuncName, copiedColumn));
 
             // DictMerge meta aggregate function is special, need change their types from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
                 Function aggFunction = ExprUtils.getBuiltinFunction(aggCall.getFnName(),
-                        new Type[] {Type.ARRAY_VARCHAR, Type.INT}, Function.CompareMode.IS_IDENTICAL);
+                        new Type[] {ArrayType.ARRAY_VARCHAR, IntegerType.INT}, Function.CompareMode.IS_IDENTICAL);
 
                 newAggCalls.put(kv.getKey(),
                         new CallOperator(aggCall.getFnName(), aggCall.getType(),
@@ -160,10 +189,10 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_SIZE)
                     || aggCall.getFnName().equals(FunctionSet.COLUMN_COMPRESSED_SIZE)) {
                 // rewrite count to sum
-                Function aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},
+                Function aggFunction = ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
                         Function.CompareMode.IS_IDENTICAL);
                 newAggCalls.put(kv.getKey(),
-                        new CallOperator(FunctionSet.SUM, Type.BIGINT, List.of(metaColumn), aggFunction));
+                        new CallOperator(FunctionSet.SUM, IntegerType.BIGINT, List.of(metaColumn), aggFunction));
             } else {
                 newAggCalls.put(kv.getKey(),
                         new CallOperator(aggCall.getFnName(), aggCall.getType(), List.of(metaColumn),
@@ -174,7 +203,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .withOperator(metaScan)
                 .setColRefToColumnMetaMap(newScanColumnRefs)
-                .setAggColumnIdToNames(aggColumnIdToNames)
+                .setAggColumnIdToColumns(aggColumnIdToColumns)
                 .build();
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(

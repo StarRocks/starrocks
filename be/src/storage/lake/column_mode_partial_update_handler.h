@@ -37,7 +37,8 @@ public:
     ColumnModePartialUpdateHandler(int64_t base_version, int64_t txn_id, MemTracker* tracker);
     ~ColumnModePartialUpdateHandler();
 
-    Status execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder);
+    Status execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
+                   std::vector<std::vector<uint32_t>>* insert_rowids_by_segment = nullptr);
 
 private:
     Status _load_update_state(const RowsetUpdateStateParams& params);

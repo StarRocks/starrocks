@@ -44,9 +44,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -91,10 +93,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -107,8 +108,8 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.type.CharType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.lang.StringUtils;
@@ -168,6 +169,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     @SerializedName("rd")
     private String rowDelimiter;
     private boolean includeQueryId;
+    @SerializedName("withHdr")
+    private boolean withHeader;
     @SerializedName("pt")
     private Map<String, String> properties = Maps.newHashMap();
     @SerializedName("ps")
@@ -242,7 +245,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
-        String dbName = stmt.getTblName().getDb();
+        String dbName = stmt.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
@@ -256,6 +259,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.columnSeparator = stmt.getColumnSeparator();
         this.rowDelimiter = stmt.getRowDelimiter();
         this.includeQueryId = stmt.isIncludeQueryId();
+        this.withHeader = stmt.isWithHeader();
         this.properties = stmt.getProperties();
 
         exportPath = stmt.getPath();
@@ -272,12 +276,17 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         this.dbId = db.getId();
         this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), stmt.getTblName().getTbl());
+                .getTable(db.getFullName(), stmt.getTableName());
         if (exportTable == null) {
-            throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
+            throw new DdlException("Table " + stmt.getTableName() + " does not exist");
         }
         this.tableId = exportTable.getId();
-        this.tableName = stmt.getTblName();
+        TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new DdlException("Table reference is null in export statement");
+        }
+        this.tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                 LockType.READ)) {
@@ -405,12 +414,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
         switch (exportTable.getType()) {
             case OLAP:
             case CLOUD_NATIVE:
-                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", computeResource);
+                scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", -1, computeResource);
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
                 ((OlapScanNode) scanNode).computePartitionInfo();
-                ((OlapScanNode) scanNode).selectBestRollupByRollupSelector();
                 break;
             case MYSQL:
                 scanNode = new MysqlScanNode(new PlanNodeId(0), exportTupleDesc, (MysqlTable) this.exportTable);
@@ -460,8 +468,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
             HdfsUtil.getTProperties(exportTempPath, brokerPersistInfo.getProperties(), hdfsProperties);
         }
         BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+
+        // Extract column names from slot descriptors for CSV header row
+        List<String> exportColumnNames = Lists.newArrayList();
+        for (SlotDescriptor slot : exportTupleDesc.getSlots()) {
+            exportColumnNames.add(slot.getColumn().getName());
+        }
+
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, runtimeBrokerDesc, hdfsProperties));
+                rowDelimiter, runtimeBrokerDesc, hdfsProperties, exportColumnNames, withHeader));
         try {
             fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
@@ -478,7 +493,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             SlotDescriptor slotDesc = exportTupleDesc.getSlots().get(i);
             SlotRef slotRef = new SlotRef(slotDesc);
             if (slotDesc.getType().getPrimitiveType() == PrimitiveType.CHAR) {
-                slotRef.setType(Type.CHAR);
+                slotRef.setType(CharType.CHAR);
             }
             outputExprs.add(slotRef);
         }
@@ -522,12 +537,11 @@ public class ExportJob implements Writable, GsonPostProcessable {
             throw new StarRocksException("SubExportTask " + taskIndex + " scan range is empty");
         }
 
-        OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
+        OlapScanNode newOlapScanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport", -1);
         newOlapScanNode.setColumnFilters(Maps.newHashMap());
         newOlapScanNode.setIsPreAggregation(false, "This an export operation");
         newOlapScanNode.setCanTurnOnPreAggr(false);
         newOlapScanNode.computePartitionInfo();
-        newOlapScanNode.selectBestRollupByRollupSelector();
         List<TScanRangeLocations> newLocations = newOlapScanNode.updateScanRangeLocations(locations, computeResource);
 
         // random select a new location for each TScanRangeLocations
@@ -726,20 +740,28 @@ public class ExportJob implements Writable, GsonPostProcessable {
     }
 
     public synchronized boolean updateState(JobState newState) {
-        return this.updateState(newState, false, System.currentTimeMillis());
+        return this.updateState(newState, System.currentTimeMillis());
     }
 
     public ComputeResource getComputeResource() {
         return computeResource;
     }
 
-    public synchronized boolean updateState(JobState newState, boolean isReplay, long stateChangeTime) {
+    public synchronized boolean updateState(JobState newState, long stateChangeTime) {
         if (isExportDone()) {
             LOG.warn("export job state is finished or cancelled");
             return false;
         }
 
-        state = newState;
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(id, newState, stateChangeTime,
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logExportUpdateState(updateInfo, wal -> changeState(newState, stateChangeTime));
+        return true;
+    }
+
+    protected void changeState(JobState newState, long stateChangeTime) {
+        this.state = newState;
         switch (newState) {
             case PENDING:
                 progress = 0;
@@ -752,15 +774,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 finishTimeMs = stateChangeTime;
                 progress = 100;
                 break;
-            default:
-                Preconditions.checkState(false, "wrong job state: " + newState.name());
-                break;
         }
-        if (!isReplay) {
-            GlobalStateMgr.getCurrentState().getEditLog().logExportUpdateState(id, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        }
-        return true;
     }
 
     public Status releaseSnapshots() {

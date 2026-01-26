@@ -123,16 +123,6 @@ public class MvPartitionCompensator {
         return false;
     }
 
-    public static boolean isSupportPartitionPruneCompensate(Table t) {
-        if (t == null) {
-            return false;
-        }
-        if (t.isNativeTableOrMaterializedView() || t.isHiveTable()) {
-            return true;
-        }
-        return false;
-
-    }
     /**
      * Determine whether to compensate extra partition predicates to query plan for the mv,
      * - if it needs compensate, use `selectedPartitionIds` to compensate complete partition ranges
@@ -148,7 +138,7 @@ public class MvPartitionCompensator {
                                                    MaterializationContext mvContext) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
         MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
-        PCellSortedSet mvPartitionNameToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+        PCellSortedSet mvPartitionNameToRefresh = mvUpdateInfo.getMVToRefreshPCells();
         // If mv contains no partitions to refresh, no need compensate
         if (PCellUtils.isEmpty(mvPartitionNameToRefresh)) {
             logMVRewrite(mvContext, "MV has no partitions to refresh, no need compensate");
@@ -375,7 +365,7 @@ public class MvPartitionCompensator {
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-        MVCompensation mvCompensation = mvContext.getMvCompensation();
+        MVCompensation mvCompensation = mvContext.getMvCompensation(queryExpression);
         if (mvCompensation.getState().isNoRewrite()) {
             return null;
         }

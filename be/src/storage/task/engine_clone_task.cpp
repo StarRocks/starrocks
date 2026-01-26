@@ -1003,7 +1003,7 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
         Status clear_st;
         for (const std::string& filename : tablet_files) {
             clear_st = fs::delete_file(filename);
-            if (!st.ok()) {
+            if (!clear_st.ok()) {
                 LOG(WARNING) << "remove tablet file:" << filename << " failed, status:" << clear_st;
             }
         }

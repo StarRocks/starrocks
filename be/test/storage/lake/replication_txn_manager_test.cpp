@@ -30,6 +30,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_define.h"
@@ -177,7 +178,7 @@ public:
         }
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto& cols = chunk->columns();
+        auto cols = chunk->mutable_columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
                 cols[0]->append_datum(Datum(key));
@@ -345,8 +346,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     txn_info.set_txn_type(TXN_REPLICATION);
     txn_info.set_commit_time(0);
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
-    auto status_or =
-            lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span, false);
+    auto status_or = lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(_tablet_id), _version,
+                                           _src_version, txn_info_span, false);
     EXPECT_TRUE(!status_or.ok()) << status_or.status();
 
     lake::abort_txn(_tablet_manager.get(), _tablet_id, txn_info_span);
@@ -400,8 +401,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     txn_info.set_combined_txn_log(false);
     txn_info.set_commit_time(0);
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
-    auto status_or =
-            lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span, false);
+    auto status_or = lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(_tablet_id), _version,
+                                           _src_version, txn_info_span, false);
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());
@@ -469,8 +470,8 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     txn_info.set_combined_txn_log(false);
     txn_info.set_commit_time(0);
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
-    auto status_or =
-            lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span, false);
+    auto status_or = lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(_tablet_id), _version,
+                                           _src_version, txn_info_span, false);
     EXPECT_TRUE(status_or.ok()) << status_or.status();
 
     EXPECT_EQ(_src_version, status_or.value()->version());

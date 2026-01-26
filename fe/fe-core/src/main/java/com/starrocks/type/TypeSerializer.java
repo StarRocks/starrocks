@@ -16,6 +16,9 @@ package com.starrocks.type;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Function;
+import com.starrocks.thrift.TAggStateDesc;
+import com.starrocks.thrift.TFunctionVersion;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TStructField;
@@ -24,6 +27,7 @@ import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Utility class for serializing Type objects to Thrift format.
@@ -219,5 +223,35 @@ public class TypeSerializer {
 
     private static void pseudoTypeToThrift(PseudoType type, TTypeDesc container) {
         Preconditions.checkArgument(false, "PseudoType should not exposed to external");
+    }
+
+    /**
+     * Converts an AggStateDesc to its Thrift representation.
+     *
+     * @param aggStateDesc The AggStateDesc to serialize
+     * @return The TAggStateDesc thrift object
+     */
+    public static TAggStateDesc toThrift(AggStateDesc aggStateDesc) {
+        TAggStateDesc tAggStateDesc = new TAggStateDesc();
+        tAggStateDesc.setAgg_func_name(Function.rectifyFunctionName(aggStateDesc.getFunctionName()));
+        
+        List<Type> argTypes = aggStateDesc.getArgTypes();
+        for (Type argType : argTypes) {
+            TTypeDesc tTypeDesc = new TTypeDesc();
+            tTypeDesc.setTypes(new ArrayList<TTypeNode>());
+            toThrift(argType, tTypeDesc);
+            tAggStateDesc.addToArg_types(tTypeDesc);
+        }
+        
+        tAggStateDesc.setResult_nullable(aggStateDesc.getResultNullable());
+        tAggStateDesc.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
+
+        TTypeDesc tTypeDesc = new TTypeDesc();
+        tTypeDesc.setTypes(new ArrayList<TTypeNode>());
+        toThrift(aggStateDesc.getReturnType(), tTypeDesc);
+        tAggStateDesc.setRet_type(tTypeDesc);
+        Preconditions.checkState(!tTypeDesc.types.isEmpty());
+
+        return tAggStateDesc;
     }
 }

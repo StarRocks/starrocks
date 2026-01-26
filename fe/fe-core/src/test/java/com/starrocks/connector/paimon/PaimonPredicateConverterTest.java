@@ -17,6 +17,7 @@ package com.starrocks.connector.paimon;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -25,7 +26,9 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
+import com.starrocks.type.VarcharType;
 import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.predicate.And;
@@ -76,16 +79,18 @@ public class PaimonPredicateConverterTest {
                     new DataField(7, "f7", new DecimalType()),
                     new DataField(8, "f8", new SmallIntType()),
                     new DataField(9, "f9", new TinyIntType()));
-    private static final ColumnRefOperator F0 = new ColumnRefOperator(0, Type.INT, "f0", true, false);
-    private static final ColumnRefOperator F1 = new ColumnRefOperator(1, Type.VARCHAR, "f1", true, false);
-    private static final ColumnRefOperator F2 = new ColumnRefOperator(2, Type.FLOAT, "f2", true, false);
-    private static final ColumnRefOperator F3 = new ColumnRefOperator(3, Type.DATE, "f3", true, false);
-    private static final ColumnRefOperator F4 = new ColumnRefOperator(4, Type.BOOLEAN, "f4", true, false);
-    private static final ColumnRefOperator F5 = new ColumnRefOperator(5, Type.DATETIME, "f5", true, false);
-    private static final ColumnRefOperator F6 = new ColumnRefOperator(6, Type.BIGINT, "f6", true, false);
-    private static final ColumnRefOperator F7 = new ColumnRefOperator(7, Type.DEFAULT_DECIMAL128, "f7", true, false);
-    private static final ColumnRefOperator F8 = new ColumnRefOperator(8, Type.SMALLINT, "f8", true, false);
-    private static final ColumnRefOperator F9 = new ColumnRefOperator(9, Type.TINYINT, "f9", true, false);
+    private static final ColumnRefOperator F0 = new ColumnRefOperator(0, IntegerType.INT, "f0", true, false);
+    private static final ColumnRefOperator F1 = new ColumnRefOperator(1, VarcharType.VARCHAR, "f1", true, false);
+    private static final ColumnRefOperator F2 = new ColumnRefOperator(2, com.starrocks.type.FloatType.FLOAT, "f2", true, false);
+    private static final ColumnRefOperator F3 = new ColumnRefOperator(3, com.starrocks.type.DateType.DATE, "f3", true, false);
+    private static final ColumnRefOperator F4 = new ColumnRefOperator(4, com.starrocks.type.BooleanType.BOOLEAN,
+            "f4", true, false);
+    private static final ColumnRefOperator F5 = new ColumnRefOperator(5, com.starrocks.type.DateType.DATETIME, "f5", true, false);
+    private static final ColumnRefOperator F6 = new ColumnRefOperator(6, IntegerType.BIGINT, "f6", true, false);
+    private static final ColumnRefOperator F7 = new ColumnRefOperator(7,
+            com.starrocks.type.DecimalType.DEFAULT_DECIMAL128, "f7", true, false);
+    private static final ColumnRefOperator F8 = new ColumnRefOperator(8, IntegerType.SMALLINT, "f8", true, false);
+    private static final ColumnRefOperator F9 = new ColumnRefOperator(9, IntegerType.TINYINT, "f9", true, false);
     private static final PaimonPredicateConverter CONVERTER = new PaimonPredicateConverter(new RowType(DATA_FIELDS));
 
     @Test
@@ -291,7 +296,8 @@ public class PaimonPredicateConverterTest {
 
     @Test
     public void testDecimal() {
-        ConstantOperator value = ConstantOperator.createDecimal(new BigDecimal(14.11), Type.DEFAULT_DECIMAL128);
+        ConstantOperator value = ConstantOperator.createDecimal(new BigDecimal(14.11),
+                com.starrocks.type.DecimalType.DEFAULT_DECIMAL128);
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F2, value);
         Predicate result = CONVERTER.convert(op);
         Assertions.assertTrue(result instanceof LeafPredicate);
@@ -303,21 +309,21 @@ public class PaimonPredicateConverterTest {
     public void testPaimonCastPredicate() {
         // double to int
         ConstantOperator doubleValue = ConstantOperator.createDouble(11.11);
-        CastOperator cast0 = new CastOperator(Type.INT, F0);
+        CastOperator cast0 = new CastOperator(IntegerType.INT, F0);
         Predicate result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast0, doubleValue));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate0 = (LeafPredicate) result;
         Assertions.assertEquals(11, leafPredicate0.literals().get(0));
         // string to date
         ConstantOperator string = ConstantOperator.createVarchar("2025-01-01");
-        CastOperator cast1 = new CastOperator(Type.DATE, F1);
+        CastOperator cast1 = new CastOperator(com.starrocks.type.DateType.DATE, F1);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast1, string));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate1 = (LeafPredicate) result;
         Assertions.assertEquals(BinaryString.fromString("2025-01-01"), leafPredicate1.literals().get(0));
         // float to double
         ConstantOperator floatValue = ConstantOperator.createFloat(11.11);
-        CastOperator cast2 = new CastOperator(Type.DOUBLE, F2);
+        CastOperator cast2 = new CastOperator(com.starrocks.type.FloatType.DOUBLE, F2);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast2, floatValue));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate2 = (LeafPredicate) result;
@@ -325,21 +331,21 @@ public class PaimonPredicateConverterTest {
         // date to string
         ConstantOperator date = ConstantOperator.createDate(
                 LocalDate.parse("2025-01-01").atTime(0, 0, 0, 0));
-        CastOperator cast3 = new CastOperator(Type.STRING, F3);
+        CastOperator cast3 = new CastOperator(StringType.STRING, F3);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast3, date));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate3 = (LeafPredicate) result;
         Assertions.assertEquals(20089, leafPredicate3.literals().get(0));
         // bool to string
         ConstantOperator bool = ConstantOperator.createBoolean(true);
-        CastOperator cast4 = new CastOperator(Type.INT, F1);
+        CastOperator cast4 = new CastOperator(IntegerType.INT, F1);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast4, bool));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate4 = (LeafPredicate) result;
         Assertions.assertEquals(BinaryString.fromString("1"), leafPredicate4.literals().get(0));
         // bool to int
         ConstantOperator bool2 = ConstantOperator.createBoolean(false);
-        CastOperator cast5 = new CastOperator(Type.INT, F0);
+        CastOperator cast5 = new CastOperator(IntegerType.INT, F0);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast5, bool2));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate5 = (LeafPredicate) result;
@@ -347,57 +353,106 @@ public class PaimonPredicateConverterTest {
         // datetime to string
         ConstantOperator ts = ConstantOperator.createDatetime(
                 LocalDate.parse("2025-01-01").atTime(0, 0, 0, 0));
-        CastOperator cast6 = new CastOperator(Type.VARCHAR, F1);
+        CastOperator cast6 = new CastOperator(VarcharType.VARCHAR, F1);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast6, ts));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate6 = (LeafPredicate) result;
         Assertions.assertEquals(BinaryString.fromString("2025-01-01 00:00:00"), leafPredicate6.literals().get(0));
         // tinyInt to bool
         ConstantOperator stringBool = ConstantOperator.createTinyInt((byte) 0);
-        CastOperator cast7 = new CastOperator(Type.BOOLEAN, F4);
+        CastOperator cast7 = new CastOperator(com.starrocks.type.BooleanType.BOOLEAN, F4);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast7, stringBool));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate7 = (LeafPredicate) result;
         Assertions.assertEquals(false, leafPredicate7.literals().get(0));
         // string to datetime
         ConstantOperator stringTime = ConstantOperator.createVarchar("2025-01-01 00:00:00");
-        CastOperator cast8 = new CastOperator(Type.DATETIME, F5);
+        CastOperator cast8 = new CastOperator(com.starrocks.type.DateType.DATETIME, F5);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast8, stringTime));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate8 = (LeafPredicate) result;
         Assertions.assertEquals(1735689600000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
         // smallInt to string
         ConstantOperator si = ConstantOperator.createSmallInt((short) 200);
-        CastOperator cast9 = new CastOperator(Type.VARCHAR, F1);
+        CastOperator cast9 = new CastOperator(VarcharType.VARCHAR, F1);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast9, si));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate9 = (LeafPredicate) result;
         Assertions.assertEquals(BinaryString.fromString("200"), leafPredicate9.literals().get(0));
         // int to long
         ConstantOperator i = ConstantOperator.createInt(200);
-        CastOperator cast10 = new CastOperator(Type.BIGINT, F6);
+        CastOperator cast10 = new CastOperator(IntegerType.BIGINT, F6);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast10, i));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate10 = (LeafPredicate) result;
         Assertions.assertEquals(200L, leafPredicate10.literals().get(0));
         // int to smallint
         ConstantOperator is = ConstantOperator.createInt(200);
-        CastOperator cast11 = new CastOperator(Type.BIGINT, F8);
+        CastOperator cast11 = new CastOperator(IntegerType.BIGINT, F8);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast11, is));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate11 = (LeafPredicate) result;
         Assertions.assertEquals((short) 200, leafPredicate11.literals().get(0));
         // int to tinyint
         ConstantOperator it = ConstantOperator.createInt(10);
-        CastOperator cast12 = new CastOperator(Type.BIGINT, F9);
+        CastOperator cast12 = new CastOperator(IntegerType.BIGINT, F9);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast12, it));
         Assertions.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate12 = (LeafPredicate) result;
         Assertions.assertEquals((byte) 10, leafPredicate12.literals().get(0));
         // can not cast to decimal
         ConstantOperator d = ConstantOperator.createDouble(14.11);
-        CastOperator cast99 = new CastOperator(Type.DEFAULT_DECIMAL128, F7);
+        CastOperator cast99 = new CastOperator(com.starrocks.type.DecimalType.DEFAULT_DECIMAL128, F7);
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast99, d));
         Assertions.assertNull(result);
+    }
+
+    @Test
+    public void testOrWithFunction() {
+        //    (f0 = 44 and (case when f0 = 44 then 'test' end) = 'test')
+        // OR (f0 <= 46 and (case when f0 = 44 then 'test' end) = 'test')
+        // OR((case when f0 = 44 then 'test' end) = 'test' and f1 like 'ttt%')
+        // return f0 = 44 OR f0 <= 46 OR f0 <= 20
+        BinaryPredicateOperator op2 = new BinaryPredicateOperator(
+                BinaryType.EQ, F0, ConstantOperator.createInt(44));
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(IntegerType.INT, op2, null,
+                Lists.newArrayList(op2, ConstantOperator.createVarchar("test")));
+        BinaryPredicateOperator test =
+                new BinaryPredicateOperator(BinaryType.EQ, caseWhenOperator, ConstantOperator.createVarchar("test"));
+        ScalarOperator op20 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op2,
+                test.clone());
+
+        BinaryPredicateOperator op12 = new BinaryPredicateOperator(
+                BinaryType.LE, F0, ConstantOperator.createInt(46));
+        ScalarOperator op21 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, op12,
+                test.clone());
+
+        ConstantOperator value = ConstantOperator.createVarchar("ttt%");
+        ScalarOperator op13 = new LikePredicateOperator(LikePredicateOperator.LikeType.LIKE, F1, value);
+        ScalarOperator op22 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
+                test.clone(), op13);
+
+        CompoundPredicateOperator compoundPredicateOperator =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, op20, op21);
+        CompoundPredicateOperator compoundPredicateOperator1 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, compoundPredicateOperator,
+                        op22);
+        CompoundPredicate convert = (CompoundPredicate) CONVERTER.convert(compoundPredicateOperator1);
+        Assertions.assertTrue(
+                "Or([Or([Equal(f0, 44), LessOrEqual(f0, 46)]), StartsWith(f1, ttt)])".equals(convert.toString()));
+
+        // (case when f0 = 44 then 'test' end) = 'test'
+        // OR (f0 <= 46 and (case when f0 = 44 then 'test' end) = 'test')
+        // return null
+        ScalarOperator op40 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, test.clone(),
+                op21.clone());
+        CompoundPredicate convert1 = (CompoundPredicate) CONVERTER.convert(op40.clone());
+        Assertions.assertTrue(convert1 == null);
+
+        // NOT ((case when f0 = 44 then 'test' end) = 'test' and  f1 like 'ttt%')
+        // return null
+        ScalarOperator op52 = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, op22.clone());
+        Predicate convert2 = CONVERTER.convert(op52);
+        Assertions.assertTrue(convert2 == null);
     }
 }

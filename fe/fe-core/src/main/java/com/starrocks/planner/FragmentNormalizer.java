@@ -21,21 +21,23 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+import com.starrocks.planner.expression.ExprToNormalFormVisitor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToNormalFormVisitor;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -330,7 +332,7 @@ public class FragmentNormalizer {
             cacheParam.setSlot_remapping(outputSlotIdRemapping);
             cacheParam.setRegion_map(selectedRangeMap);
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
-            cacheParam.setKeys_type(keysType.toThrift());
+            cacheParam.setKeys_type(ExprToThrift.keysTypeToThrift(keysType));
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
             if (RunMode.isSharedDataMode()) {
                 cacheParam.setIs_lake(true);
@@ -526,7 +528,7 @@ public class FragmentNormalizer {
         List<Expr> boundSimpleRegionExprs = Lists.newArrayList();
         List<Expr> boundOtherExprs = Lists.newArrayList();
         for (Expr e : exprs) {
-            if (!e.isBound(partitionSlotId)) {
+            if (!ExprUtils.isBound(e, partitionSlotId)) {
                 unboundExprs.add(e);
                 continue;
             }

@@ -26,8 +26,8 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
@@ -50,7 +50,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.type.Type;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -70,6 +71,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class StatisticsCalculatorTest {
@@ -157,8 +161,8 @@ public class StatisticsCalculatorTest {
 
     @Test
     public void testLogicalAggregationRowCount() throws Exception {
-        ColumnRefOperator v1 = columnRefFactory.create("v1", Type.INT, true);
-        ColumnRefOperator v2 = columnRefFactory.create("v2", Type.INT, true);
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
 
         List<ColumnRefOperator> groupByColumns = Lists.newArrayList(v1);
         Map<ColumnRefOperator, CallOperator> aggCall = new HashMap<>();
@@ -196,14 +200,14 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalUnion() throws Exception {
         // child 1 output column
-        ColumnRefOperator v1 = columnRefFactory.create("v1", Type.INT, true);
-        ColumnRefOperator v2 = columnRefFactory.create("v2", Type.INT, true);
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
         // child 2 output column
-        ColumnRefOperator v3 = columnRefFactory.create("v3", Type.INT, true);
-        ColumnRefOperator v4 = columnRefFactory.create("v4", Type.INT, true);
+        ColumnRefOperator v3 = columnRefFactory.create("v3", IntegerType.INT, true);
+        ColumnRefOperator v4 = columnRefFactory.create("v4", IntegerType.INT, true);
         // union node output column
-        ColumnRefOperator v5 = columnRefFactory.create("v3", Type.INT, true);
-        ColumnRefOperator v6 = columnRefFactory.create("v4", Type.INT, true);
+        ColumnRefOperator v5 = columnRefFactory.create("v3", IntegerType.INT, true);
+        ColumnRefOperator v6 = columnRefFactory.create("v4", IntegerType.INT, true);
         // child 1 statistics
         Statistics.Builder childBuilder1 = Statistics.builder();
         childBuilder1.setOutputRowCount(10000);
@@ -244,7 +248,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds =
                     partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -259,7 +263,7 @@ public class StatisticsCalculatorTest {
             LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
                         refToColumn, columnToRef,
                         null, -1, null,
-                        ((OlapTable) table).getBaseIndexId(),
+                        ((OlapTable) table).getBaseIndexMetaId(),
                         partitionIds,
                         null,
                         false,
@@ -339,7 +343,7 @@ public class StatisticsCalculatorTest {
 
     @Test
     public void testLogicalOlapTableEmptyPartition() {
-        ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
+        ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
 
@@ -365,10 +369,10 @@ public class StatisticsCalculatorTest {
 
         LogicalOlapScanOperator olapScanOperator =
                     new LogicalOlapScanOperator(table,
-                                ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
-                                ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate),
+                                ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
+                                ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate),
                                 null, -1, null,
-                                ((OlapTable) table).getBaseIndexId(),
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -391,7 +395,7 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalOlapTableScanPartitionPrune1() {
         FeConstants.runningUnitTest = true;
-        ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
+        ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getLocalMetastore().getDb("statistics_test").getTable("test_all_type");
@@ -415,17 +419,17 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
                     new LogicalOlapScanOperator(table,
-                                ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
-                                ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate),
+                                ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
+                                ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate),
                                 null, -1,
                                 new BinaryPredicateOperator(BinaryType.EQ,
                                             idDate, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))),
-                                ((OlapTable) table).getBaseIndexId(),
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -453,9 +457,9 @@ public class StatisticsCalculatorTest {
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         olapScanOperator =
                     new LogicalOlapScanOperator(table,
-                                ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
-                                ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate),
-                                null, -1, null, ((OlapTable) table).getBaseIndexId(),
+                                ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
+                                ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate),
+                                null, -1, null, ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -486,7 +490,7 @@ public class StatisticsCalculatorTest {
     @Test
     public void testLogicalOlapTableScanPartitionPrune2() {
         FeConstants.runningUnitTest = true;
-        ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
+        ColumnRefOperator idDate = columnRefFactory.create("id_date", DateType.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("statistics_test")
@@ -511,14 +515,14 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p2")).
                     mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
                     new LogicalOlapScanOperator(table,
-                                ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
-                                ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate), null, -1, null,
-                                ((OlapTable) table).getBaseIndexId(),
+                                ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
+                                ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate), null, -1, null,
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -548,9 +552,9 @@ public class StatisticsCalculatorTest {
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         olapScanOperator =
                     new LogicalOlapScanOperator(table,
-                                ImmutableMap.of(idDate, new Column("id_date", Type.DATE, true)),
-                                ImmutableMap.of(new Column("id_date", Type.DATE, true), idDate), null, -1, null,
-                                ((OlapTable) table).getBaseIndexId(),
+                                ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
+                                ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate), null, -1, null,
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -580,13 +584,13 @@ public class StatisticsCalculatorTest {
     @Test
     public void testJoinEstimateWithMultiColumns() {
         // child 1 output column
-        ColumnRefOperator v1 = columnRefFactory.create("v1", Type.INT, true);
-        ColumnRefOperator v2 = columnRefFactory.create("v2", Type.INT, true);
-        ColumnRefOperator v5 = columnRefFactory.create("v5", Type.INT, true);
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
+        ColumnRefOperator v5 = columnRefFactory.create("v5", IntegerType.INT, true);
         // child 2 output column
-        ColumnRefOperator v3 = columnRefFactory.create("v3", Type.INT, true);
-        ColumnRefOperator v4 = columnRefFactory.create("v4", Type.INT, true);
-        ColumnRefOperator v6 = columnRefFactory.create("v6", Type.INT, true);
+        ColumnRefOperator v3 = columnRefFactory.create("v3", IntegerType.INT, true);
+        ColumnRefOperator v4 = columnRefFactory.create("v4", IntegerType.INT, true);
+        ColumnRefOperator v6 = columnRefFactory.create("v6", IntegerType.INT, true);
         // child 1 statistics
         Statistics.Builder childBuilder1 = Statistics.builder();
         childBuilder1.setOutputRowCount(10000);
@@ -665,10 +669,10 @@ public class StatisticsCalculatorTest {
         // on predicate : t0.v1 = t1.v3 + t1.v4 and t0.v2 = t1.v3 + t1.v4
         BinaryPredicateOperator eqOnPredicateWithAdd1 =
                     new BinaryPredicateOperator(BinaryType.EQ, v1,
-                                new CallOperator("add", Type.BIGINT, Lists.newArrayList(v3, v4)));
+                                new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(v3, v4)));
         BinaryPredicateOperator eqOnPredicateWithAdd2 =
                     new BinaryPredicateOperator(BinaryType.EQ, v2,
-                                new CallOperator("add", Type.BIGINT, Lists.newArrayList(v3, v4)));
+                                new CallOperator("add", IntegerType.BIGINT, Lists.newArrayList(v3, v4)));
         joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, new CompoundPredicateOperator(
                     CompoundPredicateOperator.CompoundType.AND, eqOnPredicateWithAdd1, eqOnPredicateWithAdd2));
         groupExpression = new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
@@ -684,10 +688,10 @@ public class StatisticsCalculatorTest {
 
     @Test
     public void testNotFoundColumnStatistics() {
-        ColumnRefOperator v1 = columnRefFactory.create("v1", Type.INT, true);
-        ColumnRefOperator v2 = columnRefFactory.create("v2", Type.INT, true);
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
 
-        ColumnRefOperator v3 = columnRefFactory.create("v3", Type.INT, true);
+        ColumnRefOperator v3 = columnRefFactory.create("v3", IntegerType.INT, true);
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(10000);
         builder.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
@@ -703,5 +707,51 @@ public class StatisticsCalculatorTest {
             throw new IOException("Couldn't create folders " + root);
         }
         return result;
+    }
+
+    @Test
+    public void testSkipPredicateColumnsCollectionScopeIsNestableAndRestores() {
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        try (var scope1 = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+            Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+            try (var scope2 = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+                Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+            }
+
+            Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+        }
+
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+    }
+
+    @Test
+    public void testSkipPredicateColumnsCollectionScopeDoesNotLeakAcrossThreads() throws Exception {
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<Throwable> err = new AtomicReference<>();
+
+        Thread t = new Thread(() -> {
+            try (var scope = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+                entered.countDown();
+                Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+            } catch (Throwable e) {
+                err.set(e);
+            } finally {
+                done.countDown();
+            }
+        });
+        t.start();
+
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        Assertions.assertTrue(done.await(5, TimeUnit.SECONDS));
+        if (err.get() != null) {
+            throw new AssertionError(err.get());
+        }
     }
 }

@@ -29,6 +29,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hudi.HudiRemoteFileDesc;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -265,7 +266,7 @@ public class HudiTable extends Table {
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream()
-                    .map(com.starrocks.sql.ast.expression.ExprToThriftVisitor::treeToThrift)
+                    .map(ExprToThrift::treeToThrift)
                     .collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
@@ -367,6 +368,11 @@ public class HudiTable extends Table {
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
                 Objects.equal(hiveDbName, otherTable.hiveDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 
     public static Builder builder() {

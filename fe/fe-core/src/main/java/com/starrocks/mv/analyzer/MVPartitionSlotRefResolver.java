@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.mv.analyzer;
 
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
@@ -35,7 +36,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 
@@ -243,7 +243,7 @@ public class MVPartitionSlotRefResolver {
                                 ((SlotRef) partitionByExpr).getColumnName() : ExprToSql.toSql(partitionByExpr);
                         throw new SemanticException("window function %s ’s partition expressions" +
                                 " should contain the partition column %s of materialized view",
-                                analyticExpr.getFnCall().getFnName().getFunction(),
+                                analyticExpr.getFnCall().getFunctionName(),
                                 name
                         );
                     }

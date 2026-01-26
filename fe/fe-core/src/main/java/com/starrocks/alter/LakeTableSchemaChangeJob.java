@@ -27,8 +27,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -36,6 +36,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -46,13 +47,12 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
-import com.starrocks.persist.EditLog;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -66,11 +66,10 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -89,7 +88,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -110,24 +109,27 @@ import javax.validation.constraints.NotNull;
 public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private static final Logger LOG = LogManager.getLogger(LakeTableSchemaChangeJob.class);
 
-    // physical partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
+    // initially, shadow index id and shadow index meta id are the same.
+    // not change the SerializedName for compatibility
+
+    // physical partition id -> (shadow index meta id -> (shadow tablet id -> origin tablet id))
     @SerializedName(value = "partitionIndexTabletMap")
     private Table<Long, Long, Map<Long, Long>> physicalPartitionIndexTabletMap = HashBasedTable.create();
-    // physical partition id -> (shadow index id -> shadow index))
+    // physical partition id -> (shadow index meta id -> shadow index))
     @SerializedName(value = "partitionIndexMap")
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
-    // shadow index id -> origin index id
+    // shadow index meta id -> origin index meta id
     @SerializedName(value = "indexIdMap")
-    private Map<Long, Long> indexIdMap = Maps.newHashMap();
-    // shadow index id -> shadow index name(__starrocks_shadow_xxx)
+    private Map<Long, Long> indexMetaIdMap = Maps.newHashMap();
+    // shadow index meta id -> shadow index name(__starrocks_shadow_xxx)
     @SerializedName(value = "indexIdToName")
-    private Map<Long, String> indexIdToName = Maps.newHashMap();
-    // shadow index id -> index schema
+    private Map<Long, String> indexMetaIdToName = Maps.newHashMap();
+    // shadow index meta id -> index schema
     @SerializedName(value = "indexSchemaMap")
-    private Map<Long, List<Column>> indexSchemaMap = Maps.newHashMap();
-    // shadow index id -> shadow index short key count
+    private Map<Long, List<Column>> indexMetaIdToSchema = Maps.newHashMap();
+    // shadow index meta id -> shadow index short key count
     @SerializedName(value = "indexShortKeyMap")
-    private Map<Long, Short> indexShortKeyMap = Maps.newHashMap();
+    private Map<Long, Short> indexMetaIdToShortKey = Maps.newHashMap();
 
     // bloom filter info
     @SerializedName(value = "hasBfChange")
@@ -175,6 +177,54 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
     }
 
+    protected LakeTableSchemaChangeJob(LakeTableSchemaChangeJob job) {
+        super(job);
+        if (job.physicalPartitionIndexTabletMap != null) {
+            this.physicalPartitionIndexTabletMap = HashBasedTable.create();
+            for (Table.Cell<Long, Long, Map<Long, Long>> cell : job.physicalPartitionIndexTabletMap.cellSet()) {
+                Map<Long, Long> tabletMap = Maps.newHashMap();
+                if (cell.getValue() != null) {
+                    tabletMap.putAll(cell.getValue());
+                }
+                this.physicalPartitionIndexTabletMap.put(cell.getRowKey(), cell.getColumnKey(), tabletMap);
+            }
+        } else {
+            this.physicalPartitionIndexTabletMap = null;
+        }
+        if (job.physicalPartitionIndexMap != null) {
+            this.physicalPartitionIndexMap = HashBasedTable.create();
+            this.physicalPartitionIndexMap.putAll(job.physicalPartitionIndexMap);
+        } else {
+            this.physicalPartitionIndexMap = null;
+        }
+        this.indexMetaIdMap = job.indexMetaIdMap == null ? null : Maps.newHashMap(job.indexMetaIdMap);
+        this.indexMetaIdToName = job.indexMetaIdToName == null ? null : Maps.newHashMap(job.indexMetaIdToName);
+        if (job.indexMetaIdToSchema != null) {
+            this.indexMetaIdToSchema = Maps.newHashMap();
+            for (Map.Entry<Long, List<Column>> entry : job.indexMetaIdToSchema.entrySet()) {
+                List<Column> columns = entry.getValue() == null ? null : new ArrayList<>(entry.getValue());
+                this.indexMetaIdToSchema.put(entry.getKey(), columns);
+            }
+        } else {
+            this.indexMetaIdToSchema = null;
+        }
+        this.indexMetaIdToShortKey = job.indexMetaIdToShortKey == null ? null : Maps.newHashMap(job.indexMetaIdToShortKey);
+        this.hasBfChange = job.hasBfChange;
+        this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
+        this.bfFpp = job.bfFpp;
+        this.indexChange = job.indexChange;
+        this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
+        this.startTime = job.startTime;
+        if (job.commitVersionMap != null) {
+            this.commitVersionMap = Maps.newHashMap();
+            this.commitVersionMap.putAll(job.commitVersionMap);
+        } else {
+            this.commitVersionMap = null;
+        }
+        this.sortKeyIdxes = job.sortKeyIdxes == null ? null : new ArrayList<>(job.sortKeyIdxes);
+        this.sortKeyUniqueIds = job.sortKeyUniqueIds == null ? null : new ArrayList<>(job.sortKeyUniqueIds);
+    }
+
     void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
@@ -198,49 +248,49 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
 
-    void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
-        Map<Long, Long> tabletMap = physicalPartitionIndexTabletMap.get(partitionId, shadowIdxId);
+    void addTabletIdMap(long physicalPartitionId, long shadowIdxMetaId, long shadowTabletId, long originTabletId) {
+        Map<Long, Long> tabletMap = physicalPartitionIndexTabletMap.get(physicalPartitionId, shadowIdxMetaId);
         if (tabletMap == null) {
             tabletMap = Maps.newHashMap();
-            physicalPartitionIndexTabletMap.put(partitionId, shadowIdxId, tabletMap);
+            physicalPartitionIndexTabletMap.put(physicalPartitionId, shadowIdxMetaId, tabletMap);
         }
         tabletMap.put(shadowTabletId, originTabletId);
     }
 
-    void addPartitionShadowIndex(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx) {
-        physicalPartitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
+    void addPartitionShadowIndex(long physicalPartitionId, long shadowIdxMetaId, MaterializedIndex shadowIdx) {
+        physicalPartitionIndexMap.put(physicalPartitionId, shadowIdxMetaId, shadowIdx);
     }
 
-    void addIndexSchema(long shadowIdxId, long originIdxId, @NotNull String shadowIndexName,
+    void addIndexSchema(long shadowIdxMetaId, long originIdxMetaId, @NotNull String shadowIndexName,
                         short shadowIdxShortKeyCount,
                         @NotNull List<Column> shadowIdxSchema) {
-        indexIdMap.put(shadowIdxId, originIdxId);
-        indexIdToName.put(shadowIdxId, shadowIndexName);
-        indexShortKeyMap.put(shadowIdxId, shadowIdxShortKeyCount);
-        indexSchemaMap.put(shadowIdxId, shadowIdxSchema);
+        indexMetaIdMap.put(shadowIdxMetaId, originIdxMetaId);
+        indexMetaIdToName.put(shadowIdxMetaId, shadowIndexName);
+        indexMetaIdToShortKey.put(shadowIdxMetaId, shadowIdxShortKeyCount);
+        indexMetaIdToSchema.put(shadowIdxMetaId, shadowIdxSchema);
     }
 
     // REQUIRE: has acquired the exclusive lock of database
     void addShadowIndexToCatalog(@NotNull OlapTable table, long visibleTxnId) {
         Preconditions.checkState(visibleTxnId != -1);
-        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            Preconditions.checkState(partition != null);
-            Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            Preconditions.checkState(physicalPartition != null);
+            Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 shadowIndex.setVisibleTxnId(visibleTxnId);
                 Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                         shadowIndex.getState());
-                partition.createRollupIndex(shadowIndex);
+                physicalPartition.createRollupIndex(shadowIndex);
             }
         }
 
-        for (long shadowIdxId : indexIdMap.keySet()) {
+        for (long shadowIdxMetaId : indexMetaIdMap.keySet()) {
             List<Integer> sortKeyColumnIndexes = null;
             List<Integer> sortKeyColumnUniqueIds = null;
 
-            long orgIndexId = indexIdMap.get(shadowIdxId);
-            if (orgIndexId == table.getBaseIndexId()) {
+            long orgIndexMetaId = indexMetaIdMap.get(shadowIdxMetaId);
+            if (orgIndexMetaId == table.getBaseIndexMetaId()) {
                 sortKeyColumnIndexes = sortKeyIdxes;
                 sortKeyColumnUniqueIds = sortKeyUniqueIds;
             }
@@ -248,20 +298,20 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             // If upgraded from an old version and do schema change,
             // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
             // so here we initialize column uniqueId here.
-            List<Column> columns = indexSchemaMap.get(shadowIdxId);
+            List<Column> columns = indexMetaIdToSchema.get(shadowIdxMetaId);
             boolean restored = LakeTableHelper.restoreColumnUniqueId(columns);
             if (restored) {
-                LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}", shadowIdxId,
+                LOG.info("Columns of index {} in table {} has reset all unique ids, column size: {}", shadowIdxMetaId,
                         tableName, columns.size());
             }
 
-            table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), columns, 0, 0,
-                    indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes,
+            table.setIndexMeta(shadowIdxMetaId, indexMetaIdToName.get(shadowIdxMetaId), columns, 0, 0,
+                    indexMetaIdToShortKey.get(shadowIdxMetaId), TStorageType.COLUMN,
+                    table.getKeysTypeByIndexMetaId(indexMetaIdMap.get(shadowIdxMetaId)), null, sortKeyColumnIndexes,
                     sortKeyColumnUniqueIds);
-            MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByIndexId(orgIndexId);
+            MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByMetaId(orgIndexMetaId);
             Preconditions.checkNotNull(orgIndexMeta);
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(shadowIdxId);
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(shadowIdxMetaId);
             Preconditions.checkNotNull(indexMeta);
             rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
@@ -309,16 +359,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
         }
-    }
-
-    @VisibleForTesting
-    public static void writeEditLog(LakeTableSchemaChangeJob job) {
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job);
-    }
-
-    @VisibleForTesting
-    public static JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
-        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
     }
 
     @VisibleForTesting
@@ -377,7 +417,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
-            long baseIndexId = table.getBaseIndexId();
+            long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -388,20 +428,20 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
-                    long shadowIdxId = entry.getKey();
+                    long shadowIdxMetaId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
 
-                    short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
-                    List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
-                    long originIndexId = indexIdMap.get(shadowIdxId);
-                    KeysType originKeysType = table.getKeysTypeByIndexId(originIndexId);
+                    short shadowShortKeyColumnCount = indexMetaIdToShortKey.get(shadowIdxMetaId);
+                    List<Column> shadowSchema = indexMetaIdToSchema.get(shadowIdxMetaId);
+                    long originIndexMetaId = indexMetaIdMap.get(shadowIdxMetaId);
+                    KeysType originKeysType = table.getKeysTypeByIndexMetaId(originIndexMetaId);
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
-                            .setId(shadowIdxId) // For newly create materialized index, schema id equals to index id
+                            .setId(shadowIdxMetaId) // For newly create materialized index, schema id equals to index meta id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
-                            .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
-                            .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
-                            .setIndexes(originIndexId == baseIndexId ?
+                            .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
+                            .setSortKeyUniqueIds(originIndexMetaId == baseIndexMetaId ? sortKeyUniqueIds : null)
+                            .setIndexes(originIndexMetaId == baseIndexMetaId ?
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
@@ -426,7 +466,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setDbId(dbId)
                                 .setTableId(tableId)
                                 .setPartitionId(physicalPartitionId)
-                                .setIndexId(shadowIdxId)
+                                .setIndexId(shadowIdxMetaId)
                                 .setTabletId(shadowTabletId)
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
                                 .setStorageMedium(storageMedium)
@@ -442,6 +482,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
                                 .setGtid(gtid)
                                 .setCompactionStrategy(table.getCompactionStrategy())
+                                .setRange(table.isRangeDistribution() ? shadowTablet.getRange() : null)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
@@ -483,13 +524,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     "concurrent transaction detected while adding shadow index, please re-run the alter table command");
         }
 
-        jobState = JobState.WAITING_TXN;
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        writeEditLog(this);
+        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
+        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
+        persistStateChange(this, JobState.WAITING_TXN);
 
         LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
                 watershedTxnId);
@@ -513,25 +555,26 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkNotNull(partition, partitionId);
+            Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
 
                 // the schema change task will transform the data before visible version(included).
-                long visibleVersion = partition.getVisibleVersion();
+                long visibleVersion = physicalPartition.getVisibleVersion();
 
-                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
-                    long shadowIdxId = entry.getKey();
+                    long shadowIdxMetaId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
-                    long originIndexId = indexIdMap.get(shadowIdxId);
+                    long originIndexMetaId = indexMetaIdMap.get(shadowIdxMetaId);
 
                     boolean hasNewGeneratedColumn = false;
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
-                    if (originIndexId == table.getBaseIndexId()) {
-                        List<String> originSchema = table.getSchemaByIndexId(originIndexId).stream().map(col ->
+                    if (originIndexMetaId == table.getBaseIndexMetaId()) {
+                        List<String> originSchema = table.getSchemaByIndexMetaId(originIndexMetaId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
-                        List<String> newSchema = table.getSchemaByIndexId(shadowIdxId).stream().map(col ->
+                        List<String> newSchema = table.getSchemaByIndexMetaId(shadowIdxMetaId).stream().map(col ->
                                 new String(col.getName())).collect(Collectors.toList());
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
@@ -629,7 +672,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 columnIndex = table.getFullSchema().indexOf(generatedColumn);
                             }
 
-                            mcExprs.put(columnIndex, ExprToThriftVisitor.treeToThrift(generatedColumnExpr));
+                            mcExprs.put(columnIndex, ExprToThrift.treeToThrift(generatedColumnExpr));
                         }
                         // we need this thing, otherwise some expr evalution will fail in BE
                         TQueryGlobals queryGlobals = new TQueryGlobals();
@@ -646,6 +689,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         generatedColumnReq.setMc_exprs(mcExprs);
                     }
 
+                    TTabletSchema baseTabletReadSchema = indexToBaseTabletReadSchema.get(originIndexMetaId);
+                    if (baseTabletReadSchema == null) {
+                        baseTabletReadSchema = SchemaInfo.fromMaterializedIndex(
+                                table, originIndexMetaId, table.getIndexMetaByMetaId(originIndexMetaId)).toTabletSchema();
+                        indexToBaseTabletReadSchema.put(originIndexMetaId, baseTabletReadSchema);
+                    }
+
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
                                 shadowTablet.getId());
@@ -655,16 +705,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId =
-                                physicalPartitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
+                                physicalPartitionIndexTabletMap.row(physicalPartitionId).get(shadowIdxMetaId).get(shadowTabletId);
                         AlterReplicaTask alterTask =
-                                AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, partitionId,
-                                        shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
-                                        watershedTxnId, generatedColumnReq);
+                                AlterReplicaTask.alterLakeTablet(computeNode.getId(), dbId, tableId, physicalPartitionId,
+                                        shadowIdxMetaId, shadowTabletId, originTabletId, visibleVersion, jobId,
+                                        watershedTxnId, generatedColumnReq, baseTabletReadSchema);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
                 }
 
-                partition.setMinRetainVersion(visibleVersion);
+                physicalPartition.setMinRetainVersion(visibleVersion);
 
             } // end for partitions
         }
@@ -706,21 +756,20 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             commitVersionMap = new HashMap<>();
-            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkNotNull(partition, partitionId);
-                partition.setMinRetainVersion(0);
-                long commitVersion = partition.getNextVersion();
-                commitVersionMap.put(partitionId, commitVersion);
-                LOG.debug("commit version of partition {} is {}. jobId={}", partitionId, commitVersion, jobId);
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
+                physicalPartition.setMinRetainVersion(0);
+                long commitVersion = physicalPartition.getNextVersion();
+                commitVersionMap.put(physicalPartitionId, commitVersion);
+                LOG.debug("commit version of partition {} is {}. jobId={}", physicalPartitionId, commitVersion, jobId);
             }
-            this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            writeEditLog(this);
-
-            // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
-            updateNextVersion(table);
+            persistStateChange(this, JobState.FINISHED_REWRITING, () -> {
+                // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
+                updateNextVersion(table);
+            });
         }
 
         if (span != null) {
@@ -743,10 +792,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             return;
         }
 
-        JournalTask editLogFuture;
         // Replace the current index with shadow index.
-        Set<String> modifiedColumns;
-        List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             OlapTable table = (db != null) ? db.getTable(tableId) : null;
             if (table == null) {
@@ -755,20 +801,17 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             // collect modified columns for inactivating mv
             // Note: should collect before visualiseShadowIndex
-            modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
-            // Below this point, all query and load jobs will use the new schema.
-            droppedIndexes = visualiseShadowIndex(table);
-
-            // inactivate related mv
-            inactiveRelatedMv(modifiedColumns, table);
-            table.onReload();
-            this.jobState = JobState.FINISHED;
+            Set<String> modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
             this.finishedTimeMs = System.currentTimeMillis();
 
-            editLogFuture = writeEditLogAsync(this);
+            persistStateChange(this, JobState.FINISHED, () -> {
+                // Below this point, all query and load jobs will use the new schema.
+                visualiseShadowIndex(table);
+                // inactivate related mv
+                inactiveRelatedMv(modifiedColumns, table);
+                table.onReload();
+            });
         }
-
-        EditLog.waitInfinity(editLogFuture);
 
         if (span != null) {
             span.end();
@@ -781,13 +824,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             isFileBundling = table.isFileBundling();
-            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkState(partition != null, partitionId);
-                long commitVersion = commitVersionMap.get(partitionId);
-                if (commitVersion != partition.getVisibleVersion() + 1) {
-                    Preconditions.checkState(partition.getVisibleVersion() < commitVersion,
-                            "partition=" + partitionId + " visibleVersion=" + partition.getVisibleVersion() +
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null, physicalPartitionId);
+                long commitVersion = commitVersionMap.get(physicalPartitionId);
+                if (commitVersion != physicalPartition.getVisibleVersion() + 1) {
+                    Preconditions.checkState(physicalPartition.getVisibleVersion() < commitVersion,
+                            "partition=" + physicalPartitionId + " visibleVersion=" + physicalPartition.getVisibleVersion() +
                                     " commitVersion=" + commitVersion);
                     return false;
                 }
@@ -813,10 +856,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
             originTxnInfo.gtid = watershedGtid;
 
-            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
-                long commitVersion = commitVersionMap.get(partitionId);
-                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+                long commitVersion = commitVersionMap.get(physicalPartitionId);
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!isFileBundling) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
@@ -828,15 +871,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 // For indexes whose schema have not changed, we still need to upgrade the version
-                List<MaterializedIndex> originMaterializedIndex;
+                List<MaterializedIndex> originMaterializedIndices;
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
                 try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
                     OlapTable table = getTableOrThrow(db, tableId);
-                    PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-                    originMaterializedIndex = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                    originMaterializedIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                 }
 
-                for (MaterializedIndex index : originMaterializedIndex) {
+                for (MaterializedIndex index : originMaterializedIndices) {
                     allOtherPartitionTablets.addAll(index.getTablets());
                 }
 
@@ -864,11 +907,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             return Sets.newHashSet();
         }
         Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (Map.Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
-            Long shadowIdxId = entry.getKey();
-            long originIndexId = indexIdMap.get(shadowIdxId);
+        for (Map.Entry<Long, List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Long shadowIdxMetaId = entry.getKey();
+            long originIndexMetaId = indexMetaIdMap.get(shadowIdxMetaId);
             List<Column> shadowSchema = entry.getValue();
-            List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+            List<Column> originSchema = tbl.getSchemaByIndexMetaId(originIndexMetaId);
             modifiedColumns.addAll(AlterHelper.collectDroppedOrModifiedColumns(originSchema, shadowSchema));
         }
         return modifiedColumns;
@@ -910,12 +953,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     // Update each Partition's nextVersion.
     // The caller must have acquired the database's exclusive lock.
     void updateNextVersion(@NotNull OlapTable table) {
-        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            long commitVersion = commitVersionMap.get(partitionId);
-            Preconditions.checkState(partition.getNextVersion() == commitVersion,
-                    "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
-            partition.setNextVersion(commitVersion + 1);
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            long commitVersion = commitVersionMap.get(physicalPartitionId);
+            Preconditions.checkState(physicalPartition.getNextVersion() == commitVersion,
+                    "partitionNextVersion=" + physicalPartition.getNextVersion() + " commitVersion=" + commitVersion);
+            physicalPartition.setNextVersion(commitVersion + 1);
         }
     }
 
@@ -939,10 +982,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
             this.physicalPartitionIndexTabletMap = other.physicalPartitionIndexTabletMap;
             this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
-            this.indexIdMap = other.indexIdMap;
-            this.indexIdToName = other.indexIdToName;
-            this.indexSchemaMap = other.indexSchemaMap;
-            this.indexShortKeyMap = other.indexShortKeyMap;
+            this.indexMetaIdMap = other.indexMetaIdMap;
+            this.indexMetaIdToName = other.indexMetaIdToName;
+            this.indexMetaIdToSchema = other.indexMetaIdToSchema;
+            this.indexMetaIdToShortKey = other.indexMetaIdToShortKey;
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
@@ -984,12 +1027,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         for (Table.Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
             Long partitionId = cell.getRowKey();
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
-            Long shadowIndexId = cell.getColumnKey();
+            Long shadowIndexMetaId = cell.getColumnKey();
             MaterializedIndex shadowIndex = cell.getValue();
             assert partitionId != null;
-            assert shadowIndexId != null;
+            assert shadowIndexMetaId != null;
             assert shadowIndex != null;
             TStorageMedium medium = table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+            long shadowIndexId = shadowIndexMetaId;
             TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, medium, true);
             for (Tablet shadowTablet : shadowIndex.getTablets()) {
                 invertedIndex.addTablet(shadowTablet.getId(), shadowTabletMeta);
@@ -998,21 +1042,21 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     void removeShadowIndex(@NotNull OlapTable table) {
-        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            Preconditions.checkNotNull(partition, partitionId);
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(physicalPartitionId);
+            Preconditions.checkNotNull(partition, physicalPartitionId);
             partition.setMinRetainVersion(0);
-            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(partitionId).values()) {
-                partition.deleteRollupIndex(shadowIdx.getId());
+            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
+                partition.deleteMaterializedIndexByMetaId(shadowIdx.getMetaId());
             }
         }
-        for (String shadowIndexName : indexIdToName.values()) {
+        for (String shadowIndexName : indexMetaIdToName.values()) {
             table.deleteIndexInfo(shadowIndexName);
         }
         // Delete tablet from TabletInvertedIndex
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
-            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(partitionId).values()) {
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(physicalPartitionId).values()) {
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.deleteTablet(tablet.getId());
                 }
@@ -1023,79 +1067,76 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     @NotNull
     List<MaterializedIndex> visualiseShadowIndex(@NotNull OlapTable table) {
-        List<MaterializedIndex> droppedIndexes = new ArrayList<>();
+        List<MaterializedIndex> droppedIndices = new ArrayList<>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Column column : table.getColumns()) {
-            if (Type.VARCHAR.equals(column.getType())) {
-                IDictManager.getInstance().removeGlobalDict(table.getId(), column.getColumnId());
+            if (VarcharType.VARCHAR.equals(column.getType())) {
+                IDictManager.getInstance().removeGlobalDict(table, column.getColumnId());
             }
         }
 
         // replace the origin index with shadow index, set index state as NORMAL
-        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            Preconditions.checkState(commitVersionMap.containsKey(partition.getId()));
-            long commitVersion = commitVersionMap.get(partition.getId());
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            Preconditions.checkState(commitVersionMap.containsKey(physicalPartition.getId()));
+            long commitVersion = commitVersionMap.get(physicalPartition.getId());
 
-            LOG.debug("update partition visible version. partition=" + partition.getId() + " commitVersion=" +
+            LOG.debug("update partition visible version. partition=" + physicalPartition.getId() + " commitVersion=" +
                     commitVersion);
             // Update Partition's visible version
-            Preconditions.checkState(commitVersion == partition.getVisibleVersion() + 1,
-                    commitVersion + " vs " + partition.getVisibleVersion());
-            partition.setVisibleVersion(commitVersion, finishedTimeMs);
-            LOG.debug("update visible version of partition {} to {}. jobId={}", partition.getId(),
+            Preconditions.checkState(commitVersion == physicalPartition.getVisibleVersion() + 1,
+                    commitVersion + " vs " + physicalPartition.getVisibleVersion());
+            physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+            LOG.debug("update visible version of partition {} to {}. jobId={}", physicalPartition.getId(),
                     commitVersion, jobId);
-            TStorageMedium medium = table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium();
+            TStorageMedium medium = table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
             // drop the origin index from partitions
-            for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
-                long shadowIdxId = entry.getKey();
-                long originIdxId = entry.getValue();
+            for (Map.Entry<Long, Long> entry : indexMetaIdMap.entrySet()) {
+                long shadowIdxMetaId = entry.getKey();
+                long originIdxMetaId = entry.getValue();
                 // get index from globalStateMgr, not from 'partitionIdToRollupIndex'.
                 // because if this alter job is recovered from edit log, index in 'physicalPartitionIndexMap'
                 // is not the same object in globalStateMgr. So modification on that index can not reflect to the index
                 // in globalStateMgr.
-                MaterializedIndex shadowIdx = partition.getIndex(shadowIdxId);
-                Preconditions.checkNotNull(shadowIdx, shadowIdxId);
-                MaterializedIndex droppedIdx;
-                if (originIdxId == partition.getBaseIndex().getId()) {
-                    droppedIdx = partition.getBaseIndex();
-                } else {
-                    droppedIdx = partition.deleteRollupIndex(originIdxId);
-                }
-                Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
+                MaterializedIndex shadowIdx = physicalPartition.getLatestIndex(shadowIdxMetaId);
+                Preconditions.checkNotNull(shadowIdx, shadowIdxMetaId);
+                List<MaterializedIndex> partDroppedIndices = physicalPartition.deleteMaterializedIndexByMetaId(originIdxMetaId);
+                Preconditions.checkState(!partDroppedIndices.isEmpty(), originIdxMetaId + " vs. " + shadowIdxMetaId);
 
                 // Add Tablet to TabletInvertedIndex.
                 TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, medium, true);
+                        new TabletMeta(dbId, tableId, physicalPartition.getId(), shadowIdx.getId(), medium, true);
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                 }
 
-                partition.visualiseShadowIndex(shadowIdxId, originIdxId == partition.getBaseIndex().getId());
+                physicalPartition.visualiseShadowIndex(shadowIdx.getId(), originIdxMetaId == table.getBaseIndexMetaId());
 
                 // the origin tablet created by old schema can be deleted from FE metadata
-                for (Tablet originTablet : droppedIdx.getTablets()) {
-                    invertedIndex.deleteTablet(originTablet.getId());
+                for (MaterializedIndex droppedIdx : partDroppedIndices) {
+                    for (Tablet originTablet : droppedIdx.getTablets()) {
+                        invertedIndex.deleteTablet(originTablet.getId());
+                    }
                 }
 
-                droppedIndexes.add(droppedIdx);
+                droppedIndices.addAll(partDroppedIndices);
             }
         }
 
         // update index schema info of each index
-        for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
-            long shadowIdxId = entry.getKey();
-            long originIdxId = entry.getValue();
-            String shadowIdxName = table.getIndexNameById(shadowIdxId);
-            String originIdxName = table.getIndexNameById(originIdxId);
+        for (Map.Entry<Long, Long> entry : indexMetaIdMap.entrySet()) {
+            long shadowIdxMetaId = entry.getKey();
+            long originIdxMetaId = entry.getValue();
+            String shadowIdxName = table.getIndexNameByMetaId(shadowIdxMetaId);
+            String originIdxName = table.getIndexNameByMetaId(originIdxMetaId);
             table.deleteIndexInfo(originIdxName);
             // the shadow index name is '__starrocks_shadow_xxx', rename it to origin name 'xxx'
             // this will also remove the prefix of columns
             table.renameIndexForSchemaChange(shadowIdxName, originIdxName);
-            table.renameColumnNamePrefix(shadowIdxId);
+            table.renameColumnNamePrefix(shadowIdxMetaId);
 
-            if (originIdxId == table.getBaseIndexId()) {
-                table.setBaseIndexId(shadowIdxId);
+            if (originIdxMetaId == table.getBaseIndexMetaId()) {
+                table.setBaseIndexMetaId(shadowIdxMetaId);
             }
         }
         // rebuild table's full schema
@@ -1112,7 +1153,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         table.setState(OlapTable.OlapTableState.NORMAL);
 
-        return droppedIndexes;
+        return droppedIndices;
     }
 
     @Override
@@ -1148,22 +1189,23 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                removeShadowIndex(table);
-            }
-        }
-
-        this.jobState = JobState.CANCELLED;
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
+
+        persistStateChange(this, JobState.CANCELLED, () -> {
+            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
+                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+                if (table != null) {
+                    removeShadowIndex(table);
+                }
+            }
+        });
+
         if (span != null) {
             span.setStatus(StatusCode.ERROR, errMsg);
             span.end();
         }
 
-        writeEditLog(this);
         LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;
@@ -1177,6 +1219,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @Override
+    public AlterJobV2 copyForPersist() {
+        return new LakeTableSchemaChangeJob(this);
+    }
+
+    @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
         String progress = FeConstants.NULL_STRING;
@@ -1185,16 +1232,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // one line for one shadow index
-        for (Map.Entry<Long, Long> entry : indexIdMap.entrySet()) {
-            long shadowIndexId = entry.getKey();
+        for (Map.Entry<Long, Long> entry : indexMetaIdMap.entrySet()) {
+            long shadowIndexMetaId = entry.getKey();
             List<Comparable> info = Lists.newArrayList();
             info.add(jobId);
             info.add(tableName);
             info.add(TimeUtils.longToTimeString(createTimeMs));
             info.add(TimeUtils.longToTimeString(finishedTimeMs));
             // only show the origin index name
-            info.add(Column.removeNamePrefix(indexIdToName.get(shadowIndexId)));
-            info.add(shadowIndexId);
+            info.add(Column.removeNamePrefix(indexMetaIdToName.get(shadowIndexMetaId)));
+            info.add(shadowIndexMetaId);
             info.add(entry.getValue());
             info.add("0:0"); // schema version and schema hash
             info.add(watershedTxnId);

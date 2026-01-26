@@ -212,14 +212,14 @@ class TestRealCases():
 
     def test_real_case_1(self):
         """Test real case 1."""
-        sql = "select users.id, users.name from test.users where users.active = true"
+        sql = "select users.id, users.name from test_sqla.users where users.active = true"
         expected = "select id, name from users where active = true"
         result = TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True)
         assert result == expected
 
     def test_real_case_2_with_backticks(self):
         """Test real case 2 with backticks."""
-        sql = "SELECT `users`.`id`, `users`.`name` FROM `test`.`users` WHERE `users`.`active` = TRUE"
+        sql = "SELECT `users`.`id`, `users`.`name` FROM `test_sqla`.`users` WHERE `users`.`active` = TRUE"
         expected = "select id, name from users where active = true"
         result = TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True)
         assert result == expected
@@ -228,7 +228,7 @@ class TestRealCases():
         """Test real case 3."""
         sql = """
         SELECT `users`.`id`, `users`.`name`
-        FROM `test`.`users`
+        FROM `test_sqla`.`users`
         WHERE `users`.`active` = TRUE
         """
         expected = "select id, name from users where active = true"
@@ -244,7 +244,7 @@ class TestRealCases():
 
     def test_real_case_5_with_qualifiers(self):
         """Test real case 5 with special char in backticks."""
-        sql = "select orders_part_expr.user_id, orders_part_expr.order_date, count(*) as cnt from test.orders_part_expr group by orders_part_expr.user_id, orders_part_expr.order_date"
+        sql = "select orders_part_expr.user_id, orders_part_expr.order_date, count(*) as cnt from test_sqla.orders_part_expr group by orders_part_expr.user_id, orders_part_expr.order_date"
         expected = "select user_id, order_date, count(*) as cnt from orders_part_expr group by user_id, order_date"
         result = TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True)
         assert result == expected
@@ -252,7 +252,7 @@ class TestRealCases():
     def test_real_case_6_with_qualifiers_and_backticks(self):
         """Test real case 6 with special char in backticks."""
         sql = """SELECT `orders_part_expr`.`user_id`, `orders_part_expr`.`order_date`, count(*) AS `cnt`
-            FROM `test`.`orders_part_expr`
+            FROM `test_sqla`.`orders_part_expr`
             GROUP BY `orders_part_expr`.`user_id`, `orders_part_expr`.`order_date`"""
         expected = "select user_id, order_date, count(*) as cnt from orders_part_expr group by user_id, order_date"
         result = TableAttributeNormalizer.normalize_sql(sql, remove_qualifiers=True)

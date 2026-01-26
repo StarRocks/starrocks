@@ -24,8 +24,12 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
 #include "cache/mem_cache/lrucache_engine.h"
+#include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "common/logging.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
@@ -47,6 +51,8 @@
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 #include "util/thrift_util.h"
+#include "util/variant.h"
+#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 
@@ -4357,25 +4363,25 @@ TEST_F(FileReaderTest, test_read_variant) {
     chunk->check_or_die();
 
     std::vector<std::string> expected_rows = {
-            R"(['object_primitive', {boolean_false_field:false,boolean_true_field:true,double_field:1.23456789,int_field:1,null_field:null,string_field:Apache Parquet,timestamp_field:2025-04-16T12:34:56.78}, '{"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}'])",
-            R"(['primitive_string', This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!, '"This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!"'])",
-            R"(['object_nested', {id:1,observation:{location:In the Volcano,time:12:34:56,value:{humidity:456,temperature:123}},species:{name:lava monster,population:6789}}, '{"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}'])",
-            R"(['array_nested', [{id:1,thing:{names:[Contrarian,Spider]}},null,{id:2,names:[Apple,Ray,null],type:if}], '[{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}]'])",
-            "['short_string', Less than 64 bytes (❤️ with utf8), '\"Less than 64 bytes (❤️ with utf8)\"']",
-            R"(['primitive_decimal16', 12345678912345678.90, '12345678912345678.9'])",
+            R"(['object_primitive', {"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}, '{"boolean_false_field":false,"boolean_true_field":true,"double_field":1.23456789,"int_field":1,"null_field":null,"string_field":"Apache Parquet","timestamp_field":"2025-04-16T12:34:56.78"}'])",
+            R"(['primitive_string', "This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!", '"This string is longer than 64 bytes and therefore does not fit in a short_string and it also includes several non ascii characters such as 🐢, 💖, ♥️, 🎣 and 🤦!!"'])",
+            R"(['object_nested', {"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}, '{"id":1,"observation":{"location":"In the Volcano","time":"12:34:56","value":{"humidity":456,"temperature":123}},"species":{"name":"lava monster","population":6789}}'])",
+            R"(['array_nested', [{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}], '[{"id":1,"thing":{"names":["Contrarian","Spider"]}},null,{"id":2,"names":["Apple","Ray",null],"type":"if"}]'])",
+            R"==(['short_string', "Less than 64 bytes (❤️ with utf8)", '"Less than 64 bytes (❤️ with utf8)"'])==",
+            R"(['primitive_decimal16', 12345678912345678.9, '12345678912345678.9'])",
             R"(['primitive_timestampntz', "2025-04-16 12:34:56.780000", '"2025-04-16 12:34:56.78"'])",
             R"(['primitive_timestamp', "2025-04-16 04:34:56.78+00:00", '"2025-04-16 12:34:56.78+08:00"'])",
             R"(['array_primitive', [2,1,5,9], '[2,1,5,9]'])",
             R"(['primitive_binary', "AxM33q2+78r+", '"AxM33q2+78r+"'])",
-            R"(['primitive_decimal8', 12345678.90, '12345678.9'])",
-            R"(['primitive_double', 1234567890.123400, '1.2345678901234E9'])",
+            R"(['primitive_decimal8', 12345678.9, '12345678.9'])",
+            R"(['primitive_double', 1234567890.1234, '1.2345678901234E9'])",
             R"(['primitive_int64', 1234567890123456789, '1234567890123456789'])",
             R"(['primitive_boolean_true', true, 'true'])",
             R"(['primitive_decimal4', 12.34, '12.34'])",
             R"(['primitive_boolean_false', false, 'false'])",
             R"(['primitive_date', "2025-04-16", '"2025-04-16"'])",
             R"(['primitive_int32', 123456, '123456'])",
-            R"(['primitive_float', 1234567936.000000, '1.23456794E9'])",
+            R"(['primitive_float', 1.23456794e+09, '1.23456794E9'])",
             R"(['primitive_int16', 1234, '1234'])",
             R"(['primitive_int8', 42, '42'])",
             R"(['object_empty', {}, '{}'])",
@@ -4401,6 +4407,114 @@ TEST_F(FileReaderTest, test_read_variant) {
     }
 
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_age) {
+    const std::string shred_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(shred_file_path);
+
+    // Read only data.typed_value.age.typed_value (INT32) from a shredded variant.
+    TypeDescriptor age_struct = TypeDescriptor::create_struct_type({"typed_value"}, {TYPE_INT_DESC});
+    TypeDescriptor typed_value_struct = TypeDescriptor::create_struct_type({"age"}, {age_struct});
+    TypeDescriptor data_struct = TypeDescriptor::create_struct_type({"typed_value"}, {typed_value_struct});
+
+    Utils::SlotDesc slot_descs[] = {{"data", data_struct}, {""}};
+    auto ctx = _create_scan_context(slot_descs, shred_file_path);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
+    ASSERT_EQ(file_reader->row_group_size(), 1);
+
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+    // Only the "data.typed_value.age.typed_value" leaf column should be read.
+    EXPECT_EQ(ranges.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(data_struct, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
+    ASSERT_EQ(chunk->num_rows(), 5);
+    const Column* data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0));
+    const auto* data_struct_col = down_cast<const StructColumn*>(data_col);
+    const Column* typed_value_col =
+            ColumnHelper::get_data_column(data_struct_col->field_column_raw_ptr("typed_value").value());
+    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col);
+    const Column* age_col = ColumnHelper::get_data_column(typed_value_struct_col->field_column_raw_ptr("age").value());
+    const auto* age_struct_col = down_cast<const StructColumn*>(age_col);
+    const Column* age_typed_col =
+            ColumnHelper::get_data_column(age_struct_col->field_column_raw_ptr("typed_value").value());
+
+    const auto* age_values = down_cast<const FixedLengthColumn<int32_t>*>(age_typed_col);
+    ASSERT_EQ(age_values->size(), chunk->num_rows());
+    for (size_t i = 0; i < age_values->size(); ++i) {
+        EXPECT_EQ(20 + static_cast<int32_t>(i), age_values->get_data()[i]);
+    }
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_profile_rank_partial) {
+    const std::string shred_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(shred_file_path);
+
+    // Read only data.typed_value.profile.typed_value.rank.typed_value (INT32).
+    TypeDescriptor rank_struct = TypeDescriptor::create_struct_type({"typed_value"}, {TYPE_INT_DESC});
+    TypeDescriptor profile_typed_struct = TypeDescriptor::create_struct_type({"rank"}, {rank_struct});
+    TypeDescriptor profile_struct = TypeDescriptor::create_struct_type({"typed_value"}, {profile_typed_struct});
+    TypeDescriptor typed_value_struct = TypeDescriptor::create_struct_type({"profile"}, {profile_struct});
+    TypeDescriptor data_struct = TypeDescriptor::create_struct_type({"typed_value"}, {typed_value_struct});
+
+    Utils::SlotDesc slot_descs[] = {{"data", data_struct}, {""}};
+    auto ctx = _create_scan_context(slot_descs, shred_file_path);
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok()) << "Failed to initialize file reader: " << status.message();
+    ASSERT_EQ(file_reader->row_group_size(), 1);
+
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+    // Only rank.typed_value should be read.
+    EXPECT_EQ(ranges.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(data_struct, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << "Failed to read shredded variant data: " << status.message();
+    ASSERT_EQ(chunk->num_rows(), 5);
+
+    const Column* data_col = ColumnHelper::get_data_column(chunk->get_column_by_index(0).get());
+    const auto* data_struct_col = down_cast<const StructColumn*>(data_col);
+    const Column* typed_value_col =
+            ColumnHelper::get_data_column(data_struct_col->field_column_raw_ptr("typed_value").value());
+    const auto* typed_value_struct_col = down_cast<const StructColumn*>(typed_value_col);
+    const Column* profile_col =
+            ColumnHelper::get_data_column(typed_value_struct_col->field_column_raw_ptr("profile").value());
+    const auto* profile_struct_col = down_cast<const StructColumn*>(profile_col);
+    const Column* profile_typed_col =
+            ColumnHelper::get_data_column(profile_struct_col->field_column_raw_ptr("typed_value").value());
+    const auto* profile_typed_struct_col = down_cast<const StructColumn*>(profile_typed_col);
+    const Column* rank_col = profile_typed_struct_col->field_column_raw_ptr("rank").value();
+    const auto* rank_struct_col = down_cast<const StructColumn*>(ColumnHelper::get_data_column(rank_col));
+
+    const Column* rank_typed_col = rank_struct_col->field_column_raw_ptr("typed_value").value();
+    ASSERT_TRUE(rank_typed_col->is_nullable());
+
+    const auto* rank_typed_nullable = down_cast<const NullableColumn*>(rank_typed_col);
+    const auto* rank_typed_data =
+            down_cast<const FixedLengthColumn<int32_t>*>(rank_typed_nullable->data_column().get());
+
+    for (size_t i = 0; i < chunk->num_rows(); ++i) {
+        int32_t expected = static_cast<int32_t>(i + 1);
+        if (i % 2 == 0) {
+            EXPECT_FALSE(rank_typed_nullable->is_null(i));
+            EXPECT_EQ(rank_typed_data->get_data()[i], expected);
+        } else {
+            EXPECT_TRUE(rank_typed_nullable->is_null(i));
+        }
+    }
 }
 
 } // namespace starrocks::parquet

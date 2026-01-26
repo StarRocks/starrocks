@@ -98,3 +98,7 @@ If you have a custom file system, you also need to copy the file system-related 
 Check that the **/etc/krb5.conf** file is configured on all hosts on which brokers are deployed.
 
 If the error persists, add `-Djava.security.krb5.conf:/etc/krb5.conf` to the end of the `JAVA_OPTS` variable in the broker startup script.
+
+## 11. Will Broker Load fail if the source Hive table is empty?
+
+By default, an empty transaction returns error "all partitions have no load data". You can set the FE configuration `empty_load_as_error` to `false` to allow empty transactions to return success.

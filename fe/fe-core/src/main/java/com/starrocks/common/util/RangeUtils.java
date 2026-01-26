@@ -146,7 +146,7 @@ public class RangeUtils {
         if (hasLowerBound) {
             PartitionKey lowerBound = range.lowerEndpoint();
             out.writeBoolean(range.lowerBoundType() == BoundType.CLOSED);
-            lowerBound.write(out);
+            PartitionKeySerializer.write(out, lowerBound);
         }
 
         // write upper bound if upper bound exists
@@ -155,7 +155,7 @@ public class RangeUtils {
         if (hasUpperBound) {
             PartitionKey upperBound = range.upperEndpoint();
             out.writeBoolean(range.upperBoundType() == BoundType.CLOSED);
-            upperBound.write(out);
+            PartitionKeySerializer.write(out, upperBound);
         }
     }
 
@@ -170,13 +170,13 @@ public class RangeUtils {
         hasLowerBound = in.readBoolean();
         if (hasLowerBound) {
             lowerBoundClosed = in.readBoolean();
-            lowerBound = PartitionKey.read(in);
+            lowerBound = PartitionKeySerializer.read(in);
         }
 
         hasUpperBound = in.readBoolean();
         if (hasUpperBound) {
             upperBoundClosed = in.readBoolean();
-            upperBound = PartitionKey.read(in);
+            upperBound = PartitionKeySerializer.read(in);
         }
 
         // Totally 9 cases. Both lower bound and upper bound could be open, closed or not exist

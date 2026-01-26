@@ -37,6 +37,7 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
 
+#include <optional>
 #include <ostream>
 #include <shared_mutex>
 #include <unordered_map>
@@ -63,6 +64,7 @@ class IcebergDeleteFileMeta;
 class OlapTableSchemaParam;
 class PTupleDescriptor;
 class PSlotDescriptor;
+class RowPositionDescriptor;
 
 // Location information for null indicator bit for particular slot.
 // For non-nullable slots, the byte_offset will be 0 and the bit_mask will be 0.
@@ -174,14 +176,17 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
+    const std::vector<TExpr>& thrift_partition_key_exprs() const { return _thrift_partition_key_exprs; }
     Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool);
+    std::string debug_string() const;
 
 private:
     int64_t _id = 0;
     THdfsFileFormat::type _file_format;
     std::string _location;
 
-    const std::vector<TExpr>& _thrift_partition_key_exprs;
+    // holding thrift exprs for partition keys for duplication check during runtime
+    const std::vector<TExpr> _thrift_partition_key_exprs;
     std::vector<ExprContext*> _partition_key_value_evals;
 };
 
@@ -254,6 +259,8 @@ public:
     const TSortOrder& sort_order() const { return _t_sort_order; }
 
     Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
+
+    const std::vector<std::string>& partition_source_column_names() { return _source_column_names; }
 
 private:
     TIcebergSchema _t_iceberg_schema;
@@ -568,6 +575,47 @@ private:
 
     // map from TupleId to position of tuple w/in row
     std::vector<int> _tuple_idx_map;
+};
+
+// used to describe row position, only used in global late materialization
+class RowPositionDescriptor {
+public:
+    enum Type : uint8_t {
+        ICEBERG_V3 = 0,
+    };
+    RowPositionDescriptor(Type type, SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
+                          std::vector<SlotId> lookup_ref_slot_ids)
+            : _type(type),
+              _row_source_slot_id(row_source_slot_id),
+              _fetch_ref_slot_ids(std::move(fetch_ref_slot_ids)),
+              _lookup_ref_slot_ids(std::move(lookup_ref_slot_ids)) {}
+
+    virtual ~RowPositionDescriptor() = default;
+
+    Type type() const { return _type; }
+
+    SlotId get_row_source_slot_id() const { return _row_source_slot_id; }
+
+    const std::vector<SlotId>& get_fetch_ref_slot_ids() const { return _fetch_ref_slot_ids; }
+    const std::vector<SlotId>& get_lookup_ref_slot_ids() const { return _lookup_ref_slot_ids; }
+    std::string debug_string() const;
+
+    static RowPositionDescriptor* from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool);
+
+protected:
+    Type _type;
+    SlotId _row_source_slot_id;
+    std::vector<SlotId> _fetch_ref_slot_ids;
+    std::vector<SlotId> _lookup_ref_slot_ids;
+};
+
+class IcebergV3RowPositionDescriptor : public RowPositionDescriptor {
+public:
+    IcebergV3RowPositionDescriptor(SlotId row_source_slot_id, std::vector<SlotId> fetch_ref_slot_ids,
+                                   std::vector<SlotId> lookup_ref_slot_ids)
+            : RowPositionDescriptor(ICEBERG_V3, row_source_slot_id, std::move(fetch_ref_slot_ids),
+                                    std::move(lookup_ref_slot_ids)) {}
+    ~IcebergV3RowPositionDescriptor() override = default;
 };
 
 } // namespace starrocks

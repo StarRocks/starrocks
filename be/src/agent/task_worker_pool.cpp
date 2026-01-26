@@ -59,6 +59,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "service/backend_options.h"
+#include "simd/simd.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"

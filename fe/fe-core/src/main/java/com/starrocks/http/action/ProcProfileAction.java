@@ -14,12 +14,20 @@
 
 package com.starrocks.http.action;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
+import com.starrocks.http.HttpUtils;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,27 +57,87 @@ public class ProcProfileAction extends WebBaseAction {
     public void executeGet(BaseRequest request, BaseResponse response) {
         getPageHeader(request, response.getContent());
 
-        addProfileListInfo(response.getContent());
+        // Add proc profile tabs CSS link in the head section
+        // Insert before the closing </head> tag by replacing the body tag opening
+        String content = response.getContent().toString();
+        int headEndIndex = content.lastIndexOf("</head>");
+        if (headEndIndex > 0) {
+            response.getContent().setLength(0);
+            response.getContent().append(content.substring(0, headEndIndex));
+            response.getContent()
+                    .append("  <link href=\"/static/css?res=proc-profile-tabs.css\" ")
+                    .append("rel=\"stylesheet\" media=\"screen\"/>\n");
+            response.getContent().append(content.substring(headEndIndex));
+        }
+
+        String nodeParam = request.getSingleParameter("node");
+        if (nodeParam == null || nodeParam.isEmpty()) {
+            nodeParam = "FE";
+        }
+
+        addTabNavigation(response.getContent(), nodeParam);
+        addProfileListInfo(response.getContent(), nodeParam);
 
         getPageFooter(response.getContent());
 
         writeResponse(request, response);
     }
 
-    private void addProfileListInfo(StringBuilder buffer) {
+    private void addTabNavigation(StringBuilder buffer, String selectedNode) {
+        buffer.append("<ul class=\"nav nav-tabs\" style=\"margin-bottom: 20px;\">");
+
+        // FE tab
+        String feClass = "FE".equals(selectedNode) ? "active" : "";
+        buffer.append("<li class=\"").append(feClass).append("\">");
+        buffer.append("<a href=\"/proc_profile?node=FE\">FE</a>");
+        buffer.append("</li>");
+
+        // BE tabs
+        ImmutableMap<Long, Backend> backendMap =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        for (Backend backend : backendMap.values()) {
+            if (!backend.isAlive()) {
+                continue;
+            }
+            String beNodeId = "BE:" + backend.getHost() + ":" + backend.getHttpPort();
+            String beClass = beNodeId.equals(selectedNode) ? "active" : "";
+            buffer.append("<li class=\"").append(beClass).append("\">");
+            buffer.append("<a href=\"/proc_profile?node=").append(beNodeId).append("\">");
+            buffer.append("BE: ").append(backend.getHost()).append(":").append(backend.getHttpPort());
+            buffer.append("</a>");
+            buffer.append("</li>");
+        }
+
+        buffer.append("</ul>");
+    }
+
+    private void addProfileListInfo(StringBuilder buffer, String nodeParam) {
         buffer.append("<h2>Process Profiles</h2>");
         buffer.append("<p>This table lists all available CPU and memory profile files</p>");
 
-        List<ProfileFileInfo> profileFiles = getProfileFiles();
+        List<ProfileFileInfo> profileFiles;
+        if ("FE".equals(nodeParam)) {
+            profileFiles = getProfileFiles();
+        } else if (nodeParam.startsWith("BE:")) {
+            profileFiles = getProfileFilesFromBE(nodeParam);
+        } else {
+            buffer.append("<p>Invalid node parameter: ").append(nodeParam).append("</p>");
+            return;
+        }
 
         if (profileFiles.isEmpty()) {
-            buffer.append("<p>No profile files found in directory: ").append(Config.sys_log_dir)
-                    .append("/proc_profile</p>");
+            if ("FE".equals(nodeParam)) {
+                buffer.append("<p>No profile files found in directory: ")
+                        .append(Config.sys_log_dir)
+                        .append("/proc_profile</p>");
+            } else {
+                buffer.append("<p>No profile files found or node unavailable</p>");
+            }
             return;
         }
 
         appendProfileTableHeader(buffer);
-        appendProfileTableBody(buffer, profileFiles);
+        appendProfileTableBody(buffer, profileFiles, nodeParam);
         appendTableFooter(buffer);
     }
 
@@ -144,7 +212,70 @@ public class ProcProfileAction extends WebBaseAction {
         buffer.append("</tr></thead>");
     }
 
-    private void appendProfileTableBody(StringBuilder buffer, List<ProfileFileInfo> profileFiles) {
+    private List<ProfileFileInfo> getProfileFilesFromBE(String beNodeId) {
+        List<ProfileFileInfo> profileFiles = new ArrayList<>();
+
+        // Parse BE node: "BE:host:port"
+        String[] parts = beNodeId.substring(3).split(":");
+        if (parts.length != 2) {
+            LOG.warn("Invalid BE node format: {}", beNodeId);
+            return profileFiles;
+        }
+
+        String host = parts[0];
+        int port;
+        try {
+            port = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            LOG.warn("Invalid BE port: {}", parts[1]);
+            return profileFiles;
+        }
+
+        try {
+            String url = "http://" + host + ":" + port + "/api/proc_profile/list";
+            String jsonResponse = HttpUtils.get(url, null);
+
+            JsonElement jsonElement = JsonParser.parseString(jsonResponse);
+            JsonObject jsonObject = jsonElement.getAsJsonObject();
+
+            if (jsonObject.has("error")) {
+                LOG.warn("Error from BE {}:{}: {}", host, port, jsonObject.get("error").getAsString());
+                return profileFiles;
+            }
+
+            JsonArray profilesArray = jsonObject.getAsJsonArray("profiles");
+            if (profilesArray == null) {
+                return profileFiles;
+            }
+
+            SimpleDateFormat parseFormat = new SimpleDateFormat("yyyyMMdd-HHmmss");
+
+            for (JsonElement element : profilesArray) {
+                JsonObject profileObj = element.getAsJsonObject();
+                String filename = profileObj.get("filename").getAsString();
+                String type = profileObj.get("type").getAsString();
+                String timestampStr = profileObj.get("timestamp").getAsString();
+                long size = profileObj.get("size").getAsLong();
+
+                try {
+                    Date timestamp = parseFormat.parse(timestampStr);
+                    profileFiles.add(new ProfileFileInfo(type, timestamp, size, filename));
+                } catch (Exception e) {
+                    LOG.warn("Failed to parse timestamp: {}", timestampStr, e);
+                }
+            }
+
+            // Sort by timestamp descending (newest first)
+            profileFiles.sort((f1, f2) -> f2.timestamp.compareTo(f1.timestamp));
+
+        } catch (Exception e) {
+            LOG.warn("Failed to fetch proc profiles from BE {}:{}", host, port, e);
+        }
+
+        return profileFiles;
+    }
+
+    private void appendProfileTableBody(StringBuilder buffer, List<ProfileFileInfo> profileFiles, String nodeParam) {
         buffer.append("<tbody>");
         SimpleDateFormat displayFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
@@ -154,15 +285,22 @@ public class ProcProfileAction extends WebBaseAction {
             buffer.append("<td>").append(displayFormat.format(profile.timestamp)).append("</td>");
             buffer.append("<td>").append(DebugUtil.getPrettyStringBytes(profile.fileSize)).append("</td>");
             buffer.append("<td>");
-            buffer.append("<a href=\"/proc_profile/file?filename=")
-                    .append(profile.fileName)
-                    .append("\" target=\"_blank\">View</a>");
+            if ("FE".equals(nodeParam)) {
+                buffer.append("<a href=\"/proc_profile/file?filename=")
+                        .append(profile.fileName)
+                        .append("\" target=\"_blank\">View</a>");
+            } else {
+                buffer.append("<a href=\"/proc_profile/file?node=")
+                        .append(nodeParam)
+                        .append("&filename=")
+                        .append(profile.fileName)
+                        .append("\" target=\"_blank\">View</a>");
+            }
             buffer.append("</td>");
             buffer.append("</tr>");
         }
         buffer.append("</tbody>");
     }
-
 
     private static class ProfileFileInfo {
         final String type;

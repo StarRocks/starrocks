@@ -22,7 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
@@ -34,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OrderByElement;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -51,6 +51,8 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.common.util.Util.normalizeName;
 
 public class PipeAnalyzer {
 
@@ -74,6 +76,7 @@ public class PipeAnalyzer {
             if (Strings.isNullOrEmpty(defaultDbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
+            defaultDbName = normalizeName(defaultDbName);
             pipeName.setDbName(defaultDbName);
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
@@ -166,17 +169,17 @@ public class PipeAnalyzer {
         Map<String, String> properties = stmt.getProperties();
 
         InsertStmt insertStmt = stmt.getInsertStmt();
-        stmt.setTargetTable(insertStmt.getTableName());
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
         Analyzer.analyze(insertStmt, context);
+        stmt.setTargetTableRef(insertStmt.getTableRef());
 
-        analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
+        analyzePipeName(stmt.getPipeName(), insertStmt.getDbName());
 
-        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
+        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getDbName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
                     String.format("pipe's database [%s] and target table's database [%s] should be the same",
-                            stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
+                            stmt.getPipeName().getDbName(), insertStmt.getDbName()));
         }
 
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]

@@ -121,6 +121,11 @@ under the License.
 
         <dependency>
             <groupId>com.starrocks</groupId>
+            <artifactId>fe-type</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.starrocks</groupId>
             <artifactId>fe-parser</artifactId>
         </dependency>
 
@@ -430,6 +435,12 @@ under the License.
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.slf4j/jul-to-slf4j -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jul-to-slf4j</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.oshi/oshi-core -->
@@ -921,6 +932,13 @@ under the License.
             <artifactId>sql-formatter</artifactId>
             <version>2.0.4</version>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.google.api-client/google-api-client -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.8.1</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -967,8 +985,6 @@ under the License.
                             </includes>
                             <excludes>
                                 <exclude>com/starrocks/proto/**</exclude>
-                                <exclude>com/starrocks/rpc/**</exclude>
-                                <exclude>com/starrocks/server/**</exclude>
                                 <exclude>**/*$$JProtoBufClass</exclude>
                                 <exclude>**/*$$JProtoBuf*</exclude>
                             </excludes>

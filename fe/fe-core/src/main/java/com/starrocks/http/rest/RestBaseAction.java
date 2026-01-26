@@ -39,6 +39,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
@@ -57,7 +58,11 @@ import com.starrocks.http.HttpUtils;
 import com.starrocks.http.WebUtils;
 import com.starrocks.http.rest.v2.RestBaseResultV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -73,8 +78,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static io.netty.handler.codec.http.HttpResponseStatus.SERVICE_UNAVAILABLE;
 
 public class RestBaseAction extends BaseAction {
 
@@ -136,7 +144,7 @@ public class RestBaseAction extends BaseAction {
                 List<String> activatedRoles = authorizationMgr.getRoleNamesByRoleIds(context.getCurrentRoleIds());
                 List<String> inactivatedRoles =
                         authorizationMgr.getInactivatedRoleNamesByUser(userIdentity, activatedRoles);
-                return "Access denied for user " + userIdentity  + ". " +
+                return "Access denied for user " + userIdentity + ". " +
                         String.format(ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT, activatedRoles, inactivatedRoles);
             }
             return "Access denied.";
@@ -150,15 +158,34 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx lifetime is the same as the channel
+
         HttpConnectContext ctx = request.getConnectContext();
-        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        ctx.setNettyChannel(request.getContext());
-        ctx.setQualifiedUser(authInfo.fullUserName);
-        ctx.setQueryId(UUIDUtil.genUUID());
-        ctx.setRemoteIP(authInfo.remoteIp);
+
+        // Change user for ConnectContext if necessary
+        UserIdentity prevUserIdentity = ctx.getCurrentUserIdentity();
+        Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
+        String prevUserName = ctx.getQualifiedUser();
+
         ctx.setCurrentUserIdentity(currentUser);
         ctx.setCurrentRoleIds(currentUser);
+        ctx.setQualifiedUser(authInfo.fullUserName);
+
+        if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
+            ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+            Pair<Boolean, String> userChangeRes = connectScheduler.onUserChanged(ctx, prevUserName, ctx.getQualifiedUser());
+            if (!userChangeRes.first) {
+                ctx.setCurrentUserIdentity(prevUserIdentity);
+                ctx.setCurrentRoleIds(prevRoleIds);
+                ctx.setQualifiedUser(prevUserName);
+                throw new StarRocksHttpException(SERVICE_UNAVAILABLE, userChangeRes.second);
+            }
+        }
+
+        // ctx lifetime is the same as the channel
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        ctx.setNettyChannel(request.getContext());
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }
@@ -377,7 +404,7 @@ public class RestBaseAction extends BaseAction {
     }
 
     protected void sendSuccessResponse(BaseResponse response, String content, BaseRequest request) {
-        sendResult(request, response,  RestBaseResultV2.ok(content));
+        sendResult(request, response, RestBaseResultV2.ok(content));
     }
 
     protected void sendErrorResponse(BaseResponse response, String message, HttpResponseStatus status, BaseRequest request) {
@@ -385,5 +412,26 @@ public class RestBaseAction extends BaseAction {
                 response,
                 status,
                 new RestBaseResultV2<>(status.code(), message));
+    }
+
+    public static Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+        ConnectContext ctx = request.getConnectContext();
+        if (ctx != null && ctx.getCurrentUserIdentity() != null) {
+            UserIdentity userIdentity = ctx.getCurrentUserIdentity();
+            if (!userIdentity.isEphemeral()) {
+                try {
+                    UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                            .getUserProperty(userIdentity.getUser());
+                    String userWarehouse = userProperty.getSessionVariables().get(SessionVariable.WAREHOUSE_NAME);
+                    if (!Strings.isNullOrEmpty(userWarehouse)) {
+                        return Optional.of(userWarehouse);
+                    }
+                } catch (SemanticException e) {
+                    // user does not exist, use default warehouse
+                    LOG.warn("Failed to get user property. user: {}", userIdentity.getUser(), e);
+                }
+            }
+        }
+        return Optional.empty();
     }
 }

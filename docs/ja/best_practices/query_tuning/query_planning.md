@@ -106,7 +106,8 @@ StarRocks のプランは階層的です。
 :::
 
 ```sql
-EXPLAIN select  count(*)
+explain logical
+select  count(*)
 from store_sales
     ,household_demographics
     ,time_dim
@@ -121,33 +122,83 @@ where ss_sold_time_sk = time_dim.t_time_sk
 order by count(*) limit 100;
 ```
 
-出力は、StarRocks がクエリをどのように実行するかを示す階層的なプランで、フラグメントとオペレーターに分かれています。以下はクエリプランフラグメントの簡略化された例です。
+出力は、StarRocks がクエリをどのように実行するかを示す階層的なプランです。プランはオペレーターのツリー構造で、下から上に読むことができます。論理プランは、コスト見積もりを含む操作のシーケンスを示します：
 
 ```
-PLAN FRAGMENT 1
-  6:HASH JOIN (BROADCAST)
-    |-- 4:HASH JOIN (BROADCAST)
-    |     |-- 2:HASH JOIN (BROADCAST)
-    |     |     |-- 0:OlapScanNode (store_sales)
-    |     |     |-- 1:OlapScanNode (time_dim)
-    |     |-- 3:OlapScanNode (household_demographics)
-    |-- 5:OlapScanNode (store)
+- Output => [69:count]
+    - TOP-100(FINAL)[69: count ASC NULLS FIRST]
+            Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 8.00, cost: 68669801.20}
+        - TOP-100(PARTIAL)[69: count ASC NULLS FIRST]
+                Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 8.00, cost: 68669769.20}
+            - AGGREGATE(GLOBAL) []
+                    Estimates: {row: 1, cpu: 8.00, memory: 8.00, network: 0.00, cost: 68669737.20}
+                    69:count := count(69:count)
+                - EXCHANGE(GATHER)
+                        Estimates: {row: 1, cpu: 8.00, memory: 0.00, network: 8.00, cost: 68669717.20}
+                    - AGGREGATE(LOCAL) []
+                            Estimates: {row: 1, cpu: 3141.35, memory: 0.80, network: 0.00, cost: 68669701.20}
+                            69:count := count()
+                        - HASH/INNER JOIN [9:ss_store_sk = 40:s_store_sk] => [71:auto_fill_col]
+                                Estimates: {row: 3490, cpu: 111184.52, memory: 8.80, network: 0.00, cost: 68668128.93}
+                                71:auto_fill_col := 1
+                            - HASH/INNER JOIN [7:ss_hdemo_sk = 25:hd_demo_sk] => [9:ss_store_sk]
+                                    Estimates: {row: 19940, cpu: 1841177.20, memory: 2880.00, network: 0.00, cost: 68612474.92}
+                                - HASH/INNER JOIN [4:ss_sold_time_sk = 30:t_time_sk] => [7:ss_hdemo_sk, 9:ss_store_sk]
+                                        Estimates: {row: 199876, cpu: 69221191.15, memory: 7077.97, network: 0.00, cost: 67671726.32}
+                                    - SCAN [store_sales] => [4:ss_sold_time_sk, 7:ss_hdemo_sk, 9:ss_store_sk]
+                                            Estimates: {row: 5501341, cpu: 66016092.00, memory: 0.00, network: 0.00, cost: 33008046.00}
+                                            partitionRatio: 1/1, tabletRatio: 192/192
+                                            predicate: 7:ss_hdemo_sk IS NOT NULL
+                                    - EXCHANGE(BROADCAST)
+                                            Estimates: {row: 1769, cpu: 7077.97, memory: 7077.97, network: 7077.97, cost: 38928.81}
+                                        - SCAN [time_dim] => [30:t_time_sk]
+                                                Estimates: {row: 1769, cpu: 21233.90, memory: 0.00, network: 0.00, cost: 10616.95}
+                                                partitionRatio: 1/1, tabletRatio: 5/5
+                                                predicate: 33:t_hour = 8 AND 34:t_minute >= 30
+                                - EXCHANGE(BROADCAST)
+                                        Estimates: {row: 720, cpu: 2880.00, memory: 2880.00, network: 2880.00, cost: 14400.00}
+                                    - SCAN [household_demographics] => [25:hd_demo_sk]
+                                            Estimates: {row: 720, cpu: 5760.00, memory: 0.00, network: 0.00, cost: 2880.00}
+                                            partitionRatio: 1/1, tabletRatio: 1/1
+                                            predicate: 28:hd_dep_count = 5
+                            - EXCHANGE(BROADCAST)
+                                    Estimates: {row: 2, cpu: 8.80, memory: 8.80, network: 8.80, cost: 44.15}
+                                - SCAN [store] => [40:s_store_sk]
+                                        Estimates: {row: 2, cpu: 17.90, memory: 0.00, network: 0.00, cost: 8.95}
+                                        partitionRatio: 1/1, tabletRatio: 1/1
+                                        predicate: 45:s_store_name = 'ese'
 ```
 
-- **OlapScanNode**: テーブルをスキャンし、フィルターや事前集計が適用される可能性があります。
-- **HASH JOIN (BROADCAST)**: 小さなテーブルをブロードキャストして2つのテーブルをジョインします。
-- **フラグメント**: 各フラグメントは異なるノードで並行して実行できます。
+**プランを下から上に読む**
 
-クエリ96のクエリプランは、0から4までの5つのフラグメントに分かれています。クエリプランは、下から上に一つずつ読むことができます。
+クエリプランは、データフローに従って、底部（リーフノード）から上部（ルートノード）に向かって読む必要があります。
 
-フラグメント4は、`time_dim` テーブルをスキャンし、関連するクエリ条件（すなわち `time_dim.t_hour = 8 and time_dim.t_minute >= 30`）を事前に実行する役割を担っています。このステップは述語プッシュダウンとしても知られています。StarRocks は、集計テーブルに対して `PREAGGREGATION` を有効にするかどうかを決定します。前の図では、`time_dim` の事前集計は無効になっています。この場合、`time_dim` のすべてのディメンション列が読み取られ、テーブルに多くのディメンション列がある場合、パフォーマンスに悪影響を及ぼす可能性があります。`time_dim` テーブルがデータ分割に `range partition` を選択した場合、クエリプランでいくつかのパーティションがヒットし、無関係なパーティションは自動的にフィルタリングされます。マテリアライズドビューがある場合、StarRocks はクエリに基づいてマテリアライズドビューを自動的に選択します。マテリアライズドビューがない場合、クエリは自動的にベーステーブルにヒットします（たとえば、前の図の `rollup: time_dim`）。
+1. **スキャン操作（下位レベル）**: 下部の `SCAN` オペレーターがベーステーブルからデータを読み取ります：
+   - `SCAN [store_sales]` は、述語 `ss_hdemo_sk IS NOT NULL` でメインファクトテーブルを読み取ります
+   - `SCAN [time_dim]` は、述語 `t_hour = 8 AND t_minute >= 30` で時間ディメンションテーブルを読み取ります
+   - `SCAN [household_demographics]` は、述語 `hd_dep_count = 5` で人口統計テーブルを読み取ります
+   - `SCAN [store]` は、述語 `s_store_name = 'ese'` でストアテーブルを読み取ります
 
-スキャンが完了すると、フラグメント4が終了します。データは、前の図で EXCHANGE ID : 09 と示されるように、他のフラグメントに渡され、受信ノード9に送られます。
+   各スキャン操作には以下が表示されます：
+   - **見積もり**: 行数、CPU、メモリ、ネットワーク、コストの見積もり
+   - **パーティションとタブレット比率**: スキャンされるパーティション/タブレットの数（例：`partitionRatio: 1/1, tabletRatio: 192/192`）
+   - **述語**: スキャンレベルにプッシュダウンされるクエリ条件で、読み取るデータ量を削減します
 
-クエリ96のクエリプランでは、フラグメント2、3、4は似た機能を持っていますが、異なるテーブルをスキャンする役割を担っています。具体的には、クエリ内の `Order/Aggregation/Join` 操作はフラグメント1で実行されます。
+2. **データ交換（ブロードキャスト）**: `EXCHANGE(BROADCAST)` 操作は、小さなディメンションテーブルを、大きなファクトテーブルを処理するすべてのノードに配布します。`time_dim`、`household_demographics`、`store` がブロードキャストされるように、ディメンションテーブルがファクトテーブルと比較して小さい場合、これは効率的です。
 
-フラグメント1は `BROADCAST` メソッドを使用して `Order/Aggregation/Join` 操作を実行します。つまり、小さなテーブルを大きなテーブルにブロードキャストします。両方のテーブルが大きい場合は、`SHUFFLE` メソッドを使用することをお勧めします。現在、StarRocks は `HASH JOIN` のみをサポートしています。`colocate` フィールドは、結合された2つのテーブルが同じ方法でパーティション分割およびバケット化されていることを示し、データを移動せずにローカルでジョイン操作を実行できることを示します。ジョイン操作が完了すると、上位レベルの `aggregation`、`order by`、および `top-n` 操作が実行されます。
+3. **ジョイン操作（中間レベル）**: データは `HASH/INNER JOIN` 操作を通じて上向きに流れます：
+   - 最初に、`store_sales` が `ss_sold_time_sk = t_time_sk` で `time_dim` とジョインされます
+   - 次に、結果が `ss_hdemo_sk = hd_demo_sk` で `household_demographics` とジョインされます
+   - 最後に、結果が `ss_store_sk = s_store_sk` で `store` とジョインされます
 
-特定の式を削除することにより（オペレーターのみを保持）、クエリプランはよりマクロ的なビューで提示できます。以下の図に示すように。
+   各ジョインには、ジョイン条件と結果の行数およびリソース使用量の見積もりが表示されます。
 
-![8-5](../../_assets/8-5.png)
+4. **集計（上位レベル）**: 
+   - `AGGREGATE(LOCAL)` は各ノードでローカル集計を実行し、`count()` を計算します
+   - `EXCHANGE(GATHER)` はすべてのノードから結果を収集します
+   - `AGGREGATE(GLOBAL)` はローカル結果を最終カウントにマージします
+
+5. **最終操作（最上位レベル）**: 
+   - `TOP-100(PARTIAL)` と `TOP-100(FINAL)` 操作は `ORDER BY count(*) LIMIT 100` 句を処理し、並べ替え後に上位100の結果を選択します
+
+論理プランは各操作のコスト見積もりを提供し、クエリがリソースの大部分をどこで消費するかを理解するのに役立ちます。実際の物理実行プラン（`EXPLAIN` または `EXPLAIN VERBOSE` から）には、操作がノード間でどのように分散され、並列実行されるかに関する追加の詳細が含まれます。

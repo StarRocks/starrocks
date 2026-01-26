@@ -49,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -199,6 +200,32 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     }
 
     @Override
+    public OptExpression visitPhysicalUnion(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalUnionOperator unionOp = optExpression.getOp().cast();
+        DecodeInfo info = context.operatorDecodeInfo.getOrDefault(unionOp, DecodeInfo.EMPTY);
+        ColumnRefSet inputColumns = new ColumnRefSet();
+        inputColumns.union(info.inputStringColumns);
+        unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
+                .forEach(inputColumns::union);
+        ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
+        Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
+        List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
+                c -> context.allStringColumns.contains(c.getId())
+                        ? context.stringRefToDictRefMap.getOrDefault(c, c) : c).toList();
+        List<List<ColumnRefOperator>> newChildOutputColumns = unionOp.getChildOutputColumns().stream()
+                .map(l -> l.stream()
+                        .map(c -> info.inputStringColumns.contains(c) ?
+                                context.stringRefToDictRefMap.getOrDefault(c, c) : c).toList()
+                ).toList();
+
+        PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
+                unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
+                unionOp.isFromIcebergEqualityDeleteRewrite());
+        return rewriteOptExpression(optExpression, newUnionOp, info.outputStringColumns);
+    }
+
+
+    @Override
     public OptExpression visitPhysicalHashAggregate(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         // rewrite multi-stage aggregate
         PhysicalHashAggregateOperator aggregate = optExpression.getOp().cast();
@@ -237,9 +264,12 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
                 new PhysicalHashAggregateOperator(aggregate.getType(), groupBys, partitions, aggregations,
                         aggregate.isSplit(), aggregate.getLimit(), predicate,
                         projection);
+        op.setWithLocalShuffle(aggregate.isWithLocalShuffle());
         op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
         op.setUseSortAgg(aggregate.isUseSortAgg());
         op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
+        op.setWithoutColocateRequirement(aggregate.isWithoutColocateRequirement());
+        op.setLocalLimit(aggregate.getLocalLimit());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }
 

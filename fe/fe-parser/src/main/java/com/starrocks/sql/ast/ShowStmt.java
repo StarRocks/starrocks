@@ -14,11 +14,40 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
+
 public abstract class ShowStmt extends StatementBase {
+    protected Predicate predicate;
+    protected LimitElement limitElement;
+    protected List<OrderByElement> orderByElements;
+    protected List<OrderByPair> orderByPairs;
+
     protected ShowStmt(NodePosition pos) {
         super(pos);
+    }
+
+    public Predicate getPredicate() {
+        return predicate;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public List<OrderByPair> getOrderByPairs() {
+        return orderByPairs;
+    }
+
+    public void setOrderByPairs(List<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
+    }
+
+    public LimitElement getLimitElement() {
+        return limitElement;
     }
 
     @Override

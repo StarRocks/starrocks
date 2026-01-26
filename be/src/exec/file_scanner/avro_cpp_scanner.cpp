@@ -32,7 +32,9 @@ AvroCppScanner::AvroCppScanner(RuntimeState* state, RuntimeProfile* profile, con
                                ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
-          _max_chunk_size(state->chunk_size()) {}
+          _max_chunk_size(state->chunk_size()) {
+    _file_format_str = "avro";
+}
 
 Status AvroCppScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -195,6 +197,7 @@ StatusOr<AvroReaderUniquePtr> AvroCppScanner::open_avro_reader(const TBrokerRang
         return Status::EndOfFile("Empty file");
     }
 
+    ++_counter->num_files_read;
     auto col_not_found_as_null =
             _scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping;
     auto avro_reader = std::make_unique<AvroReader>();
@@ -208,7 +211,7 @@ void AvroCppScanner::materialize_src_chunk_adaptive_nullable_column(ChunkPtr& ch
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
-                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
         chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                              adaptive_column->materialized_raw_null_column()),
                                       i);

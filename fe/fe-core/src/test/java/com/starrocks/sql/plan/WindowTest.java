@@ -52,6 +52,7 @@ public class WindowTest extends PlanTestBase {
                 "\"compression\" = \"LZ4\"    \n" +
                 ");");
     }
+
     @Test
     public void testLagWindowFunction() throws Exception {
         String sql = "select lag(id_datetime, 1, '2020-01-01') over(partition by t1c) from test_all_type;";
@@ -73,12 +74,6 @@ public class WindowTest extends PlanTestBase {
         sql = "select lag(null, 1,1) OVER () from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, lag(NULL, 1, 1), ]");
-
-
-        String invalidSql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
-        SemanticException e = assertThrows(SemanticException.class, () -> getThriftPlan(invalidSql));
-        Assertions.assertTrue(e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"),
-                e.getMessage());
     }
 
     @Test
@@ -91,6 +86,7 @@ public class WindowTest extends PlanTestBase {
 
     @Test
     public void testPruneEmptyWindow() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(*) from( select avg(t1g) over(partition by t1a) from test_all_type ) r";
         assertLogicalPlanContains(sql,
                 "AGGREGATE ([GLOBAL] aggregate [{12: count=count()}] group by [[]] having [null]\n" +
@@ -155,13 +151,24 @@ public class WindowTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("The third parameter of LEAD/LAG can't convert to INT");
 
         sql = "select lead(k3, 3, abs(k3)) over () from baseall";
-        starRocksAssert.query(sql).analysisError("The default parameter (parameter 3) of LAG must be a constant");
+        starRocksAssert.query(sql).analysisError("The type of the third parameter of LEAD/LAG not match the type INT");
 
         sql = "select lead(id2, 1, 1) OVER () from bitmap_table";
         starRocksAssert.query(sql).analysisError("No matching function with signature: lead(bitmap,");
 
         sql = "select lag(id2, 1, 1) OVER () from hll_table";
         starRocksAssert.query(sql).analysisError("No matching function with signature: lag(hll,");
+
+        sql = "select lead(ta, 3, tc) over () from test_laglead";
+        starRocksAssert.query(sql).explainContains("functions: [, lead(1: ta, 3, 3: tc), ]");
+
+        // IGNORE NULLS with column default
+        sql = "select lead(ta ignore nulls, 2, tc) over(order by tb) from test_laglead";
+        starRocksAssert.query(sql).explainContains("functions: [, lead(1: ta, 2, 3: tc), ]");
+
+        // Non-constant offset should fail
+        sql = "select lead(ta, tb, tc) over() from test_laglead";
+        starRocksAssert.query(sql).analysisError("The offset parameter of LEAD/LAG must be a constant positive integer");
     }
 
     @Test
@@ -693,6 +700,168 @@ public class WindowTest extends PlanTestBase {
                     "  1:EXCHANGE");
         }
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testLimitRankingWindowWithoutPartitionAndOrder() throws Exception {
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:TOP-N\n" +
+                    "  |  order by: <slot 4> 4: row_number() ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE\n" +
+                    "     limit: 4", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=0/1\n" +
+                    "     rollup: t0\n" +
+                    "     tabletRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     cardinality=1\n" +
+                    "     avgRowSize=3.0\n" +
+                    "     limit: 4");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:TOP-N\n" +
+                    "  |  order by: <slot 4> 4: rank() ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, rank(), ]\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        dense_rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:TOP-N\n" +
+                    "  |  order by: <slot 4> 4: dense_rank() ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, dense_rank(), ]\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+        }
+    }
+
+    @Test
+    public void testPredicateRankingWindowWithoutPartitionAndOrder() throws Exception {
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:SELECT\n" +
+                            "  |  predicates: 4: row_number() <= 4\n" +
+                            "  |  \n" +
+                            "  2:ANALYTIC\n" +
+                            "  |  functions: [, row_number(), ]\n" +
+                            "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                            "  |  \n" +
+                            "  1:EXCHANGE\n" +
+                            "     limit: 4",
+                    "  STREAM DATA SINK\n" +
+                            "    EXCHANGE ID: 01\n" +
+                            "    UNPARTITIONED\n" +
+                            "\n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: t0\n" +
+                            "     PREAGGREGATION: ON\n" +
+                            "     partitions=0/1\n" +
+                            "     rollup: t0\n" +
+                            "     tabletRatio=0/0\n" +
+                            "     tabletList=\n" +
+                            "     cardinality=1\n" +
+                            "     avgRowSize=3.0\n" +
+                            "     limit: 4");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:SELECT\n" +
+                    "  |  predicates: 4: rank() <= 4\n" +
+                    "  |  \n" +
+                    "  2:ANALYTIC\n" +
+                    "  |  functions: [, rank(), ]\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE", "  STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED\n" +
+                    "\n" +
+                    "  0:OlapScanNode");
+        }
+
+        {
+            String sql = "select * from (\n" +
+                    "    select *, " +
+                    "        dense_rank() over () as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk <= 4;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:SELECT\n" +
+                            "  |  predicates: 4: dense_rank() <= 4\n" +
+                            "  |  \n" +
+                            "  2:ANALYTIC\n" +
+                            "  |  functions: [, dense_rank(), ]\n" +
+                            "  |  \n" +
+                            "  1:EXCHANGE",
+                    "  STREAM DATA SINK\n" +
+                            "    EXCHANGE ID: 01\n" +
+                            "    UNPARTITIONED\n" +
+                            "\n" +
+                            "  0:OlapScanNode");
+        }
     }
 
     @Test
@@ -1687,40 +1856,15 @@ public class WindowTest extends PlanTestBase {
                 " last_value(a1 ignore nulls) over(partition by v1 order by v2)\n" +
                 "from s1;";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
-        Assertions.assertTrue(plan.contains("  4:ANALYTIC\n" +
-                "  |  functions: [, first_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); " +
-                "args: INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
-                "[, last_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; result: ARRAY<VARCHAR>;" +
-                " args nullable: true; result nullable: true], ], " +
-                "[, first_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
-                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
-                "[, last_value[([3: a1, ARRAY<VARCHAR(65533)>, true]); args: INVALID_TYPE; " +
-                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: v1, BIGINT, true]\n" +
-                "  |  order by: [2: v2, INT, true] ASC\n" +
-                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  3:ANALYTIC\n" +
-                "  |  functions: [, lag[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE; " +
-                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
-                "[, lag[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); args: INVALID_TYPE; " +
-                "result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: v1, BIGINT, true]\n" +
-                "  |  order by: [2: v2, INT, true] ASC\n" +
-                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  2:ANALYTIC\n" +
-                "  |  functions: [, lead[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); " +
-                "args: INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ], " +
-                "[, lead[([3: a1, ARRAY<VARCHAR(65533)>, true], 1, NULL); " +
-                "args: INVALID_TYPE; result: ARRAY<VARCHAR>; args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: v1, BIGINT, true]\n" +
-                "  |  order by: [2: v2, INT, true] ASC\n" +
-                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING\n" +
-                "  |  cardinality: 1"));
+        // Verify output columns (projected window functions) to align with current explain format
+        Assertions.assertTrue(plan.contains(
+                "Output Exprs:1: v1 | 2: v2 | 5: lead(3: a1, 1, null) | 7: lag(3: a1, 1, null)"), plan);
+        Assertions.assertTrue(plan.contains("|  5 <-> [5: lead(3: a1, 1, null), ARRAY<VARCHAR>, true]"), plan);
+        Assertions.assertTrue(plan.contains("|  7 <-> [7: lag(3: a1, 1, null), ARRAY<VARCHAR>, true]"), plan);
+        // Verify windows for lead/lag and first/last_value
+        Assertions.assertTrue(plan.contains("window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING"), plan);
+        Assertions.assertTrue(plan.contains("window: ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING"), plan);
+        Assertions.assertTrue(plan.contains("window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"), plan);
     }
 
     @Test
@@ -1753,5 +1897,69 @@ public class WindowTest extends PlanTestBase {
         List<AnalyticEvalNode> analyticNodes = new ArrayList<>();
         execPlan.getTopFragment().getPlanRoot().collect(AnalyticEvalNode.class, analyticNodes);
         Assertions.assertFalse(analyticNodes.isEmpty());
+    }
+
+    @Test
+    public void testRowNumberWithAggregate() throws Exception {
+        // Test for issue: row_number() with count(*) and max() in SELECT with GROUP BY
+        // This tests that aggregate columns are not pruned when window operator is above aggregate
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000);
+        String sql = "SELECT row_number() OVER(ORDER BY v1) as rid, " +
+                "count(*) as s_num, max(v2) as m_date " +
+                "FROM s1 GROUP BY v1, v2";
+
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 1: v1, 2: v2");
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : 7: row_number()\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 1: v1 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+    }
+
+    @Test
+    public void testRowNumberWithMultipleAggregates() throws Exception {
+        // Test multiple aggregates with row_number to ensure all are preserved
+        String sql = "SELECT row_number() OVER(ORDER BY v1) as rid, " +
+                "count(*) as cnt, max(v2) as max_v2, min(v2) as min_v2, sum(v2) as sum_v2 " +
+                "FROM s1 GROUP BY v1, v2";
+
+        String plan = getFragmentPlan(sql);
+
+        // Verify all aggregate functions are present in the plan
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : clone(2: v2)\n" +
+                "  |  <slot 7> : 2: v2\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*), sum(2: v2)\n" +
+                "  |  group by: 1: v1, 2: v2");
+
+        assertContains(plan, "  6:Project\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : 6: max\n" +
+                "  |  <slot 7> : 7: min\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  <slot 9> : 9: row_number()\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  order by: 1: v1 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
     }
 }

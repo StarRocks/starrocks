@@ -246,7 +246,7 @@ drop table agg_test;
 drop database sort_key_test_agg;
 -- result:
 -- !result
--- name: test_sort_key_agg_tbl_duplicate_row
+-- name: test_sort_key_agg_tbl_duplicate_row @native
 create database test_sort_key_agg_tbl_duplicate_row;
 -- result:
 -- !result
@@ -322,7 +322,7 @@ select * from agg_test;
 1	2	3	4	1	4
 1	2	3	3	2	2
 -- !result
--- name: test_sort_key_agg_tbl_with_rollup;
+-- name: test_sort_key_agg_tbl_with_rollup; @native
 create database sort_key_test_agg_with_rollup;
 -- result:
 -- !result

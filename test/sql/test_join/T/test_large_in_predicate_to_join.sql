@@ -289,9 +289,11 @@ select id, int_col from t_int where id in (
 ) order by id;
 
 -- Test 24: Scalar subquery with LargeInPredicate
-select id, int_col, (
+-- Note: Use ROUND() to avoid floating-point precision issues from different execution orders
+-- (LargeInPredicate rewrite to JOIN may cause different accumulation order for AVG)
+select id, int_col, round((
     select avg(score) from t_large where category_id in (1, 2, 3, 4, 5)
-) as avg_score from t_int where id <= 5 order by id;
+), 2) as avg_score from t_int where id <= 5 order by id;
 
 -- Test 25: Subquery with DISTINCT and LargeInPredicate
 select id, int_col from t_int where id in (

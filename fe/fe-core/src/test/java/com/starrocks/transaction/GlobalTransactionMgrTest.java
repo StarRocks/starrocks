@@ -464,8 +464,8 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
-    public void testCommitRoutineLoadTransactionWithErrorMax(@Injectable TabletCommitInfo tabletCommitInfo,
-                                                             @Mocked EditLog editLog) throws StarRocksException {
+    public void testCommitRoutineLoadTransactionWithErrorMax(@Injectable TabletCommitInfo tabletCommitInfo)
+                                                             throws StarRocksException {
 
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
 

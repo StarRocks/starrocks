@@ -72,6 +72,7 @@
 #include "runtime/heartbeat_flags.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/profile_report_worker.h"
@@ -86,6 +87,7 @@
 #include "runtime/stream_load/transaction_mgr.h"
 #include "service/staros_worker.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -94,7 +96,6 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
 #include "udf/python/env.h"
-#include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/mem_info.h"
@@ -102,6 +103,7 @@
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
+#include "util/time.h"
 
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/jit_engine.h"
@@ -236,6 +238,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _update_mem_tracker->set_level(2);
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
     _passthrough_mem_tracker->set_level(2);
+    _brpc_iobuf_mem_tracker = regist_tracker(MemTrackerType::BRPC_IOBUF, -1, nullptr);
+    _brpc_iobuf_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
     ASSIGN_OR_RETURN(int64_t consistency_mem_limit, calc_max_consistency_memory(_process_mem_tracker->limit()));
     _consistency_mem_tracker =
@@ -318,6 +322,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
     _metrics = StarRocksMetrics::instance()->metrics();
     _stream_mgr = new DataStreamMgr();
+    _lookup_dispatcher_mgr = new LookUpDispatcherMgr();
     _result_mgr = new ResultBufferMgr();
     _result_queue_mgr = new ResultQueueMgr();
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
@@ -432,8 +437,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
                                        : config::pipeline_scan_thread_pool_thread_num;
-
-    const int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+    int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+#ifdef BE_TEST
+    connector_num_io_threads = std::min(connector_num_io_threads, 2);
+#endif
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {
@@ -492,9 +499,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-#if !defined(__APPLE__) && !defined(BE_TEST)
-    _bfd_parser = BfdParser::create();
-#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache(this);
@@ -572,6 +576,28 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
+    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
+    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
+    max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores() / 2;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
+                            .build(&_pk_index_execution_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
+    max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores() / 2;
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
+                            .set_min_threads(1)
+                            .set_max_threads(std::max(1, max_thread_count))
+                            .set_max_queue_size(config::pk_index_memtable_flush_threadpool_size)
+                            .build(&_pk_index_memtable_flush_thread_pool));
+    REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_memtable_flush, _pk_index_memtable_flush_thread_pool);
 
 #elif defined(BE_TEST)
     _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
@@ -585,6 +611,18 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_max_threads(1)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .build(&_put_aggregate_metadata_thread_pool));
+    _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
+    RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_pk_index_execution_thread_pool));
+    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_memtable_flush")
+                            .set_min_threads(1)
+                            .set_max_threads(1)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .build(&_pk_index_memtable_flush_thread_pool));
 #endif
 
     _agent_server = new AgentServer(this, false);
@@ -601,6 +639,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+
+    _global_spill_manager = std::make_shared<spill::GlobalSpillManager>();
 
     _diagnose_daemon = new DiagnoseDaemon();
     RETURN_IF_ERROR(_diagnose_daemon->init());
@@ -629,104 +669,192 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
+    int64_t total_start = MonotonicMillis();
+    int64_t start;
+    std::vector<std::pair<std::string, int64_t>> component_times;
+
     if (_load_channel_mgr) {
+        start = MonotonicMillis();
         // Clear load channel should be executed before stopping the storage engine,
         // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
         // so when the ThreadPool is destroyed, it will crash.
         _load_channel_mgr->close();
+        component_times.emplace_back("load_channel_mgr", MonotonicMillis() - start);
     }
 
     if (_load_stream_mgr) {
+        start = MonotonicMillis();
         _load_stream_mgr->close();
+        component_times.emplace_back("load_stream_mgr", MonotonicMillis() - start);
     }
 
     if (_fragment_mgr) {
+        start = MonotonicMillis();
         _fragment_mgr->close();
+        component_times.emplace_back("fragment_mgr", MonotonicMillis() - start);
     }
 
     if (_stream_mgr != nullptr) {
+        start = MonotonicMillis();
         _stream_mgr->close();
+        component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
+    }
+    if (_lookup_dispatcher_mgr != nullptr) {
+        _lookup_dispatcher_mgr->close();
     }
 
     if (_pipeline_sink_io_pool) {
+        start = MonotonicMillis();
         _pipeline_sink_io_pool->shutdown();
+        component_times.emplace_back("pipeline_sink_io_pool", MonotonicMillis() - start);
     }
 
     if (_put_aggregate_metadata_thread_pool) {
+        start = MonotonicMillis();
         _put_aggregate_metadata_thread_pool->shutdown();
+        component_times.emplace_back("put_aggregate_metadata_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_parallel_compact_mgr) {
+        start = MonotonicMillis();
+        _parallel_compact_mgr->shutdown();
+        component_times.emplace_back("parallel_compact_mgr", MonotonicMillis() - start);
+    }
+
+    if (_pk_index_execution_thread_pool) {
+        start = MonotonicMillis();
+        _pk_index_execution_thread_pool->shutdown();
+        component_times.emplace_back("pk_index_execution_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_pk_index_memtable_flush_thread_pool) {
+        start = MonotonicMillis();
+        _pk_index_memtable_flush_thread_pool->shutdown();
+        component_times.emplace_back("pk_index_memtable_flush_thread_pool", MonotonicMillis() - start);
     }
 
     if (_agent_server) {
+        start = MonotonicMillis();
         _agent_server->stop();
+        component_times.emplace_back("agent_server", MonotonicMillis() - start);
     }
 
     if (_runtime_filter_worker) {
+        start = MonotonicMillis();
         _runtime_filter_worker->close();
+        component_times.emplace_back("runtime_filter_worker", MonotonicMillis() - start);
     }
 
     if (_profile_report_worker) {
+        start = MonotonicMillis();
         _profile_report_worker->close();
+        component_times.emplace_back("profile_report_worker", MonotonicMillis() - start);
     }
 
     if (_automatic_partition_pool) {
+        start = MonotonicMillis();
         _automatic_partition_pool->shutdown();
+        component_times.emplace_back("automatic_partition_pool", MonotonicMillis() - start);
     }
 
     if (_query_rpc_pool) {
+        start = MonotonicMillis();
         _query_rpc_pool->shutdown();
+        component_times.emplace_back("query_rpc_pool", MonotonicMillis() - start);
     }
 
     if (_datacache_rpc_pool) {
+        start = MonotonicMillis();
         _datacache_rpc_pool->shutdown();
+        component_times.emplace_back("datacache_rpc_pool", MonotonicMillis() - start);
     }
 
     if (_load_rpc_pool) {
+        start = MonotonicMillis();
         _load_rpc_pool->shutdown();
+        component_times.emplace_back("load_rpc_pool", MonotonicMillis() - start);
     }
 
     if (_workgroup_manager) {
+        start = MonotonicMillis();
         _workgroup_manager->close();
+        component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
     }
 
     if (_thread_pool) {
+        start = MonotonicMillis();
         _thread_pool->shutdown();
+        component_times.emplace_back("thread_pool", MonotonicMillis() - start);
     }
 
     if (_query_context_mgr) {
+        start = MonotonicMillis();
         _query_context_mgr->clear();
+        component_times.emplace_back("query_context_mgr", MonotonicMillis() - start);
     }
 
     if (_result_mgr) {
+        start = MonotonicMillis();
         _result_mgr->stop();
+        component_times.emplace_back("result_mgr", MonotonicMillis() - start);
     }
 
     if (_stream_mgr) {
+        start = MonotonicMillis();
         _stream_mgr->close();
+        component_times.emplace_back("stream_mgr", MonotonicMillis() - start);
     }
 
     if (_batch_write_mgr) {
+        start = MonotonicMillis();
         _batch_write_mgr->stop();
+        component_times.emplace_back("batch_write_mgr", MonotonicMillis() - start);
     }
 
 #ifndef __APPLE__
     if (_routine_load_task_executor) {
+        start = MonotonicMillis();
         _routine_load_task_executor->stop();
+        component_times.emplace_back("routine_load_task_executor", MonotonicMillis() - start);
     }
 #endif
 
     if (_dictionary_cache_pool) {
+        start = MonotonicMillis();
         _dictionary_cache_pool->shutdown();
+        component_times.emplace_back("dictionary_cache_pool", MonotonicMillis() - start);
     }
 
     if (_diagnose_daemon) {
+        start = MonotonicMillis();
         _diagnose_daemon->stop();
+        component_times.emplace_back("diagnose_daemon", MonotonicMillis() - start);
     }
 
 #if !defined(__APPLE__) && !defined(BE_TEST)
+    start = MonotonicMillis();
     close_s3_clients();
+    component_times.emplace_back("close_s3_clients", MonotonicMillis() - start);
 #endif
 
+    start = MonotonicMillis();
     PythonEnvManager::getInstance().close();
+    component_times.emplace_back("PythonEnvManager", MonotonicMillis() - start);
+
+    int64_t total_time = MonotonicMillis() - total_start;
+    std::string summary = strings::Substitute("[ExecEnv::stop] Total: $0 ms", total_time);
+    if (!component_times.empty()) {
+        summary += " (";
+        std::vector<std::string> parts;
+        for (const auto& [name, time] : component_times) {
+            if (time > 0) {
+                parts.push_back(strings::Substitute("$0:$1ms", name, time));
+            }
+        }
+        summary += JoinStrings(parts, ", ");
+        summary += ")";
+    }
+    LOG(INFO) << summary;
 }
 
 void ExecEnv::destroy() {
@@ -746,9 +874,6 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
-#if !defined(__APPLE__)
-    SAFE_DELETE(_bfd_parser);
-#endif
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
@@ -757,6 +882,8 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_query_rpc_pool);
     SAFE_DELETE(_datacache_rpc_pool);
     _load_rpc_pool.reset();
+    SAFE_DELETE(_stream_mgr);
+    SAFE_DELETE(_query_context_mgr);
     _workgroup_manager->destroy();
     _workgroup_manager.reset();
     SAFE_DELETE(_thread_pool);
@@ -767,7 +894,6 @@ void ExecEnv::destroy() {
         _lake_tablet_manager->prune_metacache();
     }
 
-    SAFE_DELETE(_query_context_mgr);
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
     SAFE_DELETE(_runtime_filter_cache);
@@ -786,7 +912,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_backend_client_cache);
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
-    SAFE_DELETE(_stream_mgr);
+    SAFE_DELETE(_lookup_dispatcher_mgr);
     SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
@@ -798,6 +924,9 @@ void ExecEnv::destroy() {
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
+    _parallel_compact_mgr.reset();
+    _pk_index_execution_thread_pool.reset();
+    _pk_index_memtable_flush_thread_pool.reset();
     _metrics = nullptr;
 }
 

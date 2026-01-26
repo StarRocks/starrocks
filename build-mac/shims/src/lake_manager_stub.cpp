@@ -15,15 +15,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <string_view>
+
 #include "common/status.h"
 #include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_parallel_compaction_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_compaction_state.h"
 #include "storage/lake/update_manager.h"
 #include "storage/options.h"
@@ -56,13 +61,18 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const std::string
     return Status::NotSupported("Lake storage is disabled on macOS");
 }
 
+std::string TabletManager::lcrm_location(int64_t /*tablet_id*/, std::string_view /*crm_name*/) const {
+    return {};
+}
+
 Status TabletManager::put_combined_txn_log(const CombinedTxnLogPB& /*log*/) {
     return Status::NotSupported("Lake storage is disabled on macOS");
 }
 
 void TabletManager::update_metacache_limit(size_t /*limit*/) {}
 
-void TabletManager::update_segment_cache_size(std::string_view /*key*/, intptr_t /*segment_addr_hint*/) {}
+void TabletManager::update_segment_cache_size(std::string_view /*key*/, size_t /*mem_cost*/,
+                                              intptr_t /*segment_addr_hint*/) {}
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t /*tablet_id*/, int64_t /*from_version*/,
                                                                      int64_t /*to_version*/) {
@@ -71,7 +81,8 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t /*t
 
 void TabletManager::clean_in_writing_data_size() {}
 
-Status TabletReader::parse_seek_range(const TabletSchema& /*schema*/, TabletReaderParams::RangeStartOperation /*start_op*/,
+Status TabletReader::parse_seek_range(const TabletSchema& /*schema*/,
+                                      TabletReaderParams::RangeStartOperation /*start_op*/,
                                       TabletReaderParams::RangeEndOperation /*end_op*/,
                                       const std::vector<OlapTuple>& /*start_keys*/,
                                       const std::vector<OlapTuple>& /*end_keys*/, std::vector<SeekRange>* /*ranges*/,
@@ -82,6 +93,8 @@ Status TabletReader::parse_seek_range(const TabletSchema& /*schema*/, TabletRead
 UpdateManager::~UpdateManager() = default;
 
 CompactionScheduler::~CompactionScheduler() = default;
+
+TabletParallelCompactionManager::~TabletParallelCompactionManager() = default;
 
 void CompactionScheduler::update_compact_threads(int /*thread_num*/) {}
 
@@ -108,13 +121,40 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
     return Status::NotSupported("Lake replication snapshot is disabled on macOS");
 }
 
-void SegmentPKEncodeResult::close() {
-    pk_column.reset();
+void SegmentPKIterator::close() {
+    _pk_column_chunk.reset();
+    _standalone_pk_column.reset();
     _iter.reset();
     _begin_rowid_offsets.clear();
     _current_rows = 0;
+    _current_pk_column_idx = 0;
     _memory_usage = 0;
+    _lazy_load = false;
     _status = Status::NotSupported("Lake rowset update is disabled on macOS");
+}
+
+// TabletWriteLogManager stubs
+TabletWriteLogManager::TabletWriteLogManager() = default;
+
+TabletWriteLogManager* TabletWriteLogManager::instance() {
+    static TabletWriteLogManager instance;
+    return &instance;
+}
+
+std::vector<TabletWriteLogEntry> TabletWriteLogManager::get_logs(int64_t /*table_id*/, int64_t /*partition_id*/,
+                                                                 int64_t /*tablet_id*/, int64_t /*log_type*/,
+                                                                 int64_t /*start_finish_time*/,
+                                                                 int64_t /*end_finish_time*/) const {
+    return {};
+}
+
+// LakePersistentIndexParallelCompactMgr stubs
+LakePersistentIndexParallelCompactMgr::~LakePersistentIndexParallelCompactMgr() = default;
+
+void LakePersistentIndexParallelCompactMgr::shutdown() {}
+
+Status LakePersistentIndexParallelCompactMgr::update_max_threads(int /*max_threads*/) {
+    return Status::NotSupported("Lake storage is disabled on macOS");
 }
 
 } // namespace starrocks::lake

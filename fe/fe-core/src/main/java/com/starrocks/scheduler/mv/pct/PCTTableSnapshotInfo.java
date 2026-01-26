@@ -21,6 +21,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
@@ -158,9 +159,11 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
     }
 
     private static MaterializedView.BasePartitionInfo toBasePartitionInfo(Partition partition) {
-        return new MaterializedView.BasePartitionInfo(partition.getId(),
-                partition.getDefaultPhysicalPartition().getVisibleVersion(),
-                partition.getDefaultPhysicalPartition().getVisibleVersionTime());
+        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
+        return new MaterializedView.BasePartitionInfo(
+                partition.getId(),
+                defaultPartition.getVisibleVersion(),
+                defaultPartition.getVisibleVersionTime());
     }
 
     private void updatePCTOlapPartitionInfos(OlapTable olapTable,

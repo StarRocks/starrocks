@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
@@ -39,6 +40,7 @@ import com.starrocks.scheduler.mv.MVTraceUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
@@ -52,7 +54,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -88,7 +89,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                         MaterializedView mv,
                                         MVRefreshParams mvRefreshParams) {
         super(mvContext, context, db, mv, mvRefreshParams);
-        this.differ = new RangePartitionDiffer(mv, false, null);
+        this.differ = new RangePartitionDiffer(mv, queryRewriteParams, null);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
     }
 
@@ -207,7 +208,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             }
             FunctionCallExpr functionCallExpr = functionCallExprOpt.get();
             Preconditions.checkState(
-                    functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
+                    functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE));
             String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
             List<Range<PartitionKey>> converted = Lists.newArrayList();
             for (Range<PartitionKey> range : sourceTablePartitionRange) {
@@ -446,35 +447,15 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         boolean isAscending = Config.materialized_view_refresh_ascending;
         Iterator<PCellWithName> iterator = getToRefreshPartitionsIterator(mvPartitionsToRefresh, isAscending);
         int i = 0;
-        while (i++ < partitionRefreshNumber && iterator.hasNext()) {
+        while (i < partitionRefreshNumber && iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
+            // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
+            if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
+            i++;
             logger.debug("need to refresh partition name {}, value {}",
                     mv.getName(), pCell.name(), pCell.cell());
-            // NOTE: if mv's need to refresh partitions in the many-to-many mappings, no need to filter to
-            // avoid data lose.
-            // eg:
-            // ref table's partitions:
-            //  p0:   [2023-07-27, 2023-07-30)
-            //  p1:   [2023-07-30, 2023-08-02) X
-            //  p2:   [2023-08-02, 2023-08-05)
-            // materialized view's partition:
-            //  p0:   [2023-07-01, 2023-08-01)
-            //  p1:   [2023-08-01, 2023-09-01)
-            //  p2:   [2023-09-01, 2023-10-01)
-            //
-            // If partitionRefreshNumber is 1, ref table's p1 has been updated, then mv's partition [p0, p1]
-            // needs to be refreshed.
-            // Run1: mv's p0, refresh will update ref-table's p1 into version mapping(since incremental refresh)
-            // Run2: mv's p1, refresh check ref-table's p1 has been refreshed, skip to refresh.
-            // BTW, since the refresh has already scanned the needed base tables' data, it's better to update
-            // more mv's partitions as more as possible.
-            // TODO: But it may cause much memory to refresh many partitions, support fine-grained partition refresh later.
-            if (!mvToRefreshPotentialPartitions.isEmpty() && mvToRefreshPotentialPartitions.containsName(pCell.name())) {
-                logger.info("partition {} is in the many-to-many mappings, " +
-                        "skip to filter it, mvToRefreshPotentialPartitions:{}", mv.getName(),
-                        pCell.name(), mvToRefreshPotentialPartitions);
-                return;
-            }
         }
 
         // no matter ascending or descending, we should always keep start is less than end
@@ -482,11 +463,16 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         String start = null;
         String end = null;
         PCellWithName endCell = null;
-        if (iterator.hasNext()) {
+        while (iterator.hasNext()) {
             PCellWithName pCell = iterator.next();
+            // remove potential mv partitions from to-refresh partitions since they are added only for being affected.
+            if (mvToRefreshPotentialPartitions.containsName(pCell.name())) {
+                continue;
+            }
             start = getNextPartitionVal(pCell, isAscending, true);
             endCell = pCell;
             iterator.remove();
+            break;
         }
         while (iterator.hasNext()) {
             endCell = iterator.next();
@@ -494,18 +480,31 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         }
 
         if (!mvRefreshParams.isTentative()) {
+            String prevStart = mvRefreshParams.getRangeStart();
+            String prevEnd = mvRefreshParams.getRangeEnd();
             // partitionNameIter has just been traversed, and endPartitionName is not updated
             // will cause endPartitionName == null
             if (endCell != null) {
                 end = getNextPartitionVal(endCell, isAscending, false);
             }
+            String newStart = isAscending ? start : end;
+            String newEnd = isAscending ? end : start;
+            // check new start/end whether is fine
             if (isAscending) {
-                mvContext.setNextPartitionStart(start);
-                mvContext.setNextPartitionEnd(end);
+                if (prevStart != null && prevStart.equals(newStart)) {
+                    // in ascending start should not be equal to prevStart, otherwise dead loop may happen
+                    throw new SemanticException("Generate new task run start is the same to the previous in ascending, dead " +
+                            "loop happens. start:%s, end:%s", newStart, newEnd);
+                }
             } else {
-                mvContext.setNextPartitionStart(end);
-                mvContext.setNextPartitionEnd(start);
+                if (prevEnd != null && prevEnd.equals(newEnd)) {
+                    // end descending end should not be equal to prevEnd, otherwise dead loop may happen
+                    throw new SemanticException("Generate new task run end is the same to the previous in descending, dead " +
+                            "loop happens. start:%s, end:%s", newStart, newEnd);
+                }
             }
+            mvContext.setNextPartitionStart(newStart);
+            mvContext.setNextPartitionEnd(newEnd);
         }
     }
     private String getNextPartitionVal(PCellWithName pCell,

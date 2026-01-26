@@ -24,12 +24,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -38,24 +38,29 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.SnapshotRef;
@@ -63,6 +68,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -126,7 +132,7 @@ public class InsertAnalyzer {
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
             List<Long> targetPartitionIds = Lists.newArrayList();
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (insertStmt.isSpecifyPartitionNames()) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
@@ -137,8 +143,8 @@ public class InsertAnalyzer {
                 List<String> deduplicatePartitionNames =
                         targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
                 if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
-                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
-                            deduplicatePartitionNames, targetPartitionNames.getPartitionColNames(),
+                    insertStmt.setTargetPartitionNames(new PartitionRef(deduplicatePartitionNames,
+                            targetPartitionNames.isTemp(), targetPartitionNames.getPartitionColNames(),
                             targetPartitionNames.getPartitionColValues(), targetPartitionNames.getPos()));
                 }
                 for (String partitionName : deduplicatePartitionNames) {
@@ -174,18 +180,13 @@ public class InsertAnalyzer {
         }
 
         if (table.isIcebergTable() || table.isHiveTable()) {
-            if (table.isHiveTable() && table.isUnPartitioned() &&
-                    HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite()) {
-                throw new SemanticException("Unsupported insert overwrite hive unpartitioned table with s3 location");
-            }
-
             if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE &&
                     !session.getSessionVariable().enableWriteHiveExternalTable()) {
                 throw new SemanticException("Only support to write hive managed table, tableType: " +
                         ((HiveTable) table).getHiveTableType());
             }
 
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
@@ -253,7 +254,8 @@ public class InsertAnalyzer {
                 IcebergTable icebergTable = (IcebergTable) table;
                 targetColumns = new ArrayList<>();
                 icebergTable.getFullSchema().forEach(column -> {
-                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) &&
+                            !IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName())) {
                         targetColumns.add(column);
                     }
                 });
@@ -360,7 +362,7 @@ public class InsertAnalyzer {
 
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
-            session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+            session.getDumpInfo().addTable(insertStmt.getDbName(), table);
         }
 
         // Set table function table used for load
@@ -431,8 +433,8 @@ public class InsertAnalyzer {
             return false;
         }
 
-        String dbName = insertStmt.getTableName().getDb();
-        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getDbName();
+        String catalogName = insertStmt.getCatalogName();
 
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (database == null) {
@@ -526,7 +528,7 @@ public class InsertAnalyzer {
         return true;
     }
 
-    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionNames targetPartitionNames) {
+    private static void checkStaticKeyPartitionInsert(InsertStmt insertStmt, Table table, PartitionRef targetPartitionNames) {
         List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
         List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
         List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
@@ -560,15 +562,15 @@ public class InsertAnalyzer {
 
             Expr partitionValue = partitionColValues.get(i);
 
-            if (!partitionValue.isLiteral()) {
+            if (!ExprUtils.isLiteral(partitionValue)) {
                 throw new SemanticException("partition value should be literal expression");
             }
 
             LiteralExpr literalExpr = (LiteralExpr) partitionValue;
             Column column = table.getColumn(actualName);
             try {
-                Type type = literalExpr.isConstantNull() ? Type.NULL : column.getType();
-                Expr expr = LiteralExpr.create(literalExpr.getStringValue(), type);
+                Type type = literalExpr.isConstantNull() ? NullType.NULL : column.getType();
+                Expr expr = LiteralExprFactory.create(literalExpr.getStringValue(), type);
                 insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
@@ -583,10 +585,20 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        insertStmt.getTableName().normalization(session);
-        String catalogName = insertStmt.getTableName().getCatalog();
-        String dbName = insertStmt.getTableName().getDb();
-        String tableName = insertStmt.getTableName().getTbl();
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (Strings.isNullOrEmpty(tableRef.getDbName()) || Strings.isNullOrEmpty(tableRef.getCatalogName())) {
+            TableName tableName = TableName.fromTableRef(tableRef);
+            tableName.normalization(session);
+            QualifiedName normalizedName = QualifiedName.of(
+                    Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                    tableRef.getPos());
+            String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+            tableRef = new TableRef(normalizedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
+        }
+        insertStmt.setTableRef(tableRef);
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
@@ -594,7 +606,8 @@ public class InsertAnalyzer {
         if (database == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
+        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -603,7 +616,7 @@ public class InsertAnalyzer {
             throw new SemanticException(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
-                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+                    tableName, tableName);
         }
 
         if (insertStmt.isOverwrite()) {

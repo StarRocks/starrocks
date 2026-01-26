@@ -43,7 +43,7 @@ void test_simd_multi_select_if() {
         Container dst;
 
         SelectVec select_vecs[CASE_SIZE];
-        Container* select_lists[CASE_SIZE + 1];
+        const Container* select_lists[CASE_SIZE + 1];
         using SelectorInit = ContainerIniter<RandomGenerator<uint8_t, 2>, SelectorContainer, TEST_SIZE>;
 
         // Init TEST Value

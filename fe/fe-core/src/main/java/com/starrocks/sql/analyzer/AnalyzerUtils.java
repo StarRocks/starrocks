@@ -34,6 +34,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
@@ -44,6 +45,8 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -77,6 +80,7 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
@@ -87,6 +91,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -99,7 +104,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -107,7 +111,6 @@ import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -120,6 +123,9 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -132,7 +138,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -148,7 +153,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
+import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class AnalyzerUtils {
@@ -182,7 +187,7 @@ public class AnalyzerUtils {
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {
         List<FunctionCallExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
-                arg.getFn() instanceof AggregateFunction, functions);
+                ((FunctionCallExpr) arg).getFn() instanceof AggregateFunction, functions);
         if (!functions.isEmpty()) {
             throw new SemanticException(clause + " clause cannot contain aggregations", expression.getPos());
         }
@@ -228,7 +233,7 @@ public class AnalyzerUtils {
             return null;
         }
 
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function search = new Function(fnName, argTypes, InvalidType.INVALID, false);
         Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
         if (fn != null) {
@@ -246,7 +251,7 @@ public class AnalyzerUtils {
     }
 
     private static Function getGlobalUdfFunction(ConnectContext context, FunctionName fnName, Type[] argTypes) {
-        Function search = new Function(fnName, argTypes, Type.INVALID, false);
+        Function search = new Function(fnName, argTypes, InvalidType.INVALID, false);
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
@@ -388,13 +393,15 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            getDB(node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
             return visit(node.getQueryStatement());
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
-            getDB(node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
             return null;
@@ -402,7 +409,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
-            getDB(node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            getDB(tableName);
             //If support DML operations through query results in the future,
             //need to add the corresponding `visit(node.getQueryStatement())`
             return null;
@@ -503,7 +511,9 @@ public class AnalyzerUtils {
 
         public UpdateStmtSelectTableColumnCollector(UpdateStmt updateStmt) {
             this.updateTable = updateStmt.getTable();
-            this.updateTableName = updateStmt.getTableName();
+            TableRef tableRef = updateStmt.getTableRef();
+            this.updateTableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
         }
 
         @Override
@@ -737,21 +747,24 @@ public class AnalyzerUtils {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             Table table = node.getTargetTable();
-            tables.put(node.getTableName(), table);
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
             return super.visitInsertStatement(node, context);
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getTableName(), table);
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
             return super.visitUpdateStatement(node, context);
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
             Table table = node.getTable();
-            tables.put(node.getTableName(), table);
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tables.put(tableName, table);
             return super.visitDeleteStatement(node, context);
         }
 
@@ -939,6 +952,10 @@ public class AnalyzerUtils {
             }
 
             Table table = node.getTable();
+            // system table is immutable
+            if (table instanceof SystemTable) {
+                return null;
+            }
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
@@ -970,11 +987,11 @@ public class AnalyzerUtils {
          */
         class TableIndexId {
             long tableId;
-            long baseIndexId;
+            long baseIndexMetaId;
 
-            public TableIndexId(long tableId, long indexId) {
+            public TableIndexId(long tableId, long indexMetaId) {
                 this.tableId = tableId;
-                this.baseIndexId = indexId;
+                this.baseIndexMetaId = indexMetaId;
             }
 
             @Override
@@ -986,12 +1003,12 @@ public class AnalyzerUtils {
                     return false;
                 }
                 TableIndexId that = (TableIndexId) o;
-                return tableId == that.tableId && baseIndexId == that.baseIndexId;
+                return tableId == that.tableId && baseIndexMetaId == that.baseIndexMetaId;
             }
 
             @Override
             public int hashCode() {
-                return Objects.hash(tableId, baseIndexId);
+                return Objects.hash(tableId, baseIndexMetaId);
             }
         }
 
@@ -1019,7 +1036,7 @@ public class AnalyzerUtils {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
-            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
             OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
                 return existed;
@@ -1372,7 +1389,7 @@ public class AnalyzerUtils {
             throw new AnalysisException("automatic partition only support FunctionCallExpr");
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-        String fnName = functionCallExpr.getFnName().getFunction();
+        String fnName = functionCallExpr.getFunctionName();
         if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             List<Expr> paramsExprs = functionCallExpr.getParams().exprs();
             if (paramsExprs.size() != 2) {
@@ -1637,11 +1654,11 @@ public class AnalyzerUtils {
         if (partitionType.isDate()) {
             outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
             isMaxValue =
-                    endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+                    endTime.isAfter(TimeUtils.MAX_DATE.atTime(0, 0, 0));
         } else if (partitionType.isDatetime()) {
             outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
             isMaxValue = endTime.isAfter(
-                    TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+                    TimeUtils.MAX_DATETIME);
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
@@ -1699,7 +1716,7 @@ public class AnalyzerUtils {
 
     public static Type replaceNullType2Boolean(Type type) {
         if (type.isNull()) {
-            return Type.BOOLEAN;
+            return BooleanType.BOOLEAN;
         } else if (type.isArrayType()) {
             Type childType = ((ArrayType) type).getItemType();
             Type newType = replaceNullType2Boolean(childType);
@@ -1725,6 +1742,20 @@ public class AnalyzerUtils {
         return type;
     }
 
+    public static void replaceNullTypeInExprTree(Expr expr) {
+        for (Expr child : expr.getChildren()) {
+            replaceNullTypeInExprTree(child);
+        }
+
+        Type currentType = expr.getType();
+        if (currentType != null) {
+            Type hackedType = replaceNullType2Boolean(currentType);
+            if (!currentType.equals(hackedType)) {
+                expr.setType(hackedType);
+            }
+        }
+    }
+
     public static void checkNondeterministicFunction(ParseNode node) {
         new AstTraverser<Void, Void>() {
             @Override
@@ -1746,11 +1777,11 @@ public class AnalyzerUtils {
         }
 
         private boolean containsNonDeterministicFunction(FunctionCallExpr expr) {
-            FunctionName functionName = expr.getFnName();
+            String functionName = expr.getFunctionName();
             if (functionName == null) {
                 return false;
             }
-            return FunctionSet.allNonDeterministicFunctions.contains(functionName.getFunction());
+            return FunctionSet.allNonDeterministicFunctions.contains(functionName);
         }
 
         @Override
@@ -1762,7 +1793,7 @@ public class AnalyzerUtils {
                         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                         if (containsNonDeterministicFunction(functionCallExpr)) {
                             nonDeterministicFunctionOpt =
-                                    Optional.ofNullable(functionCallExpr.getFnName()).map(FunctionName::getFunction);
+                                    Optional.ofNullable(functionCallExpr.getFunctionName());
                             return null;
                         }
                     }
@@ -1774,7 +1805,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
             if (containsNonDeterministicFunction(expr)) {
-                nonDeterministicFunctionOpt = Optional.ofNullable(expr.getFnName()).map(FunctionName::getFunction);
+                nonDeterministicFunctionOpt = Optional.ofNullable(expr.getFunctionName());
                 return null;
             }
             for (Expr param : expr.getChildren()) {
@@ -1804,7 +1835,7 @@ public class AnalyzerUtils {
         if (prePartitionGranularity == null) {
             return;
         }
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
         if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)) {
             Expr expr = functionCallExpr.getParams().exprs().get(0);
             String functionGranularity = ((StringLiteral) expr).getStringValue();
@@ -1832,7 +1863,7 @@ public class AnalyzerUtils {
      */
     public static List<String> checkAndExtractPartitionCol(FunctionCallExpr expr, List<ColumnDef> columnDefs,
                                                            Set<String> supportedDateTruncFormats) {
-        String functionName = expr.getFnName().getFunction();
+        String functionName = expr.getFunctionName();
         NodePosition pos = expr.getPos();
         List<String> columnList = Lists.newArrayList();
         List<Expr> paramsExpr = expr.getParams().exprs();
@@ -1930,7 +1961,7 @@ public class AnalyzerUtils {
             if (partitionDef == null) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
-            if (partitionDef.getType() != Type.DATETIME) {
+            if (partitionDef.getType() != DateType.DATETIME) {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfoAndExplain(ExprToSql.toSql(expr),
                         "PARTITION BY", "The hour/minute parameter only supports datetime type"), pos);
             }
@@ -1997,5 +2028,19 @@ public class AnalyzerUtils {
         }
 
         return order1 > order2;
+    }
+
+    public static TableRef normalizedTableRef(TableRef tableRef, ConnectContext context) {
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        tableName.normalization(context);
+        QualifiedName qualifiedName = QualifiedName.of(
+                Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                tableRef.getPos());
+        String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+        return new TableRef(qualifiedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
     }
 }

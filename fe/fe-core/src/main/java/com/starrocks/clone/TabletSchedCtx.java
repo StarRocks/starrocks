@@ -43,7 +43,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -68,6 +67,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -81,6 +81,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -141,7 +142,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         FINISHED, // task is finished
         CANCELLED, // task is failed
         TIMEOUT, // task is timeout
-        UNEXPECTED // other unexpected errors
+        UNEXPECTED, // other unexpected errors
+        EXPIRED // tablet will be erased soon
     }
 
     private Type type;
@@ -950,9 +952,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (physicalPartition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "physical partition " + physicalPartitionId + " does not exist");
             }
-            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+            MaterializedIndex index = physicalPartition.getIndex(indexId);
+            if (index == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index " + indexId + " does not exist");
+            }
+            long indexMetaId = index.getMetaId();
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
             if (indexMeta == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
+                throw new SchedException(Status.UNRECOVERABLE, "materialized index meta " + indexMetaId + " does not exist");
             }
             TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                     .setId(indexMeta.getSchemaId())
@@ -980,7 +987,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     .setStorageMedium(TStorageMedium.HDD)
                     .setEnablePersistentIndex(olapTable.enablePersistentIndex())
                     .setPrimaryIndexCacheExpireSec(olapTable.primaryIndexCacheExpireSec())
-                    .setTabletType(olapTable.getPartitionInfo().getTabletType(physicalPartition.getParentId()))
+                    .setTabletType(TTabletType.TABLET_TYPE_DISK)
                     .setCompressionType(olapTable.getCompressionType())
                     .setCompressionLevel(olapTable.getCompressionLevel())
                     .setRecoverySource(RecoverySource.SCHEDULER)
@@ -1053,12 +1060,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
+
         Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, tblId, LockType.WRITE);
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
             OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
             if (olapTable == null) {
-                throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
+                throw new SchedException(Status.UNRECOVERABLE, "table does not exist");
             }
 
             PhysicalPartition partition = globalStateMgr.getLocalMetastore()
@@ -1079,9 +1087,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "index does not exist");
             }
 
-            if (schemaHash != olapTable.getSchemaHashByIndexId(indexId)) {
+            if (schemaHash != olapTable.getSchemaHashByIndexMetaId(index.getMetaId())) {
                 throw new SchedException(Status.UNRECOVERABLE, "schema hash is not consistent. index's: "
-                        + olapTable.getSchemaHashByIndexId(indexId)
+                        + olapTable.getSchemaHashByIndexMetaId(index.getMetaId())
                         + ", task's: " + schemaHash);
             }
 
@@ -1107,7 +1115,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
             throw e;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(dbId, tblId, LockType.WRITE);
         }
 
         if (request.isSetCopy_size()) {

@@ -121,7 +121,9 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     _is_returning_random_value = _fn.fid == 10300 /* rand */ || _fn.fid == 10301 /* random */ ||
                                  _fn.fid == 10302 /* rand */ || _fn.fid == 10303 /* random */ ||
-                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uniq_id */;
+                                 _fn.fid == 100015 /* uuid */ || _fn.fid == 100016 /* uuid_numeric */ ||
+                                 _fn.fid == 100025 /* uuid_v7 */ || _fn.fid == 100026 /* uuid_v7_numeric */
+            ;
 
     return Status::OK();
 }
@@ -220,9 +222,10 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 
     // For no args function call (pi, e)
     if (result.value()->is_constant() && ptr != nullptr) {
-        result.value()->resize(ptr->num_rows());
+        result.value()->as_mutable_raw_ptr()->resize(ptr->num_rows());
     }
-    RETURN_IF_ERROR(result.value()->unfold_const_children(_type));
+    auto mut_col = result.value()->as_mutable_raw_ptr();
+    RETURN_IF_ERROR(mut_col->unfold_const_children(_type));
     return result;
 }
 

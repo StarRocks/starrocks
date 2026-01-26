@@ -40,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.RemoveSmallFileLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
@@ -148,14 +149,10 @@ public class SmallFileMgrTest {
         Assertions.assertTrue(fail);
 
         // 3. test remove
-        try {
-            smallFileMgr.removeFile(2L, "kafka", "file1", true);
-        } catch (DdlException e) {
-            // this is expected
-        }
+        smallFileMgr.replayRemoveFile(new RemoveSmallFileLog(2L, "kafka", "file1"));
         gotFile = smallFileMgr.getSmallFile(10001L);
         Assertions.assertEquals(10001L, gotFile.id);
-        smallFileMgr.removeFile(1L, "kafka", "file1", true);
+        smallFileMgr.replayRemoveFile(new RemoveSmallFileLog(1L, "kafka", "file1"));
         gotFile = smallFileMgr.getSmallFile(10001L);
         Assertions.assertNull(gotFile);
 

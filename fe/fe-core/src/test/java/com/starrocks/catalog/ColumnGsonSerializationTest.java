@@ -42,8 +42,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -86,7 +85,7 @@ public class ColumnGsonSerializationTest {
         file.createNewFile();
         DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
-        Column c1 = new Column("c1", TypeFactory.createType(PrimitiveType.BIGINT), true, null, true,
+        Column c1 = new Column("c1", IntegerType.BIGINT, true, null, true,
                 new ColumnDef.DefaultValueDef(true, new StringLiteral("1")), "abc");
 
         String c1Json = GsonUtils.GSON.toJson(c1);

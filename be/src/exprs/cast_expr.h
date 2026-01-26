@@ -27,6 +27,7 @@
 #include "jsonpath.h"
 #include "runtime/types.h"
 #include "types/large_int_value.h"
+#include "variant_path_parser.h"
 
 namespace starrocks {
 
@@ -47,6 +48,10 @@ private:
                                             const TypeDescriptor& cast_type, bool allow_throw_exception);
     static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TExprNode& node, const TypeDescriptor& from_type,
                                             const TypeDescriptor& to_type, bool allow_throw_exception);
+    static Expr* create_json_to_complex_type_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+                                                  LogicalType to_type, bool allow_throw_exception);
+    static Expr* create_variant_to_complex_type_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+                                                     LogicalType to_type, bool allow_throw_exception);
     static Expr* create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
                                        LogicalType to_type, bool allow_throw_exception);
 };
@@ -79,7 +84,7 @@ private:
             : Expr(rhs),
               _cast_to_type_desc(rhs._cast_to_type_desc),
               _throw_exception_if_err(rhs._throw_exception_if_err),
-              _constant_res(rhs._constant_res != nullptr ? rhs._constant_res->clone() : nullptr) {}
+              _constant_res(rhs._constant_res != nullptr ? std::move(*(rhs._constant_res)).mutate() : nullptr) {}
 
     Slice _unquote(Slice slice) const;
     Slice _trim(Slice slice) const;
@@ -200,6 +205,115 @@ private:
     Expr* _element_cast = nullptr;
 };
 
+// Expression to cast VARIANT type to ARRAY<ANY>
+class CastVariantToArray final : public Expr {
+public:
+    CastVariantToArray(const TExprNode& node, Expr* cast_element, TypeDescriptor type_desc)
+            : Expr(node), _cast_elements_expr(cast_element), _expected_type_desc(std::move(type_desc)) {}
+    ~CastVariantToArray() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastVariantToArray>(new CastVariantToArray(*this));
+        if (_cast_elements_expr != nullptr) {
+            cloned->_cast_elements_expr = Expr::copy(pool, _cast_elements_expr);
+        }
+        return pool->add(cloned.release());
+    }
+
+private:
+    // Invoked only by clone.
+    CastVariantToArray(const CastVariantToArray& rhs) : Expr(rhs), _expected_type_desc(rhs._expected_type_desc) {}
+
+    Expr* _cast_elements_expr = nullptr;
+    TypeDescriptor _expected_type_desc;
+};
+
+// Expression to cast VARIANT type to MAP<VARCHAR, ANY>
+class CastVariantToMap final : public Expr {
+public:
+    CastVariantToMap(const TExprNode& node, Expr* key_cast_expr, Expr* value_cast_expr)
+            : Expr(node), _key_cast_expr(std::move(key_cast_expr)), _value_cast_expr(std::move(value_cast_expr)) {}
+
+    CastVariantToMap(const CastVariantToMap& rhs) : Expr(rhs) {}
+
+    ~CastVariantToMap() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastVariantToMap(*this)); }
+
+private:
+    // If MAP key is TYPE_VARIANT means no need to cast, the expr is nullptr
+    Expr* _key_cast_expr;
+    // If MAP value is TYPE_VARIANT means no need to cast, the expr is nullptr
+    Expr* _value_cast_expr;
+
+    bool keys_need_cast() const { return _key_cast_expr != nullptr; }
+    bool values_need_cast() const { return _value_cast_expr != nullptr; }
+};
+
+// Expression to cast VARIANT type to STRUCT<ANY>
+class CastVariantToStruct final : public Expr {
+public:
+    CastVariantToStruct(const TExprNode& node, std::vector<Expr*> field_casts)
+            : Expr(node), _field_casts(std::move(field_casts)) {
+        _variant_paths.reserve(_type.field_names.size());
+        for (int i = 0; i < _type.field_names.size(); i++) {
+            std::string path_string = "$." + _type.field_names[i];
+            auto res = VariantPathParser::parse(Slice(path_string));
+            if (!res.ok()) {
+                throw std::runtime_error("Failed to parse variant path: " + path_string);
+            }
+            _variant_paths.emplace_back(res.value());
+        }
+    }
+
+    ~CastVariantToStruct() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+
+    Expr* clone(ObjectPool* pool) const override {
+        auto cloned = std::unique_ptr<CastVariantToStruct>(new CastVariantToStruct(*this));
+        cloned->_field_casts.reserve(_field_casts.size());
+        for (int i = 0; i < _field_casts.size(); ++i) {
+            if (_field_casts[i] != nullptr) {
+                cloned->_field_casts.emplace_back(Expr::copy(pool, _field_casts[i]));
+            }
+        }
+        return pool->add(cloned.release());
+    }
+
+private:
+    // Invoked only by clone.
+    CastVariantToStruct(const CastVariantToStruct& rhs) : Expr(rhs), _variant_paths(rhs._variant_paths) {}
+
+    std::vector<Expr*> _field_casts;
+    std::vector<VariantPath> _variant_paths;
+};
+
+// Expression to cast SQL types to VARIANT
+class CastToVariantExpr final : public Expr {
+public:
+    CastToVariantExpr(const TExprNode& node, TypeDescriptor from_type, bool allow_throw_exception)
+            : Expr(node), _from_type(std::move(from_type)), _allow_throw_exception(allow_throw_exception) {}
+
+    ~CastToVariantExpr() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastToVariantExpr(*this)); }
+
+private:
+    // Invoked only by clone.
+    CastToVariantExpr(const CastToVariantExpr& rhs)
+            : Expr(rhs), _from_type(rhs._from_type), _allow_throw_exception(rhs._allow_throw_exception) {}
+
+    TypeDescriptor _from_type;
+    bool _allow_throw_exception;
+};
+
 // cast one MAP to another MAP.
 // For example.
 //   cast MAP<tinyint, tinyint> to MAP<int, int>
@@ -308,7 +422,6 @@ struct CastToString {
 
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception);
 
-// cast column[idx] to coresponding json type.
-StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx);
+StatusOr<std::string> cast_type_to_json_str(const ColumnPtr& column, int idx, bool unindexed_struct = false);
 
 } // namespace starrocks

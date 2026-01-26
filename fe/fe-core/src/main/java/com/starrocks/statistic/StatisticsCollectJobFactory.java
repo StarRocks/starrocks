@@ -20,13 +20,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
@@ -112,7 +113,7 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties,
-                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 List<StatisticsType> statisticsTypes,
                                                                  List<List<String>> columnGroup,
                                                                  boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {
@@ -433,7 +434,8 @@ public class StatisticsCollectJobFactory {
             return;
         }
         if (table instanceof OlapTable) {
-            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL
+                    && ((OlapTable) table).getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 return;
             }
         }

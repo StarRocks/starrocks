@@ -96,157 +96,157 @@ from __row_util;
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 join w1 t2 using(c_bool_null);
+from t1 join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1279999	1279999	1279999
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 left outer join w1 t2 using(c_bool_null);
+from t1 left outer join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 2377142	1279999	1279999
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.c_bool_null)
-from t1 left semi join w1 t2 using(c_bool_null);
+from t1 left semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 182857	182857
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.c_bool_null)
-from t1 left anti join w1 t2 using(c_bool_null);
+from t1 left anti join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1097143	0
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 right outer join w1 t2 using(c_bool_null);
+from t1 right outer join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1280084	1279999	1279999
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t2.c_bool_null)
-from t1 right semi join w1 t2 using(c_bool_null);
+from t1 right semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 14	14
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t2.c_bool_null)
-from t1 right anti join w1 t2 using(c_bool_null);
+from t1 right anti join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 85	0
 -- !result
 with w1 as (select * from t1 where k1 < 100)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 full join w1 t2 using(c_bool_null);
+from t1 full join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 2377227	1279999	1279999
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 join w1 t2 using(c_bool_null);
+from t1 join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 639996	639996	639996
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 left outer join w1 t2 using(c_bool_null);
+from t1 left outer join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1828568	731425	639996
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t1.c_bool_null)
-from t1 left semi join w1 t2 using(c_bool_null);
+from t1 left semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 91428	91428
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t1.c_bool_null)
-from t1 left anti join w1 t2 using(c_bool_null);
+from t1 left anti join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1188572	91429
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 right outer join w1 t2 using(c_bool_null);
+from t1 right outer join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 639996	639996	639996
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t2.c_bool_null)
-from t1 right semi join w1 t2 using(c_bool_null);
+from t1 right semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 7	7
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t2.c_bool_null)
-from t1 right anti join w1 t2 using(c_bool_null);
+from t1 right anti join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 full join w1 t2 using(c_bool_null);
+from t1 full join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1828568	731425	639996
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 join w1 t2 using(c_bool_null);
+from t1 join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 left outer join w1 t2 using(c_bool_null);
+from t1 left outer join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1280000	182857	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t1.c_bool_null)
-from t1 left semi join w1 t2 using(c_bool_null);
+from t1 left semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t1.c_bool_null)
-from t1 left anti join w1 t2 using(c_bool_null);
+from t1 left anti join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1280000	182857
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 right outer join w1 t2 using(c_bool_null);
+from t1 right outer join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t2.c_bool_null)
-from t1 right semi join w1 t2 using(c_bool_null);
+from t1 right semi join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t2.c_bool_null)
-from t1 right anti join w1 t2 using(c_bool_null);
+from t1 right anti join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 100 and c_bool_null is null and c_bool_null = true)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 full join w1 t2 using(c_bool_null);
+from t1 full join w1 t2 on t1.c_bool_null = t2.c_bool_null;
 -- result:
 1280000	182857	0
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 join w1 t2 using(c_bool_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 join w1 t2 on t1.c_bool_null = t2.c_bool_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 91429	91429	91429
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 left outer join w1 t2 using(c_bool_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 left outer join w1 t2 on t1.c_bool_null = t2.c_bool_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 91429	91429	91429
 -- !result
@@ -282,115 +282,115 @@ from t1 right anti join w1 t2 on t1.c_bool_null = t2.c_bool_null and (t1.k1 + t2
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_bool_null), count(t2.c_bool_null)
-from t1 full join w1 t2 using(c_bool_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 full join w1 t2 on t1.c_bool_null = t2.c_bool_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 91429	91429	91429
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 join w1 t2 using(c_tinyint_null);
+from t1 join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 80002	80002	80002
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 left outer join w1 t2 using(c_tinyint_null);
+from t1 left outer join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1280000	106666	80002
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t1.c_tinyint_null)
-from t1 left semi join w1 t2 using(c_tinyint_null);
+from t1 left semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 80002	80002
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t1.c_tinyint_null)
-from t1 left anti join w1 t2 using(c_tinyint_null);
+from t1 left anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1199998	26664
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 right outer join w1 t2 using(c_tinyint_null);
+from t1 right outer join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 80002	80002	80002
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t2.c_tinyint_null)
-from t1 right semi join w1 t2 using(c_tinyint_null);
+from t1 right semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 24	24
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t2.c_tinyint_null)
-from t1 right anti join w1 t2 using(c_tinyint_null);
+from t1 right anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 full join w1 t2 using(c_tinyint_null);
+from t1 full join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1280000	106666	80002
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 join w1 t2 using(c_tinyint_null);
+from t1 join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 left outer join w1 t2 using(c_tinyint_null);
+from t1 left outer join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1280000	106666	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t1.c_tinyint_null)
-from t1 left semi join w1 t2 using(c_tinyint_null);
+from t1 left semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t1.c_tinyint_null)
-from t1 left anti join w1 t2 using(c_tinyint_null);
+from t1 left anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1280000	106666
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 right outer join w1 t2 using(c_tinyint_null);
+from t1 right outer join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t2.c_tinyint_null)
-from t1 right semi join w1 t2 using(c_tinyint_null);
+from t1 right semi join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t2.c_tinyint_null)
-from t1 right anti join w1 t2 using(c_tinyint_null);
+from t1 right anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_tinyint_null % 2 = 0 and c_tinyint_null is null)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 full join w1 t2 using(c_tinyint_null);
+from t1 full join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null;
 -- result:
 1280000	106666	0
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 join w1 t2 using(c_tinyint_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 left outer join w1 t2 using(c_tinyint_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 left outer join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 0	0	0
 -- !result
@@ -426,115 +426,115 @@ from t1 right anti join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null and (t1.k
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_tinyint_null), count(t2.c_tinyint_null)
-from t1 full join w1 t2 using(c_tinyint_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 full join w1 t2 on t1.c_tinyint_null = t2.c_tinyint_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 join w1 t2 using(c_smallint_null);
+from t1 join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 44	44	44
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 left outer join w1 t2 using(c_smallint_null);
+from t1 left outer join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1280000	98461	44
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t1.c_smallint_null)
-from t1 left semi join w1 t2 using(c_smallint_null);
+from t1 left semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 44	44
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t1.c_smallint_null)
-from t1 left anti join w1 t2 using(c_smallint_null);
+from t1 left anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1279956	98417
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 right outer join w1 t2 using(c_smallint_null);
+from t1 right outer join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 44	44	44
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t2.c_smallint_null)
-from t1 right semi join w1 t2 using(c_smallint_null);
+from t1 right semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 11	11
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t2.c_smallint_null)
-from t1 right anti join w1 t2 using(c_smallint_null);
+from t1 right anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 full join w1 t2 using(c_smallint_null);
+from t1 full join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1280000	98461	44
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 join w1 t2 using(c_smallint_null);
+from t1 join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 left outer join w1 t2 using(c_smallint_null);
+from t1 left outer join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1280000	98461	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t1.c_smallint_null)
-from t1 left semi join w1 t2 using(c_smallint_null);
+from t1 left semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t1.c_smallint_null)
-from t1 left anti join w1 t2 using(c_smallint_null);
+from t1 left anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1280000	98461
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 right outer join w1 t2 using(c_smallint_null);
+from t1 right outer join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t2.c_smallint_null)
-from t1 right semi join w1 t2 using(c_smallint_null);
+from t1 right semi join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t2.c_smallint_null)
-from t1 right anti join w1 t2 using(c_smallint_null);
+from t1 right anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 0	0
 -- !result
 with w1 as (select * from t1 where k1 < 300 and c_smallint_null % 2 = 0 and c_smallint_null is null)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 full join w1 t2 using(c_smallint_null);
+from t1 full join w1 t2 on t1.c_smallint_null = t2.c_smallint_null;
 -- result:
 1280000	98461	0
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 join w1 t2 using(c_smallint_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 join w1 t2 on t1.c_smallint_null = t2.c_smallint_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 0	0	0
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 left outer join w1 t2 using(c_smallint_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 left outer join w1 t2 on t1.c_smallint_null = t2.c_smallint_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 0	0	0
 -- !result
@@ -570,7 +570,7 @@ from t1 right anti join w1 t2 on t1.c_smallint_null = t2.c_smallint_null and (t1
 -- !result
 with w1 as (select * from t1 where k1 < 10)
 select count(1), count(t1.c_smallint_null), count(t2.c_smallint_null)
-from t1 full join w1 t2 using(c_smallint_null) where (t1.k1 + t2.k1) % 7 = 0;
+from t1 full join w1 t2 on t1.c_smallint_null = t2.c_smallint_null where (t1.k1 + t2.k1) % 7 = 0;
 -- result:
 0	0	0
 -- !result

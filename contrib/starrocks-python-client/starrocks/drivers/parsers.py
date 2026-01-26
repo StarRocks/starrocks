@@ -58,6 +58,11 @@ class DataTypeTransformer(Transformer):
         if type_name_lower == "bigint" and unsigned:
             return self.type_map["largeint"]
 
+        # Convert TINYINT(1) to BOOLEAN during reflection
+        # This ensures that TINYINT(1) from database is always reflected as BOOLEAN
+        if type_name_lower == "tinyint" and args and len(args) == 1 and args[0] == 1:
+            return self.type_map["boolean"]
+
         type_class = self.type_map.get(type_name_lower)
         # logger.debug(f"type_class: {type_class}")
         if type_class is None:
@@ -197,5 +202,10 @@ def _get_mv_refresh_parser() -> Lark:
 
 
 def parse_mv_refresh_clause(refresh_clause_str: str) -> dict:
-    """Parses a full 'REFRESH ...' string and returns a dictionary with moment and scheme."""
+    """Parses a full 'REFRESH ...' string and returns a dictionary with moment and scheme.
+    Returns:
+        A dictionary with keys "refresh_moment" and "refresh_type". The values are like:
+        - "refresh_moment": "IMMEDIATE" | "DEFERRED" | None,
+        - "refresh_type": "ASYNC" | "MANUAL" | "INCREMENTAL" | None,
+    """
     return _get_mv_refresh_parser().parse(refresh_clause_str)

@@ -26,10 +26,9 @@
 #include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "join_hash_map_helper.h"
-#include "join_hash_table_descriptor.h"
+#include "exec/join/join_hash_map_helper.h"
+#include "exec/join/join_hash_table_descriptor.h"
 #include "simd/simd.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

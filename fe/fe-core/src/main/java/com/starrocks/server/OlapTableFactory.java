@@ -29,7 +29,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -65,12 +64,15 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
@@ -86,12 +88,16 @@ import org.threeten.extra.PeriodDuration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.validation.constraints.NotNull;
+
+import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
+import static com.starrocks.common.InvertedIndexParams.InvertedIndexImpType.CLUCENE;
 
 public class OlapTableFactory implements AbstractTableFactory {
 
@@ -189,7 +195,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             Set<Integer> addedSortKey = new HashSet<>();
             List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
             for (OrderByElement orderByElement : stmt.getOrderByElements()) {
-                String column = orderByElement.castAsSlotRef();
+                Expr expr = orderByElement.getExpr();
+                String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
                 if (column == null) {
                     throw new DdlException("Unknown column '" +
                             ExprToSql.toSql(orderByElement.getExpr()) + "' in order by clause");
@@ -253,7 +260,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
 
                 processFlatJsonConfig(properties, table, tableName);
-
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -271,9 +277,9 @@ public class OlapTableFactory implements AbstractTableFactory {
         try {
             table.setComment(stmt.getComment());
 
-            // set base index id
-            long baseIndexId = metastore.getNextId();
-            table.setBaseIndexId(baseIndexId);
+            // set base index meta id
+            long baseIndexMetaId = metastore.getNextId();
+            table.setBaseIndexMetaId(baseIndexMetaId);
 
             // get use light schema change
             try {
@@ -282,6 +288,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
             table.setUseFastSchemaEvolution(useFastSchemaEvolution);
+
+            if (table.isCloudNativeTable()) {
+                boolean fastSchemaEvolutionV2 = properties == null ? true :
+                        PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, true);
+                ((LakeTable) table).setFastSchemaEvolutionV2(fastSchemaEvolutionV2);
+            }
+
             for (Column column : baseSchema) {
                 column.setUniqueId(table.incAndGetMaxColUniqueId());
                 // check reserved column for PK table
@@ -350,10 +363,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             // analyze location property
             PropertyAnalyzer.analyzeLocation(table, properties);
 
-            // set in memory
-            boolean isInMemory =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
-            table.setIsInMemory(isInMemory);
+            // consume deprecated in_memory property if present
+            PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
             boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -399,6 +410,14 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("Only default compaction strategy is allowed for non-pk table.");
                 }
                 table.setCompactionStrategy(compactionStrategy);
+
+                // analyze lake_compaction_max_parallel property
+                try {
+                    int lakeCompactionMaxParallel = PropertyAnalyzer.analyzeLakeCompactionMaxParallel(properties);
+                    table.setLakeCompactionMaxParallel(lakeCompactionMaxParallel);
+                } catch (AnalysisException e) {
+                    throw new DdlException(e.getMessage());
+                }
             }
 
             try {
@@ -467,6 +486,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setEnableLoadProfile(true);
             }
 
+            if (PropertyAnalyzer.analyzeBooleanProp(properties,
+                    PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, true)) {
+                table.setEnableStatisticCollectOnFirstLoad(true);
+            } else {
+                table.setEnableStatisticCollectOnFirstLoad(false);
+            }
+
             try {
                 table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
                 if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
@@ -496,13 +522,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-            try {
-                Boolean enableDynamicTablet = PropertyAnalyzer.analyzeEnableDynamicTablet(properties, true);
-                table.setEnableDynamicTablet(enableDynamicTablet);
-            } catch (Exception e) {
-                throw new DdlException(e.getMessage());
-            }
-
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
@@ -510,26 +529,37 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(e.getMessage());
             }
 
-            // replicated storage
-            table.setEnableReplicatedStorage(
-                    PropertyAnalyzer.analyzeBooleanProp(
-                            properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
-                            Config.enable_replicated_storage_as_default_engine));
+            boolean enableReplicatedStorage = PropertyAnalyzer.analyzeBooleanProp(
+                    properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                    Config.enable_replicated_storage_as_default_engine);
+            if (table.isOlapTableOrMaterializedView()) {
+                // replicated storage
+                table.setEnableReplicatedStorage(enableReplicatedStorage);
 
+                boolean hasGin = table.getIndexes() != null && table.getIndexes().stream()
+                        .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+                boolean hasCLuceneGin = table.getIndexes() != null && table.getIndexes().stream()
+                        .anyMatch(index -> {
+                            if (index.getIndexType() != IndexType.GIN) {
+                                return false;
+                            }
+                            String impVal = index.getProperties() == null ? null :
+                                    index.getProperties().get(IMP_LIB.name().toLowerCase(Locale.ROOT));
+                            return impVal == null ? !RunMode.isSharedDataMode() /* default to CLUCENE for share nothing */
+                                                  : CLUCENE.name().equalsIgnoreCase(impVal);
+                        });
+                if (hasGin && hasCLuceneGin && table.enableReplicatedStorage()) {
+                    // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
+                    // if table contains GIN Index.
+                    table.setEnableReplicatedStorage(false);
+                }
 
-            boolean hasGin = table.getIndexes().stream()
-                            .anyMatch(index -> index.getIndexType() == IndexType.GIN);
-            if (hasGin && table.enableReplicatedStorage()) {
-                // GIN indexes are incompatible with replicated_storage right now and we will disable replicated_storage
-                // if table contains GIN Index.
-                table.setEnableReplicatedStorage(false);
-            }
-
-            if (table.enableReplicatedStorage().equals(false)) {
-                for (Column col : baseSchema) {
-                    if (col.isAutoIncrement()) {
-                        throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
-                                " and not compatible with GIN Index");
+                if (table.enableReplicatedStorage().equals(false)) {
+                    for (Column col : baseSchema) {
+                        if (col.isAutoIncrement()) {
+                            throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage " +
+                                    " and not compatible with GIN Index");
+                        }
                     }
                 }
             }
@@ -614,8 +644,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 Preconditions.checkNotNull(dataProperty);
                 partitionInfo.setDataProperty(partitionId, dataProperty);
                 partitionInfo.setReplicationNum(partitionId, replicationNum);
-                partitionInfo.setIsInMemory(partitionId, isInMemory);
-                partitionInfo.setTabletType(partitionId, tabletType);
                 StorageInfo storageInfo = table.getTableProperty().getStorageInfo();
                 DataCacheInfo dataCacheInfo = storageInfo == null ? null : storageInfo.getDataCacheInfo();
                 partitionInfo.setDataCacheInfo(partitionId, dataCacheInfo);
@@ -650,18 +678,18 @@ public class OlapTableFactory implements AbstractTableFactory {
             int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
             if (stmt.getOrderByElements() != null) {
-                table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                table.setIndexMeta(baseIndexMetaId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes,
                         sortKeyUniqueIds);
             } else {
-                table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                table.setIndexMeta(baseIndexMetaId, tableName, baseSchema, schemaVersion, schemaHash,
                         shortKeyColumnCount, baseIndexStorageType, keysType, null);
             }
 
             for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
                 AddRollupClause addRollupClause = (AddRollupClause) alterClause;
 
-                Long baseRollupIndex = table.getIndexIdByName(tableName);
+                Long baseRollupIndexMetaId = table.getIndexMetaIdByName(tableName);
 
                 // get storage type for rollup index
                 TStorageType rollupIndexStorageType = null;
@@ -673,12 +701,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 Preconditions.checkNotNull(rollupIndexStorageType);
                 // set rollup index meta to olap table
                 List<Column> rollupColumns = stateMgr.getRollupHandler().checkAndPrepareMaterializedView(addRollupClause,
-                        table, baseRollupIndex);
+                        table, baseRollupIndexMetaId);
                 short rollupShortKeyColumnCount =
                         GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, addRollupClause.getProperties());
                 int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
-                long rollupIndexId = metastore.getNextId();
-                table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
+                long rollupIndexMetaId = metastore.getNextId();
+                table.setIndexMeta(rollupIndexMetaId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                         rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
             }
 
@@ -747,6 +775,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT, timeDriftConstraintSpec);
                 table.getTableProperty().setTimeDriftConstraintSpec(timeDriftConstraintSpec);
+            }
+
+            // analyze table_query_timeout
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+                try {
+                    int tableQueryTimeout = PropertyAnalyzer.analyzeTableQueryTimeout(properties);
+                    table.setTableQueryTimeout(tableQueryTimeout);
+                } catch (AnalysisException ex) {
+                    throw new DdlException(ex.getMessage());
+                }
             }
 
             try {

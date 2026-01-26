@@ -31,6 +31,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.common.Pair;
@@ -51,10 +52,12 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
@@ -97,6 +100,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.ast.PartitionValue.STARROCKS_DEFAULT_PARTITION_VALUE;
 import static com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner.doFurtherPartitionPrune;
 import static com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner.isNeedFurtherPrune;
 import static com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner.buildDeducedConjunct;
@@ -262,7 +266,7 @@ public class PartitionSelector {
         try {
             scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory);
         } catch (Exception e) {
-            LOG.warn("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
+            LOG.debug("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
         }
 
         LOG.debug("Get partition ids by where expression after deduce: {}", scalarOperator.toString());
@@ -511,8 +515,14 @@ public class PartitionSelector {
         Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, Integer> entry : colRefIdxMap.entrySet()) {
             ColumnRefOperator colRef = entry.getKey();
+            LiteralExpr literalExpr;
             try {
-                LiteralExpr literalExpr = LiteralExpr.create(values.get(entry.getValue()), colRef.getType());
+                if (values.get(entry.getValue()) != null &&
+                        values.get(entry.getValue()).equalsIgnoreCase(STARROCKS_DEFAULT_PARTITION_VALUE)) {
+                    literalExpr = NullLiteral.create(colRef.getType());
+                } else {
+                    literalExpr = LiteralExprFactory.create(values.get(entry.getValue()), colRef.getType());
+                }
                 ConstantOperator replace = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
                 replaceMap.put(colRef, replace);
             } catch (Exception e) {
@@ -530,7 +540,7 @@ public class PartitionSelector {
                                                          boolean isDropPartitionCondition,
                                                          Map<Long, PCell> inputCells) {
         // clone it to avoid changing the original map
-        Map<Long, Range<PartitionKey>> keyRangeById = Maps.newHashMap(rangePartitionInfo.getIdToRange(false));
+        Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getNonEmptyRanges(false);
         if (inputCells != null && !inputCells.isEmpty()) {
             // mock partition ids since input cells has not been added into olapTable yet.
             inputCells.entrySet().stream()
@@ -839,13 +849,13 @@ public class PartitionSelector {
         if (partitionsMetaTbl == null) {
             return null;
         }
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap();
         List<Column> partitionCols = olapTable.getPartitionColumns();
         for (Map.Entry<Expr, Integer> e : exprToColumnIdxes.entrySet()) {
             Expr alias = buildJsonQuery(partitionCols, e.getValue());
             aliasMap.put(e.getKey(), alias);
         }
-        Expr newExpr = whereExpr.substitute(aliasMap);
+        Expr newExpr = ExprSubstitutionVisitor.rewrite(whereExpr, aliasMap);
         String newWhereSql = ExprToSql.toSql(newExpr);
         String sql = String.format(PARTITIONS_META_TEMPLATE, dbName, olapTable.getName(), newWhereSql);
         LOG.info("Get partition ids by sql: {}", sql);

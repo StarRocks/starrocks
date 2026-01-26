@@ -14,7 +14,7 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 
-#include "cache/disk_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "connector/deletion_vector/deletion_vector.h"
@@ -125,7 +125,8 @@ Status HdfsScanner::_build_scanner_context() {
     // build columns of materialized and partition.
     for (size_t i = 0; i < _scanner_params.materialize_slots.size(); i++) {
         auto* slot = _scanner_params.materialize_slots[i];
-        if (slot->col_name() == ICEBERG_ROW_ID) {
+        if (slot->col_name() == ICEBERG_ROW_ID || slot->col_name() == "_row_source_id" ||
+            slot->col_name() == "_scan_range_id" || slot->col_name() == ICEBERG_ROW_POSITION) {
             ctx.reserved_field_slots.emplace_back(slot);
         } else {
             HdfsScannerContext::ColumnInfo column;
@@ -156,6 +157,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.slot_descs = _scanner_params.tuple_desc->slots();
     ctx.scan_range = _scanner_params.scan_range;
+    ctx.scan_range_id = _scanner_params.scan_range_id;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -502,13 +504,16 @@ void HdfsScanner::update_counter() {
     COUNTER_UPDATE(profile->column_read_timer, _app_stats.column_read_ns);
     COUNTER_UPDATE(profile->column_convert_timer, _app_stats.column_convert_ns);
 
+    DataCacheHitRateCounter::instance()->update_page_cache_stat(_app_stats.page_cache_read_counter,
+                                                                _app_stats.page_read_counter);
+
     if (_scanner_params.datacache_options.enable_datacache && _cache_input_stream) {
         const io::CacheInputStream::Stats& stats = _cache_input_stream->stats();
-        COUNTER_UPDATE(profile->datacache_read_counter, stats.read_cache_count);
-        COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_counter, stats.read_block_cache_count);
+        COUNTER_UPDATE(profile->datacache_read_bytes, stats.read_block_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_mem_bytes, stats.read_mem_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_disk_bytes, stats.read_disk_cache_bytes);
-        COUNTER_UPDATE(profile->datacache_read_timer, stats.read_cache_ns);
+        COUNTER_UPDATE(profile->datacache_read_timer, stats.read_block_cache_ns);
         COUNTER_UPDATE(profile->datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(profile->datacache_skip_read_bytes, stats.skip_read_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_peer_bytes, stats.read_peer_cache_bytes);
@@ -516,9 +521,9 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_peer_timer, stats.read_peer_cache_ns);
         COUNTER_UPDATE(profile->datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
         COUNTER_UPDATE(profile->datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
-        COUNTER_UPDATE(profile->datacache_write_counter, stats.write_cache_count);
-        COUNTER_UPDATE(profile->datacache_write_bytes, stats.write_cache_bytes);
-        COUNTER_UPDATE(profile->datacache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(profile->datacache_write_counter, stats.write_block_cache_count);
+        COUNTER_UPDATE(profile->datacache_write_bytes, stats.write_block_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_write_timer, stats.write_block_cache_ns);
         COUNTER_UPDATE(profile->datacache_write_fail_counter, stats.write_cache_fail_count);
         COUNTER_UPDATE(profile->datacache_write_fail_bytes, stats.write_cache_fail_bytes);
         COUNTER_UPDATE(profile->datacache_skip_write_counter, stats.skip_write_cache_count);
@@ -528,14 +533,15 @@ void HdfsScanner::update_counter() {
 
         if (_scanner_params.datacache_options.enable_cache_select) {
             // For cache select, we will update load datacache metrics
-            _runtime_state->update_num_datacache_read_bytes(stats.read_cache_bytes);
-            _runtime_state->update_num_datacache_read_time_ns(stats.read_cache_ns);
-            _runtime_state->update_num_datacache_write_bytes(stats.write_cache_bytes);
-            _runtime_state->update_num_datacache_write_time_ns(stats.write_cache_ns);
+            _runtime_state->update_num_datacache_read_bytes(stats.read_block_cache_bytes);
+            _runtime_state->update_num_datacache_read_time_ns(stats.read_block_cache_ns);
+            _runtime_state->update_num_datacache_write_bytes(stats.write_block_cache_bytes);
+            _runtime_state->update_num_datacache_write_time_ns(stats.write_block_cache_ns);
             _runtime_state->update_num_datacache_count(1);
         } else {
             // For none cache select sql, we will update DataCache app hit rate
-            BlockCacheHitRateCounter::instance()->update(stats.read_cache_bytes, _fs_stats.bytes_read);
+            DataCacheHitRateCounter::instance()->update_block_cache_stat(stats.read_block_cache_bytes,
+                                                                         _fs_stats.bytes_read);
         }
     }
     if (_shared_buffered_input_stream) {

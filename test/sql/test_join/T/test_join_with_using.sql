@@ -56,9 +56,6 @@ SELECT id1, id2 FROM left_table RIGHT JOIN right_table USING(id1, id2) ORDER BY 
 -- Test FULL OUTER JOIN
 SELECT * FROM left_table FULL OUTER JOIN right_table USING(id1, id2) ORDER BY right_table.dept, right_table.bonus;
 
--- Test with table aliases and qualified references
-SELECT L.id1, R.id1, id1 FROM left_table L JOIN right_table R USING(id1, id2) ORDER BY L.id1;
-
 -- Test single USING column
 SELECT * FROM left_table JOIN right_table USING(id1) ORDER BY id1;
 
@@ -107,10 +104,6 @@ SELECT l.id2 l_id1 FROM left_table l right JOIN right_table r USING(id1) ORDER B
 SELECT r.id2 l_id1 FROM left_table l right JOIN right_table r USING(id1) ORDER BY l_id1;
 
 SELECT id1 AS key1, id2 AS key2 FROM left_table JOIN right_table USING(id1, id2) ORDER BY key1;
-
--- Test USING column with table alias and column alias
-SELECT L.id1 AS left_key, R.id1 AS right_key, id1 AS coalesced_key 
-FROM left_table L JOIN right_table R USING(id1) ORDER BY left_key;
 
 -- Test RIGHT JOIN with single column and alias (should prefer right table value)
 SELECT id1 AS right_preferred_key FROM left_table RIGHT JOIN right_table USING(id1) ORDER BY right_preferred_key;

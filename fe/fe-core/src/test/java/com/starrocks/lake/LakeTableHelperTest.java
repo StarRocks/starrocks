@@ -16,12 +16,10 @@ package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardGroupInfo;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -34,12 +32,14 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -132,7 +132,7 @@ public class LakeTableHelperTest {
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
         subPartitions.forEach(physicalPartition -> {
             MaterializedIndex materializedIndex =
-                    physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
+                    physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).get(0);
             materializedIndex.setShardGroupId(groupIdToClear);
         });
 
@@ -169,8 +169,8 @@ public class LakeTableHelperTest {
         long indexId = 1000L;
         long partitionId = 1001L;
         KeysType keysType = KeysType.DUP_KEYS;
-        Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
-        Column c1 = new Column("c1", Type.INT, true, AggregateType.NONE, false, null, null);
+        Column c0 = new Column("c0", IntegerType.INT, true, AggregateType.NONE, false, null, null);
+        Column c1 = new Column("c1", IntegerType.INT, true, AggregateType.NONE, false, null, null);
 
         DistributionInfo dist = new HashDistributionInfo(10, Arrays.asList(c0, c1));
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
@@ -183,16 +183,16 @@ public class LakeTableHelperTest {
             index.addTablet(tablet, tabletMeta);
         }
         table.addPartition(partition);
-        table.setIndexMeta(index.getId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
+        table.setIndexMeta(index.getMetaId(), "t0", Arrays.asList(c0, c1), 0, 0, (short) 1, TStorageType.COLUMN,
                 keysType);
-        List<Column> newIndexSchema = table.getSchemaByIndexId(indexId);
+        List<Column> newIndexSchema = table.getSchemaByIndexMetaId(index.getMetaId());
         List<Column> baseSchema = table.getBaseSchema();
 
         {
             // reset column unique id to invalid value
             c0.setUniqueId(-1);
             c1.setUniqueId(0);
-            Assertions.assertEquals(2, table.getIndexIdToSchema().size());
+            Assertions.assertEquals(2, table.getIndexMetaIdToSchema().size());
 
             // base schema is fine
             Assertions.assertFalse(LakeTableHelper.restoreColumnUniqueId(baseSchema));

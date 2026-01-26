@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra;
@@ -32,9 +33,11 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.IcebergRewriteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TSinkCommitInfo;
 import mockit.Mock;
@@ -211,8 +214,10 @@ public class IcebergRewriteDataJobTest {
         IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);  
         InsertStmt fakeInsertStmt = Mockito.mock(InsertStmt.class);
-        PartitionNames pn = mock(PartitionNames.class);
-        when(fakeInsertStmt.getTableName()).thenReturn(new TableName("c", "db", "t"));
+        PartitionRef pn = new PartitionRef(Collections.emptyList(), false, NodePosition.ZERO);
+        when(fakeInsertStmt.getTableRef()).thenReturn(new TableRef(
+                QualifiedName.of(Lists.newArrayList("c", "db", "t")),
+                null, NodePosition.ZERO));
         when(fakeInsertStmt.getTargetPartitionNames()).thenReturn(pn);
         when(fakeInsertStmt.getLabel()).thenReturn("label_123");
         when(fakeInsertStmt.getTargetColumnNames()).thenReturn(Collections.emptyList());

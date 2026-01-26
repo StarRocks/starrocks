@@ -1,0 +1,28 @@
+From 9e2d8eb05b71866bfe04b0beaa42fefdfde65b89 Mon Sep 17 00:00:00 2001
+From: Murphy <mofei@starrocks.com>
+Date: Wed, 5 Nov 2025 15:51:15 +0800
+Subject: [PATCH] fix
+
+Signed-off-by: Murphy <mofei@starrocks.com>
+---
+ src/profiledata.cc | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/profiledata.cc b/src/profiledata.cc
+index 8b05d3a..c02966a 100644
+--- a/src/profiledata.cc
++++ b/src/profiledata.cc
+@@ -192,8 +192,8 @@ void ProfileData::Stop() {
+   DumpProcSelfMaps(out_);
+ 
+   Reset();
+-  fprintf(stderr, "PROFILE: interrupts/evictions/bytes = %d/%d/%" PRIuS "\n",
+-          count_, evictions_, total_bytes_);
++  // fprintf(stderr, "PROFILE: interrupts/evictions/bytes = %d/%d/%" PRIuS "\n",
++  //        count_, evictions_, total_bytes_);
+ }
+ 
+ void ProfileData::Reset() {
+-- 
+2.34.1
+

@@ -22,7 +22,7 @@
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
-#include "exec/join/join_hash_map.h"
+#include "exec/join/join_hash_table.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/spill_process_channel.h"
@@ -141,6 +141,14 @@ inline bool could_short_circuit(TJoinOp::type join_type) {
 inline bool has_post_probe(TJoinOp::type join_type) {
     return join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
            join_type == TJoinOp::FULL_OUTER_JOIN;
+}
+
+inline bool support_partitioned(TJoinOp::type join_type, bool has_other_conjuncts) {
+    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
+           join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::FULL_OUTER_JOIN ||
+           (join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && !has_other_conjuncts);
 }
 
 inline bool is_spillable(TJoinOp::type join_type) {
@@ -374,7 +382,7 @@ private:
                 key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(chunk->num_rows(), 0);
+                const_column->data_column()->as_mutable_raw_ptr()->assign(chunk->num_rows(), 0);
                 key_columns.emplace_back(const_column->data_column());
             } else {
                 key_columns.emplace_back(std::move(column_ptr));

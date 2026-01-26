@@ -34,6 +34,7 @@
 
 #include "runtime/descriptors.h"
 
+#include <protocol/TDebugProtocol.h>
 #include <util/timezone_utils.h>
 
 #include <boost/algorithm/string/join.hpp>
@@ -150,6 +151,13 @@ Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, Objec
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::open(_partition_key_value_evals, state));
     return Status::OK();
+}
+
+std::string HdfsPartitionDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "HdfsPartition(id=" << _id << ", location=" << _location << ", file_format=" << _file_format
+        << ", partition_key_value_evals=" << Expr::debug_string(_partition_key_value_evals);
+    return out.str();
 }
 
 HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -460,7 +468,17 @@ Status HiveTableDescriptor::add_partition_value(RuntimeState* runtime_state, Obj
     RETURN_IF_ERROR(partition->create_part_key_exprs(runtime_state, pool));
     {
         std::unique_lock lock(_map_mutex);
-        _partition_id_to_desc_map[id] = partition;
+        const auto it = _partition_id_to_desc_map.find(id);
+        if (it != _partition_id_to_desc_map.end()) {
+            auto* old_partition = it->second;
+            if (partition->thrift_partition_key_exprs() != old_partition->thrift_partition_key_exprs()) {
+                return Status::InternalError(
+                        fmt::format("Partition id {} already exists. new partition = {}, old_partition = {}", id,
+                                    partition->debug_string(), old_partition->debug_string()));
+            }
+        } else {
+            _partition_id_to_desc_map[id] = partition;
+        }
     }
     return Status::OK();
 }
@@ -865,6 +883,45 @@ std::string DescriptorTbl::debug_string() const {
     }
 
     return out.str();
+}
+
+std::string RowPositionDescriptor::debug_string() const {
+    std::stringstream out;
+    out << "RowPositionDescriptor(type=" << _type << " row_source_slot_id=" << _row_source_slot_id
+        << " fetch_ref_slot_ids=[";
+    for (const auto& slot_id : _fetch_ref_slot_ids) {
+        out << slot_id << ", ";
+    }
+    out << "], lookup_ref_slot_ids=[";
+    for (const auto& slot_id : _lookup_ref_slot_ids) {
+        out << slot_id << ", ";
+    }
+    out << "])";
+    return out.str();
+}
+
+RowPositionDescriptor* RowPositionDescriptor::from_thrift(const TRowPositionDescriptor& t_desc, ObjectPool* pool) {
+    RowPositionDescriptor* desc = nullptr;
+    switch (t_desc.row_position_type) {
+    case TRowPositionType::ICEBERG_V3_ROW_POSITION: {
+        std::vector<SlotId> fetch_ref_slot_ids;
+        for (const auto& slot_id : t_desc.fetch_ref_slots) {
+            fetch_ref_slot_ids.emplace_back(slot_id);
+        }
+        std::vector<SlotId> lookup_ref_slot_ids;
+        for (const auto& slot_id : t_desc.lookup_ref_slots) {
+            lookup_ref_slot_ids.emplace_back(slot_id);
+        }
+        desc = pool->add(
+                new IcebergV3RowPositionDescriptor(t_desc.row_source_slot, fetch_ref_slot_ids, lookup_ref_slot_ids));
+        break;
+    }
+    default: {
+        DCHECK(false) << "Unknown row position type: " << t_desc.row_position_type;
+        break;
+    }
+    }
+    return desc;
 }
 
 } // namespace starrocks

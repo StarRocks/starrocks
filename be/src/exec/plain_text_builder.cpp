@@ -6,6 +6,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "formats/csv/converter.h"
+#include "formats/csv/csv_escape.h"
 #include "formats/csv/output_stream.h"
 #include "formats/csv/output_stream_file.h"
 #include "gutil/strings/substitute.h"
@@ -23,6 +24,8 @@ PlainTextBuilder::PlainTextBuilder(PlainTextBuilderOptions options, std::unique_
           _output_stream(
                   std::make_unique<csv::OutputStreamFile>(std::move(writable_file), OUTSTREAM_BUFFER_SIZE_BYTES)),
           _init(false) {}
+
+PlainTextBuilder::~PlainTextBuilder() = default;
 
 Status PlainTextBuilder::init() {
     if (_init) {
@@ -43,6 +46,25 @@ Status PlainTextBuilder::init() {
         }
         _converters.emplace_back(std::move(conv));
     }
+
+    // Write header row if enabled
+    if (_options.with_header) {
+        if (_options.column_names.empty()) {
+            LOG(WARNING)
+                    << "with_header is enabled but column_names is empty, this may indicate an upstream logic issue";
+        } else {
+            const size_t num_cols = _options.column_names.size();
+            for (size_t i = 0; i < num_cols; i++) {
+                // Escape column names that contain special characters (delimiter, quotes, newlines)
+                std::string escaped_name =
+                        csv::escape_csv_field(_options.column_names[i], _options.column_terminated_by);
+                RETURN_IF_ERROR(_output_stream->write(escaped_name));
+                RETURN_IF_ERROR(_output_stream->write((i == num_cols - 1) ? _options.line_terminated_by
+                                                                          : _options.column_terminated_by));
+            }
+        }
+    }
+
     _init = true;
 
     return Status::OK();
@@ -69,7 +91,7 @@ Status PlainTextBuilder::add_chunk(Chunk* chunk) {
         if (col == nullptr) {
             return Status::InternalError(strings::Substitute("Column not found by slot id %0", column_ref->slot_id()));
         }
-        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, col);
+        col = ColumnHelper::unfold_const_column(column_ref->type(), num_rows, std::move(col));
         columns.emplace_back(col);
     }
 
@@ -95,6 +117,8 @@ std::size_t PlainTextBuilder::file_size() {
 
 Status PlainTextBuilder::finish() {
     DCHECK(_output_stream != nullptr);
+    // Ensure header is written even if no data was added
+    RETURN_IF_ERROR(init());
     return _output_stream->finalize();
 }
 

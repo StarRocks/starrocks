@@ -24,6 +24,7 @@ import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -173,7 +174,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
         // mv's to refresh partition info
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
-        MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+        MVTimelinessArbiter.QueryRewriteParams queryRewriteParams =
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context);
+        MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv, queryRewriteParams);
         if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
             logMVRewrite(context, this, "Get mv to refresh partition info failed, and redirect to mv's defined query");
             return getOptExpressionByDefault(context, mv, mvPlanContext, olapScanOperator, queryTables);
@@ -225,7 +228,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                    LogicalOlapScanOperator olapScanOperator,
                                                    Set<Table> queryTables) {
         MvUpdateInfo mvUpdateInfo = MvUpdateInfo.fullRefresh(mv);
-        mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
+        mvUpdateInfo.addMVToRefreshPartitionNames(mv.getPartitionCells(Optional.empty()));
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                 mv, mvPlanContext, mvUpdateInfo, queryTables, 0);

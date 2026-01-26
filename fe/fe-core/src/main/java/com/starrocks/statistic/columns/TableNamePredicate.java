@@ -14,7 +14,7 @@
 
 package com.starrocks.statistic.columns;
 
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.function.Predicate;

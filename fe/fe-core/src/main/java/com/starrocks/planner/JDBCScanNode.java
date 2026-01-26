@@ -18,7 +18,6 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.StarRocksException;
@@ -51,7 +50,35 @@ public class JDBCScanNode extends ScanNode {
         super(id, desc, "SCAN JDBC");
         table = tbl;
         String objectIdentifier = getIdentifierSymbol();
-        tableName = objectIdentifier + tbl.getCatalogTableName() + objectIdentifier;
+        tableName = wrapWithIdentifier(tbl.getCatalogTableName(), objectIdentifier);
+    }
+
+    private String wrapWithIdentifier(String name, String identifier) {
+        if (name == null) {
+            return "";
+        }
+        if (identifier.isEmpty()) {
+            return name;
+        }
+        // If name already have identifier wrapped, just return
+        if (name.length() > 2 && name.startsWith(identifier) && name.endsWith(identifier)) {
+            return name;
+        }
+
+        String[] parts = name.split("\\.", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                sb.append(".");
+            }
+            String part = parts[i];
+            if (part.length() > 2 && part.startsWith(identifier) && part.endsWith(identifier)) {
+                sb.append(part);
+            } else {
+                sb.append(identifier).append(part).append(identifier);
+            }
+        }
+        return sb.toString();
     }
 
     @Override
@@ -99,26 +126,42 @@ public class JDBCScanNode extends ScanNode {
             if (!slot.isMaterialized()) {
                 continue;
             }
-            Column col = slot.getColumn();
-            columns.add(objectIdentifier + col.getName() + objectIdentifier);
+            String colName = slot.getColumn().getName();
+            if (objectIdentifier.isEmpty() || (
+                    colName.startsWith(objectIdentifier) && colName.endsWith(objectIdentifier))) {
+                columns.add(colName);
+            } else {
+                columns.add(objectIdentifier + colName + objectIdentifier);
+            }
         }
-        // this happends when count(*)
-        if (0 == columns.size()) {
+        // this happens when count(*)
+        if (columns.isEmpty()) {
             columns.add("*");
         }
     }
 
-    private boolean isMysql() {
+    private String getJdbcUri() {
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
         // Compatible with jdbc catalog
-        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
-        return jdbcURI.startsWith("jdbc:mysql");
+        return resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
     }
 
     private String getIdentifierSymbol() {
-        //TODO: for other jdbc table we need different objectIdentifier to support reserved key words
-        return isMysql() ? "`" : "";
+        String jdbcUri = getJdbcUri();
+        if (jdbcUri == null) {
+            return "";
+        }
+        if (jdbcUri.startsWith("jdbc:mysql") ||
+                jdbcUri.startsWith("jdbc:mariadb") ||
+                jdbcUri.startsWith("jdbc:clickhouse")) {
+            return "`";
+        }
+        if (jdbcUri.startsWith("jdbc:postgresql") ||
+                jdbcUri.startsWith("jdbc:postgres")) {
+            return "\"";
+        }
+        return "";
     }
 
     private void createJDBCTableFilters() {
@@ -138,7 +181,7 @@ public class JDBCScanNode extends ScanNode {
 
         ArrayList<Expr> jdbcConjuncts = ExprUtils.cloneList(conjuncts, sMap);
         for (Expr p : jdbcConjuncts) {
-            p = p.replaceLargeStringLiteral();
+            p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(AstToStringBuilder.toString(p));
         }
     }

@@ -25,7 +25,6 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -41,14 +40,14 @@ import com.starrocks.clone.TabletScheduler.PathSlot;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchedule;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,8 +67,8 @@ public class TabletSchedCtxTest {
     private static int PH_PART_ID = 6;
 
     private static String TB_NAME = "test";
-    private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1", TypeFactory
-            .createType(PrimitiveType.TINYINT), true, null, "", "key1"));
+    private static List<Column> TB_BASE_SCHEMA = Lists.newArrayList(new Column("k1",
+            IntegerType.TINYINT, true, null, "", "key1"));
 
     private static int TABLET_ID_1 = 50000;
     private static int TABLET_ID_2 = 51000;
@@ -118,13 +117,12 @@ public class TabletSchedCtxTest {
                 addReplica(TABLET_ID_1, new Replica(50001, be1.getId(), 0, Replica.ReplicaState.NORMAL));
 
         // mock catalog
-        MaterializedIndex baseIndex = new MaterializedIndex(TB_ID, MaterializedIndex.IndexState.NORMAL);
+        MaterializedIndex baseIndex = new MaterializedIndex(INDEX_ID, MaterializedIndex.IndexState.NORMAL);
         DistributionInfo distributionInfo = new RandomDistributionInfo(32);
         Partition partition = new Partition(PART_ID, PH_PART_ID, TB_NAME, baseIndex, distributionInfo);
         baseIndex.addTablet(tablet, tabletMeta);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(PART_ID, (short) 3);
-        partitionInfo.setIsInMemory(PART_ID, false);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         partitionInfo.setDataProperty(PART_ID, dataProperty);
         OlapTable olapTable =

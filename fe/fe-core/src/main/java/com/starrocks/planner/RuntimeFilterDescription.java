@@ -17,10 +17,10 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.connector.BucketProperty;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToThriftVisitor;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TBucketProperty;
 import com.starrocks.thrift.TNetworkAddress;
@@ -176,6 +176,14 @@ public class RuntimeFilterDescription {
         return this.topn;
     }
 
+    public boolean isTopNSortAsc() {
+        return sortInfo != null && sortInfo.getIsAscOrder().get(exprOrder);
+    }
+
+    public boolean isTopNullsFirst() {
+        return sortInfo != null && sortInfo.getNullsFirst().get(exprOrder);
+    }
+
     public PlanNode getBuildPlanNode() {
         return buildPlanNode;
     }
@@ -260,6 +268,7 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        // TODO: Support TopN runtime filter for other nodes
         if (runtimeFilterType().isTopNFilter() || runtimeFilterType().isAggInFilter()) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
@@ -588,11 +597,11 @@ public class RuntimeFilterDescription {
         TRuntimeFilterDescription t = new TRuntimeFilterDescription();
         t.setFilter_id(filterId);
         if (buildExpr != null) {
-            t.setBuild_expr(ExprToThriftVisitor.treeToThrift(buildExpr));
+            t.setBuild_expr(ExprToThrift.treeToThrift(buildExpr));
         }
         t.setExpr_order(exprOrder);
         for (Map.Entry<Integer, Expr> entry : nodeIdToProbeExpr.entrySet()) {
-            t.putToPlan_node_id_to_target_expr(entry.getKey(), ExprToThriftVisitor.treeToThrift(entry.getValue()));
+            t.putToPlan_node_id_to_target_expr(entry.getKey(), ExprToThrift.treeToThrift(entry.getValue()));
         }
         t.setHas_remote_targets(hasRemoteTargets);
         t.setBuild_plan_node_id(buildPlanNodeId);
@@ -631,7 +640,7 @@ public class RuntimeFilterDescription {
             for (Map.Entry<Integer, List<Expr>> entry : nodeIdToParitionByExprs.entrySet()) {
                 if (entry.getValue() != null && !entry.getValue().isEmpty()) {
                     t.putToPlan_node_id_to_partition_by_exprs(entry.getKey(),
-                            ExprToThriftVisitor.treesToThrift(entry.getValue()));
+                            ExprToThrift.treesToThrift(entry.getValue()));
                 }
             }
         }
@@ -640,6 +649,9 @@ public class RuntimeFilterDescription {
 
         if (runtimeFilterType().isTopNFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
+            t.setIs_asc(isTopNSortAsc());
+            t.setIs_nulls_first(isTopNullsFirst());
+            t.setLimit(topn);
         } else if (runtimeFilterType().isAggInFilter()) {
             t.setFilter_type(TRuntimeFilterBuildType.AGG_FILTER);
         } else {

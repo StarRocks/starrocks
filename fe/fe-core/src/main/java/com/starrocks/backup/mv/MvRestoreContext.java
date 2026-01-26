@@ -21,7 +21,7 @@ import com.starrocks.backup.BackupMeta;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.catalog.TableName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

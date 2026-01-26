@@ -44,6 +44,7 @@
 #include "util/jvm_metrics.h"
 #endif
 #include "util/metrics.h"
+#include "util/metrics/file_scan_metrics.h"
 #include "util/system_metrics.h"
 #include "util/table_metrics.h"
 
@@ -91,12 +92,7 @@ public:
     // query execution
     pipeline::PipelineExecutorMetrics pipeline_executor_metrics;
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_driver_schedule_count, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_driver_execution_time, MetricUnit::NANOSECONDS);
-    METRIC_DEFINE_INT_GAUGE(pipe_driver_queue_len, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(pipe_poller_block_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(query_scan_bytes_per_second, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(runtime_filter_event_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_COUNTER(query_scan_bytes, MetricUnit::BYTES);
@@ -232,6 +228,15 @@ public:
     METRIC_DEFINE_INT_COUNTER(async_delta_writer_task_pending_duration_us, MetricUnit::MICROSECONDS);
     // Metrics for metadata lru cache
     METRIC_DEFINE_INT_GAUGE(metadata_cache_bytes_total, MetricUnit::BYTES);
+    // Metrics for load spill blocks read & write
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_blocks_read_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_blocks_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_blocks_read_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_blocks_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_bytes_read_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_local_bytes_write_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_bytes_read_total, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(load_spill_remote_bytes_write_total, MetricUnit::BYTES);
 
     // Metrics for delta writer
     // The number of eos task that executed
@@ -251,6 +256,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(delta_writer_txn_commit_duration_us, MetricUnit::MICROSECONDS);
 
     METRIC_DEFINE_INT_COUNTER(memtable_flush_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(memtable_finalize_task_total, MetricUnit::OPERATIONS);
     METRIC_DEFINE_INT_COUNTER(memtable_finalize_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_duration_us, MetricUnit::MICROSECONDS);
     METRIC_DEFINE_INT_COUNTER(memtable_flush_io_time_us, MetricUnit::MICROSECONDS);
@@ -369,8 +375,13 @@ public:
     METRICS_DEFINE_THREAD_POOL(compact_pool);
     METRICS_DEFINE_THREAD_POOL(pindex_load);
     METRICS_DEFINE_THREAD_POOL(put_aggregate_metadata);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_execution);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_memtable_flush);
+    METRICS_DEFINE_THREAD_POOL(cloud_native_pk_index_compact);
     METRICS_DEFINE_THREAD_POOL(exec_state_report);
     METRICS_DEFINE_THREAD_POOL(priority_exec_state_report);
+    METRICS_DEFINE_THREAD_POOL(pip_prepare);
+    METRICS_DEFINE_THREAD_POOL(tablet_internal_parallel_merge);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
 
@@ -401,6 +412,12 @@ public:
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
 
+    // data cache metrics
+    METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_disk_quota_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_disk_used_bytes, MetricUnit::BYTES);
+
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;
         return &instance;
@@ -417,6 +434,7 @@ public:
     TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
     TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
+    FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
 
 private:
     // Don't allow constructor
@@ -436,6 +454,8 @@ private:
     JVMMetrics _jvm_metrics;
 #endif
     TableMetricsManager _table_metrics_mgr;
+
+    std::unique_ptr<FileScanMetrics> _file_scan_metrics;
 };
 
 }; // namespace starrocks

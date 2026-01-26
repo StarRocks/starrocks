@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
@@ -33,6 +34,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
@@ -40,10 +42,9 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.type.Type;
+import com.starrocks.type.NullType;
 
 import java.util.HashMap;
 import java.util.List;
@@ -72,7 +73,9 @@ public class UpdateAnalyzer {
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         analyzeProperties(updateStmt, session);
 
-        TableName tableName = updateStmt.getTableName();
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(updateStmt.getTableRef(), session);
+        updateStmt.setTableRef(tableRef);
+        TableName tableName = TableName.fromTableRef(tableRef);
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
@@ -144,7 +147,7 @@ public class UpdateAnalyzer {
                     autoIncrementColumn = col;
                 }
 
-                if (col.isAutoIncrement() && assign.getExpr().getType() == Type.NULL) {
+                if (col.isAutoIncrement() && assign.getExpr().getType() == NullType.NULL) {
                     nullExprInAutoIncrement = true;
                     break;
                 }

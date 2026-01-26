@@ -75,7 +75,7 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
         DCHECK_GT(_child->output_schema().num_fields(), 0);
-        _chunk = ChunkHelper::new_chunk(_child->output_schema(), _chunk_size);
+        ASSIGN_OR_RETURN(_chunk, ChunkHelper::new_chunk_checked(_child->output_schema(), _chunk_size));
     }
     _chunk->reset();
     Status st = _child->get_next(_chunk.get());

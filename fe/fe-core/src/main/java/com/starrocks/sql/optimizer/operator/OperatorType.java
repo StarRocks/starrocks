@@ -63,6 +63,7 @@ public enum OperatorType {
     LOGICAL_CTE_PRODUCE,
     LOGICAL_CTE_CONSUME,
     LOGICAL_SPJG_PIECES,
+    LOGICAL_BENCHMARK_SCAN,
 
     /**
      * Physical operator
@@ -91,6 +92,7 @@ public enum OperatorType {
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+    PHYSICAL_BENCHMARK_SCAN,
 
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,
@@ -120,6 +122,8 @@ public enum OperatorType {
     PHYSICAL_SPLIT_CONSUME,
     PHYSICAL_CONCATENATE,
 
+    PHYSICAL_FETCH,
+    PHYSICAL_LOOKUP,
     /**
      * Scalar operator
      */
@@ -167,6 +171,7 @@ public enum OperatorType {
     private static final Set<OperatorType> PHYSICAL_SCANS =
             Arrays.stream(OperatorType.values())
                     .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .filter(x -> !x.equals(PHYSICAL_STREAM_SCAN))
                     .collect(Collectors.toUnmodifiableSet());
 
     public boolean isPhysicalScan() {

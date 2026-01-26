@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.ast.expression.JoinOperator;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -523,10 +523,15 @@ public abstract class JoinOrder {
     }
 
     private boolean contains(BitSet left, BitSet right) {
-        return right.stream().allMatch(left::get);
+        for (int b = right.nextSetBit(0); b >= 0; b = right.nextSetBit(b + 1)) {
+            if (!left.get(b)) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    private boolean existsEqOnPredicate(OptExpression optExpression) {
+    protected boolean existsEqOnPredicate(OptExpression optExpression) {
         LogicalJoinOperator joinOp = optExpression.getOp().cast();
         List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOp.getOnPredicate());
 
@@ -536,5 +541,24 @@ public abstract class JoinOrder {
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                 leftChildColumns, rightChildColumns, onPredicates);
         return !eqOnPredicates.isEmpty();
+    }
+
+    public static double saturatingAdd(double a, double b) {
+        double max = StatisticsEstimateCoefficient.MAXIMUM_COST;
+        if (a >= max || b >= max) {
+            return max;
+        }
+        return a > (max - b) ? max : (a + b);
+    }
+
+    public static double saturatingMul(double a, double b) {
+        double max = StatisticsEstimateCoefficient.MAXIMUM_COST;
+        if (a <= 0 || b <= 0) {
+            return 0;
+        }
+        if (a >= max || b >= max) {
+            return max;
+        }
+        return a > (max / b) ? max : (a * b);
     }
 }

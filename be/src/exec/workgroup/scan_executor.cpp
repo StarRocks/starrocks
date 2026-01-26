@@ -81,7 +81,7 @@ void ScanExecutor::worker_thread() {
         _task_queue->update_statistics(task, time_spent_ns);
         _metrics->running_tasks.increment(-1);
         _metrics->finished_tasks.increment(1);
-        _metrics->execution_time.increment(time_spent_ns);
+        _metrics->execution_time.increment(task.query_type(), time_spent_ns);
 
         // task
         if (!task.is_finished()) {

@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
@@ -32,12 +32,12 @@ public class LoadTrackingLogsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("JOB_ID", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("LABEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DATABASE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TRACKING_LOG", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("ID", IntegerType.BIGINT)
+                        .column("JOB_ID", IntegerType.BIGINT)
+                        .column("LABEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DATABASE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TRACKING_LOG", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_LOAD_TRACKING_LOGS);
     }
 }

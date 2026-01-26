@@ -41,6 +41,8 @@ public:
     }
     ~ByteStreamSplitEncoder() override = default;
 
+    std::string to_string() const override { return fmt::format("ByteStreamSplitEncoder<{}>", typeid(T).name()); }
+
     void set_type_length(int byte_width) override {
         if constexpr (IS_FLBA) {
             byte_width_ = byte_width;
@@ -115,6 +117,8 @@ public:
     }
     ~ByteStreamSplitDecoder() override = default;
 
+    std::string to_string() const override { return fmt::format("ByteStreamSplitDecoder<{}>", typeid(T).name()); }
+
     void set_type_length(int byte_width) override {
         if constexpr (IS_FLBA) {
             byte_width_ = byte_width;
@@ -140,7 +144,7 @@ public:
             // decoded result is in decode_buffer_ if we pass nullptr.
             RETURN_IF_ERROR(Decode(nullptr, count));
             if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             const char* string_buffer = (const char*)decode_buffer_.data();

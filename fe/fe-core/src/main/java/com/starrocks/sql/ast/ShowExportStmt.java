@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -25,11 +24,8 @@ import com.starrocks.sql.parser.NodePosition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-
-import static com.starrocks.common.util.Util.normalizeName;
 
 // SHOW EXPORT STATUS statement used to get status of load job.
 //
@@ -40,16 +36,12 @@ public class ShowExportStmt extends ShowStmt {
 
     private String dbName;
     private Expr whereClause;
-    private LimitElement limitElement;
-    private List<OrderByElement> orderByElements;
 
     private long jobId = 0;
     private String stateValue = null;
     private UUID queryId = null;
 
     private JobState jobState;
-
-    private ArrayList<OrderByPair> orderByPairs;
 
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
                           LimitElement limitElement) {
@@ -59,7 +51,7 @@ public class ShowExportStmt extends ShowStmt {
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements,
                           LimitElement limitElement, NodePosition pos) {
         super(pos);
-        this.dbName = normalizeName(db);
+        this.dbName = db;
         this.whereClause = whereExpr;
         this.orderByElements = orderByElements;
         this.limitElement = limitElement;
@@ -82,11 +74,7 @@ public class ShowExportStmt extends ShowStmt {
     }
 
     public void setDbName(String dbName) {
-        this.dbName = normalizeName(dbName);
-    }
-
-    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
-        this.orderByPairs = orderByPairs;
+        this.dbName = dbName;
     }
 
     public String getDbName() {
@@ -95,14 +83,6 @@ public class ShowExportStmt extends ShowStmt {
 
     public Expr getWhereClause() {
         return whereClause;
-    }
-
-    public List<OrderByElement> getOrderByElements() {
-        return orderByElements;
-    }
-
-    public ArrayList<OrderByPair> getOrderByPairs() {
-        return this.orderByPairs;
     }
 
     public long getLimit() {

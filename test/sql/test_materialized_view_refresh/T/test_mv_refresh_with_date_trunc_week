@@ -233,12 +233,12 @@ select count(1) from test_mv11;
 select count(1) from test_mv12;
 select count(1) from test_mv13;
 
-function: check_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
-function: check_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
-function: check_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
-function: check_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
-function: check_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 
 select dt, s1 from test_mv1 order by 1;
 select dt, s1 from test_mv2 order by 1;
@@ -312,12 +312,12 @@ select count(1) from test_mv11;
 select count(1) from test_mv12;
 select count(1) from test_mv13;
 
-function: check_no_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
-function: check_no_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
-function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
-function: check_no_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
-function: check_no_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
-function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+function: print_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+function: print_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+function: print_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+function: print_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+function: print_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+function: print_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
 
 select dt, s1 from test_mv1 order by 1;
 select dt, s1 from test_mv2 order by 1;

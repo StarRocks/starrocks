@@ -298,6 +298,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
     @Test
     public void testDecimal32Count() throws Exception {
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql = "select count(col_decimal32p9s2) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String snippet = "count[([2: col_decimal32p9s2, DECIMAL32(9,2), false]); args: DECIMAL32; result: BIGINT";
@@ -487,6 +488,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
     @Test
     public void testDecimalNullableProperties() throws Exception {
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
         String sql;
         String plan;
 

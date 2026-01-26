@@ -30,6 +30,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.PartitionUtil;
@@ -44,8 +45,9 @@ import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -120,10 +122,10 @@ public class SyncPartitionUtils {
                                                             RangePartitionDiffer differ) {
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         PCellSortedSet rollupRange = PCellSortedSet.of();
-        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+        if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
             rollupRange = toMappingRanges(baseRangeMap, granularity, partitionColumnType);
-        } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+        } else if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             rollupRange = mappingRangeListForDate(baseRangeMap);
         }
         return getRangePartitionDiff(mvRangeMap, rollupRange, differ);
@@ -163,9 +165,9 @@ public class SyncPartitionUtils {
     public static PartitionKey toPartitionKey(LocalDateTime dateTime, PrimitiveType type) throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         if (type == PrimitiveType.DATE) {
-            partitionKey.pushColumn(new DateLiteral(dateTime, Type.DATE), type);
+            partitionKey.pushColumn(new DateLiteral(dateTime, DateType.DATE), type);
         } else {
-            partitionKey.pushColumn(new DateLiteral(dateTime, Type.DATETIME), type);
+            partitionKey.pushColumn(new DateLiteral(dateTime, DateType.DATETIME), type);
         }
         return partitionKey;
     }
@@ -181,10 +183,10 @@ public class SyncPartitionUtils {
         try {
             PartitionKey lowerPartitionKey = new PartitionKey();
             PartitionKey upperPartitionKey = new PartitionKey();
-            lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, Type.DATE), PrimitiveType.DATE);
-            upperPartitionKey.pushColumn(new DateLiteral(upperDate, Type.DATE), PrimitiveType.DATE);
+            lowerPartitionKey.pushColumn(new DateLiteral(lowerDate, DateType.DATE), PrimitiveType.DATE);
+            upperPartitionKey.pushColumn(new DateLiteral(upperDate, DateType.DATE), PrimitiveType.DATE);
             return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
-        } catch (AnalysisException e) {
+        } catch (ParsingException e) {
             throw new SemanticException("Convert to DateLiteral failed:", e);
         }
     }
@@ -204,11 +206,11 @@ public class SyncPartitionUtils {
             return baseRange;
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
+        if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)) {
             return baseRange;
         }
-        if (!functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-            throw new SemanticException("Do not support function: %s", functionCallExpr.getFnName().getFunction());
+        if (!functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            throw new SemanticException("Do not support function: %s", functionCallExpr.getFunctionName());
         }
         Preconditions.checkState(baseRange.lowerEndpoint().getTypes().size() == 1);
 
@@ -246,7 +248,7 @@ public class SyncPartitionUtils {
         if (literalExpr == null) {
             return null;
         }
-        if (literalExpr.getType() != Type.DATE && literalExpr.getType() != Type.DATETIME) {
+        if (literalExpr.getType() != DateType.DATE && literalExpr.getType() != DateType.DATETIME) {
             throw new SemanticException("Do not support date_trunc for type: %s", literalExpr.getType());
         }
         DateLiteral dateLiteral = (DateLiteral) literalExpr;
@@ -516,7 +518,7 @@ public class SyncPartitionUtils {
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
-        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(DateType.DATETIME);
         if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
             return upperDateTime;
         }
@@ -555,7 +557,7 @@ public class SyncPartitionUtils {
             default:
                 throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
-        final DateLiteral maxDateTime = DateLiteral.createMaxValue(Type.DATETIME);
+        final DateLiteral maxDateTime = DateLiteral.createMaxValue(DateType.DATETIME);
         if (truncUpperDateTime.isAfter(maxDateTime.toLocalDateTime())) {
             return upperDateTime;
         }

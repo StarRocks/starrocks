@@ -34,14 +34,11 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
-#include "column/nullable_column.h"
+#include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
 #include "runtime/types.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace parquet {
 class RowGroupWriter;

@@ -290,12 +290,20 @@ public class TaskRun implements Comparable<TaskRun> {
         context.getState().reset();
         context.setQueryId(UUID.fromString(status.getQueryId()));
         context.setIsLastStmt(true);
+        context.setSingleStmt(true);
         context.resetSessionVariable();
-        switchUser(context);
+        // Preserve critical session variables from parent context if available
+        // This ensures that settings like enableSingleNodeSchedule are inherited
+        if (parentRunCtx != null && parentRunCtx.getSessionVariable() != null) {
+            context.getSessionVariable().setEnableSingleNodeSchedule(
+                    parentRunCtx.getSessionVariable().enableSingleNodeSchedule());
+        }
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         context.setThreadLocalInfo();
+        // NOTE: The switchUser might depend on the thread-local context if it's LDAP user
+        switchUser(context);
         return context;
     }
 

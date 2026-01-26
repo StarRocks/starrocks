@@ -14,6 +14,8 @@
 
 #include "variant_column.h"
 
+#include <cctz/time_zone.h>
+
 #include "types/variant_value.h"
 #include "util/mysql_row_buffer.h"
 
@@ -37,7 +39,7 @@ uint32_t VariantColumn::serialize_size(size_t idx) const {
 const uint8_t* VariantColumn::deserialize_and_append(const uint8_t* pos) {
     // Read the first 4 bytes to get the size of the variant
     uint32_t variant_length = *reinterpret_cast<const uint32_t*>(pos);
-    auto variant_result = VariantValue::create(Slice(pos, variant_length + sizeof(uint32_t)));
+    auto variant_result = VariantRowValue::create(Slice(pos, variant_length + sizeof(uint32_t)));
 
     if (!variant_result.ok()) {
         throw std::runtime_error("Failed to deserialize variant: " + variant_result.status().to_string());
@@ -50,7 +52,7 @@ const uint8_t* VariantColumn::deserialize_and_append(const uint8_t* pos) {
 }
 
 void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
-    VariantValue* variant = get_object(idx);
+    VariantRowValue* variant = get_object(idx);
     DCHECK(variant != nullptr) << "Variant value is null at index " << idx;
 
     auto json = variant->to_json();
@@ -62,34 +64,51 @@ void VariantColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool i
 }
 
 void VariantColumn::append_datum(const Datum& datum) {
-    BaseClass::append(datum.get<VariantValue*>());
+    BaseClass::append(datum.get<VariantRowValue*>());
 }
 
 void VariantColumn::append(const Column& src, size_t offset, size_t count) {
     BaseClass::append(src, offset, count);
 }
 
-void VariantColumn::append(const VariantValue& object) {
+void VariantColumn::append(const VariantRowValue& object) {
     BaseClass::append(object);
 }
 
-void VariantColumn::append(const VariantValue* object) {
+void VariantColumn::append(const VariantRowValue* object) {
     BaseClass::append(object);
 }
 
-void VariantColumn::append(VariantValue&& object) {
+void VariantColumn::append(VariantRowValue&& object) {
     BaseClass::append(std::move(object));
 }
 
 bool VariantColumn::append_nulls(size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        append(VariantValue::of_null());
+        append(VariantRowValue::from_null());
     }
     return true;
 }
 
 std::string VariantColumn::debug_item(size_t idx) const {
-    return get_object(idx)->to_string();
+    // For debug display, use UTC timezone to show timestamps consistently
+    auto json_result = get_object(idx)->to_json(cctz::utc_time_zone());
+    if (!json_result.ok()) {
+        return "";
+    }
+    return json_result.value();
+}
+
+std::string VariantColumn::debug_string() const {
+    std::string result = "[";
+    for (size_t i = 0; i < size(); ++i) {
+        if (i > 0) {
+            result += ", ";
+        }
+        result += debug_item(i);
+    }
+    result += "]";
+    return result;
 }
 
 } // namespace starrocks

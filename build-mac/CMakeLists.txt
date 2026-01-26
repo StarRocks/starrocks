@@ -105,7 +105,7 @@ if(NOT EXISTS "${GENCODE_DIR}")
     message(FATAL_ERROR "Generated C++ sources directory not found: ${GENCODE_DIR}")
 endif()
 set(TEST_DIR "${CMAKE_SOURCE_DIR}/test/")
-set(OUTPUT_DIR "${BASE_DIR}/output")
+set(OUTPUT_DIR "${BASE_DIR}/../output/be")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 
 # Validate essential paths
@@ -906,6 +906,7 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/formats/(avro|orc|parquet)/.*\\.
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/file_scanner/(avro|orc|parquet)_.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*(avro|orc|parquet|iceberg).*\\.cpp$")
 
+
 # ==============================================================================
 # EXCLUDE CLOUD STORAGE BACKENDS (S3, Azure, HDFS)
 # ==============================================================================
@@ -1001,6 +1002,16 @@ list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*data_consumer_group.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg.*sink.*\\.cpp$")
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*iceberg_table_sink.*\\.cpp$")
 
+# Exclude lookup related files that depend on HiveDataSource
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/lookup_request\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/lookup_operator\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/fetch_task\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/pipeline/fetch_processor\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/fetch_node\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/exec/lookup_node\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/lookup_stream_mgr\\.cpp$")
+list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/runtime/lookup_dispatcher_mgr\\.cpp$")
+
 # Exclude Linux-only memory hook implementation on macOS
 list(FILTER STARROCKS_SOURCES EXCLUDE REGEX ".*/service/mem_hook\\.cpp$")
 
@@ -1054,6 +1065,7 @@ set(MACOS_SHIM_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/inverted_index_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/java_window_function_stub.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/shims/src/missing_symbols_shim.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/shims/src/lookup_stub.cpp"
 )
 foreach(_shim_file IN LISTS MACOS_SHIM_SOURCES)
     if(EXISTS "${_shim_file}")
@@ -1157,6 +1169,9 @@ install(TARGETS starrocks_be
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/bin)
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/conf)
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib)
+
+# Install default BE config
+install(FILES ${BASE_DIR}/../conf/be.conf DESTINATION ${OUTPUT_DIR}/conf)
 
 # ==============================================================================
 # BUILD SUMMARY

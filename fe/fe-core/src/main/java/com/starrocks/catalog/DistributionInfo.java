@@ -46,7 +46,8 @@ public abstract class DistributionInfo implements Writable {
 
     public enum DistributionInfoType {
         HASH,
-        RANDOM
+        RANDOM,
+        RANGE
     }
 
     // for Gson runtime type adaptor

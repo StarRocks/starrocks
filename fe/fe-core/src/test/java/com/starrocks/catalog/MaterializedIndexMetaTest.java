@@ -36,10 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.Type;
+import com.starrocks.type.ArrayType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -61,7 +62,7 @@ public class MaterializedIndexMetaTest {
     @Test
     public void testSetDefineExprCaseInsensitive() {
         List<Column> schema = Lists.newArrayList();
-        Column column = new Column("UPPER", Type.ARRAY_VARCHAR);
+        Column column = new Column("UPPER", ArrayType.ARRAY_VARCHAR);
         schema.add(column);
         MaterializedIndexMeta meta = new MaterializedIndexMeta(0, schema, 0, 0,
                 (short) 0, TStorageType.COLUMN, KeysType.DUP_KEYS, null);

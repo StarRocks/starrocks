@@ -6,7 +6,6 @@ sidebar_position: 30
 # 管理用户权限
 
 import UserPrivilegeCase from '../../../_assets/commonMarkdown/userPrivilegeCase.mdx'
-import GrantToGroup from '../../../_assets/commonMarkdown/grant_to_group.mdx'
 
 本文介绍如何在 StarRocks 中管理用户、角色和权限。
 
@@ -90,7 +89,13 @@ CREATE ROLE example_role;
   GRANT example_role TO ROLE test_role;
   ```
 
-<GrantToGroup />
+- 将角色授予用户组。您可以通过 [Group Provider](../group_provider.md) 从外部验证系统识别用户组。
+
+  以下示例将角色 `example_role` 授予用户组 `analysts`：
+
+  ```SQL
+  GRANT example_role TO EXTERNAL GROUP analysts;
+  ```
 
 ### 更改用户的默认角色
 

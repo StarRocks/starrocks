@@ -14,6 +14,7 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
@@ -190,7 +191,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         lock.readLock().lock();
         try {
             for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
-                if (mergeCommitTask.isActive() && mergeCommitTask.containCoordinatorBackend(backendId)) {
+                if (mergeCommitTask.isActive() && mergeCommitTask.containsBackend(backendId)) {
                     status.setStatus_code(TStatusCode.OK);
                     return new RequestLoadResult(status, mergeCommitTask.getLabel());
                 }
@@ -202,7 +203,7 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
         lock.writeLock().lock();
         try {
             for (MergeCommitTask mergeCommitTask : mergeCommitTasks.values()) {
-                if (mergeCommitTask.isActive() && mergeCommitTask.containCoordinatorBackend(backendId)) {
+                if (mergeCommitTask.isActive() && mergeCommitTask.containsBackend(backendId)) {
                     status.setStatus_code(TStatusCode.OK);
                     return new RequestLoadResult(status, mergeCommitTask.getLabel());
                 }
@@ -227,11 +228,19 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                 backendIds.add(backendId);
             }
 
+            Optional<Long> dbId = getDbId();
+            if (dbId.isEmpty()) {
+                status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Collections.singletonList(
+                        String.format("Database '%s' does not exist", tableId.getDbName())));
+                return new RequestLoadResult(status, null);
+            }
             TUniqueId loadId = UUIDUtil.genTUniqueId();
             String label = LABEL_PREFIX + DebugUtil.printId(loadId);
             MergeCommitTask mergeCommitTask = new MergeCommitTask(
-                    tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
-                    backendIds, queryCoordinatorFactory, this);
+                    GlobalStateMgr.getCurrentState().getNextId(),
+                    dbId.get(), tableId, label, loadId, streamLoadInfo, batchWriteIntervalMs, loadParameters,
+                    warehouseName, backendIds, queryCoordinatorFactory, this);
             mergeCommitTasks.put(label, mergeCommitTask);
             try {
                 executor.execute(mergeCommitTask);
@@ -270,13 +279,6 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
             lock.writeLock().unlock();
         }
 
-        if (executor.getFailure() == null) {
-            MergeCommitMetricRegistry.getInstance().incSuccessTask();
-        } else {
-            MergeCommitMetricRegistry.getInstance().incFailTask();
-        }
-        MergeCommitMetricRegistry.getInstance().updateRunningTask(-1L);
-
         long txnId = executor.getTxnId();
         if (!asyncMode && txnId > 0) {
             for (long backendId : executor.getBackendIds()) {
@@ -288,6 +290,17 @@ public class MergeCommitJob implements MergeCommitTaskCallback {
                 }
             }
         }
+    }
+
+    /**
+     * Resolves the database ID from the database name in {@link #tableId}.
+     *
+     * @return the database ID if the database exists, otherwise an empty Optional
+     */
+    private Optional<Long> getDbId() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db = globalStateMgr.getLocalMetastore().getDb(tableId.getDbName());
+        return db == null ? Optional.empty() : Optional.of(db.getId());
     }
 
     @VisibleForTesting

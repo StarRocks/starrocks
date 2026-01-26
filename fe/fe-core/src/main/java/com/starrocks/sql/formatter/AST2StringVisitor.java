@@ -20,7 +20,7 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PEntryObject;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.Pair;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.SqlCredentialRedactor;
@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.PivotValue;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RefreshConnectionsStmt;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
@@ -72,10 +74,12 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UserAuthOption;
@@ -116,6 +120,7 @@ import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.MatchExpr;
+import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
@@ -333,15 +338,23 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     }
 
     @Override
+    public String visitRefreshConnectionsStatement(RefreshConnectionsStmt stmt, Void context) {
+        if (stmt.isForce()) {
+            return "REFRESH CONNECTIONS FORCE";
+        }
+        return "REFRESH CONNECTIONS";
+    }
+
+    @Override
     public String visitSetUserPropertyStatement(SetUserPropertyStmt stmt, Void context) {
         StringBuilder sb = new StringBuilder();
         sb.append("SET PROPERTY FOR ").append('\'').append(stmt.getUser()).append('\'');
         int idx = 0;
-        for (Pair<String, String> stringStringPair : stmt.getPropertyPairList()) {
+        for (SetUserPropertyVar property : stmt.getPropertyList()) {
             if (idx != 0) {
                 sb.append(", ");
             }
-            sb.append(stringStringPair.first).append(" = ").append(stringStringPair.second);
+            sb.append(property.getPropertyKey()).append(" = ").append(property.getPropertyValue());
             idx++;
         }
         return sb.toString();
@@ -461,10 +474,12 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         StringBuilder sb = new StringBuilder();
 
         sb.append("EXPORT TABLE ");
-        if (stmt.getTblName() == null) {
+        if (stmt.getTableRef() == null) {
             sb.append("non-exist");
         } else {
-            sb.append(stmt.getTblName().toSql());
+            TableName tableName = new TableName(stmt.getCatalogName(), stmt.getDbName(),
+                    stmt.getTableName(), stmt.getTableRef().getPos());
+            sb.append(tableName.toSql());
         }
 
         if (stmt.getPartitions() != null && !stmt.getPartitions().isEmpty()) {
@@ -503,6 +518,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
 
         if (queryRelation.hasWithClause()) {
             sqlBuilder.append("WITH ");
+            if (queryRelation.isHasRecursiveCTE()) {
+                sqlBuilder.append("RECURSIVE ");
+            }
             List<String> cteStrings =
                     queryRelation.getCteRelations().stream().map(this::visit).collect(Collectors.toList());
             sqlBuilder.append(Joiner.on(", ").join(cteStrings));
@@ -661,7 +679,15 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         }
         sqlBuilder.append(visit(relation.getRight())).append(" ");
 
-        if (relation.getOnPredicate() != null) {
+        // Prioritize USING clause over ON predicate
+        // Even if onPredicate is set (by analyzeJoinUsing), output USING clause if it exists
+        if (relation.getUsingColNames() != null && !relation.getUsingColNames().isEmpty()) {
+            sqlBuilder.append("USING (");
+            sqlBuilder.append(relation.getUsingColNames().stream()
+                    .map(col -> "`" + col + "`")
+                    .collect(Collectors.joining(", ")));
+            sqlBuilder.append(")");
+        } else if (relation.getOnPredicate() != null) {
             sqlBuilder.append("ON ").append(visit(relation.getOnPredicate()));
         }
         return sqlBuilder.toString();
@@ -916,7 +942,7 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
             sb.append("ORDER BY ").append(visitAstList(orderByElements)).append(" ");
         }
         if (window != null) {
-            sb.append(window.toSql());
+            sb.append(ExprToSql.toSql(window));
         }
         sb.append(")");
         return sb.toString();
@@ -946,7 +972,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         } else if (insert.useBlackHoleTableAsTargetTable()) {
             sb.append("blackhole()");
         } else {
-            sb.append(insert.getTableName().toSql());
+            TableRef tableRef = insert.getTableRef();
+            TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                    tableRef.getTableName(), tableRef.getPos());
+            sb.append(tableName.toSql());
         }
         sb.append(" ");
 
@@ -1010,7 +1039,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     public String visitDeleteStatement(DeleteStmt delete, Void context) {
         StringBuilder sb = new StringBuilder();
         sb.append("DELETE FROM ");
-        sb.append(delete.getTableName().toSql());
+        TableRef tableRef = delete.getTableRef();
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        sb.append(tableName.toSql());
 
         if (delete.getWherePredicate() != null) {
             sb.append(" WHERE ");
@@ -1157,10 +1189,10 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     public String visitFunctionCall(FunctionCallExpr node, Void context) {
         FunctionParams fnParams = node.getParams();
         StringBuilder sb = new StringBuilder();
-        if (options.isAddFunctionDbName() && node.getFnName().getDb() != null) {
-            sb.append("`" + node.getFnName().getDb() + "`.");
+        if (options.isAddFunctionDbName() && node.getDbName() != null) {
+            sb.append("`" + node.getDbName() + "`.");
         }
-        String functionName = node.getFnName().getFunction();
+        String functionName = node.getFunctionName();
         sb.append(functionName);
 
         sb.append("(");
@@ -1272,11 +1304,11 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     public String visitLargeInPredicate(LargeInPredicate node, Void context) {
         StringBuilder strBuilder = new StringBuilder();
         String notStr = (node.isNotIn()) ? "NOT " : "";
-        
+
         strBuilder.append(printWithParentheses(node.getCompareExpr())).append(" ").append(notStr).append("IN (");
         strBuilder.append(node.getRawText());
         strBuilder.append(")");
-        
+
         return strBuilder.toString();
     }
 
@@ -1524,9 +1556,17 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
     protected String printWithParentheses(ParseNode node) {
         if (node instanceof SlotRef || node instanceof LiteralExpr) {
             return visit(node);
-        } else {
-            return "(" + visit(node) + ")";
         }
+
+        if (node instanceof Parameter) {
+            Parameter parameter = (Parameter) node;
+            Expr expr = parameter.getExpr();
+            if ((expr instanceof SlotRef || expr instanceof LiteralExpr)) {
+                return visit(node);
+            }
+        }
+
+        return "(" + visit(node) + ")";
     }
 
     // --------------------------------------------Storage volume Statement ----------------------------------------
@@ -1620,5 +1660,13 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
         sb.append(SqlCredentialRedactor.redact(stmt.getSqlText()));
 
         return sb.toString();
+    }
+
+    @Override
+    public String visitExecuteStatement(ExecuteStmt stmt, Void context) {
+        String stmtName = stmt.getStmtName();
+        List<Expr> paramsExpr = stmt.getParamsExpr();
+        return "EXECUTE `" + stmtName + "`" +
+                paramsExpr.stream().map(ExprToSql::toSql).collect(Collectors.joining(", ", " USING ", ""));
     }
 }

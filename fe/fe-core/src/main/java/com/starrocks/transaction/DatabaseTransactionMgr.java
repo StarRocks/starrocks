@@ -102,7 +102,7 @@ import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.common.ErrorCode.ERR_LOCK_ERROR;
-import static com.starrocks.common.ErrorCode.ERR_NO_PARTITIONS_HAVE_DATA_LOAD;
+import static com.starrocks.common.ErrorCode.ERR_NO_ROWS_IMPORTED;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -367,10 +367,10 @@ public class DatabaseTransactionMgr {
                 return;
             }
             // For compatible reason, the default behavior of empty load is still returning
-            // "No partitions have data available for loading" and abort transaction.
+            // "No rows were imported from upstream" and abort transaction.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
-                throw new TransactionCommitFailedException(ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg());
+                throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
             if (transactionState.getWriteEndTimeMs() < 0) {
@@ -1021,7 +1021,7 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
+                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
@@ -1201,7 +1201,7 @@ public class DatabaseTransactionMgr {
                                 partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
+                                transactionState.getPartitionLoadedIndexesWithoutLock(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -1507,6 +1507,13 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                // make sure remove txn from startup active compaction transaction map for visible/aborted state
+                // The startup active compaction transaction map is built when FE starts, and it is used to track the
+                // active compaction txn when FE restarts.
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
+            }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
             finalStatusTransactionStateDeque.add(transactionState);
@@ -1542,6 +1549,13 @@ public class DatabaseTransactionMgr {
                 } else {
                     runningTxnNums--;
                 }
+            }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                // make sure remove txn from startup active compaction transaction map for visible/aborted state
+                // The startup active compaction transaction map is built when FE starts, and it is used to track the
+                // active compaction txn when FE restarts.
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
@@ -1920,18 +1934,20 @@ public class DatabaseTransactionMgr {
             // set transaction status will call txn state change listener
             transactionState.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionState.getDbId());
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                if (!isCheckpoint) {
-                    LOG.info("replay a committed transaction {}", transactionState.getBrief());
+            if (db != null) {
+                if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                    if (!isCheckpoint) {
+                        LOG.info("replay a committed transaction {}", transactionState.getBrief());
+                    }
+                    LOG.debug("replay a committed transaction {}", transactionState);
+                    updateCatalogAfterCommitted(transactionState, db);
+                } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
+                    if (!isCheckpoint) {
+                        LOG.info("replay a visible transaction {}", transactionState.getBrief());
+                    }
+                    LOG.debug("replay a visible transaction {}", transactionState);
+                    updateCatalogAfterVisible(transactionState, db);
                 }
-                LOG.debug("replay a committed transaction {}", transactionState);
-                updateCatalogAfterCommitted(transactionState, db);
-            } else if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
-                if (!isCheckpoint) {
-                    LOG.info("replay a visible transaction {}", transactionState.getBrief());
-                }
-                LOG.debug("replay a visible transaction {}", transactionState);
-                updateCatalogAfterVisible(transactionState, db);
             }
             unprotectUpsertTransactionState(transactionState);
             if (transactionState.isExpired(System.currentTimeMillis())) {
@@ -2210,7 +2226,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTransactionMetrics(TransactionState txnState) {
-        updateTransactionPublishMetrics(txnState);
+        TransactionMetricRegistry.getInstance().update(txnState);
         if (txnState.getTableIdList().isEmpty()) {
             return;
         }
@@ -2231,27 +2247,6 @@ public class DatabaseTransactionMgr {
             entity.counterStreamLoadFinishedTotal.increase(1L);
             entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
             entity.counterStreamLoadBytesTotal.increase(streamAttachment.getLoadedBytes());
-        }
-    }
-
-    private void updateTransactionPublishMetrics(TransactionState txnState) {
-        if (txnState.getTransactionStatus() != TransactionStatus.VISIBLE) {
-            return;
-        }
-        long commitTime = txnState.getCommitTime();
-        long publishVersionTime = txnState.getPublishVersionTime();
-        long publishVersionFinishTime = txnState.getPublishVersionFinishTime();
-        long finishTime = txnState.getFinishTime();
-        if (commitTime > 0) {
-            if (publishVersionTime >= commitTime) {
-                MetricRepo.HISTO_TXN_WAIT_FOR_PUBLISH_LATENCY.update(publishVersionTime - commitTime);
-            }
-            if (finishTime >= commitTime) {
-                MetricRepo.HISTO_TXN_PUBLISH_TOTAL_LATENCY.update(finishTime - commitTime);
-            }
-        }
-        if (publishVersionFinishTime > 0 && finishTime >= publishVersionFinishTime) {
-            MetricRepo.HISTO_TXN_FINISH_PUBLISH_LATENCY.update(finishTime - publishVersionFinishTime);
         }
     }
 

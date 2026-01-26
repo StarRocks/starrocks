@@ -49,7 +49,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
@@ -151,11 +151,10 @@ public class BalanceStatProcNodeTest {
 
         // 1. cluster tablet balance
         {
-            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1025L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1024L, "olap_table", cols, null, listPartition, null);
 
@@ -165,8 +164,8 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1011L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
-            indexNameToId.put("index1", index.getId());
+            Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+            indexNameToMetaId.put("index1", index.getMetaId());
 
             // balance stat
             index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(be1.getId(), be2.getId(), 9L, 1L));
@@ -187,11 +186,10 @@ public class BalanceStatProcNodeTest {
 
         // 2. colocate mismatch balance
         {
-            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1125L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1124L, "colocate_table", cols, null, listPartition, null);
 
@@ -201,8 +199,8 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1111L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
-            indexNameToId.put("index1", index.getId());
+            Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+            indexNameToMetaId.put("index1", index.getMetaId());
 
             // balance stat
             index.setBalanceStat(BalanceStat.createColocationGroupBalanceStat(
@@ -231,11 +229,10 @@ public class BalanceStatProcNodeTest {
 
         // 3. label location mismatch balance
         {
-            List<Column> cols = Lists.newArrayList(new Column("province", Type.VARCHAR));
+            List<Column> cols = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
             PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, cols);
             long partitionId = 1225L;
             listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-            listPartition.setIsInMemory(partitionId, false);
             listPartition.setReplicationNum(partitionId, (short) 1);
             OlapTable olapTable = new OlapTable(1224L, "location_table", cols, null, listPartition, null);
 
@@ -245,8 +242,8 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1211L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToId();
-            indexNameToId.put("index1", index.getId());
+            Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+            indexNameToMetaId.put("index1", index.getMetaId());
 
             // balance stat
             Set<Long> currentBes = Sets.newHashSet(be1.getId(), be2.getId());

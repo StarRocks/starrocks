@@ -20,7 +20,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -36,17 +36,17 @@ public class DebugOperatorTracerTest {
     public void testVisitPhysicalHashAggregateWithProjection() {
         // Create a PhysicalHashAggregateOperator with projection for testing
         List<ColumnRefOperator> groupByColumns = new ArrayList<>();
-        ColumnRefOperator groupByCol = new ColumnRefOperator(1, Type.INT, "col1", true);
+        ColumnRefOperator groupByCol = new ColumnRefOperator(1, IntegerType.INT, "col1", true);
         groupByColumns.add(groupByCol);
 
         Map<ColumnRefOperator, CallOperator> aggregations = Maps.newHashMap();
-        ColumnRefOperator aggCol = new ColumnRefOperator(2, Type.BIGINT, "sum_col1", true);
+        ColumnRefOperator aggCol = new ColumnRefOperator(2, IntegerType.BIGINT, "sum_col1", true);
         CallOperator aggFunc = new CallOperator(
-                "sum", Type.BIGINT, List.of(groupByCol), null, false);
+                "sum", IntegerType.BIGINT, List.of(groupByCol), null, false);
         aggregations.put(aggCol, aggFunc);
 
         Map<ColumnRefOperator, ScalarOperator> projection = Maps.newHashMap();
-        ColumnRefOperator projCol = new ColumnRefOperator(3, Type.INT, "proj_col1", true);
+        ColumnRefOperator projCol = new ColumnRefOperator(3, IntegerType.INT, "proj_col1", true);
         projection.put(projCol, groupByCol);
 
         PhysicalHashAggregateOperator aggregateOperator = new PhysicalHashAggregateOperator(

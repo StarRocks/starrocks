@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SlotSelectionStrategyV2Test {
@@ -55,7 +56,7 @@ public class SlotSelectionStrategyV2Test {
         ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
         slotManager = new SlotManager(resourceUsageMonitor);
 
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, NUM_CORES);
     }
 
     @AfterEach
@@ -249,7 +250,7 @@ public class SlotSelectionStrategyV2Test {
         assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot3, slot2);
 
         // Make options changed.
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES * 2);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, NUM_CORES * 2);
         Thread.sleep(1200);
         // 3. Allocate slot2 and slot3.
         slotTracker.allocateSlot(slot2);
@@ -290,7 +291,7 @@ public class SlotSelectionStrategyV2Test {
         assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(slot2.getNumPhysicalSlots() + slot3.getNumPhysicalSlots());
 
         // Make options changed.
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, NUM_CORES * 2);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1, NUM_CORES * 2);
         Thread.sleep(1200);
         // 3. Release slot2 and slot3.
         assertThat(slotTracker.releaseSlot(slot2.getSlotId())).isSameAs(slot2);

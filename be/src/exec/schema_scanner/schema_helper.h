@@ -101,6 +101,9 @@ public:
     static Status get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
                                        TGetTabletScheduleResponse* response);
 
+    static Status get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                 TGetFeThreadsResponse* response);
+
     static Status get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
                                  TGetRoleEdgesResponse* response);
 
@@ -138,8 +141,8 @@ public:
     static Status get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
                                         TGetWarehouseQueriesResponse* response);
 
-    static Status get_dynamic_tablet_jobs_info(const SchemaScannerState& state, const TDynamicTabletJobsRequest& req,
-                                               TDynamicTabletJobsResponse* res);
+    static Status get_tablet_reshard_jobs_info(const SchemaScannerState& state, const TTabletReshardJobsRequest& req,
+                                               TTabletReshardJobsResponse* res);
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,
@@ -173,7 +176,7 @@ void fill_column_with_slot(Column* result, void* slot) {
     if (result->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(result);
         NullData& null_data = nullable_column->null_column_data();
-        Column* data_column = nullable_column->data_column().get();
+        Column* data_column = nullable_column->data_column_raw_ptr();
         null_data.push_back(0);
         fill_data_column_with_slot<SlotType>(data_column, slot);
     } else {

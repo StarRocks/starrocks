@@ -114,6 +114,8 @@ StarRocks v2.0 クラスタをアップグレードする前に、次の BE 設�
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # 旧バージョンでカスタム関数（UDF）が使用されていた場合、旧バージョンのUDFディレクトリを新しいlibディレクトリにコピーする必要があります。
+   cp -r lib.bak/udf lib/
    ```
 
 3. BE ノードを起動します。
@@ -147,6 +149,8 @@ StarRocks v2.0 クラスタをアップグレードする前に、次の BE 設�
    mv bin bin.bak
    cp -r /tmp/StarRocks-x.x.x/be/lib  .
    cp -r /tmp/StarRocks-x.x.x/be/bin  .
+   # 旧バージョンでカスタム関数（UDF）が使用されていた場合、旧バージョンのUDFディレクトリを新しいlibディレクトリにコピーする必要があります。
+   cp -r lib.bak/udf lib/
    ```
 
 3. CN ノードを起動します。

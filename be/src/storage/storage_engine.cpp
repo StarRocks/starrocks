@@ -677,6 +677,12 @@ void StorageEngine::stop() {
     if (_compaction_manager) {
         _compaction_manager->stop();
     }
+
+#ifdef USE_STAROS
+    if (_local_pk_index_manager) {
+        _local_pk_index_manager->stop();
+    }
+#endif
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
@@ -738,7 +744,11 @@ void StorageEngine::compaction_check() {
 // Compaction checker will check whether to schedule base compaction for tablets
 size_t StorageEngine::_compaction_check_one_round() {
     size_t batch_size = _compaction_manager->max_task_num();
+#ifdef BE_TEST
+    int batch_sleep_time_ms = 1; // 1ms
+#else
     int batch_sleep_time_ms = 1000;
+#endif
     std::vector<TabletSharedPtr> tablets;
     tablets.reserve(batch_size);
     size_t tablets_num_checked = 0;

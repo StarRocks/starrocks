@@ -538,8 +538,8 @@ public class BestMvSelector {
                         .collect(Collectors.toList());
             }
         } else {
-            long baseIndexId = olapTable.getBaseIndexId();
-            MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByIndexId(baseIndexId);
+            long baseIndexMetaId = olapTable.getBaseIndexMetaId();
+            MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(baseIndexMetaId);
             List<Column> baseSchema = olapTable.getBaseSchema();
             List<Integer> sortKeyIdxes = baseIndexMeta.getSortKeyIdxes();
             if (CollectionUtils.isNotEmpty(sortKeyIdxes)) {

@@ -285,7 +285,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         String key = String.format("cache_getUpdatedPartitionNames_%s_%s", mv.getId(), table.getId());
                         Assertions.assertTrue(queryCacheStats != null);
                         Assertions.assertTrue(queryCacheStats.getCounter().containsKey(key));
-                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) == 1);
+                        Assertions.assertTrue(queryCacheStats.getCounter().get(key) >= 1);
                     }
 
                     Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
@@ -297,7 +297,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
-                    Assertions.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
+                    Assertions.assertTrue(mvUpdateInfo.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
                     Assertions.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
                     Assertions.assertFalse(partitionsToRefresh1.isEmpty());

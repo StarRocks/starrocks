@@ -17,7 +17,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
@@ -37,6 +36,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
@@ -60,7 +61,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TTabletType;
+import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
@@ -201,7 +202,7 @@ public class PartitionDescAnalyzer {
             ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String functionName = functionCallExpr.getFnName().getFunction();
+            String functionName = functionCallExpr.getFunctionName();
 
             String partitionGranularity;
             long partitionStep;
@@ -242,7 +243,7 @@ public class PartitionDescAnalyzer {
 
         Expr partitionExpr = exprRangePartitionInfo.getPartitionExprs(idToColumn).get(0);
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-        String functionName = functionCallExpr.getFnName().getFunction();
+        String functionName = functionCallExpr.getFunctionName();
 
         String partitionGranularity;
         long partitionStep;
@@ -402,7 +403,8 @@ public class PartitionDescAnalyzer {
             for (MultiRangePartitionDesc multiRangePartitionDesc : desc.getMultiRangePartitionDescs()) {
                 TimestampArithmeticExpr.TimeUnit timeUnit = TimestampArithmeticExpr.TimeUnit
                         .fromName(multiRangePartitionDesc.getTimeUnit());
-                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR && firstPartitionColumn.getType() != Type.DATETIME) {
+                if (timeUnit == TimestampArithmeticExpr.TimeUnit.HOUR
+                        && firstPartitionColumn.getType() != DateType.DATETIME) {
                     throw new AnalysisException("Batch build partition for hour interval only supports " +
                             "partition column as DATETIME type");
                 }
@@ -457,7 +459,7 @@ public class PartitionDescAnalyzer {
                     FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                     List<String> autoPartitionSupportFunctions = Lists.newArrayList(FunctionSet.TIME_SLICE,
                             FunctionSet.DATE_TRUNC);
-                    if (!autoPartitionSupportFunctions.contains(functionCallExpr.getFnName().getFunction())) {
+                    if (!autoPartitionSupportFunctions.contains(functionCallExpr.getFunctionName())) {
                         throw new SemanticException("Only support date_trunc and time_slice as partition expression");
                     }
                 }
@@ -480,9 +482,9 @@ public class PartitionDescAnalyzer {
                     Preconditions.checkState(columnDef.isPresent());
                     slotRef.setType(columnDef.get().getType());
 
-                    String functionName = ((FunctionCallExpr) expr).getFnName().getFunction().toLowerCase();
+                    String functionName = ((FunctionCallExpr) expr).getFunctionName().toLowerCase();
                     if (functionName.equals(FunctionSet.STR2DATE)) {
-                        desc.setPartitionType(Type.DATE);
+                        desc.setPartitionType(DateType.DATE);
                         if (!PartitionFunctionChecker.checkStr2date(expr)) {
                             throw new SemanticException("partition function check fail, only supports the result " +
                                     "of the function str2date(VARCHAR str, VARCHAR format) as a strict DATE type");
@@ -586,7 +588,7 @@ public class PartitionDescAnalyzer {
             return;
         }
         List<String> slotRefs = desc.getPartitionExprs().stream()
-                .flatMap(e -> e.collectAllSlotRefs().stream())
+                .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
                 .map(SlotRef::getColumnName)
                 .collect(Collectors.toList());
         
@@ -727,7 +729,7 @@ public class PartitionDescAnalyzer {
                     DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
                     LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
                     LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
-                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
+                    DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, DateType.DATETIME);
                     long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
                     partitionDataProperty = new DataProperty(TStorageMedium.SSD, coolDownTimeStamp);
                 }
@@ -744,11 +746,11 @@ public class PartitionDescAnalyzer {
         // analyze version info
         Long versionInfo = PropertyAnalyzer.analyzeVersionInfo(partitionAndTableProperties);
 
-        // analyze in memory
-        boolean isInMemory = PropertyAnalyzer
-                .analyzeBooleanProp(partitionAndTableProperties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
+        // consume deprecated in_memory property if present
+        PropertyAnalyzer.analyzeBooleanProp(partitionAndTableProperties,
+                PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
-        TTabletType tabletType = PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
+        PropertyAnalyzer.analyzeTabletType(partitionAndTableProperties);
 
         DataCacheInfo dataCacheInfo = PropertyAnalyzer.analyzeDataCacheInfo(partitionAndTableProperties);
 
@@ -756,8 +758,6 @@ public class PartitionDescAnalyzer {
         desc.setPartitionDataProperty(partitionDataProperty);
         desc.setReplicationNum(replicationNum);
         desc.setVersionInfo(versionInfo);
-        desc.setInMemory(isInMemory);
-        desc.setTabletType(tabletType);
         desc.setDataCacheInfo(dataCacheInfo);
 
         if (desc.getProperties() != null) {

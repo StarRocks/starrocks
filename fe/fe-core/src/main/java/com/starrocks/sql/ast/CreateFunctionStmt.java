@@ -17,7 +17,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.starrocks.catalog.Function;
-import com.starrocks.sql.ast.expression.FunctionName;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.PrimitiveType;
@@ -49,15 +49,17 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String PROCESS_METHOD_NAME = "process";
     public static final String INPUT_TYPE = "input";
 
-    private final FunctionName functionName;
+    private final FunctionRef functionRef;
     private final boolean isAggregate;
     private final boolean isTable;
     private final FunctionArgsDef argsDef;
     private final TypeDef returnType;
     private final Map<String, String> properties;
-    private final String content;
+    private String content;
     private final boolean shouldReplaceIfExists;
     private final boolean createIfNotExists;
+
+    private Expr expr;
 
     // needed item set after analyzed
     private Function function;
@@ -76,7 +78,7 @@ public class CreateFunctionStmt extends DdlStmt {
                     .build();
 
     public CreateFunctionStmt(String functionType,
-                              FunctionName functionName,
+                              FunctionRef functionRef,
                               FunctionArgsDef argsDef,
                               TypeDef returnType,
                               Map<String, String> properties,
@@ -84,7 +86,7 @@ public class CreateFunctionStmt extends DdlStmt {
                               boolean shouldReplaceIfExists,
                               boolean createIfNotExists) {
         this(functionType,
-                functionName,
+                functionRef,
                 argsDef,
                 returnType,
                 properties,
@@ -95,11 +97,11 @@ public class CreateFunctionStmt extends DdlStmt {
         );
     }
 
-    public CreateFunctionStmt(String functionType, FunctionName functionName, FunctionArgsDef argsDef,
+    public CreateFunctionStmt(String functionType, FunctionRef functionRef, FunctionArgsDef argsDef,
                               TypeDef returnType, Map<String, String> properties, String content,
                               boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
         super(pos);
-        this.functionName = functionName;
+        this.functionRef = functionRef;
         this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
         this.isTable = functionType.equalsIgnoreCase("TABLE");
         this.argsDef = argsDef;
@@ -119,8 +121,34 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    public FunctionName getFunctionName() {
-        return functionName;
+    public CreateFunctionStmt(String functionType, FunctionRef functionRef, FunctionArgsDef argsDef, Expr expr,
+                              boolean shouldReplaceIfExists, boolean createIfNotExists, NodePosition pos) {
+        super(pos);
+        this.functionRef = functionRef;
+        this.isAggregate = functionType.equalsIgnoreCase("AGGREGATE");
+        this.isTable = functionType.equalsIgnoreCase("TABLE");
+        this.argsDef = argsDef;
+        this.returnType = null;
+        this.expr = expr;
+        this.shouldReplaceIfExists = shouldReplaceIfExists;
+        this.createIfNotExists = createIfNotExists;
+        this.properties = ImmutableSortedMap.of();
+    }
+
+    public boolean isBuildFunctionMode() {
+        return this.expr != null;
+    }
+
+    public boolean isUdfFunctionMode() {
+        return this.expr == null && (content != null || !properties.isEmpty());
+    }
+
+    public Expr getExpr() {
+        return expr;
+    }
+
+    public FunctionRef getFunctionRef() {
+        return functionRef;
     }
 
     public Function getFunction() {

@@ -15,16 +15,17 @@
 package com.starrocks.sql.optimizer.rule.tvr;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
+import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrLazyOptExpression;
@@ -33,20 +34,20 @@ import com.starrocks.sql.optimizer.rule.tvr.common.TvrOptMeta;
 import org.apache.hadoop.util.Lists;
 
 import java.util.List;
-import java.util.Set;
 
 public class TvrTableScanRule extends TvrTransformationRule {
 
-    private static final Set<OperatorType> SUPPORTED = Set.of(
-            OperatorType.LOGICAL_ICEBERG_SCAN
-    );
-
     public TvrTableScanRule() {
-        super(RuleType.TF_TVR_TABLE_SCAN, MultiOpPattern.of(SUPPORTED));
+        super(RuleType.TF_TVR_TABLE_SCAN, Pattern.create(OperatorType.PATTERN_SCAN));
     }
 
     private boolean isSupportedTvr(LogicalScanOperator scanOperator) {
-        return scanOperator.getTvrTableDeltaTrait().isPresent() && scanOperator.getTvrTableDeltaTrait().get().isAppendOnly();
+        // check whether this table is supported for ivm.
+        if (!IVMAnalyzer.isTableTypeIVMSupported(scanOperator.getTable().getType())) {
+            return false;
+        }
+        return scanOperator.getTvrTableDeltaTrait().isPresent()
+                && scanOperator.getTvrTableDeltaTrait().get().isAppendOnly();
     }
 
     @Override
@@ -58,9 +59,11 @@ public class TvrTableScanRule extends TvrTransformationRule {
         return input.getTvrMeta() == null;
     }
 
-    private LogicalScanOperator withTvrVersionRange(LogicalIcebergScanOperator scanOperator,
+    private LogicalScanOperator withTvrVersionRange(LogicalScanOperator scanOperator,
                                                     TvrTableSnapshot tvrVersionRange) {
-        return new LogicalIcebergScanOperator.Builder()
+        Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
+        LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) builder;
+        return scanBuilder
                 .withOperator(scanOperator)
                 .setTableVersionRange(tvrVersionRange)
                 .build();
@@ -77,29 +80,25 @@ public class TvrTableScanRule extends TvrTransformationRule {
         TvrTableSnapshot fromSnapshot = tvrTableDelta.fromSnapshot();
         TvrTableSnapshot toSnapshot = tvrTableDelta.toSnapshot();
 
-        if (Table.TableType.ICEBERG.equals(scanOperator.getTable().getType())) {
-            // For Iceberg table, we can use the snapshot directly
-            LogicalIcebergScanOperator logicalIcebergScanOperator = (LogicalIcebergScanOperator) scanOperator;
-
-            // from snapshot
-            LogicalScanOperator fromOperator = withTvrVersionRange(logicalIcebergScanOperator, fromSnapshot);
-            OptExpression fromOpt = OptExpression.create(fromOperator);
-
-            // to snapshot
-            LogicalScanOperator toOperator = withTvrVersionRange(logicalIcebergScanOperator, toSnapshot);
-            OptExpression toOpt = OptExpression.create(toOperator);
-
-            // create TvrOptExpression for both from and to snapshots
-            TvrOptMeta tvrOptMeta = new TvrOptMeta(
-                    tvrDeltaTrait,
-                    TvrLazyOptExpression.of(() -> new TvrOptExpression(fromSnapshot, fromOpt)),
-                    TvrLazyOptExpression.of(() -> new TvrOptExpression(toSnapshot, toOpt))
-            );
-            OptExpression newOptExpression = OptExpression.create(scanOperator, tvrOptMeta);
-            return Lists.newArrayList(newOptExpression);
-        } else {
+        if (!IVMAnalyzer.isTableTypeIVMSupported(scanOperator.getTable().getType())) {
             throw new IllegalStateException(
                     "Unsupported table type for TVR table scan: " + scanOperator.getTable().getType());
         }
+        // from snapshot
+        LogicalScanOperator fromOperator = withTvrVersionRange(scanOperator, fromSnapshot);
+        OptExpression fromOpt = OptExpression.create(fromOperator);
+
+        // to snapshot
+        LogicalScanOperator toOperator = withTvrVersionRange(scanOperator, toSnapshot);
+        OptExpression toOpt = OptExpression.create(toOperator);
+
+        // create TvrOptExpression for both from and to snapshots
+        TvrOptMeta tvrOptMeta = new TvrOptMeta(
+                tvrDeltaTrait,
+                TvrLazyOptExpression.of(() -> new TvrOptExpression(fromSnapshot, fromOpt)),
+                TvrLazyOptExpression.of(() -> new TvrOptExpression(toSnapshot, toOpt))
+        );
+        OptExpression newOptExpression = OptExpression.create(scanOperator, tvrOptMeta);
+        return Lists.newArrayList(newOptExpression);
     }
 }

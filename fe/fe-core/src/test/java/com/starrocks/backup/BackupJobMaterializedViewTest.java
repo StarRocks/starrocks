@@ -19,19 +19,18 @@ import com.google.common.collect.Maps;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -43,12 +42,12 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
-import mockit.Delegate;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,9 +86,6 @@ public class BackupJobMaterializedViewTest {
 
     private static List<Path> pathsNeedToBeDeleted = Lists.newArrayList();
 
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-
     private MockBackupHandler backupHandler;
 
     private MockRepositoryMgr repoMgr;
@@ -118,9 +114,6 @@ public class BackupJobMaterializedViewTest {
         }
     }
 
-    @Mocked
-    private EditLog editLog;
-
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
                 new BlobStorage("broker", Maps.newHashMap()));
 
@@ -148,7 +141,8 @@ public class BackupJobMaterializedViewTest {
 
     @BeforeEach
     public void setUp() {
-
+        UtFrameUtils.setUpForPersistTest();
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
@@ -158,41 +152,7 @@ public class BackupJobMaterializedViewTest {
         db = UnitTestUtil.createDbWithMaterializedView(dbId, tblId, partId, idxId, tabletId,
                     backendId, version, KeysType.DUP_KEYS);
 
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getLocalMetastore().getDb(anyLong);
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getNextId();
-                minTimes = 0;
-                result = id.getAndIncrement();
-
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-
-                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_mv");
-                minTimes = 0;
-                result = null;
-
-                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
-                minTimes = 0;
-                result = null;
-            }
-        };
-
-        new Expectations() {
-            {
-                editLog.logBackupJob((BackupJob) any);
-                minTimes = 0;
-                result = new Delegate() {
-                    public void logBackupJob(BackupJob job) {
-                        System.out.println("log backup job: " + job);
-                    }
-                };
-            }
-        };
+        globalStateMgr.getLocalMetastore().replayCreateDb(db);
 
         new MockUp<AgentTaskExecutor>() {
             @Mock
@@ -227,6 +187,11 @@ public class BackupJobMaterializedViewTest {
                 result = true;
             }
         };
+    }
+
+    @AfterEach
+    public void tearDown() {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Disabled
@@ -430,7 +395,7 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRefPersist(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
         job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000,
-                    globalStateMgr, repo.getId());
+                    GlobalStateMgr.getCurrentState(), repo.getId());
         job.run();
         Assertions.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assertions.assertEquals(BackupJobState.CANCELLED, job.getState());

@@ -190,7 +190,7 @@ public class TabletScheduler extends FrontendDaemon {
     }
 
     public TabletScheduler(TabletSchedulerStat stat) {
-        super("tablet scheduler", SCHEDULE_INTERVAL_MS);
+        super("tablet-scheduler", SCHEDULE_INTERVAL_MS);
         this.stat = stat;
         this.rebalancer = new DiskAndTabletLoadReBalancer();
     }
@@ -400,15 +400,19 @@ public class TabletScheduler extends FrontendDaemon {
      */
     public static void resetDecommStatForSingleReplicaTabletUnlocked(long tabletId, List<Replica> replicas) {
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        if (tabletScheduler == null) {
+            return;
+        }
         TabletSchedCtx tabletSchedCtx = tabletScheduler.getTabletSchedCtx(tabletId);
         if (tabletSchedCtx != null) {
             Replica decommissionedReplica = tabletSchedCtx.getDecommissionedReplica();
             for (Replica replica : replicas) {
                 if (replica.getState() == Replica.ReplicaState.DECOMMISSION && replica.getLastFailedVersion() < 0
                         && decommissionedReplica != null && replica.getId() == decommissionedReplica.getId()) {
+                    String replicaInfo = tabletSchedCtx.getTablet() != null ?
+                            tabletSchedCtx.getTablet().getReplicaInfos() : "tablet is null";
                     tabletScheduler.finalizeTabletCtx(tabletSchedCtx, TabletSchedCtx.State.CANCELLED,
-                            "src replica of rebalance need to reset state, replicas: " +
-                                    tabletSchedCtx.getTablet().getReplicaInfos());
+                            "src replica of rebalance need to reset state, replicas: " + replicaInfo);
                     break;
                 }
             }
@@ -838,7 +842,7 @@ public class TabletScheduler extends FrontendDaemon {
             tabletCtx.setTabletKeysType(tbl.getKeysType());
             tabletCtx.setVersionInfo(physicalPartition.getVisibleVersion(), physicalPartition.getCommittedVersion(),
                     physicalPartition.getVisibleTxnId(), physicalPartition.getVisibleVersionTime());
-            tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexId(idx.getId()));
+            tabletCtx.setSchemaHash(tbl.getSchemaHashByIndexMetaId(idx.getMetaId()));
             tabletCtx.setStorageMedium(dataProperty.getStorageMedium());
             if (!Objects.equals(oldStatus, statusPair.first)) {
                 LOG.info("change TabletSchedCtx status from {} to {}, partition visible version: {}," +
@@ -1360,7 +1364,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
     }
 
-    private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
+    protected void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
         if (Config.tablet_sched_always_force_decommission_replica) {
             force = true;
@@ -1400,14 +1404,6 @@ public class TabletScheduler extends FrontendDaemon {
             }
         }
 
-        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
-        // delete this replica from globalStateMgr.
-        // it will also delete replica from tablet inverted index.
-        if (!tabletCtx.deleteReplica(replica)) {
-            LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
-                    replica.getBackendId(), replicaInfos);
-        }
-
         if (force) {
             // send the replica deletion task.
             // also this may not be necessary, but delete it will make things simpler.
@@ -1416,9 +1412,6 @@ public class TabletScheduler extends FrontendDaemon {
             // process.
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
-        // NOTE: TabletScheduler is specific for LocalTablet, LakeTablet will never go here.
-        GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
-                .markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
 
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),
@@ -1427,8 +1420,19 @@ public class TabletScheduler extends FrontendDaemon {
                 tabletCtx.getIndexId(),
                 tabletCtx.getTabletId(),
                 replica.getBackendId());
+        String replicaInfos = tabletCtx.getTablet().getReplicaInfos();
+        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info, wal -> {
+            // delete this replica from globalStateMgr.
+            // it will also delete replica from tablet inverted index.
+            if (!tabletCtx.deleteReplica(replica)) {
+                LOG.warn("delete replica for tablet: {} failed backend {} not found replicas:{}", tabletCtx.getTabletId(),
+                        replica.getBackendId(), replicaInfos);
+            }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logDeleteReplica(info);
+            // NOTE: TabletScheduler is specific for LocalTablet, LakeTablet will never go here.
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                    .markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
+        });
 
         LOG.info("delete replica. tablet id: {}, backend id: {}. reason: {}, force: {} replicas: {}",
                 tabletCtx.getTabletId(), replica.getBackendId(), reason, force, replicaInfos);
@@ -1822,6 +1826,7 @@ public class TabletScheduler extends FrontendDaemon {
             try {
                 // ignore tablets that will expire and erase soon
                 if (checkIfTabletExpired(tablet)) {
+                    finalizeTabletCtx(tablet, TabletSchedCtx.State.EXPIRED, "will erase soon");
                     continue;
                 }
                 list.add(tablet);
@@ -2090,7 +2095,7 @@ public class TabletScheduler extends FrontendDaemon {
 
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             for (MaterializedIndex idx
-                                    : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                                    : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                                 if (!idx.isTabletBalanced()) {
                                     mediumBalanceTypes.add(Pair.create(medium, idx.getBalanceType()));
                                 }

@@ -22,7 +22,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -33,7 +35,8 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -43,6 +46,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
@@ -60,8 +64,12 @@ import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
-import static com.starrocks.type.Type.INT;
+import static com.starrocks.connector.iceberg.rest.IcebergRESTCatalog.ICEBERG_CATALOG_SECURITY;
+import static com.starrocks.type.IntegerType.INT;
 import static org.apache.iceberg.catalog.SessionCatalog.SessionContext;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergRESTCatalogTest {
     private static final String CATALOG_NAME = "iceberg_rest_catalog";
@@ -210,7 +218,7 @@ public class IcebergRESTCatalogTest {
             Table getTable(ConnectContext context, String dbName, String tblName) {
                 return new IcebergView(1, "iceberg_rest_catalog", "db", "view",
                         Lists.newArrayList(), "mocked", "iceberg_rest_catalog", "db",
-                        "location");
+                        "location", Maps.newHashMap());
             }
         };
 
@@ -222,7 +230,9 @@ public class IcebergRESTCatalogTest {
             }
         };
 
-        metadata.dropTable(connectContext, new DropTableStmt(false, new TableName("catalog", "db", "view"),
+        metadata.dropTable(connectContext, new DropTableStmt(false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "view")),
+                        null, NodePosition.ZERO),
                 false));
     }
 
@@ -231,7 +241,9 @@ public class IcebergRESTCatalogTest {
                                @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
 
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(connectContext, stmt);
@@ -293,7 +305,6 @@ public class IcebergRESTCatalogTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to list all namespaces using REST Catalog",
                 () -> metadata.listDbNames(new ConnectContext()));
-
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Failed to list tables using REST Catalog",
                 () -> metadata.listTableNames(new ConnectContext(), "db"));
@@ -362,5 +373,224 @@ public class IcebergRESTCatalogTest {
                         "catalog", "db", "view", "comment",
                         Lists.newArrayList(new Column("k1", INT)), "select * from t",
                         AlterViewStmt.AlterDialectType.NONE, Maps.newHashMap()), false));
+    }
+
+    @Test
+    public void testBuildContextWithJwtSecurity(@Mocked RESTSessionCatalog restCatalog) {
+        // Test when security is set to JWT and auth token is provided
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "JWT");
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // Create a mock ConnectContext with auth token using MockUp
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getQualifiedUser() {
+                return "test_user";
+            }
+
+            @Mock
+            public String getSessionId() {
+                return "test_session";
+            }
+
+            @Mock
+            public String getAuthToken() {
+                return "test_token";
+            }
+
+            @Mock
+            public UserIdentity getCurrentUserIdentity() {
+                return new UserIdentity("test_user", "%");
+            }
+        };
+        SessionCatalog.SessionContext sessionContext = Deencapsulation.invoke(catalog, "buildContext", connectContext);
+        assertNotNull(sessionContext);
+        assertTrue(sessionContext.credentials().containsKey("token"));
+        assertEquals("test_token", sessionContext.credentials().get("token"));
+
+
+        properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "Jwt");
+        catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+        sessionContext = Deencapsulation.invoke(catalog, "buildContext", connectContext);
+        assertNotNull(sessionContext);
+        assertTrue(sessionContext.credentials().containsKey("token"));
+        assertEquals("test_token", sessionContext.credentials().get("token"));
+    }
+
+    @Test
+    public void testListTablesWithViewEndpointsEnabled(@Mocked RESTSessionCatalog restCatalog) {
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+
+        new Expectations() {
+            {
+                restCatalog.listTables((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of("db", "tbl1"));
+                minTimes = 0;
+
+                // When viewEndpointsEnabled is true (default), listViews should be called
+                restCatalog.listViews((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of("db", "view1"));
+                minTimes = 0;
+            }
+        };
+
+        List<String> tables = icebergRESTCatalog.listTables(connectContext, "db");
+        // Should include both tables and views
+        Assertions.assertEquals(2, tables.size());
+        Assertions.assertTrue(tables.contains("tbl1"));
+        Assertions.assertTrue(tables.contains("view1"));
+    }
+
+    @Test
+    public void testListTablesWithViewEndpointsDisabled(@Mocked RESTSessionCatalog restCatalog) {
+        // Create catalog with viewEndpointsEnabled = false
+        Map<String, String> properties = ImmutableMap.of(
+                "iceberg.catalog.rest.view-endpoints-enabled", "false");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        new Expectations() {
+            {
+                restCatalog.listTables((SessionContext) any, (Namespace) any);
+                result = ImmutableList.of(TableIdentifier.of("db", "tbl1"));
+                minTimes = 0;
+
+                // When viewEndpointsEnabled is false, listViews should NOT be called
+                // So we don't set any expectations for restCatalog.listViews()
+            }
+        };
+
+        List<String> tables = icebergRESTCatalog.listTables(connectContext, "db");
+        // Should only include tables, not views
+        Assertions.assertEquals(1, tables.size());
+        Assertions.assertTrue(tables.contains("tbl1"));
+    }
+
+    @Test
+    public void testGetViewWithViewEndpointsDisabled(@Mocked RESTSessionCatalog restCatalog) {
+        // Create catalog with viewEndpointsEnabled = false
+        Map<String, String> properties = ImmutableMap.of(
+                "iceberg.catalog.rest.view-endpoints-enabled", "false");
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        // When viewEndpointsEnabled is false, getView should throw exception
+        StarRocksConnectorException exception = Assertions.assertThrows(
+                StarRocksConnectorException.class,
+                () -> icebergRESTCatalog.getView(connectContext, "db", "view"));
+
+        Assertions.assertTrue(exception.getMessage().contains("View operations are disabled for this catalog"));
+    }
+
+    @Test
+    public void testGetCatalogProperties(@Mocked RESTSessionCatalog restCatalog) {
+        Map<String, String> catalogProperties = ImmutableMap.of(
+                "s3.access-key-id", "AKIA_TEST_KEY",
+                "s3.secret-access-key", "test_secret_key",
+                "s3.session-token", "test_session_token",
+                "client.region", "us-east-1"
+        );
+
+        new Expectations() {
+            {
+                restCatalog.properties();
+                result = catalogProperties;
+                times = 1;
+            }
+        };
+
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+        Map<String, String> result = icebergRESTCatalog.getCatalogProperties();
+
+        Assertions.assertEquals("AKIA_TEST_KEY", result.get("s3.access-key-id"));
+        Assertions.assertEquals("test_secret_key", result.get("s3.secret-access-key"));
+        Assertions.assertEquals("test_session_token", result.get("s3.session-token"));
+        Assertions.assertEquals("us-east-1", result.get("client.region"));
+    }
+
+    @Test
+    public void testGetCatalogPropertiesEmpty(@Mocked RESTSessionCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.properties();
+                result = ImmutableMap.of();
+                times = 1;
+            }
+        };
+
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+        Map<String, String> result = icebergRESTCatalog.getCatalogProperties();
+
+        Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testBuildContextWithNonJwtSecurityAndOidcAuth(@Mocked RESTSessionCatalog restCatalog) {
+        // Test that user's OIDC token is NOT passed to REST Catalog when security mode is NONE or OAUTH2.
+        // This is a regression test for the bug where user's OIDC token was incorrectly passed
+        // to REST Catalog regardless of the catalog's security configuration.
+
+        // Create a mock ConnectContext with auth token (simulating OIDC authenticated user)
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getQualifiedUser() {
+                return "oidc_user";
+            }
+
+            @Mock
+            public String getSessionId() {
+                return "oidc_session";
+            }
+
+            @Mock
+            public String getAuthToken() {
+                return "user_oidc_access_token";
+            }
+
+            @Mock
+            public UserIdentity getCurrentUserIdentity() {
+                return new UserIdentity("oidc_user", "%");
+            }
+        };
+
+        // Test with security=NONE (default)
+        Map<String, String> propertiesNone = new HashMap<>();
+        IcebergRESTCatalog catalogNone = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), propertiesNone);
+        SessionCatalog.SessionContext sessionContextNone =
+                Deencapsulation.invoke(catalogNone, "buildContext", connectContext);
+        // Should return empty context, NOT passing user's OIDC token
+        // credentials() may be null for empty context, which is also acceptable
+        assertTrue(sessionContextNone.credentials() == null || sessionContextNone.credentials().isEmpty(),
+                "When security=NONE, user's OIDC token should NOT be passed to REST Catalog");
+
+        // Test with explicit security=NONE
+        Map<String, String> propertiesExplicitNone = new HashMap<>();
+        propertiesExplicitNone.put(ICEBERG_CATALOG_SECURITY, "NONE");
+        IcebergRESTCatalog catalogExplicitNone = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), propertiesExplicitNone);
+        SessionCatalog.SessionContext sessionContextExplicitNone =
+                Deencapsulation.invoke(catalogExplicitNone, "buildContext", connectContext);
+        assertTrue(sessionContextExplicitNone.credentials() == null || sessionContextExplicitNone.credentials().isEmpty(),
+                "When security=NONE (explicit), user's OIDC token should NOT be passed to REST Catalog");
+
+        // Test with security=OAUTH2 (catalog has its own OAuth2 credentials)
+        Map<String, String> propertiesOauth2 = new HashMap<>();
+        propertiesOauth2.put(ICEBERG_CATALOG_SECURITY, "OAUTH2");
+        propertiesOauth2.put("iceberg.catalog.oauth2.credential", "catalog_client_id:catalog_client_secret");
+        IcebergRESTCatalog catalogOauth2 = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), propertiesOauth2);
+        SessionCatalog.SessionContext sessionContextOauth2 =
+                Deencapsulation.invoke(catalogOauth2, "buildContext", connectContext);
+        // Should return empty context, NOT passing user's OIDC token
+        // (REST Catalog should use its own oauth2.credential instead)
+        assertTrue(sessionContextOauth2.credentials() == null || sessionContextOauth2.credentials().isEmpty(),
+                "When security=OAUTH2, user's OIDC token should NOT be passed to REST Catalog. " +
+                        "Catalog should use its own configured oauth2.credential instead");
     }
 }

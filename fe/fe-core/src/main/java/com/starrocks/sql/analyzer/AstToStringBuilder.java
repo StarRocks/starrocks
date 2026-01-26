@@ -29,7 +29,6 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
@@ -43,6 +42,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.formatter.AST2StringVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
@@ -201,10 +201,12 @@ public class AstToStringBuilder {
 
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
+            if (distributionInfo.getType() != DistributionInfo.DistributionInfoType.RANGE) {
+                sb.append("\n").append(distributionInfo.toSql(table.getIdToColumn()));
+            }
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();
@@ -368,13 +370,13 @@ public class AstToStringBuilder {
         // 3. rollup
         if (createRollupStmt != null && (table instanceof OlapTable)) {
             OlapTable olapTable = (OlapTable) table;
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
-                if (entry.getKey() == olapTable.getBaseIndexId()) {
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexMetaIdToMeta().entrySet()) {
+                if (entry.getKey() == olapTable.getBaseIndexMetaId()) {
                     continue;
                 }
                 MaterializedIndexMeta materializedIndexMeta = entry.getValue();
                 sb = new StringBuilder();
-                String indexName = olapTable.getIndexNameById(entry.getKey());
+                String indexName = olapTable.getIndexNameByMetaId(entry.getKey());
                 sb.append("ALTER TABLE ").append(table.getName()).append(" ADD ROLLUP ").append(indexName);
                 sb.append("(");
 
@@ -413,16 +415,16 @@ public class AstToStringBuilder {
         // Partition column names
         List<String> partitionNames;
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY (");
-
             if (!table.isIcebergTable()) {
+                createTableSql.append("\nPARTITION BY (");
                 partitionNames = table.getPartitionColumnNames();
+                createTableSql.append(String.join(", ", partitionNames)).append(")");
             } else {
                 partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+                createTableSql.append("\nPARTITION BY ").append(String.join(", ", partitionNames));
             }
-
-            createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
+
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
@@ -457,6 +459,7 @@ public class AstToStringBuilder {
         try {
             properties = new HashMap<>(table.getProperties());
         } catch (NotImplementedException e) {
+            // hive view does not implement getProperties
         }
 
         // Location
@@ -489,6 +492,18 @@ public class AstToStringBuilder {
         }
         sb.append(Joiner.on(", ").join(colDef));
         sb.append(")");
+
+        // Properties
+        Map<String, String> properties = new HashMap<>();
+        try {
+            properties = new HashMap<>(view.getProperties());
+        } catch (NotImplementedException e) {
+        }
+        if (!properties.isEmpty()) {
+            sb.append("\nPROPERTIES (");
+            sb.append(new PrintableMap<>(properties, "=", true, false, true).toString());
+            sb.append(")\n");
+        }
 
         sb.append(" AS ").append(view.getInlineViewDef()).append(";");
         return sb.toString();

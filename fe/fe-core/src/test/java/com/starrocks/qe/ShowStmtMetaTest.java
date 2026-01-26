@@ -15,9 +15,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
+import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -100,7 +98,6 @@ import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.ShowWhiteListStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
@@ -114,7 +111,6 @@ import com.starrocks.sql.parser.NodePosition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class ShowStmtMetaTest {
@@ -175,9 +171,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowColumnStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, false);
-        stmt.init();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, false);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
@@ -190,9 +186,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowColumnStmtVerbose() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowColumnStmt stmt = new ShowColumnStmt(tableName, "test_db", null, true);
-        stmt.init();
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowColumnStmt stmt = new ShowColumnStmt(tableRef, null, true);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(9, metaData.getColumnCount());
         Assertions.assertEquals("Field", metaData.getColumn(0).getName());
@@ -305,8 +301,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.TABLE);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -315,8 +312,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmtView() {
-        TableName tableName = new TableName("test_db", "test_view");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.VIEW);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_view")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.VIEW);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -325,8 +323,10 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowCreateTableStmtMaterializedView() {
-        TableName tableName = new TableName("test_db", "test_mv");
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableName, ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_mv")),
+                null, NodePosition.ZERO);
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(tableRef,
+                ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(2, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -415,8 +415,9 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowIndexStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowIndexStmt stmt = new ShowIndexStmt("test_db", tableName);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowIndexStmt stmt = new ShowIndexStmt(tableRef);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
         Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("Table", metaData.getColumn(0).getName());
@@ -742,62 +743,20 @@ public class ShowStmtMetaTest {
 
     @Test
     public void testShowPartitionsStmt() {
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableName, null, null, null, false);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowPartitionsStmt stmt = new ShowPartitionsStmt(tableRef, null, null, null, false);
 
         // Test basic statement creation
         Assertions.assertNotNull(stmt);
         Assertions.assertEquals("test_db", stmt.getDbName());
         Assertions.assertEquals("test_table", stmt.getTableName());
 
-        // Test getMetaData() with a mock ProcNodeInterface
-        // This simulates the behavior in ShowStmtAnalyzer.visitShowPartitionsStatement
-        ProcNodeInterface mockNode = new ProcNodeInterface() {
-            @Override
-            public ProcResult fetchResult() {
-                // Return a mock result with typical partition columns
-                BaseProcResult result = new BaseProcResult();
-                List<String> columnNames = Arrays.asList(
-                        "PartitionId", "PartitionName", "VisibleVersion", "VisibleVersionTime",
-                        "VisibleVersionHash", "State", "PartitionKey", "Range", "DistributionKey",
-                        "Buckets", "ReplicationNum", "StorageMedium", "CooldownTime",
-                        "LastConsistencyCheckTime", "DataSize", "StorageSize", "IsInMemory",
-                        "RowCount", "DataVersion", "VersionEpoch", "VersionTxnType", "TabletBalanced"
-                );
-                result.setNames(columnNames);
-                return result;
-            }
-        };
-
-        stmt.setNode(mockNode);
+        stmt.setProcPath("/nonexistent_partitions");
 
         // Now test getMetaData() method
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(22, metaData.getColumnCount());
-
-        // Verify the column names match what we expect from PartitionsProcDir
-        Assertions.assertEquals("PartitionId", metaData.getColumn(0).getName());
-        Assertions.assertEquals("PartitionName", metaData.getColumn(1).getName());
-        Assertions.assertEquals("VisibleVersion", metaData.getColumn(2).getName());
-        Assertions.assertEquals("VisibleVersionTime", metaData.getColumn(3).getName());
-        Assertions.assertEquals("VisibleVersionHash", metaData.getColumn(4).getName());
-        Assertions.assertEquals("State", metaData.getColumn(5).getName());
-        Assertions.assertEquals("PartitionKey", metaData.getColumn(6).getName());
-        Assertions.assertEquals("Range", metaData.getColumn(7).getName());
-        Assertions.assertEquals("DistributionKey", metaData.getColumn(8).getName());
-        Assertions.assertEquals("Buckets", metaData.getColumn(9).getName());
-        Assertions.assertEquals("ReplicationNum", metaData.getColumn(10).getName());
-        Assertions.assertEquals("StorageMedium", metaData.getColumn(11).getName());
-        Assertions.assertEquals("CooldownTime", metaData.getColumn(12).getName());
-        Assertions.assertEquals("LastConsistencyCheckTime", metaData.getColumn(13).getName());
-        Assertions.assertEquals("DataSize", metaData.getColumn(14).getName());
-        Assertions.assertEquals("StorageSize", metaData.getColumn(15).getName());
-        Assertions.assertEquals("IsInMemory", metaData.getColumn(16).getName());
-        Assertions.assertEquals("RowCount", metaData.getColumn(17).getName());
-        Assertions.assertEquals("DataVersion", metaData.getColumn(18).getName());
-        Assertions.assertEquals("VersionEpoch", metaData.getColumn(19).getName());
-        Assertions.assertEquals("VersionTxnType", metaData.getColumn(20).getName());
-        Assertions.assertEquals("TabletBalanced", metaData.getColumn(21).getName());
+        Assertions.assertEquals(0, metaData.getColumnCount());
     }
 
     @Test
@@ -845,13 +804,17 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupUsageStmt() {
         ShowResourceGroupUsageStmt stmt = new ShowResourceGroupUsageStmt("test_group", null);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(6, metaData.getColumnCount());
+        Assertions.assertEquals(10, metaData.getColumnCount());
         Assertions.assertEquals("Name", metaData.getColumn(0).getName());
         Assertions.assertEquals("Id", metaData.getColumn(1).getName());
         Assertions.assertEquals("Backend", metaData.getColumn(2).getName());
         Assertions.assertEquals("BEInUseCpuCores", metaData.getColumn(3).getName());
         Assertions.assertEquals("BEInUseMemBytes", metaData.getColumn(4).getName());
         Assertions.assertEquals("BERunningQueries", metaData.getColumn(5).getName());
+        Assertions.assertEquals("BEMemLimitBytes", metaData.getColumn(6).getName());
+        Assertions.assertEquals("BEMemPool", metaData.getColumn(7).getName());
+        Assertions.assertEquals("BEMemPoolInUseMemBytes", metaData.getColumn(8).getName());
+        Assertions.assertEquals("BEMemPoolMemLimitBytes", metaData.getColumn(9).getName());
     }
 
     @Test
@@ -1045,11 +1008,11 @@ public class ShowStmtMetaTest {
     public void testShowResourceGroupStmt() {
         ShowResourceGroupStmt stmt = new ShowResourceGroupStmt("test_group", false, false, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(11, metaData.getColumnCount());
+        Assertions.assertEquals(12, metaData.getColumnCount());
         Assertions.assertEquals("name", metaData.getColumn(0).getName());
         Assertions.assertEquals("id", metaData.getColumn(1).getName());
-        Assertions.assertEquals("cpu_weight", metaData.getColumn(2).getName());
-        Assertions.assertEquals("exclusive_cpu_cores", metaData.getColumn(3).getName());
+        Assertions.assertEquals("cpu_weight_percent", metaData.getColumn(2).getName());
+        Assertions.assertEquals("exclusive_cpu_percent", metaData.getColumn(3).getName());
         Assertions.assertEquals("mem_limit", metaData.getColumn(4).getName());
         Assertions.assertEquals("big_query_cpu_second_limit", metaData.getColumn(5).getName());
         Assertions.assertEquals("big_query_scan_rows_limit", metaData.getColumn(6).getName());
@@ -1057,6 +1020,7 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("concurrency_limit", metaData.getColumn(8).getName());
         Assertions.assertEquals("spill_mem_limit_threshold", metaData.getColumn(9).getName());
         Assertions.assertEquals("classifiers", metaData.getColumn(10).getName());
+        Assertions.assertEquals("warehouses", metaData.getColumn(11).getName());
     }
 
     @Test
@@ -1207,7 +1171,7 @@ public class ShowStmtMetaTest {
     @Test
     public void testShowProcStmt() {
         ShowProcStmt stmt = new ShowProcStmt("/test/path");
-        // ShowProcStmt requires a ProcNodeInterface to be set before getMetaData() can work
+        // Metadata generation depends on resolving the proc path at runtime.
         // For now, we'll just test that the statement can be created without errors
         Assertions.assertNotNull(stmt);
         Assertions.assertEquals("/test/path", stmt.getPath());
@@ -1281,8 +1245,9 @@ public class ShowStmtMetaTest {
         Assertions.assertEquals("DetailCmd", metaData.getColumn(9).getName());
 
         // Test with table name but no table set (should return empty list)
-        TableName tableName = new TableName("test_db", "test_table");
-        ShowTabletStmt stmt2 = new ShowTabletStmt(tableName, 12345L, NodePosition.ZERO);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("test_db", "test_table")),
+                null, NodePosition.ZERO);
+        ShowTabletStmt stmt2 = new ShowTabletStmt(tableRef, 12345L, NodePosition.ZERO);
         ShowResultSetMetaData metaData2 = new ShowResultMetaFactory().getMetadata(stmt2);
         Assertions.assertEquals(0, metaData2.getColumnCount());
 

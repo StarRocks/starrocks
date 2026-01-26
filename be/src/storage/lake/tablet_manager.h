@@ -41,6 +41,7 @@ class TCreateTabletReq;
 
 namespace starrocks::lake {
 
+struct CacheOptions;
 template <typename T>
 class MetadataIterator;
 class UpdateManager;
@@ -51,10 +52,12 @@ using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRow
 class CompactionScheduler;
 class Metacache;
 class VersionedTablet;
+class TableSchemaService;
 
 class TabletManager {
     friend class Tablet;
     friend class MetaFileBuilder;
+    friend class TableSchemaService;
 
 public:
     // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
@@ -74,9 +77,13 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version, bool fill_cache = true);
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version, bool fill_meta_cache = true,
+                                         bool fill_data_cache = true);
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
+
+    // Compact with pre-selected rowsets (for parallel compaction)
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context, std::vector<RowsetPtr> input_rowsets);
 
     Status put_tablet_metadata(const TabletMetadata& metadata);
 
@@ -91,14 +98,26 @@ public:
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_meta_cache,
+                                                    bool fill_data_cache, int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, const CacheOptions& cache_opts,
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     // Do not use this function except in a list dir
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true,
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, const CacheOptions& cache_opts,
+                                                    int64_t expected_gtid = 0,
+                                                    const std::shared_ptr<FileSystem>& fs = nullptr);
 
     StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true,
                                                            int64_t expected_gtid = 0,
+                                                           const std::shared_ptr<FileSystem>& fs = nullptr);
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                           const CacheOptions& cache_opts, int64_t expected_gtid = 0,
                                                            const std::shared_ptr<FileSystem>& fs = nullptr);
 
     static StatusOr<BundleTabletMetadataPtr> parse_bundle_tablet_metadata(const std::string& path,
@@ -107,6 +126,8 @@ public:
     static StatusOr<TabletMetadataPtrs> get_metas_from_bundle_tablet_metadata(const std::string& location,
                                                                               FileSystem* input_fs = nullptr);
 
+    // NOTICE : latest_cached_tablet_metadata may contain a tablet meta that
+    // is either older or newer than the FE visible version.
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
@@ -154,6 +175,7 @@ public:
 #endif
 #endif // USE_STAROS
 
+    Status drop_local_cache(const std::string& path);
     void prune_metacache();
 
     // TODO: remove this method
@@ -190,7 +212,15 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+    // Get the full path for Lake Compaction Rows Mapper file on remote storage
+    // WHY: When parallel pk index execution is enabled, mapper files are stored on
+    // remote storage (S3/HDFS) instead of local disk. This function constructs the
+    // full path using the location provider, enabling distributed access during
+    // compaction conflict resolution across multiple compute nodes.
+    std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const;
+
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
     UpdateManager* update_mgr();
@@ -198,6 +228,8 @@ public:
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
     void update_metacache_limit(size_t limit);
+
+    TableSchemaService* table_schema_service() { return _table_schema_service.get(); }
 
     // The return value will never be null.
     Metacache* metacache() { return _metacache.get(); }
@@ -219,14 +251,14 @@ public:
     // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
     // instance address matches the address provided by the segment_addr_hint. This is used to prevent
     // updating the cache size where the cached object is not the one as expected.
-    void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
+    void update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint = 0);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
-                                      const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                      const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
                                       TabletSchemaPtr tablet_schema);
     // for load segment parallel
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
-                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
@@ -242,17 +274,23 @@ public:
 
     void stop();
 
+    // Cache the schema into the metadata cache.
+    void cache_schema(const TabletSchemaPtr& schema);
+
+    // Get the schema from the metadata cache.
+    // Return nullptr if not found.
+    TabletSchemaPtr get_cached_schema(int64_t schema_id);
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
-    static Status drop_local_cache(const std::string& path);
 
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
-    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache,
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
@@ -269,6 +307,7 @@ private:
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr = nullptr;
+    std::unique_ptr<TableSchemaService> _table_schema_service;
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;

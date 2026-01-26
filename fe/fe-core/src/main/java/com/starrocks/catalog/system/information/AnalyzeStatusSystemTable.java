@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.MetaNotFoundException;
@@ -25,7 +26,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -54,17 +54,17 @@ public class AnalyzeStatusSystemTable extends SystemTable {
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Id", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("Database", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("Table", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("Columns", TypeFactory.createVarchar(200)))
-                    .addColumn(new Column("Type", TypeFactory.createVarchar(20)))
-                    .addColumn(new Column("Schedule", TypeFactory.createVarchar(20)))
-                    .addColumn(new Column("Status", TypeFactory.createVarchar(20)))
-                    .addColumn(new Column("StartTime", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("EndTime", TypeFactory.createVarchar(60)))
-                    .addColumn(new Column("Properties", TypeFactory.createVarchar(200)))
-                    .addColumn(new Column("Reason", TypeFactory.createVarchar(100)))
+                    .addColumn(new Column("Id", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Database", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Table", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Columns", TypeFactory.createVarcharType(200)))
+                    .addColumn(new Column("Type", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Schedule", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("Status", TypeFactory.createVarcharType(20)))
+                    .addColumn(new Column("StartTime", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("EndTime", TypeFactory.createVarcharType(60)))
+                    .addColumn(new Column("Properties", TypeFactory.createVarcharType(200)))
+                    .addColumn(new Column("Reason", TypeFactory.createVarcharType(100)))
                     .build();
     static {
         COLUMNS = Lists.newArrayList(META_DATA.getColumns());

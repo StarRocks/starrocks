@@ -48,6 +48,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServer;
@@ -55,6 +56,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
@@ -62,6 +64,7 @@ import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -81,6 +84,7 @@ import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.dag.PhasedExecutionSchedule;
+import com.starrocks.qe.scheduler.dag.SingleNodeSchedule;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
@@ -504,6 +508,10 @@ public class DefaultCoordinator extends Coordinator {
         prepareResultSink();
 
         prepareProfile();
+
+        // if all the instance are in the same worker, we can send them all in once
+        // but only after prepareExec() we can know the worker number
+        maybeChangeScheduler();
     }
 
     @Override
@@ -537,6 +545,12 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public List<ScanNode> getScanNodes() {
         return jobSpec.getScanNodes();
+    }
+
+    private boolean hasOlapTableSink() {
+        return executionDAG.getFragmentsInPostorder().stream()
+                .anyMatch(fragment -> fragment.getPlanFragment().getSink()
+                        instanceof OlapTableSink);
     }
 
     @Override
@@ -670,6 +684,15 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private void maybeChangeScheduler() {
+        ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
+        boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
+        if (executionDAG.getWorkerNum() == 1 && jobSpec.supportSingleNodeParallelSchedule() &&
+                scheduler instanceof AllAtOnceExecutionSchedule && !isLoadType && !hasOlapTableSink()) {
+            scheduler = new SingleNodeSchedule();
+        }
+    }
+
     @Override
     public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
             throws StarRocksException {
@@ -733,7 +756,7 @@ public class DefaultCoordinator extends Coordinator {
             throws StarRocksException, RpcException {
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
-                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                cancelInternal(PPlanFragmentCancelReason.TIMEOUT);
                 throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
                 cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
@@ -884,10 +907,13 @@ public class DefaultCoordinator extends Coordinator {
             }
 
             queryStatus.setStatus(status);
-            LOG.warn(
-                    "one instance report fail throw updateStatus(), need cancel. job id: {}, query id: {}, instance id: {}",
-                    jobSpec.getLoadJobId(), DebugUtil.printId(jobSpec.getQueryId()),
-                    instanceId != null ? DebugUtil.printId(instanceId) : "NaN");
+            if (!status.isSuppressedError()) {
+                LOG.warn(
+                        "one instance report fail throw updateStatus(), need cancel. job id: {}, " +
+                                "query id: {}, instance id: {}",
+                        jobSpec.getLoadJobId(), DebugUtil.printId(jobSpec.getQueryId()),
+                        instanceId != null ? DebugUtil.printId(instanceId) : "NaN");
+            }
             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         } finally {
             lock.unlock();
@@ -912,7 +938,9 @@ public class DefaultCoordinator extends Coordinator {
                 throw new RpcException("unknown", status.getErrorMsg());
             } else {
                 String errMsg = status.getErrorMsg();
-                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
+                if (!status.isSuppressedError()) {
+                    LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
+                }
 
                 // hide host info
                 int hostIndex = errMsg.indexOf("host");
@@ -924,10 +952,27 @@ public class DefaultCoordinator extends Coordinator {
                         status.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
                 } else if (status.isTimeout()) {
-                    ErrorReport.reportTimeoutException(
-                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
-                            String.format("please increase the '%s' session variable and retry",
-                                    SessionVariable.QUERY_TIMEOUT));
+                    int timeoutS = jobSpec.getQueryOptions().query_timeout;
+                    String hint = null;
+                    try {
+                        StmtExecutor executor = connectContext != null ? connectContext.getExecutor() : null;
+                        if (executor != null && !connectContext.isSessionQueryTimeoutOverridden()) {
+                            Pair<String, Integer> tableTimeoutInfo = executor.getTableQueryTimeoutInfo();
+                            if (tableTimeoutInfo != null && tableTimeoutInfo.second != null &&
+                                    tableTimeoutInfo.second > 0 && tableTimeoutInfo.second == timeoutS) {
+                                hint = String.format("please increase the '%s' and retry",
+                                        PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+                            }
+                        }
+                    } catch (Exception e) {
+                        LOG.error("Fail to get hint.", e);
+                        hint = null;
+                    }
+                    if (hint == null) {
+                        hint = String.format("please increase the '%s' session variable and retry",
+                                SessionVariable.QUERY_TIMEOUT);
+                    }
+                    ErrorReport.reportTimeoutException(ErrorCode.ERR_TIMEOUT, "Query", timeoutS, hint);
                 }
                 throw new StarRocksException(ec, errMsg);
             }
@@ -949,8 +994,10 @@ public class DefaultCoordinator extends Coordinator {
         resultBatch = receiver.getNext(status);
         if (!status.ok()) {
             connectContext.setErrorCodeOnce(status.getErrorCodeString());
-            LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
-                    DebugUtil.printId(jobSpec.getQueryId()));
+            if (!status.isSuppressedError()) {
+                LOG.warn("get next fail, need cancel. status {}, query id: {}", status,
+                        DebugUtil.printId(jobSpec.getQueryId()));
+            }
         }
         updateStatus(status, null /* no instance id */);
 
@@ -1029,7 +1076,8 @@ public class DefaultCoordinator extends Coordinator {
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
         jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         if (!isInternalCancel(cancelReason) && StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
-            connectContext.getState().setError(cancelReason.toString());
+            String errorMsg = String.format("[reason=%s] [msg=%s]", cancelReason, queryStatus.getErrorMsg());
+            connectContext.getState().setError(errorMsg);
         }
         if (null != receiver) {
             receiver.cancel();
@@ -1057,16 +1105,27 @@ public class DefaultCoordinator extends Coordinator {
 
     // For phased schedule execution, we cancel the query context. (BE will cancel the relevant fragment internally)
     private void cancelRemoteQueryContext(PPlanFragmentCancelReason cancelReason) {
-        executionDAG.cancelQueryContext(cancelReason);
+        // Get the actual error message to propagate to BEs
+        String errorMessage = null;
+        if (cancelReason == PPlanFragmentCancelReason.INTERNAL_ERROR && !queryStatus.ok()) {
+            errorMessage = queryStatus.getErrorMsg();
+        }
+        executionDAG.cancelQueryContext(cancelReason, errorMessage);
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
         scheduler.cancel();
+        // Get the actual error message to propagate to BEs
+        String errorMessage = null;
+        if (cancelReason == PPlanFragmentCancelReason.INTERNAL_ERROR && !queryStatus.ok()) {
+            errorMessage = queryStatus.getErrorMsg();
+        }
+        
         for (FragmentInstanceExecState execState : executionDAG.getExecutions()) {
             // If the execState fails to be cancelled, and it has been finished or not been deployed,
             // count down the profileDoneSignal of this execState immediately,
             // because the profile report will not arrive anymore for the finished or non-deployed execState.
-            if (!execState.cancelFragmentInstance(cancelReason) &&
+            if (!execState.cancelFragmentInstance(cancelReason, errorMessage) &&
                     (!execState.hasBeenDeployed() || execState.isFinished())) {
                 queryProfile.finishInstance(execState.getInstanceId());
             }
@@ -1169,10 +1228,12 @@ public class DefaultCoordinator extends Coordinator {
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
-            LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
-                    status, DebugUtil.printId(jobSpec.getQueryId()),
-                    DebugUtil.printId(params.getFragment_instance_id()),
-                    params.getBackend_id());
+            if (!status.isSuppressedError()) {
+                LOG.warn("exec state report failed status={}, query_id={}, instance_id={}, backend_id={}",
+                        status, DebugUtil.printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(params.getFragment_instance_id()),
+                        params.getBackend_id());
+            }
             updateStatus(status, params.getFragment_instance_id());
         }
     }

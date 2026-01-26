@@ -1,4 +1,4 @@
--- name: test_mv_rewrite_with_iceberg
+-- name: test_mv_rewrite_with_iceberg @slow
 create external catalog mv_iceberg_${uuid0}
 properties
 (
@@ -37,8 +37,8 @@ REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "mv1")
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "mv1")
 select * from mv1 order by dt;
-SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;
-SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
+SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt ORDER BY dt;
+SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
 
 INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1  VALUES
     (1,"2020-06-15", 1),(2,"2020-06-15", 1);
@@ -46,8 +46,8 @@ INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1  VALUES
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "mv1")
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;", "mv1")
 select * from mv1 order by dt;
-SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;
-SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
+SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt ORDER BY dt;
+SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
 
 drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
 drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;

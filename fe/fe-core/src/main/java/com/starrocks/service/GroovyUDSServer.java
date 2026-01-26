@@ -47,7 +47,7 @@ public class GroovyUDSServer extends Daemon {
             (Config.STARROCKS_HOME_DIR == null ? "/tmp" : Config.STARROCKS_HOME_DIR) + "/groovy_debug.sock";
 
     GroovyUDSServer() {
-        super("GroovyUDSServer");
+        super("groovy-uds-server");
     }
 
     public String getSocketPath() {

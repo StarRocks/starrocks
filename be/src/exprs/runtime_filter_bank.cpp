@@ -38,9 +38,12 @@
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "util/failpoint/fail_point.h"
 #include "util/time.h"
 
 namespace starrocks {
+DEFINE_FAIL_POINT(global_runtime_filter_sync_B);
+
 RuntimeFilter* RuntimeFilterHelper::transmit_to_runtime_empty_filter(ObjectPool* pool, RuntimeFilter* rf) {
     const auto* min_max_filter = rf->get_min_max_filter();
     const auto* membership_filter = rf->get_membership_filter();
@@ -312,8 +315,8 @@ size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcas
     return size;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
-                                                                             uint8_t* data) {
+StatusOr<size_t> RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column,
+                                                                                       bool eq_null, uint8_t* data) {
     size_t offset = 0;
 #define JRF_COPY_FIELD_TO(field)                  \
     memcpy(data + offset, &field, sizeof(field)); \
@@ -329,17 +332,16 @@ size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(con
     JRF_COPY_FIELD_TO(is_const);
 
     uint8_t* cur = data + offset;
-    cur = serde::ColumnArraySerde::serialize(*column, cur);
+    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(*column, cur));
     offset += (cur - (data + offset));
 
     return offset;
 }
 
 // |version|eq_null|num_rows|is_null|is_const|type|column_data|
-int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool,
-                                                                            SkewBroadcastRfMaterial** material,
-                                                                            const uint8_t* data, size_t size,
-                                                                            const PTypeDesc& ptype) {
+StatusOr<int> RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
+        ObjectPool* pool, SkewBroadcastRfMaterial** material, const uint8_t* data, size_t size,
+        const PTypeDesc& ptype) {
     *material = nullptr;
     SkewBroadcastRfMaterial* rf_material = pool->add(new SkewBroadcastRfMaterial());
     size_t offset = 0;
@@ -375,7 +377,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(Obje
     auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
 
     const uint8_t* cur = data + offset;
-    cur = serde::ColumnArraySerde::deserialize(cur, columnPtr.get());
+    ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, columnPtr.get()));
     offset += (cur - (data + offset));
 
     DCHECK(offset == size);
@@ -489,7 +491,7 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
         if (res->is_null(0)) {
             col = ColumnHelper::create_const_null_column(1);
         } else {
-            auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
+            auto data_col = down_cast<NullableColumn*>(res->as_mutable_raw_ptr())->data_column();
             col = ConstColumn::create(std::move(data_col), 1);
         }
     } else {
@@ -538,6 +540,18 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     }
     if (desc.__isset.skew_shuffle_filter_id) {
         _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
+    }
+    if (desc.__isset.is_asc) {
+        _is_asc = desc.is_asc;
+    }
+    if (desc.__isset.is_nulls_first) {
+        _is_nulls_first = desc.is_nulls_first;
+    }
+    if (desc.__isset.limit) {
+        _limit = desc.limit;
+    }
+    if (desc.__isset.filter_type) {
+        _runtime_filter_type = desc.filter_type;
     }
 
     WithLayoutMixin::init(desc);
@@ -590,11 +604,19 @@ Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_
 }
 
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile* p) {
+    _runtime_state = state;
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
     for (auto* partition_by_expr : _partition_by_exprs_contexts) {
         RETURN_IF_ERROR(partition_by_expr->prepare(state));
+    }
+    // Set exchange_hash_function_version from RuntimeState query_options
+    // 0: FNV (default for backward compatibility), 1: XXH3
+    if (state != nullptr && state->query_options().__isset.exchange_hash_function_version) {
+        _exchange_hash_function_version = state->query_options().exchange_hash_function_version;
+    } else {
+        _exchange_hash_function_version = 0; // Default to FNV
     }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
@@ -864,7 +886,7 @@ void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
     }
 }
 
-void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* column,
+void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column* column,
                                                       RuntimeFilterProbeDescriptor* rf_desc,
                                                       RuntimeMembershipFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
@@ -875,11 +897,20 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
         return;
     }
 
+    // Set exchange_hash_function_version from RuntimeState query_options
+    // 0: FNV (default for backward compatibility), 1: XXH3
+    if (_runtime_state != nullptr && _runtime_state->query_options().__isset.exchange_hash_function_version) {
+        eval_context.running_context.exchange_hash_function_version =
+                _runtime_state->query_options().exchange_hash_function_version;
+    } else {
+        eval_context.running_context.exchange_hash_function_version = 0; // Default to FNV
+    }
+
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_partition_index(rf_desc->layout(), {column}, &eval_context.running_context);
     } else {
         // Used to hold generated columns
-        std::vector<ColumnPtr> column_holders;
+        Columns column_holders;
         std::vector<const Column*> partition_by_columns;
         for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
             ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
@@ -1090,7 +1121,12 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
 }
 
 void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
-    auto notify = DeferOp([this]() { _observable.notify_source_observers(); });
+    auto notify = DeferOp([this]() {
+        FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_B, { this->barrier.arrive_B(); });
+        if (_runtime_state && _runtime_state->fragment_prepared()) {
+            _observable.notify_source_observers();
+        }
+    });
     const RuntimeFilter* expected = nullptr;
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {

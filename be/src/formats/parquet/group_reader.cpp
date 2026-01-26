@@ -20,9 +20,11 @@
 #include <memory>
 #include <utility>
 
+#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -30,7 +32,9 @@
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/parquet_pos_reader.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
+#include "formats/parquet/row_source_reader.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gutil/strings/substitute.h"
@@ -115,7 +119,7 @@ Status GroupReader::prepare() {
     }
 
     RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
-    _init_read_chunk();
+    RETURN_IF_ERROR(_init_read_chunk());
 
     if (!_is_group_filtered) {
         _range_iter = _range.new_iterator();
@@ -373,6 +377,16 @@ Status GroupReader::_create_column_readers() {
         for (const auto* slot : *_param.reserved_field_slots) {
             if (slot->col_name() == HdfsScanner::ICEBERG_ROW_ID) {
                 _column_readers.emplace(slot->id(), std::make_unique<IcebergRowIdReader>(_row_group_first_row_id));
+            } else if (slot->col_name() == "_row_source_id") {
+                if (auto opt = get_backend_id(); opt.has_value()) {
+                    _column_readers.emplace(slot->id(), std::make_unique<RowSourceReader>(opt.value()));
+                } else {
+                    return Status::InternalError("get_backend_id failed");
+                }
+            } else if (slot->col_name() == "_scan_range_id") {
+                _column_readers.emplace(slot->id(), std::make_unique<FixedValueColumnReader>(_param.scan_range_id));
+            } else if (slot->col_name() == HdfsScanner::ICEBERG_ROW_POSITION) {
+                _column_readers.emplace(slot->id(), std::make_unique<ParquetPosReader>());
             }
         }
     }
@@ -460,8 +474,6 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
             SlotId slot_id = slot->id();
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {
                 for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-                    DLOG(INFO) << "append reserved field slot conjunct ctx: " << ctx->root()->debug_string()
-                               << ", id: " << slot_id;
                     if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) ==
                         _left_no_dict_filter_conjuncts_by_slot.end()) {
                         _left_no_dict_filter_conjuncts_by_slot.insert({slot_id, std::vector<ExprContext*>{ctx}});
@@ -481,6 +493,7 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
         col_cost.insert({col_idx, flat_size});
         all_cost += flat_size;
     }
+
     _column_read_order_ctx =
             std::make_unique<ColumnReadOrderCtx>(_active_column_indices, all_cost, std::move(col_cost));
 
@@ -549,7 +562,7 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
     *end_offset = end;
 }
 
-void GroupReader::_init_read_chunk() {
+Status GroupReader::_init_read_chunk() {
     std::vector<SlotDescriptor*> read_slots;
     for (const auto& column : _param.read_cols) {
         read_slots.emplace_back(column.slot_desc);
@@ -560,7 +573,8 @@ void GroupReader::_init_read_chunk() {
         }
     }
     size_t chunk_size = _param.chunk_size;
-    _read_chunk = ChunkHelper::new_chunk(read_slots, chunk_size);
+    ASSIGN_OR_RETURN(_read_chunk, ChunkHelper::new_chunk_checked(read_slots, chunk_size));
+    return Status::OK();
 }
 
 void GroupReader::_use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path) {

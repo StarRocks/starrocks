@@ -35,7 +35,9 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
@@ -48,9 +50,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import com.starrocks.thrift.TTabletType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -85,9 +85,9 @@ public class MaterializedViewTest extends StarRocksTestBase {
 
         UtFrameUtils.createMinStarRocksCluster();
 
-        columns.add(new Column("k1", TypeFactory.createType(PrimitiveType.TINYINT), true, null, "", ""));
-        columns.add(new Column("k2", TypeFactory.createType(PrimitiveType.SMALLINT), true, null, "", ""));
-        columns.add(new Column("v1", TypeFactory.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
+        columns.add(new Column("k1", IntegerType.TINYINT, true, null, "", ""));
+        columns.add(new Column("k2", IntegerType.SMALLINT, true, null, "", ""));
+        columns.add(new Column("v1", IntegerType.INT, false, AggregateType.SUM, "", ""));
 
         super.before();
 
@@ -113,17 +113,15 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testInit() {
         MaterializedView mv = new MaterializedView();
         Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv.getType());
-        Assertions.assertEquals(null, mv.getTableProperty());
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv2", columns, KeysType.AGG_KEYS,
                 null, null, null);
         Assertions.assertEquals(100, mv2.getDbId());
         Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv2.getType());
-        Assertions.assertEquals(null, mv2.getTableProperty());
         Assertions.assertEquals("mv2", mv2.getName());
         Assertions.assertEquals(KeysType.AGG_KEYS, mv2.getKeysType());
-        mv2.setBaseIndexId(10003);
-        Assertions.assertEquals(10003, mv2.getBaseIndexId());
+        mv2.setBaseIndexMetaId(10003);
+        Assertions.assertEquals(10003, mv2.getBaseIndexMetaId());
         Assertions.assertFalse(mv2.isPartitioned());
         mv2.setState(OlapTable.OlapTableState.ROLLUP);
         Assertions.assertEquals(OlapTable.OlapTableState.ROLLUP, mv2.getState());
@@ -157,17 +155,17 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testSchema() {
         MaterializedView mv = new MaterializedView(1000, 100, "mv2", columns, KeysType.AGG_KEYS,
                 null, null, null);
-        mv.setBaseIndexId(1L);
+        mv.setBaseIndexMetaId(1L);
         mv.setIndexMeta(1L, "mv_name", columns, 0,
                 111, (short) 2, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
-        Assertions.assertEquals(1, mv.getBaseIndexId());
+        Assertions.assertEquals(1, mv.getBaseIndexMetaId());
         mv.rebuildFullSchema();
-        Assertions.assertEquals("mv_name", mv.getIndexNameById(1L));
+        Assertions.assertEquals("mv_name", mv.getIndexNameByMetaId(1L));
         List<Column> indexColumns = Lists.newArrayList(columns.get(0), columns.get(2));
         mv.setIndexMeta(2L, "index_name", indexColumns, 0,
                 222, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS, null);
         mv.rebuildFullSchema();
-        Assertions.assertEquals("index_name", mv.getIndexNameById(2L));
+        Assertions.assertEquals("index_name", mv.getIndexNameByMetaId(2L));
     }
 
     @Test
@@ -177,8 +175,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
-        partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
 
         MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
@@ -205,8 +201,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         PartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList(columns.get(0)));
         rangePartitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         rangePartitionInfo.setReplicationNum(1, (short) 3);
-        rangePartitionInfo.setIsInMemory(1, false);
-        rangePartitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv_name_2", columns, KeysType.AGG_KEYS,
                 rangePartitionInfo, distributionInfo, refreshScheme);
@@ -234,8 +228,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
-        partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
 
         MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
@@ -260,8 +252,6 @@ public class MaterializedViewTest extends StarRocksTestBase {
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setDataProperty(1, DataProperty.DEFAULT_DATA_PROPERTY);
         partitionInfo.setReplicationNum(1, (short) 3);
-        partitionInfo.setIsInMemory(1, false);
-        partitionInfo.setTabletType(1, TTabletType.TABLET_TYPE_DISK);
         MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
 
         MaterializedView mv = new MaterializedView(1000, 100, "mv_name", columns, KeysType.AGG_KEYS,
@@ -1246,5 +1236,39 @@ public class MaterializedViewTest extends StarRocksTestBase {
                     .getTable(db.getFullName(), "test_mv1"));
             Assertions.assertEquals(mv.getPartitionRefreshStrategy(), MaterializedView.PartitionRefreshStrategy.ADAPTIVE);
         });
+    }
+
+    @Test
+    public void testViewAndBaseTableWithTheSameName() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.base_t2 \n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        starRocksAssert.withDatabase("mv_db").useDatabase("mv_db")
+                .withView("CREATE VIEW mv_db.base_t1 AS " +
+                        "SELECT test.base_t1.k1 AS k1, test.base_t1.k2 AS k2 " +
+                        "FROM test.base_t1 " +
+                        "JOIN test.base_t2 ON test.base_t1.k1 = test.base_t2.k1;");
+
+        starRocksAssert.useDatabase("mv_db")
+                .withMaterializedView("CREATE MATERIALIZED VIEW mv_db.mv_cross_db_test \n" +
+                        "PARTITION BY (k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 1\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
+                        "AS SELECT k1, k2 FROM mv_db.base_t1;");
+
+        Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("mv_db");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(mvDb.getFullName(), "mv_cross_db_test"));
+        Assertions.assertNotNull(mv);
+        Assertions.assertTrue(mv.isActive());
+        Assertions.assertEquals(1, mv.getPartitionExprMaps().size());
     }
 }

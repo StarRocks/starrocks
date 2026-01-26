@@ -23,7 +23,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
@@ -195,7 +195,7 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Integer size = jdbcMetadata.listPartitionColumns("test", "tbl1",
-                    Arrays.asList(new Column("d", Type.VARCHAR))).size();
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR))).size();
             Assertions.assertTrue(size > 0);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
@@ -214,7 +214,7 @@ public class MysqlSchemaResolverTest {
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Integer size = jdbcMetadata.listPartitionColumns("test", "tbl1",
-                    Arrays.asList(new Column("d", Type.VARCHAR))).size();
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR))).size();
             Assertions.assertTrue(size == 0);
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
@@ -225,8 +225,8 @@ public class MysqlSchemaResolverTest {
     public void testGetPartitions() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assertions.assertTrue(size > 0);
         } catch (Exception e) {
@@ -239,8 +239,8 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCCacheTestUtil.openCacheEnable(connectContext);
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assertions.assertTrue(size > 0);
             int sizeWithCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
@@ -258,7 +258,7 @@ public class MysqlSchemaResolverTest {
     @Test
     public void testGetPartitions_NonPartitioned() throws DdlException {
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-        List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+        List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
         JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                 "test", "catalog", properties);
         int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
@@ -278,8 +278,8 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assertions.assertTrue(size == 0);
         } catch (Exception e) {
@@ -298,8 +298,8 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", VarcharType.VARCHAR)),
+                    Arrays.asList(new Column("d", VarcharType.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("tbl1")).size();
             Assertions.assertTrue(size == 1);
 
@@ -325,7 +325,7 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
             JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                     "test", "catalog", properties);
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
@@ -351,13 +351,74 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            List<Column> columns = Arrays.asList(new Column("d", VarcharType.VARCHAR));
             JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
                     "test", "catalog", properties);
             jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             // different mysql source may have different partition information, so we can ignore partition information parse
         } catch (Exception e) {
             Assertions.fail();
+        }
+    }
+
+    @Test
+    public void testQueryTimeoutIsSet() throws SQLException {
+        MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+        int expectedTimeout = resolver.getQueryTimeoutSeconds();
+        new Expectations() {
+            {
+                preparedStatement.setQueryTimeout(expectedTimeout);
+                minTimes = 1;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            // Assert that setQueryTimeout was called and the operation completed successfully
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertFalse(partitionNames.isEmpty());
+        } catch (Exception e) {
+            Assertions.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testQueryTimeoutMinimumValueProtection() throws SQLException {
+        long originalTimeout = com.starrocks.common.Config.jdbc_query_timeout_ms;
+        try {
+            MysqlSchemaResolver resolver = new MysqlSchemaResolver();
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+            // Test case 1: sub-second timeout (100ms) - should be rounded up to 1 second
+            com.starrocks.common.Config.jdbc_query_timeout_ms = 100;
+            int expectedTimeout1 = resolver.getQueryTimeoutSeconds();
+            new Expectations() {
+                {
+                    preparedStatement.setQueryTimeout(expectedTimeout1);
+                    minTimes = 1;
+                }
+            };
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertEquals(1, expectedTimeout1, "100ms should round up to 1 second");
+
+            // Test case 2: timeout = 0 means no limit (should remain 0, not become 1)
+            com.starrocks.common.Config.jdbc_query_timeout_ms = 0;
+            int expectedTimeout2 = resolver.getQueryTimeoutSeconds();
+            new Expectations() {
+                {
+                    preparedStatement.setQueryTimeout(expectedTimeout2);
+                    minTimes = 1;
+                }
+            };
+            partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            Assertions.assertNotNull(partitionNames);
+            Assertions.assertEquals(0, expectedTimeout2, "0ms should remain 0 (no limit)");
+        } finally {
+            com.starrocks.common.Config.jdbc_query_timeout_ms = originalTimeout;
         }
     }
 }

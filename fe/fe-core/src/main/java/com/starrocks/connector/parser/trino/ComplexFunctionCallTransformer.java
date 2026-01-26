@@ -31,7 +31,8 @@ import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
-import com.starrocks.type.Type;
+import com.starrocks.type.AnyMapType;
+import com.starrocks.type.VarcharType;
 
 import java.util.Collections;
 
@@ -46,12 +47,12 @@ public class ComplexFunctionCallTransformer {
                         unit.getStringValue()));
             }
         } else if (functionName.equalsIgnoreCase("json_format")) {
-            return new CastExpr(Type.VARCHAR, args[0]);
+            return new CastExpr(VarcharType.VARCHAR, args[0]);
         } else if (functionName.equalsIgnoreCase("json_extract_scalar")) {
-            return new CastExpr(Type.VARCHAR, new FunctionCallExpr("json_query",
+            return new CastExpr(VarcharType.VARCHAR, new FunctionCallExpr("json_query",
                     ImmutableList.of(args[0], args[1])));
         } else if (functionName.equalsIgnoreCase("map") && args.length == 0) {
-            return new MapExpr(Type.ANY_MAP, Collections.emptyList());
+            return new MapExpr(AnyMapType.ANY_MAP, Collections.emptyList());
         } else if (functionName.equalsIgnoreCase("json_array_get")) {
             if (args.length != 2) {
                 throw new RuntimeException("json_array_get function must have 2 arguments");
@@ -122,6 +123,14 @@ public class ComplexFunctionCallTransformer {
             // "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" -> "yyyy-MM-ddTHH:mm:ss.SSS"
             formatString = formatString.replace("'", "").replace("Z", "");
             return new FunctionCallExpr("str_to_jodatime", java.util.List.of(args[0], new StringLiteral(formatString)));
+        } else if (functionName.equalsIgnoreCase("map_agg")) {
+            // map_agg(key, value) -> map_from_arrays(array_agg(key), array_agg(value))
+            if (args.length != 2) {
+                throw new SemanticException("map_agg function must have 2 argument");
+            }
+            FunctionCallExpr key = new FunctionCallExpr("array_agg", ImmutableList.of(args[0]));
+            FunctionCallExpr value = new FunctionCallExpr("array_agg", ImmutableList.of(args[1]));
+            return new FunctionCallExpr("map_from_arrays", ImmutableList.of(key, value));
         }
         return null;
     }

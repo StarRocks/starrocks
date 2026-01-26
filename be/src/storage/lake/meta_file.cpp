@@ -36,6 +36,8 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
     cache_key_pb.mutable_delvec_page()->CopyFrom(page);
+    // Do not include crc32c_gen_version in cache key
+    cache_key_pb.mutable_delvec_page()->clear_crc32c_gen_version();
     return cache_key_pb.SerializeAsString();
 }
 
@@ -98,7 +100,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Put this `.cols` files into orphan files
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
-            if (dcg_ver.shared_files_size() > 0) {
+            if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
@@ -287,6 +289,22 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
     }
 }
 
+void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compaction) {
+    // Mark lcrm file as orphan for garbage collection
+    // WHY: After compaction publish completes, the mapper file is no longer needed.
+    // However, we cannot delete it immediately because:
+    // 1. It's on remote storage (S3/HDFS) - deletes are slower and may fail
+    // 2. Other nodes might still be reading it during parallel pk execution
+    // 3. Transaction rollback scenarios may need it
+    //
+    // STRATEGY: Add to orphan_files list so it gets cleaned up asynchronously by the
+    // tablet metadata GC process, which runs periodically and handles failures gracefully.
+    // This approach is safe, non-blocking, and handles distributed cleanup correctly.
+    if (op_compaction.has_lcrm_file()) {
+        _tablet_meta->add_orphan_files()->CopyFrom(op_compaction.lcrm_file());
+    }
+}
+
 Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
                                            uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
     // delete input rowsets
@@ -360,6 +378,9 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
 
     // remove compacted sst
     remove_compacted_sst(op_compaction);
+
+    // remove lcrm file
+    remove_lcrm_file(op_compaction);
 
     // add output rowset
     bool has_output_rowset = false;
@@ -492,6 +513,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_offset(iter->second.offset());
             each_delvec.second.set_size(iter->second.size());
             each_delvec.second.set_crc32c(iter->second.crc32c());
+            each_delvec.second.set_crc32c_gen_version(version);
             // record from cache key to segment id, so we can fill up cache later
             _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
@@ -501,6 +523,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     // 2. insert new delvec to meta
     for (auto&& each_delvec : _delvecs) {
         each_delvec.second.set_version(version);
+        each_delvec.second.set_crc32c_gen_version(version);
         (*_tablet_meta->mutable_delvec_meta()->mutable_delvecs())[each_delvec.first] = each_delvec.second;
         // record from cache key to segment id, so we can fill up cache later
         _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
@@ -656,17 +679,26 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
         ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
     }
     RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
-    if (delvec_page.has_crc32c()) {
+    if (delvec_page.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
         // check crc32c
         uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());
         if (crc32c != crc32c::Unmask(delvec_page.crc32c())) {
+            // NOTICE : In some ABA upgrade/downgrade scenarios, misjudgments may occur.
+            // For example, version A includes the code for generating and verifying the CRC32 of delete vectors,
+            // while version B does not yet support it.
+            // Consider a situation where a delete vector and its corresponding CRC32 are correctly generated in version A.
+            // After downgrading to version B, the delete vector is updated, but since version B does not support
+            // CRC32-related logic, the CRC32 is not updated. Later, when upgrading back to version A,
+            // the CRC32 verification fails.
             LOG(ERROR) << fmt::format(
                     "delvec crc32c mismatch, tabletid {}, delvecfile {}, offset {}, size {}, expect crc32c {}, actual "
                     "crc32c {}",
                     metadata.id(), delvec_name, delvec_page.offset(), delvec_page.size(),
                     crc32c::Unmask(delvec_page.crc32c()), crc32c);
-            return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
-                                                  crc32c::Unmask(delvec_page.crc32c()), crc32c));
+            if (config::enable_strict_delvec_crc_check) {
+                return Status::Corruption(fmt::format("delvec crc32c mismatch. expect crc32c {}, actual {}",
+                                                      crc32c::Unmask(delvec_page.crc32c()), crc32c));
+            }
         }
     }
     // parse delvec
@@ -723,6 +755,10 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
         // Merge shared_segments
         for (int i = 0; i < rowset_pb.shared_segments_size(); i++) {
             _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
+        }
+        // Merge segment metadatas
+        for (int i = 0; i < rowset_pb.segment_metas_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_metas()->CopyFrom(rowset_pb.segment_metas(i));
         }
     }
 

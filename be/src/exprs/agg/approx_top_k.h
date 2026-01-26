@@ -115,15 +115,15 @@ struct ApproxTopKState {
 
     void get_values(Column* dst, size_t start, size_t end) const {
         auto* array_column = down_cast<ArrayColumn*>(dst);
-        auto& offset_column = array_column->offsets_column();
-        auto& elements_column = array_column->elements_column();
+        auto* offset_column = array_column->offsets_column_raw_ptr();
 
         // Array's fields must be nullable
-        auto* nullable_struct_column = down_cast<NullableColumn*>(elements_column.get());
-        auto* struct_column = down_cast<StructColumn*>(nullable_struct_column->data_column().get());
+        auto* nullable_struct_column = down_cast<NullableColumn*>(array_column->elements_column_raw_ptr());
+        auto* nullable_struct_null_col = nullable_struct_column->null_column_raw_ptr();
+        auto* struct_column = down_cast<StructColumn*>(nullable_struct_column->data_column_raw_ptr());
         // Struct's fields must be nullable
-        auto* value_column = down_cast<NullableColumn*>(struct_column->fields_column()[0].get());
-        auto* order_column = down_cast<NullableColumn*>(struct_column->fields_column()[1].get());
+        auto* value_column = down_cast<NullableColumn*>(struct_column->field_column_raw_ptr(0));
+        auto* order_column = down_cast<NullableColumn*>(struct_column->field_column_raw_ptr(1));
 
         for (size_t row = start; row < end; row++) {
             bool has_null = null_counter.count > 0;
@@ -136,12 +136,12 @@ struct ApproxTopKState {
                     if (counter_i >= 0 && (is_null_processed || counters[counter_i].count > null_counter.count)) {
                         value_column->append_datum(counters[counter_i].value);
                         order_column->append_datum(counters[counter_i].count);
-                        nullable_struct_column->null_column()->append(0);
+                        nullable_struct_null_col->append(0);
                         counter_i--;
                     } else {
                         value_column->append_nulls(1);
                         order_column->append_datum(null_counter.count);
-                        nullable_struct_column->null_column()->append(0);
+                        nullable_struct_null_col->append(0);
                         is_null_processed = true;
                     }
                 }
@@ -154,7 +154,7 @@ struct ApproxTopKState {
                 for (int32_t i = unused_idx - 1; i >= (unused_idx - cnt); i--) {
                     value_column->append_datum(counters[i].value);
                     order_column->append_datum(counters[i].count);
-                    nullable_struct_column->null_column()->append(0);
+                    nullable_struct_null_col->append(0);
                 }
 
                 // array_offsets
@@ -338,10 +338,10 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const auto kv = get_k_and_counter_num(ctx);
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
 
         if (src[0]->is_nullable()) {
             auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());

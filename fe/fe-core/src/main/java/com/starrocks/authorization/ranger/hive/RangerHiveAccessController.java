@@ -19,9 +19,9 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.TableName;
 
 import java.util.List;
 import java.util.Locale;

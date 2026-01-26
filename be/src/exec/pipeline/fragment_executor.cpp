@@ -24,19 +24,15 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
-#include "exec/multi_olap_table_sink.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/result_sink_operator.h"
-#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
+#include "exec/pipeline/sink/result_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/workgroup/work_group.h"
@@ -263,6 +259,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
+    const int arrow_flight_sql_version = request.common().__isset.arrow_flight_sql_version
+                                                 ? request.common().arrow_flight_sql_version
+                                                 : TArrowFlightSQLVersion::type::V0;
+    runtime_state->set_arrow_flight_sql_version(arrow_flight_sql_version);
 
     // RuntimeFilterWorker::open_query is idempotent
     const TRuntimeFilterParams* runtime_filter_params = nullptr;
@@ -835,6 +835,36 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     return Status::OK();
 }
 
+Status FragmentExecutor::prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request) {
+    bool prepare_success = false;
+
+    UnifiedExecPlanFragmentParams request(common_request, common_request);
+    RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
+
+    // make sure query context can be released
+    // if _prepare_query_ctx return error, query context doesn't exist
+    // so it's safe to put this DeferOp below _prepare_query_ctx
+    DeferOp defer([&prepare_success, query_ctx = _query_ctx] {
+        if (!prepare_success) {
+            query_ctx->count_down_fragments();
+        }
+    });
+
+    // Set up desc tbl
+    DescriptorTbl* desc_tbl = nullptr;
+    const auto& t_desc_tbl = request.common().desc_tbl;
+
+    DCHECK(t_desc_tbl.__isset.is_cached && !t_desc_tbl.is_cached);
+    // only data lake table need runtime state, and we baned the plan with dla using single node parallel prepare
+    // so it's safe to pass nullptr here
+    RETURN_IF_ERROR(DescriptorTbl::create(nullptr, _query_ctx->object_pool(), t_desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
+    _query_ctx->set_desc_tbl(desc_tbl);
+
+    prepare_success = true;
+    return Status::OK();
+}
+
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
     DCHECK(common_request.__isset.desc_tbl);
@@ -934,6 +964,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     _query_ctx->mark_prepared();
+
     prepare_success = true;
 
     return Status::OK();
@@ -946,7 +977,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
             _fail_cleanup(true);
         }
     });
-
     auto* profile = _fragment_ctx->runtime_state()->runtime_profile();
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
     auto* prepare_driver_timer =
@@ -963,6 +993,9 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = _wg->executors()->driver_executor();
     RETURN_IF_ERROR(_fragment_ctx->submit_active_drivers(executor));
+
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_fragment_prepared(true);
 
     return Status::OK();
 }

@@ -129,7 +129,7 @@ public class DataCacheStmtAnalyzerTest {
             DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(
                     "cache select * from hive0.datacache_db.multi_partition_table");
             Assertions.assertEquals("black_hole_catalog.black_hole_db.black_hole_table",
-                    stmt.getInsertStmt().getTableName().toString());
+                    com.starrocks.catalog.TableName.fromTableRef(stmt.getInsertStmt().getTableRef()).toString());
         }
         {
             DataCacheSelectStatement stmt = (DataCacheSelectStatement) analyzeSuccess(

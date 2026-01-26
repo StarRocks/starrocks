@@ -38,7 +38,7 @@ static unique_ptr<Schema> create_schema(const vector<pair<LogicalType, bool>>& t
         fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
         fields.emplace_back(fd);
     }
-    return unique_ptr<Schema>(new Schema(std::move(fields), PRIMARY_KEYS, {}));
+    return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, std::vector<ColumnId>{});
 }
 
 void common_encode_decode(RowStoreEncoderPtr& row_encoder, std::unique_ptr<Schema>& schema,
@@ -56,7 +56,7 @@ void common_encode_decode(RowStoreEncoderPtr& row_encoder, std::unique_ptr<Schem
                                             {TYPE_PERCENTILE, false},
                                             {TYPE_OBJECT, false}});
     std::vector<ColumnId> value_column_ids{1, 2, 3, 4, 5, 6};
-    std::vector<MutableColumnPtr> read_value_columns(value_column_ids.size());
+    MutableColumns read_value_columns(value_column_ids.size());
     read_value_columns.reserve(value_column_ids.size());
     for (uint32_t i = 0; i < value_column_ids.size(); ++i) {
         auto column = ChunkHelper::column_from_field(*read_value_schema->field(i).get());
@@ -114,22 +114,22 @@ TEST(RowStoreEncoderTest, testEncodeFullRowColumn) {
     // fill chunk
     const int n = 2;
     auto pchunk = ChunkHelper::new_chunk(*schema, n);
-    auto obj_column = down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6].get());
+    auto obj_column = down_cast<ObjectColumn<BitmapValue>*>(pchunk->mutable_columns()[6].get());
     size_t ss = 0;
     for (int i = 0; i < n; i++) {
         Datum tmp;
         string tmpstr = StringPrintf("slice000%d", i * 17);
         tmp.set_int32(i * 2343);
-        pchunk->columns()[0]->append_datum(tmp);
+        pchunk->mutable_columns()[0]->append_datum(tmp);
         tmp.set_slice(tmpstr);
-        pchunk->columns()[1]->append_datum(tmp);
+        pchunk->mutable_columns()[1]->append_datum(tmp);
         tmp.set_int32(i * 2343);
-        pchunk->columns()[2]->append_datum(tmp);
+        pchunk->mutable_columns()[2]->append_datum(tmp);
         tmp.set_uint8(i % 2);
-        pchunk->columns()[3]->append_datum(tmp);
-        down_cast<ObjectColumn<HyperLogLog>*>(pchunk->columns()[4].get())->append(HyperLogLog(1));
-        down_cast<ObjectColumn<PercentileValue>*>(pchunk->columns()[5].get())->append(PercentileValue());
-        down_cast<ObjectColumn<BitmapValue>*>(pchunk->columns()[6].get())->append(BitmapValue());
+        pchunk->mutable_columns()[3]->append_datum(tmp);
+        down_cast<ObjectColumn<HyperLogLog>*>(pchunk->mutable_columns()[4].get())->append(HyperLogLog(1));
+        down_cast<ObjectColumn<PercentileValue>*>(pchunk->mutable_columns()[5].get())->append(PercentileValue());
+        down_cast<ObjectColumn<BitmapValue>*>(pchunk->mutable_columns()[6].get())->append(BitmapValue());
         ss += obj_column->byte_size(i);
     }
     EXPECT_EQ(ss, obj_column->byte_size(0, n));

@@ -16,21 +16,34 @@
 
 #include <runtime/types.h>
 
+#ifdef __x86_64__
+#include <immintrin.h>
+#endif
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
+#endif
+
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_view/column_view_helper.h"
-#include "column/json_column.h"
+#include "column/column_visitor_adapter.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "runtime/decimalv2_value.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/decimal12.h"
+#include "storage/uint24.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
+#include "types/timestamp_value.h"
 #include "util/date_func.h"
-#include "util/percentile_value.h"
+#include "util/int96.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -38,7 +51,7 @@ Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
         auto nulls = nullable_column->null_column_data().data();
-        auto& sel_vec = (down_cast<UInt8Column*>(nullable_column->mutable_data_column()))->get_data();
+        auto& sel_vec = (down_cast<UInt8Column*>(nullable_column->data_column_raw_ptr()))->get_data();
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
         auto selected = sel_vec.data();
         size_t num_rows = sel_vec.size();
@@ -142,7 +155,7 @@ size_t ColumnHelper::count_nulls(const starrocks::ColumnPtr& col) {
         return col->size();
     }
 
-    const Buffer<uint8_t>& null_data = as_raw_column<NullableColumn>(col)->null_column_data();
+    const ImmutableNullData null_data = as_raw_column<NullableColumn>(col)->null_column_data();
     // @Warn: be careful, should rewrite the code if NullColumn type changed!
     return SIMD::count_nonzero(null_data);
 }
@@ -159,8 +172,10 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
 
     if (col->is_nullable()) {
         auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-        const Buffer<uint8_t>& null_data = tmp->null_column_data();
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
+        const ImmutableNullData null_data = static_cast<const NullableColumn*>(tmp)->null_column_data();
+        const ImmutableNullData bool_data =
+                ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(static_cast<const NullableColumn*>(tmp)->data_column())
+                        ->immutable_data();
 
         size_t null_count = SIMD::count_nonzero(null_data);
         size_t true_count = SIMD::count_nonzero(bool_data);
@@ -174,7 +189,7 @@ size_t ColumnHelper::count_true_with_notnull(const starrocks::ColumnPtr& col) {
             return null_count;
         }
     } else {
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
+        const ImmutableNullData bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->immutable_data();
         return SIMD::count_nonzero(bool_data);
     }
 }
@@ -191,8 +206,10 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
 
     if (col->is_nullable()) {
         auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-        const Buffer<uint8_t>& null_data = tmp->null_column_data();
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(tmp->data_column())->get_data();
+        const ImmutableNullData null_data = static_cast<const NullableColumn*>(tmp)->null_column_data();
+        const ImmutableNullData bool_data =
+                ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(static_cast<const NullableColumn*>(tmp)->data_column())
+                        ->get_data();
 
         size_t null_count = SIMD::count_nonzero(null_data);
         size_t false_count = SIMD::count_zero(bool_data);
@@ -206,7 +223,7 @@ size_t ColumnHelper::count_false_with_notnull(const starrocks::ColumnPtr& col) {
             return null_count;
         }
     } else {
-        const Buffer<uint8_t>& bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
+        const ImmutableNullData bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(col)->get_data();
         return SIMD::count_zero(bool_data);
     }
 }
@@ -231,19 +248,23 @@ public:
     }
 
     Status do_visit(NullableColumn* column) {
-        RETURN_IF_ERROR(column->data_column()->accept_mutable(this));
+        auto* data_col = column->data_column_raw_ptr();
+        RETURN_IF_ERROR(data_col->accept_mutable(this));
         column->update_has_null();
         return Status::OK();
     }
 
     Status do_visit(ArrayColumn* column) {
-        RETURN_IF_ERROR(column->elements_column()->accept_mutable(this));
+        auto* elements_col = column->elements_column_raw_ptr();
+        RETURN_IF_ERROR(elements_col->accept_mutable(this));
         return Status::OK();
     }
 
     Status do_visit(MapColumn* column) {
-        RETURN_IF_ERROR(column->keys_column()->accept_mutable(this));
-        RETURN_IF_ERROR(column->values_column()->accept_mutable(this));
+        auto* keys_col = column->keys_column_raw_ptr();
+        auto* values_col = column->values_column_raw_ptr();
+        RETURN_IF_ERROR(keys_col->accept_mutable(this));
+        RETURN_IF_ERROR(values_col->accept_mutable(this));
         return Status::OK();
     }
 
@@ -320,9 +341,9 @@ int64_t ColumnHelper::find_first_not_equal(const Column* column, int64_t target,
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-ColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
-                                          const bool is_nullable) {
-    MutableColumnPtr new_column = (std::move(*old_col)).mutate();
+MutableColumnPtr ColumnHelper::align_return_type(MutableColumnPtr&& old_col, const TypeDescriptor& type_desc,
+                                                 size_t num_rows, bool is_nullable) {
+    MutableColumnPtr new_column;
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
         new_column->append_nulls(num_rows);
@@ -333,11 +354,18 @@ ColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescrip
         auto* const_column = down_cast<const ConstColumn*>(old_col.get());
         new_column->append(*const_column->data_column(), 0, 1);
         new_column->assign(num_rows, 0);
+    } else {
+        new_column = std::move(old_col);
     }
     if (is_nullable && !new_column->is_nullable()) {
         new_column = NullableColumn::create(std::move(new_column), NullColumn::create(new_column->size(), 0));
     }
     return new_column;
+}
+
+MutableColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                                 bool is_nullable) {
+    return align_return_type(Column::mutate(std::move(old_col)), type_desc, num_rows, is_nullable);
 }
 
 MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
@@ -401,7 +429,7 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
     } else if (type_desc.type == LogicalType::TYPE_MAP) {
-        MutableColumnPtr offsets = UInt32Column::create(size);
+        auto offsets = UInt32Column::create(size);
         MutableColumnPtr keys = nullptr;
         MutableColumnPtr values = nullptr;
         if (type_desc.children[0].is_unknown_type()) {
@@ -486,9 +514,9 @@ size_t ColumnHelper::compute_bytes_size(ColumnsConstIterator const& begin, Colum
         }
         auto binary = ColumnHelper::get_binary_column(col.get());
         if (col->is_constant()) {
-            n += binary->get_bytes().size() * row_num;
+            n += binary->get_immutable_bytes().size() * row_num;
         } else {
-            n += binary->get_bytes().size();
+            n += binary->get_immutable_bytes().size();
         }
     }
     return n;
@@ -516,7 +544,7 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
         auto* nullable_column = down_cast<const NullableColumn*>(column.get());
         auto* data_column = down_cast<const DoubleColumn*>(nullable_column->data_column().get());
         res = NullableColumn::create(get_binary_column(data_column, column->size()),
-                                     nullable_column->null_column()->as_mutable_ptr());
+                                     std::move(nullable_column->null_column()));
     } else if (column->is_constant()) {
         auto* const_column = down_cast<const ConstColumn*>(column.get());
         std::string time_str = time_str_from_double(const_column->get(0).get_double());
@@ -529,6 +557,35 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
     return res;
 }
 
+MutableColumns ColumnHelper::to_mutable_columns(const Columns& columns) {
+    MutableColumns mutable_columns;
+    mutable_columns.reserve(columns.size());
+    for (auto& column : columns) {
+        mutable_columns.emplace_back(std::move(*column).mutate());
+    }
+    return mutable_columns;
+}
+
+MutableColumns ColumnHelper::to_mutable_columns(Columns&& columns) {
+    MutableColumns mutable_columns;
+    mutable_columns.reserve(columns.size());
+    for (auto& column : columns) {
+        mutable_columns.emplace_back(Column::mutate(std::move(column)));
+    }
+    columns.clear();
+    return mutable_columns;
+}
+
+Columns ColumnHelper::to_columns(MutableColumns&& columns) {
+    Columns immutable_columns;
+    immutable_columns.reserve(columns.size());
+    for (auto& column : columns) {
+        immutable_columns.emplace_back(std::move(column));
+    }
+    columns.clear();
+    return immutable_columns;
+}
+
 std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_array_column(const ColumnPtr& column) {
     DCHECK(!column->is_nullable() && !column->is_constant());
     DCHECK(column->is_array());
@@ -538,6 +595,117 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     auto null_column = down_cast<const NullableColumn*>(array_column->elements_column().get())->null_column();
     auto offsets_column = array_column->offsets_column();
     return {offsets_column, elements_column, null_column};
+}
+
+template <typename T, bool avx512f>
+size_t ColumnHelper::t_filter_range(const Filter& filter, T* dst_data, const T* src_data, size_t from, size_t to) {
+    auto start_offset = from;
+    auto result_offset = from;
+
+#ifdef __AVX2__
+    const uint8_t* f_data = filter.data();
+    constexpr size_t data_type_size = sizeof(T);
+
+    constexpr size_t kBatchNums = 256 / (8 * sizeof(uint8_t));
+    const __m256i all0 = _mm256_setzero_si256();
+
+    // batch nums is kBatchNums
+    // we will process filter at start_offset, start_offset + 1, ..., start_offset + kBatchNums - 1 in one batch
+    while (start_offset + kBatchNums <= to) {
+        __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + start_offset));
+        uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
+
+        if (mask == 0) {
+            // all no hit, pass
+        } else if (mask == 0xffffffff) {
+            // all hit, copy all
+            memmove(dst_data + result_offset, src_data + start_offset, kBatchNums * data_type_size);
+            result_offset += kBatchNums;
+
+        } else {
+            // clang-format off
+#define AVX512_COPY(SHIFT, MASK, WIDTH)                                             \
+    {                                                                               \
+        auto m = (mask >> SHIFT) & MASK;                                            \
+        if (m) {                                                                    \
+            __m512i dst;                                                            \
+            __m512i src = _mm512_loadu_epi##WIDTH(src_data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                     \
+            _mm512_storeu_epi##WIDTH(dst_data + result_offset, dst);                \
+            result_offset += __builtin_popcount(m);                                 \
+        }                                                                           \
+    }
+
+// In theory we should put k1 in clobbers.
+// But since we compile code with AVX2, k1 register is not used.
+#define AVX512_ASM_COPY(SHIFT, MASK, WIDTH, WIDTHX)               \
+    {                                                             \
+        auto m = (mask >> SHIFT) & MASK;                          \
+        if (m) {                                                  \
+            const T* src = src_data + start_offset + SHIFT;             \
+            T* dst = dst_data + result_offset;                    \
+            __asm__ volatile("vmovdqu" #WIDTH                     \
+                             " (%[s]), %%zmm1\n"                  \
+                             "kmovw %[mask], %%k1\n"              \
+                             "vpcompress" #WIDTHX                 \
+                             " %%zmm1, %%zmm0%{%%k1%}%{z%}\n"     \
+                             "vmovdqu" #WIDTH " %%zmm0, (%[d])\n" \
+                             : [s] "+r"(src), [d] "+r"(dst)       \
+                             : [mask] "r"(m)                      \
+                             : "zmm0", "zmm1", "memory");         \
+            result_offset += __builtin_popcount(m);               \
+        }                                                         \
+    }
+
+            if constexpr (avx512f && sizeof(T) == 4) {
+                AVX512_ASM_COPY(0, 0xffff, 32, d);
+                AVX512_ASM_COPY(16, 0xffff, 32, d);
+            } else {
+                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                for (auto idx : bitmask) {
+                    *(dst_data + result_offset++) = *(src_data + start_offset + idx);
+                }
+            }
+        }
+
+        start_offset += kBatchNums;
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint8_t* filter_data = filter.data() + from;
+    constexpr size_t data_type_size = sizeof(T);
+
+    constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
+    while (start_offset + kBatchNums < to) {
+        const uint8x16_t vfilter = vld1q_u8(filter_data);
+        // nibble_mask[i] != 0 ? 0xFF : 0x00
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vfilter, vfilter));
+        if (nibble_mask == 0) {
+            // skip
+        } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+            memmove(dst_data + result_offset, src_data + start_offset, kBatchNums * data_type_size);
+            result_offset += kBatchNums;
+        } else {
+            // Make each nibble only keep the highest bit 1, that is 0b1111 -> 0b1000.
+            nibble_mask &= 0x8888'8888'8888'8888ull;
+            for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                uint32_t index = __builtin_ctzll(nibble_mask) >> 2;
+                *(dst_data + result_offset++) = *(src_data + start_offset + index);
+            }
+        }
+
+        start_offset += kBatchNums;
+        filter_data += kBatchNums;
+    }
+#endif
+    // clang-format on
+    for (auto i = start_offset; i < to; ++i) {
+        if (filter[i]) {
+            *(dst_data + result_offset) = *(src_data + i);
+            result_offset++;
+        }
+    }
+
+    return result_offset;
 }
 
 template <class Ptr>
@@ -608,4 +776,30 @@ ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_row
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
 template struct ChunkSliceTemplate<SegmentedChunkPtr>;
+
+// Explicit instantiation for t_filter_range
+#define INSTANTIATE_T_FILTER_RANGE(T)                                                                   \
+    template size_t ColumnHelper::t_filter_range<T, true>(const Filter&, T*, const T*, size_t, size_t); \
+    template size_t ColumnHelper::t_filter_range<T, false>(const Filter&, T*, const T*, size_t, size_t);
+
+INSTANTIATE_T_FILTER_RANGE(int8_t)
+INSTANTIATE_T_FILTER_RANGE(uint8_t)
+INSTANTIATE_T_FILTER_RANGE(int16_t)
+INSTANTIATE_T_FILTER_RANGE(uint16_t)
+INSTANTIATE_T_FILTER_RANGE(int32_t)
+INSTANTIATE_T_FILTER_RANGE(uint32_t)
+INSTANTIATE_T_FILTER_RANGE(int64_t)
+INSTANTIATE_T_FILTER_RANGE(uint64_t)
+INSTANTIATE_T_FILTER_RANGE(int128_t)
+INSTANTIATE_T_FILTER_RANGE(int256_t)
+INSTANTIATE_T_FILTER_RANGE(float)
+INSTANTIATE_T_FILTER_RANGE(double)
+INSTANTIATE_T_FILTER_RANGE(uint24_t)
+INSTANTIATE_T_FILTER_RANGE(int96_t)
+INSTANTIATE_T_FILTER_RANGE(decimal12_t)
+INSTANTIATE_T_FILTER_RANGE(DateValue)
+INSTANTIATE_T_FILTER_RANGE(DecimalV2Value)
+INSTANTIATE_T_FILTER_RANGE(TimestampValue)
+
+#undef INSTANTIATE_T_FILTER_RANGE
 } // namespace starrocks

@@ -69,11 +69,14 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
 
     public FullVacuumDaemon() {
         // Check every minute if we should run a full vacuum
-        super("FullVacuumDaemon", 1000 * 60);
+        super("full-vacuum-daemon", 1000 * 60);
     }
 
     @Override
     protected void runAfterCatalogReady() {
+        if (!Config.lake_enable_fullvacuum) {
+            return;
+        }
         if (FeConstants.runningUnitTest) {
             return;
         }
@@ -149,7 +152,7 @@ public class FullVacuumDaemon extends FrontendDaemon implements Writable {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 tablets.addAll(index.getTablets());
             }
             visibleVersion = partition.getVisibleVersion();

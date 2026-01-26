@@ -28,7 +28,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.VarcharType;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -87,10 +88,10 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         super(
                 PROCEDURE_NAME,
                 List.of(
-                        new NamedArgument(SOURCE_TABLE, Type.VARCHAR, false),
-                        new NamedArgument(LOCATION, Type.VARCHAR, false),
-                        new NamedArgument(FILE_FORMAT, Type.VARCHAR, false),
-                        new NamedArgument(RECURSIVE, Type.BOOLEAN, false)
+                        new NamedArgument(SOURCE_TABLE, VarcharType.VARCHAR, false),
+                        new NamedArgument(LOCATION, VarcharType.VARCHAR, false),
+                        new NamedArgument(FILE_FORMAT, VarcharType.VARCHAR, false),
+                        new NamedArgument(RECURSIVE, BooleanType.BOOLEAN, false)
                 ),
                 IcebergTableOperation.ADD_FILES
         );
@@ -541,7 +542,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                         getRemoteFiles(sourceHiveTable, params);
                 partitionRemoteFiles.add(Pair.create(params.getPartitionKeys() == null ? "" :
                                 params.getPartitionKeys().stream().map(partitionKey ->
-                                        PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
+                                                PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey)).
                                         collect(Collectors.joining()),
                         remoteFiles));
             }

@@ -71,6 +71,7 @@ import com.starrocks.persist.TableRefPersist;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -92,7 +93,7 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -168,6 +169,21 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
         this.state = BackupJobState.PENDING;
+    }
+
+    protected BackupJob(BackupJob job) {
+        super(job);
+
+        this.tableRefs = job.tableRefs;
+        this.state = job.state;
+        this.snapshotFinishedTime = job.snapshotFinishedTime;
+        this.snapshotUploadFinishedTime = job.snapshotUploadFinishedTime;
+        this.snapshotInfos = job.snapshotInfos;
+        this.backupMeta = job.backupMeta;
+        this.localMetaInfoFilePath = job.localMetaInfoFilePath;
+        this.localJobInfoFilePath = job.localJobInfoFilePath;
+        this.backupFunctions = job.backupFunctions;
+        this.backupCatalogs = job.backupCatalogs;
     }
 
     public void setTestPrimaryKey() {
@@ -418,7 +434,7 @@ public class BackupJob extends AbstractJob {
             }
             if (!tbl.isSupportBackupRestore()) {
                 status = new Status(ErrCode.UNSUPPORTED,
-                                    "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
+                        "Table: " + tblName + " can not support backup restore, type: " + tbl.getType());
                 return;
             }
 
@@ -522,9 +538,9 @@ public class BackupJob extends AbstractJob {
                 for (Partition partition : partitions) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         long visibleVersion = physicalPartition.getVisibleVersion();
-                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE);
+                        List<MaterializedIndex> indexes = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                         for (MaterializedIndex index : indexes) {
-                            int schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
+                            int schemaHash = olapTbl.getSchemaHashByIndexMetaId(index.getMetaId());
                             for (Tablet tablet : index.getTablets()) {
                                 prepareSnapshotTask(physicalPartition, olapTbl, tablet, index, visibleVersion, schemaHash);
                                 if (status != Status.OK) {
@@ -583,10 +599,9 @@ public class BackupJob extends AbstractJob {
     protected void waitingAllSnapshotsFinished() {
         if (unfinishedTaskIds.isEmpty()) {
             snapshotFinishedTime = System.currentTimeMillis();
-            state = BackupJobState.UPLOAD_SNAPSHOT;
 
             // log
-            globalStateMgr.getEditLog().logBackupJob(this);
+            persistStateChange(BackupJobState.UPLOAD_SNAPSHOT);
             LOG.info("finished to make snapshots. {}", this);
             return;
         }
@@ -681,10 +696,9 @@ public class BackupJob extends AbstractJob {
     protected void waitingAllUploadingFinished() {
         if (unfinishedTaskIds.isEmpty()) {
             snapshotUploadFinishedTime = System.currentTimeMillis();
-            state = BackupJobState.SAVE_META;
 
             // log
-            globalStateMgr.getEditLog().logBackupJob(this);
+            persistStateChange(BackupJobState.SAVE_META);
             LOG.info("finished uploading snapshots. {}", this);
             return;
         }
@@ -694,7 +708,7 @@ public class BackupJob extends AbstractJob {
 
     private void saveMetaInfo() {
         String createTimeStr = TimeUtils.longToTimeString(createTime,
-                new SimpleDateFormat(TIMESTAMP_FORMAT));
+                DateTimeFormatter.ofPattern(TIMESTAMP_FORMAT).withZone(TimeUtils.getSystemTimeZone().toZoneId()));
         if (testPrimaryKey) {
             localJobDirPath = Paths.get(BackupHandler.TEST_BACKUP_ROOT_DIR.toString(),
                     label + "__" + UUIDUtil.genUUID().toString()).normalize();
@@ -746,8 +760,6 @@ public class BackupJob extends AbstractJob {
             return;
         }
 
-        state = BackupJobState.UPLOAD_INFO;
-
         // meta info and job info has been saved to local file, this can be cleaned to reduce log size
         backupMeta = null;
         jobInfo = null;
@@ -758,7 +770,7 @@ public class BackupJob extends AbstractJob {
         snapshotInfos.clear();
 
         // log
-        globalStateMgr.getEditLog().logBackupJob(this);
+        persistStateChange(BackupJobState.UPLOAD_INFO);
         LOG.info("finished to save meta the backup job info file to local.[{}], [{}] {}",
                 localMetaInfoFilePath, localJobInfoFilePath, this);
     }
@@ -792,14 +804,14 @@ public class BackupJob extends AbstractJob {
         }
 
         finishedTime = System.currentTimeMillis();
-        state = BackupJobState.FINISHED;
 
         // log
-        globalStateMgr.getEditLog().logBackupJob(this);
+        persistStateChange(BackupJobState.FINISHED);
         LOG.info("job is finished. {}", this);
 
         MetricRepo.COUNTER_UNFINISHED_BACKUP_JOB.increase(-1L);
-        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                "BackupJob: jobId[" + jobId + "]" + " label[" + label + "]");
     }
 
     private boolean uploadFile(String localFilePath, String remoteFilePath) {
@@ -837,7 +849,7 @@ public class BackupJob extends AbstractJob {
         Collections.sort(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
-            if (replica.computeReplicaStatus(infoService, visibleVersion, schemaHash) == Replica.ReplicaStatus.OK) {
+            if (replica.computeReplicaStatus(infoService, visibleVersion, schemaHash) == ReplicaStatus.OK) {
                 return replica;
             }
         }
@@ -883,12 +895,20 @@ public class BackupJob extends AbstractJob {
 
         BackupJobState curState = state;
         finishedTime = System.currentTimeMillis();
-        state = BackupJobState.CANCELLED;
 
         // log
-        globalStateMgr.getEditLog().logBackupJob(this);
-        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        persistStateChange(BackupJobState.CANCELLED);
+        WarehouseIdleChecker.updateJobLastFinishTime(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                "BackupJob: jobId[" + jobId + "]" + " label[" + label + "]");
         LOG.info("finished to cancel backup job. current state: {}. {}", curState.name(), this);
+    }
+
+    protected void persistStateChange(BackupJobState newState) {
+        BackupJob persist = this.copyForPersist();
+        persist.setState(newState);
+        globalStateMgr.getEditLog().logBackupJob(persist, wal -> {
+            state = newState;
+        });
     }
 
     public List<String> getInfo() {
@@ -922,14 +942,14 @@ public class BackupJob extends AbstractJob {
         return Joiner.on(", ").join(list);
     }
 
-
-
-
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder(super.toString());
         sb.append(", state: ").append(state.name());
         return sb.toString();
     }
-}
 
+    public BackupJob copyForPersist() {
+        return new BackupJob(this);
+    }
+}

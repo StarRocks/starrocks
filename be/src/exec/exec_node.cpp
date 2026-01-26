@@ -57,10 +57,12 @@
 #include "exec/empty_set_node.h"
 #include "exec/except_node.h"
 #include "exec/exchange_node.h"
+#include "exec/fetch_node.h"
 #include "exec/file_scan_node.h"
 #include "exec/hash_join_node.h"
 #include "exec/intersect_node.h"
 #include "exec/lake_meta_scan_node.h"
+#include "exec/lookup_node.h"
 #include "exec/olap_meta_scan_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
@@ -299,12 +301,12 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                     return Status::OK();
                 } else {
                     // TODO: copy the small chunk to big chunk
-                    auto& dest_columns = pre_output_chunk->columns();
                     auto& src_columns = cur_chunk->columns();
                     size_t num_rows = cur_size;
                     // copy the new read chunk to the reserved
+                    auto& dest_columns = pre_output_chunk->columns();
                     for (size_t i = 0; i < dest_columns.size(); i++) {
-                        dest_columns[i]->append(*src_columns[i], 0, num_rows);
+                        dest_columns[i]->as_mutable_raw_ptr()->append(*src_columns[i], 0, num_rows);
                     }
                     continue;
                 }
@@ -520,6 +522,14 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
         return Status::OK();
     }
+    case TPlanNodeType::BENCHMARK_SCAN_NODE: {
+        TPlanNode new_node = tnode;
+        TConnectorScanNode connector_scan_node;
+        connector_scan_node.connector_name = connector::Connector::BENCHMARK;
+        new_node.connector_scan_node = connector_scan_node;
+        *node = pool->add(new ConnectorScanNode(pool, new_node, descs));
+        return Status::OK();
+    }
     case TPlanNodeType::ES_HTTP_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
@@ -574,6 +584,14 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     }
     case TPlanNodeType::CAPTURE_VERSION_NODE: {
         *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::FETCH_NODE: {
+        *node = pool->add(new FetchNode(pool, tnode, descs));
+        return Status::OK();
+    }
+    case TPlanNodeType::LOOKUP_NODE: {
+        *node = pool->add(new LookUpNode(pool, tnode, descs));
         return Status::OK();
     }
     default:
@@ -848,6 +866,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::LAKE_META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::BENCHMARK_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::STREAM_SCAN_NODE, nodes);

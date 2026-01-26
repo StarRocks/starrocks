@@ -90,7 +90,7 @@ protected:
         partition.partitions[0].id = 0;
         partition.partitions[0].indexes.resize(1);
         partition.partitions[0].indexes[0].index_id = 0;
-        partition.partitions[0].indexes[0].tablets.push_back(0);
+        partition.partitions[0].indexes[0].tablet_ids.push_back(0);
 
         TOlapTableLocationParam& location = table_sink.location;
         location.db_id = _db_id;
@@ -314,8 +314,8 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-    chunk->get_column_by_index(0)->append_datum(Datum(1));
-    chunk->get_column_by_index(1)->append_datum(Datum(1L));
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(1L));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     ASSERT_FALSE(sink->close(runtime_state.get(), Status::OK()).ok());
     ASSERT_EQ(expected_num_stack_trace, num_stack_trace);
@@ -392,7 +392,7 @@ TEST_F(TabletSinkIndexChannelTest, primary_replica_node_not_connected) {
     ASSERT_OK(sink->open(runtime_state.get()));
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-    chunk->get_column_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     Status status = sink->close(runtime_state.get(), Status::OK());
     ASSERT_FALSE(status.ok());

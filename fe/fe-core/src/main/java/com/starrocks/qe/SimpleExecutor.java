@@ -57,6 +57,8 @@ public class SimpleExecutor {
 
     private final TResultSinkType queryResultProtocol;
 
+    private int dop = 0;
+
     public SimpleExecutor(String name, TResultSinkType queryResultProtocol) {
         this.name = name;
         this.queryResultProtocol = queryResultProtocol;
@@ -73,18 +75,38 @@ public class SimpleExecutor {
         return sql;
     }
 
+    /**
+     * Set the execution DOP of this executor
+     *
+     * @param dop
+     */
+    public void setDop(int dop) {
+        this.dop = dop;
+    }
+
     public void executeDML(String sql) {
+        executeDMLOrControl(sql, SqlType.DML);
+    }
+
+    public void executeControl(String sql) {
+        executeDMLOrControl(sql, SqlType.CONTROL);
+    }
+
+    private void executeDMLOrControl(String sql, SqlType type) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             sql = formatSQL(sql, parsedStmt);
-            Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
+            if (type == SqlType.DML) {
+                Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be DML statement");
+            }
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
-            AuditLog.getInternalAudit()
-                    .info("{} execute SQL | Query_id {} | DML {}", name, DebugUtil.printId(context.getQueryId()), sql);
+            context.getSessionVariable().setPipelineDop(dop);
+            AuditLog.getInternalAudit().info("{} execute SQL | Query_id {} | {} {}",
+                    name, DebugUtil.printId(context.getQueryId()), type.name(), sql);
             executor.execute();
         } catch (Exception e) {
             LOG.error(name + " execute SQL {} failed: {}", sql, e.getMessage(), e);
@@ -118,6 +140,7 @@ public class SimpleExecutor {
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()
                     .info("{} execute SQL | Query_id {} | DQL {}", name, DebugUtil.printId(context.getQueryId()), sql);
             Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
@@ -156,5 +179,10 @@ public class SimpleExecutor {
         context.setNeedQueued(false);
         context.setStartTime();
         return context;
+    }
+
+    private enum SqlType {
+        DML,
+        CONTROL
     }
 }

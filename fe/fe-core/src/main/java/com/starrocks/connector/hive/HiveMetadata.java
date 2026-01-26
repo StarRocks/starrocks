@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -63,7 +64,6 @@ import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -296,7 +297,10 @@ public class HiveMetadata implements ConnectorMetadata {
             throw e;
         } catch (Exception e) {
             LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            return null;
+            Throwable ce = ExceptionUtils.getRootCause(e);
+            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
+            throw new StarRocksConnectorException(String.format("Failed to get hive table %s.%s.%s. %s",
+                    catalogName, dbName, tblName, errMsg), e);
         }
 
         return table;
@@ -451,12 +455,13 @@ public class HiveMetadata implements ConnectorMetadata {
             return;
         }
         HiveTable table = (HiveTable) getTable(new ConnectContext(), dbName, tableName);
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
         String stagingDir = commitInfos.get(0).getStaging_dir();
         boolean isOverwrite = commitInfos.get(0).isIs_overwrite();
 
         List<PartitionUpdate> partitionUpdates = commitInfos.stream()
                 .map(TSinkCommitInfo::getHive_file_info)
-                .map(fileInfo -> PartitionUpdate.get(fileInfo, stagingDir, table.getTableLocation()))
+                .map(fileInfo -> PartitionUpdate.get(fileInfo, stagingDir, table.getTableLocation(), partitionColumnNames))
                 .collect(Collectors.collectingAndThen(Collectors.toList(), PartitionUpdate::merge));
 
         List<String> partitionColNames = table.getPartitionColumnNames();
@@ -552,6 +557,9 @@ public class HiveMetadata implements ConnectorMetadata {
                 .setParameters(ImmutableMap.<String, String>builder()
                         .put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH)
                         .put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString())
+                        .buildOrThrow())
+                .setSerDeParameters(ImmutableMap.<String, String>builder()
+                        .putAll(table.getSerdeProperties())
                         .buildOrThrow())
                 .setStorageFormat(table.getStorageFormat())
                 .setLocation(partitionPath)

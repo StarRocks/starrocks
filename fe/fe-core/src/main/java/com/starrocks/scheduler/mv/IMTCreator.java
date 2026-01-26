@@ -22,7 +22,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.PartitionInfo;
@@ -33,8 +32,9 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.KeysDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.expression.TableName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.UnsupportedException;
@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -109,7 +110,7 @@ class IMTCreator {
         MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
         mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
 
-        String mvName = stmt.getTableName().getTbl();
+        String mvName = stmt.getTblName();
         return new MaterializedView(mvId, dbId, mvName, columns, stmt.getKeysType(), partitionInfo,
                 distributionInfo, mvRefreshScheme);
     }
@@ -200,7 +201,7 @@ class IMTCreator {
                     keyColumns.add(newColumn);
                 }
 
-                TypeDef typeDef = TypeDef.create(refOp.getType().getPrimitiveType());
+                TypeDef typeDef = new TypeDef(TypeFactory.createType(refOp.getType().getPrimitiveType()));
                 ColumnDef columnDef = new ColumnDef(refOp.getName(), typeDef,
                         /* isKey */ isKey,
                         /* aggregateType */ null,
@@ -228,16 +229,18 @@ class IMTCreator {
             distributionInfo.setDistributionColumns(keyColumns);
 
             // TODO(murphy) refine it
-            String mvName = stmt.getTableName().getTbl();
+            String mvName = stmt.getTblName();
             long seq = GlobalStateMgr.getCurrentState().getNextId();
             String tableName = "imt_" + mvName + seq;
-            TableName canonicalName = new TableName(stmt.getTableName().getDb(), tableName);
+            com.starrocks.sql.ast.QualifiedName qualifiedName = 
+                    com.starrocks.sql.ast.QualifiedName.of(java.util.Arrays.asList(stmt.getDbName(), tableName));
+            TableRef tableRef = new TableRef(qualifiedName, null, com.starrocks.sql.parser.NodePosition.ZERO);
 
             // Properties
             Map<String, String> extProperties = Maps.newTreeMap();
             String comment = "IMT for MV StreamAggOperator";
 
-            result.add(new CreateTableStmt(false, false, canonicalName, columnDefs,
+            result.add(new CreateTableStmt(false, false, tableRef, columnDefs,
                     EngineType.defaultEngine().name(), keyDesc, partitionDesc, distributionDesc, properties,
                     extProperties, comment));
             return null;

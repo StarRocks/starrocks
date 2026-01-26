@@ -18,9 +18,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorSinkShuffleMode;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -33,13 +35,12 @@ import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -829,8 +830,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         Table nativeTable = new BaseTable(null, null);
 
-        Column k1 = new Column("k1", Type.INT);
-        Column k2 = new Column("k2", Type.INT);
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
         builder.setCatalogDBName("iceberg_db");
@@ -851,6 +852,9 @@ public class InsertPlanTest extends PlanTestBase {
                 minTimes = 0;
 
                 icebergTable.getPartitionColumnNames();
+                result = new ArrayList<>();
+
+                icebergTable.getPartitionColumns();
                 result = new ArrayList<>();
             }
         };
@@ -932,8 +936,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         Table nativeTable = new BaseTable(null, null);
 
-        Column k1 = new Column("k1", Type.INT);
-        Column k2 = new Column("k2", Type.INT);
+        Column k1 = new Column("k1", IntegerType.INT);
+        Column k2 = new Column("k2", IntegerType.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog_shuffle");
         builder.setCatalogDBName("iceberg_db");
@@ -998,8 +1002,8 @@ public class InsertPlanTest extends PlanTestBase {
 
         new MockUp<SessionVariable>() {
             @Mock
-            public boolean isEnableIcebergSinkGlobalShuffle() {
-                return true;
+            public ConnectorSinkShuffleMode getConnectorSinkShuffleMode() {
+                return ConnectorSinkShuffleMode.FORCE;
             }
         };
 

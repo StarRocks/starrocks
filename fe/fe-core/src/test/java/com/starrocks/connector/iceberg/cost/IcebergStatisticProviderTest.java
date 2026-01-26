@@ -25,7 +25,8 @@ import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.iceberg.types.Types;
@@ -64,10 +65,10 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
-        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, StringType.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", StringType.STRING));
 
         TvrVersionRange version = TvrTableSnapshot.of(Optional.of(
                 mockedNativeTableA.currentSnapshot().snapshotId()));
@@ -109,10 +110,10 @@ public class IcebergStatisticProviderTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
-        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
-        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
-        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
-        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, IntegerType.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, StringType.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", IntegerType.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", StringType.STRING));
 
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().
                 setTableVersionRange(TvrTableSnapshot.empty()).build();

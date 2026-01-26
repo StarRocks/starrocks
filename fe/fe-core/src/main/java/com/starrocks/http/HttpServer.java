@@ -60,6 +60,7 @@ import com.starrocks.http.meta.MetaService.InfoAction;
 import com.starrocks.http.meta.MetaService.JournalIdAction;
 import com.starrocks.http.meta.MetaService.PutAction;
 import com.starrocks.http.meta.MetaService.RoleAction;
+import com.starrocks.http.meta.MetaService.ServiceIdAction;
 import com.starrocks.http.meta.MetaService.VersionAction;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.CancelStreamLoadAction;
@@ -257,6 +258,7 @@ public class HttpServer {
         CheckAction.registerAction(controller);
         DumpAction.registerAction(controller);
         DumpStarMgrAction.registerAction(controller);
+        ServiceIdAction.registerAction(controller);
         RoleAction.registerAction(controller);
 
         // external usage

@@ -40,16 +40,16 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TTypeDesc;
+import com.starrocks.type.AggStateDesc;
+import com.starrocks.type.InvalidType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 import org.apache.commons.lang.ArrayUtils;
@@ -342,7 +342,7 @@ public class Function implements Writable {
 
     public Type getVarArgsType() {
         if (!hasVarArgs) {
-            return Type.INVALID;
+            return InvalidType.INVALID;
         }
         Preconditions.checkState(argTypes.length > 0);
         return argTypes[argTypes.length - 1];
@@ -764,7 +764,7 @@ public class Function implements Writable {
             fn.setChecksum(checksum);
         }
         if (aggStateDesc != null) {
-            fn.setAgg_state_desc(aggStateDesc.toThrift());
+            fn.setAgg_state_desc(TypeSerializer.toThrift(aggStateDesc));
         }
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
@@ -891,6 +891,9 @@ public class Function implements Writable {
                 } else {
                     row.add("NULL");
                 }
+            } else if (this instanceof SqlFunction) {
+                row.add("SQL");
+                row.add("NULL");
             } else {
                 TableFunction tableFunc = (TableFunction) this;
                 row.add("Table");

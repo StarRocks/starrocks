@@ -33,6 +33,7 @@ class Tablet;
 class Schema;
 class Column;
 class PrimaryKeyDump;
+class ParallelPublishContext;
 
 class TabletLoader {
 public:
@@ -729,7 +730,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, ParallelPublishContext* ctx = nullptr);
 
     // batch replace without return old values
     // |n|: size of key/value array
@@ -827,6 +828,8 @@ public:
 
     void test_force_dump();
 
+    bool need_rebuild() const { return _need_rebuild; }
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -905,6 +908,8 @@ private:
 
     size_t _get_encoded_fixed_size(const Schema& schema);
 
+    void _set_need_rebuild(bool need_rebuild) { _need_rebuild = need_rebuild; }
+
 protected:
     // index storage directory
     std::string _path;
@@ -951,6 +956,8 @@ private:
     int64_t _latest_compaction_time = 0;
     // Re-calculated when commit end
     std::atomic<size_t> _memory_usage{0};
+
+    std::atomic<bool> _need_rebuild{false};
 };
 
 } // namespace starrocks

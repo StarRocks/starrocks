@@ -1,7 +1,8 @@
 -- name: test_sorted_streaming_agg_spill
 set enable_spill=true;
 set spill_mode="force";
--- 
+set enable_agg_spill_preaggregation=false;
+
 CREATE TABLE `test_basic` (
   `id_int` int(11) NOT NULL COMMENT "",
   `id_tinyint` tinyint(4) NOT NULL COMMENT "",
@@ -54,3 +55,22 @@ insert into t_array values (null, null), (1, [1, null]), (1, [2, null]), (1, [1,
 select count(*), c_1_0 from t_array group by c_1_0 order by c_1_0;
 select count(*), c_1_1 from t_array group by c_1_1 order by c_1_1;
 select count(*), c_1_0, c_1_1 from t_array group by c_1_0, c_1_1 order by c_1_0, c_1_1;
+
+-- test struct
+CREATE TABLE `t_struct` (
+    `c_1_0` int NULL COMMENT "",
+    `c_1_1` struct<name varchar(20), age int> NULL COMMENT ""
+) ENGINE = OLAP 
+DUPLICATE KEY(`c_1_0`) COMMENT "OLAP" 
+DISTRIBUTED BY HASH(`c_1_0`) BUCKETS 1 PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t_struct values (null, null), (1, row('Alice', 25)), (1, row('Alice', 25)), (1, row('Bob', 30)), (1, null), (null, row('Alice', 25));
+insert into t_struct values (null, null), (1, row('Alice', 25)), (1, row('Alice', 30)), (2, row('Bob', 30)), (1, null), (null, row('Charlie', 35));
+insert into t_struct values (null, null), (1, row('Alice', null)), (1, row('Bob', null)), (1, row('Alice', null));
+
+select count(*), c_1_0 from t_struct group by c_1_0 order by c_1_0;
+select count(*), c_1_1 from t_struct group by c_1_1 order by c_1_1;
+select count(*), c_1_0, c_1_1 from t_struct group by c_1_0, c_1_1 order by c_1_0, c_1_1;
+set enable_agg_spill_preaggregation=true;

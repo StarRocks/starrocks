@@ -28,7 +28,7 @@ import com.starrocks.thrift.TFeMemoryItem;
 import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import org.apache.thrift.TException;
 
@@ -42,8 +42,8 @@ public class SysFeMemoryUsage {
                 SystemTable.builder()
                         .column("module_name", TypeFactory.createVarcharType(256))
                         .column("class_name", TypeFactory.createVarcharType(256))
-                        .column("current_consumption", TypeFactory.createType(PrimitiveType.BIGINT))
-                        .column("peak_consumption", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("current_consumption", IntegerType.BIGINT)
+                        .column("peak_consumption", IntegerType.BIGINT)
                         .column("counter_info", TypeFactory.createVarcharType(65532))
                         .build(),
                 TSchemaTableType.SYS_FE_MEMORY_USAGE);

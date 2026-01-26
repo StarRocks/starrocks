@@ -154,7 +154,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
             char c = '0' + (k++ % 10);
             buf->put_bytes(&c, sizeof(c));
         }
-        buf->flip();
+        buf->flip_to_read();
         pipe.append(std::move(buf));
         pipe.finish();
     };
@@ -193,7 +193,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
             char c = '0' + (k++ % 10);
             buf->put_bytes(&c, sizeof(c));
         }
-        buf->flip();
+        buf->flip_to_read();
         pipe.append(std::move(buf));
         pipe.finish();
     };
@@ -271,9 +271,9 @@ PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
     auto producer = std::thread([&pipe]() {
         // append data with size larger than max_buffered_bytes
         auto buf = readFileAsBytes("./be/test/runtime/test_data/compressed_file/foo.json.lz4");
-        auto byte_buffer = ByteBuffer::allocate_with_tracker(buf.size(), ByteBufferMetaType::KAFKA).value();
+        auto byte_buffer = ByteBuffer::allocate_with_tracker(buf.size(), 0, ByteBufferMetaType::KAFKA).value();
         byte_buffer->put_bytes(buf.data(), buf.size());
-        byte_buffer->flip();
+        byte_buffer->flip_to_read();
         KafkaByteBufferMeta* meta = dynamic_cast<KafkaByteBufferMeta*>(byte_buffer->meta());
         EXPECT_TRUE(meta != nullptr);
         meta->set_partition(1);
@@ -304,7 +304,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_after_finish) {
         char c = '0' + j;
         buf1->put_bytes(&c, sizeof(c));
     }
-    buf1->flip();
+    buf1->flip_to_read();
     ASSERT_OK(pipe.append(std::move(buf1)));
 
     auto appender = [&pipe] {
@@ -320,7 +320,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_after_finish) {
         char c = '0' + j;
         buf2->put_bytes(&c, sizeof(c));
     }
-    buf2->flip();
+    buf2->flip_to_read();
     EXPECT_TRUE(pipe.append(std::move(buf2)).is_capacity_limit_exceeded());
     t1.join();
 }
@@ -335,7 +335,7 @@ PARALLEL_TEST(StreamLoadPipeTest, non_blocking_read) {
         char c = '0' + j;
         buf->put_bytes(&c, sizeof(c));
     }
-    buf->flip();
+    buf->flip_to_read();
     ASSERT_OK(pipe.append(std::move(buf)));
 
     auto ret = pipe.read();

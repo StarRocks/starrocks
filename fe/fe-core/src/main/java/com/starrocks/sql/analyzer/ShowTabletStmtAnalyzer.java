@@ -22,15 +22,16 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.OrderByElement;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.BoolLiteral;
@@ -64,15 +65,14 @@ public class ShowTabletStmtAnalyzer {
 
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-            String dbName = statement.getDbName();
             boolean isShowSingleTablet = statement.isShowSingleTablet();
-            if (!isShowSingleTablet && Strings.isNullOrEmpty(dbName)) {
-                dbName = context.getDatabase();
+            if (!isShowSingleTablet) {
+                TableRef normalizedRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+                statement.setTableRef(normalizedRef);
             }
-            statement.setDbName(dbName);
 
             // partitionNames.
-            PartitionNames partitionNames = statement.getPartitionNames();
+            PartitionRef partitionNames = statement.getPartitionNames();
             if (partitionNames != null) {
                 // check if partition name is not empty string
                 if (partitionNames.getPartitionNames().stream().anyMatch(entity -> Strings.isNullOrEmpty(entity))) {
@@ -96,11 +96,16 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
+                TableRef tableRef = statement.getTableRef();
+                if (tableRef == null) {
+                    throw new SemanticException("Table ref is null");
+                }
+                String dbName = tableRef.getDbName();
                 Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
                 if (db == null) {
                     throw new SemanticException("Database %s is not found", dbName);
                 }
-                String tableName = statement.getTableName();
+                String tableName = tableRef.getTableName();
                 Table table = null;
                 Locker locker = new Locker();
                 locker.lockDatabase(db.getId(), LockType.READ);

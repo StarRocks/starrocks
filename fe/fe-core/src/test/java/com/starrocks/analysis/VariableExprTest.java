@@ -21,8 +21,7 @@ import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.expression.VariableExpr;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -37,7 +36,7 @@ public class VariableExprTest {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
         Assertions.assertEquals(SetType.SESSION, desc.getSetType());
         Assertions.assertEquals("version_comment", desc.getName());
-        Assertions.assertEquals(TypeFactory.createType(PrimitiveType.VARCHAR), desc.getType());
+        Assertions.assertEquals(VarcharType.VARCHAR, desc.getType());
         Assertions.assertEquals(SetType.SESSION, desc.getSetType());
     }
 

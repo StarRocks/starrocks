@@ -36,6 +36,7 @@ Status LakeDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, DelV
 
 Status LakeDelvecLoader::load_from_meta(const TabletMetadataPtr& metadata, const DelvecPagePB& delvec_page,
                                         DelVectorPtr* pdelvec) {
+    (*pdelvec).reset(new DelVector());
     return lake::get_del_vec(_tablet_manager, *metadata, delvec_page, _fill_cache, _lake_io_opts, pdelvec->get());
 }
 

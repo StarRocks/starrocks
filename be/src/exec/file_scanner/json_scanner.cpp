@@ -28,6 +28,7 @@
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "exprs/json_functions.h"
+#include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
@@ -48,7 +49,9 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
           _next_range(0),
           _max_chunk_size(state->chunk_size()),
           _cur_file_reader(nullptr),
-          _cur_file_eof(true) {}
+          _cur_file_eof(true) {
+    _file_format_str = "json";
+}
 
 JsonScanner::~JsonScanner() = default;
 
@@ -118,48 +121,6 @@ void JsonScanner::close() {
     FileScanner::close();
 }
 
-static TypeDescriptor construct_json_type(const TypeDescriptor& src_type) {
-    switch (src_type.type) {
-    case TYPE_ARRAY: {
-        TypeDescriptor json_type(TYPE_ARRAY);
-        const auto& child_type = src_type.children[0];
-        json_type.children.emplace_back(construct_json_type(child_type));
-        return json_type;
-    }
-    case TYPE_STRUCT: {
-        TypeDescriptor json_type(TYPE_STRUCT);
-        json_type.field_names = src_type.field_names;
-        for (auto& child_type : src_type.children) {
-            json_type.children.emplace_back(construct_json_type(child_type));
-        }
-        return json_type;
-    }
-    case TYPE_MAP: {
-        TypeDescriptor json_type(TYPE_MAP);
-        const auto& key_type = src_type.children[0];
-        const auto& value_type = src_type.children[1];
-        json_type.children.emplace_back(construct_json_type(key_type));
-        json_type.children.emplace_back(construct_json_type(value_type));
-        return json_type;
-    }
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_BIGINT:
-    case TYPE_INT:
-    case TYPE_SMALLINT:
-    case TYPE_TINYINT:
-    case TYPE_BOOLEAN:
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_JSON: {
-        return src_type;
-    }
-    default:
-        // Treat other types as VARCHAR.
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-    }
-}
-
 Status JsonScanner::_construct_json_types() {
     size_t slot_size = _src_slot_descriptors.size();
     _json_types.resize(slot_size);
@@ -169,7 +130,7 @@ Status JsonScanner::_construct_json_types() {
             continue;
         }
 
-        _json_types[column_pos] = construct_json_type(slot_desc->type());
+        _json_types[column_pos] = JsonUtils::construct_json_type(slot_desc->type());
     }
     return Status::OK();
 }
@@ -263,7 +224,7 @@ void JsonScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chun
     chunk->materialized_nullable();
     for (int i = 0; i < chunk->num_columns(); i++) {
         AdaptiveNullableColumn* adaptive_column =
-                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_index(i));
         chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
                                                              adaptive_column->materialized_raw_null_column()),
                                       i);
@@ -291,6 +252,7 @@ Status JsonScanner::_open_next_reader() {
         return st;
     }
     _next_range++;
+    ++_counter->num_files_read;
     return Status::OK();
 }
 
@@ -313,7 +275,7 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
     return cast_chunk;
 }
 
-JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter* counter, JsonScanner* scanner,
+JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner,
                        std::shared_ptr<SequentialFile> file, bool strict_mode, std::vector<SlotDescriptor*> slot_descs,
                        std::vector<TypeDescriptor> type_descs, const TBrokerRangeDesc& range_desc)
         : _state(state),
@@ -322,7 +284,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _type_descs(std::move(std::move(type_descs))),
+          _type_descs(std::move(type_descs)),
           _op_col_index(-1),
           _range_desc(range_desc) {
     int index = 0;
@@ -585,11 +547,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             } else {
                 _parsed_columns[column_index] = true;
             }
-            auto& column = chunk->get_column_by_index(column_index);
+            auto* column = chunk->get_column_raw_ptr_by_index(column_index);
             simdjson::ondemand::value val = field.value();
 
             // construct column with value.
-            RETURN_IF_ERROR(_construct_column(val, column.get(), _prev_parsed_position[key_index].type,
+            RETURN_IF_ERROR(_construct_column(val, column, _prev_parsed_position[key_index].type,
                                               _prev_parsed_position[key_index].key));
 
             key_index++;
@@ -603,7 +565,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     // append null to the column without data.
     for (int i = 0; i < chunk->num_columns(); i++) {
         if (!_parsed_columns[i]) {
-            auto& column = chunk->get_column_by_index(i);
+            auto* column = chunk->get_column_raw_ptr_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
@@ -629,7 +591,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         const char* column_name = _slot_descs[i]->col_name().c_str();
 
         // The columns in JsonReader's chunk are all in NullableColumn type;
-        auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(_slot_descs[i]->id()).get());
+        auto* column = down_cast<NullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(_slot_descs[i]->id()));
         if (i >= jsonpath_size) {
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
@@ -703,11 +665,11 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(
-                                           _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING,
-                                           _file_stream_buffer->meta()->type()));
+        ASSIGN_OR_RETURN(auto buf,
+                         ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining(), simdjson::SIMDJSON_PADDING,
+                                                           _file_stream_buffer->meta()->type()));
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
-        buf->flip();
+        buf->flip_to_read();
         // copying meta fail should not affect the scan
         Status copy_st = buf->meta()->copy_from(_file_stream_buffer->meta());
         if (!copy_st.ok()) {

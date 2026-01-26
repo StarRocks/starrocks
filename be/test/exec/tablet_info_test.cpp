@@ -112,7 +112,7 @@ TEST_F(OlapTablePartitionParamTest, unknown_distributed_col) {
     t_partition_param.partitions[0].id = 10;
     t_partition_param.partitions[0].indexes.resize(2);
     t_partition_param.partitions[0].indexes[0].index_id = 4;
-    t_partition_param.partitions[0].indexes[0].tablets = {21};
+    t_partition_param.partitions[0].indexes[0].tablet_ids = {21};
     t_partition_param.partitions[0].indexes[1].index_id = 5;
 
     OlapTablePartitionParam part(schema, t_partition_param);
@@ -138,7 +138,7 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.partitions[0].id = 10;
         t_partition_param.partitions[0].indexes.resize(1);
         t_partition_param.partitions[0].indexes[0].index_id = 4;
-        t_partition_param.partitions[0].indexes[0].tablets = {21};
+        t_partition_param.partitions[0].indexes[0].tablet_ids = {21};
 
         OlapTablePartitionParam part(schema, t_partition_param);
         st = part.init(nullptr);
@@ -156,7 +156,7 @@ TEST_F(OlapTablePartitionParamTest, bad_index) {
         t_partition_param.partitions[0].id = 10;
         t_partition_param.partitions[0].indexes.resize(2);
         t_partition_param.partitions[0].indexes[0].index_id = 4;
-        t_partition_param.partitions[0].indexes[0].tablets = {21};
+        t_partition_param.partitions[0].indexes[0].tablet_ids = {21};
         t_partition_param.partitions[0].indexes[1].index_id = 6;
 
         OlapTablePartitionParam part(schema, t_partition_param);
@@ -196,7 +196,7 @@ TEST_F(OlapTablePartitionParamTest, NodesInfo) {
 }
 
 TEST_F(OlapTablePartitionParamTest, removePartition) {
-    Columns columns;
+    MutableColumns columns;
     for (size_t i = 0; i < 2; i++) {
         auto column = FixedLengthColumn<int32_t>::create();
         for (int j = 0; j < 5; j++) {

@@ -22,7 +22,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.type.Type;
+import com.starrocks.type.StringType;
+import com.starrocks.type.UnknownType;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.avro.HoodieAvroUtils;
@@ -77,7 +78,7 @@ public class HudiTableFactory extends ExternalTableFactory {
         Set<String> includedMetaFields = columns.stream().map(Column::getName)
                 .filter(metaFields::contains).collect(Collectors.toSet());
         metaFields.removeAll(includedMetaFields);
-        metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
+        metaFields.forEach(f -> columns.add(new Column(f, StringType.STRING, true)));
 
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HUDI, HUDI);
         if (table == null) {
@@ -130,7 +131,7 @@ public class HudiTableFactory extends ExternalTableFactory {
             }
             Column oColumn = oTable.getColumn(column.getName());
 
-            if (oColumn.getType() == Type.UNKNOWN_TYPE) {
+            if (oColumn.getType() == UnknownType.UNKNOWN_TYPE) {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 

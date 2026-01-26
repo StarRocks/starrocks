@@ -16,10 +16,14 @@ package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.SqlFunction;
+import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.ResolvedField;
@@ -47,6 +51,7 @@ import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.ExistsPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
+import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FieldReference;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.GroupingFunctionCallExpr;
@@ -67,7 +72,6 @@ import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.SubfieldExpr;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VariableExpr;
@@ -105,7 +109,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.type.Type;
+import com.starrocks.type.FunctionType;
+import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -196,7 +202,7 @@ public final class SqlToScalarOperatorTranslator {
         result = scalarRewriter.rewrite(result, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
 
         result = ScalarOperatorRewriter.replaceScalarOperatorByColumnRef(result,
-                                        expressionMapping.getGeneratedColumnExprOpToColumnRef());
+                expressionMapping.getGeneratedColumnExprOpToColumnRef());
 
         requireNonNull(result, "translated expression is null");
         return result;
@@ -422,7 +428,7 @@ public final class SqlToScalarOperatorTranslator {
                     .collect(Collectors.toList());
             return new CallOperator(
                     FunctionSet.JSON_QUERY,
-                    Type.JSON,
+                    JsonType.JSON,
                     arguments,
                     func);
         }
@@ -442,7 +448,7 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping, null);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
+            return new LambdaFunctionOperator(refs, lambda, FunctionType.FUNCTION);
         }
 
         @Override
@@ -526,16 +532,15 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitArithmeticExpr(ArithmeticExpr node, Context context) {
+            Function arithmeticFn = ExpressionAnalyzer.getArithmeticFunction(node);
             if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.BINARY_INFIX) {
                 ScalarOperator left = visit(node.getChild(0), context.clone(node));
                 ScalarOperator right = visit(node.getChild(1), context.clone(node));
 
-                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(left, right),
-                        node.getFn());
+                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(left, right), arithmeticFn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
                 ScalarOperator child = visit(node.getChild(0), context.clone(node));
-                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(child),
-                        node.getFn());
+                return new CallOperator(node.getOp().getName(), node.getType(), Lists.newArrayList(child), arithmeticFn);
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_POSTFIX) {
                 throw unsupportedException("nonsupport arithmetic expr");
             } else {
@@ -551,8 +556,9 @@ public final class SqlToScalarOperatorTranslator {
                 arguments.add(visit(argument, context.clone(node)));
             }
 
-            return new CallOperator(node.getFn().getFunctionName().getFunction(), node.getType(), arguments,
-                    node.getFn());
+            Function fn = ExprUtils.getTimestampArithmeticFunction(node);
+            Preconditions.checkNotNull(fn, "TimestampArithmeticExpr must resolve to a function");
+            return new CallOperator(fn.getFunctionName().getFunction(), node.getType(), arguments, fn);
         }
 
         private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {
@@ -615,12 +621,12 @@ public final class SqlToScalarOperatorTranslator {
             List<ScalarOperator> children = node.getChildren().stream()
                     .map(child -> visit(child, context))
                     .collect(Collectors.toList());
-            
+
             return new LargeInPredicateOperator(
                     node.getRawText(),
-                    node.getRawConstantList(), 
+                    node.getRawConstantList(),
                     node.getConstantCount(),
-                    node.isNotIn(), 
+                    node.isNotIn(),
                     node.getConstantType(),
                     children);
         }
@@ -730,18 +736,44 @@ public final class SqlToScalarOperatorTranslator {
 
             // for nonDeterministicFunctions, we need add an argument as its unique id to distinguish
             // the reusing behavior in common exprs
-            if (FunctionSet.nonDeterministicFunctions.contains(node.getFnName().getFunction())) {
+            if (FunctionSet.nonDeterministicFunctions.contains(node.getFunctionName())) {
                 arguments.add(ConstantOperator.createInt(columnRefFactory.getNextUniqueId()));
             }
 
+            if (node.getFn() instanceof SqlFunction) {
+                return visitSqlFunctionCall(node, arguments);
+            }
+
             CallOperator callOperator = new CallOperator(
-                    node.getFnName().getFunction(),
+                    node.getFunctionName(),
                     node.getType(),
                     arguments,
                     node.getFn(),
                     node.getParams().isDistinct());
             callOperator.setHints(node.getHints());
             return callOperator;
+        }
+
+        public ScalarOperator visitSqlFunctionCall(FunctionCallExpr node, List<ScalarOperator> arguments) {
+            SqlFunction sqlFunction = (SqlFunction) node.getFn();
+            Expr expr = sqlFunction.getAnalyzeExpr();
+            if (expr == null) {
+                throw new StarRocksPlannerException("view function analyze expr is null",
+                        ErrorType.INTERNAL_ERROR);
+            }
+
+            Map<String, ScalarOperator> argMap = Maps.newHashMap();
+            for (int i = 0; i < sqlFunction.getArgNames().length; i++) {
+                argMap.put(sqlFunction.getArgNames()[i], arguments.get(i));
+            }
+
+            return SqlToScalarOperatorTranslator.translateWithSlotRef(expr, slotRef -> {
+                if (argMap.containsKey(slotRef.getColName())) {
+                    return argMap.get(slotRef.getColName());
+                }
+                Preconditions.checkState(false, "cannot find function argument: " + slotRef.getColName());
+                return null;
+            });
         }
 
         @Override
@@ -753,7 +785,7 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
             CallOperator callOperator =
-                    new CallOperator(functionCallExpr.getFnName().getFunction(), functionCallExpr.getType(), arguments,
+                    new CallOperator(functionCallExpr.getFunctionName(), functionCallExpr.getType(), arguments,
                             functionCallExpr.getFn(), functionCallExpr.getParams().isDistinct());
             callOperator.setIgnoreNulls(functionCallExpr.getIgnoreNulls());
             return callOperator;
@@ -833,7 +865,7 @@ public final class SqlToScalarOperatorTranslator {
                 LogicalApplyOperator applyOperator = LogicalApplyOperator.builder()
                         .setUseSemiAnti(false)
                         .build();
-                return new SubqueryOperator(Type.INVALID, queryStatement, applyOperator, null);
+                return new SubqueryOperator(InvalidType.INVALID, queryStatement, applyOperator, null);
             }
 
             LogicalPlan subqueryPlan = SubqueryUtils.getLogicalPlan(session, cteContext,

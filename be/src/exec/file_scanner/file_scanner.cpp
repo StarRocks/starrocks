@@ -47,7 +47,12 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _strict_mode(false),
           _error_counter(0),
           _file_scan_type(TFileScanType::LOAD),
-          _schema_only(schema_only) {}
+          _file_format_str("UNKNOWN"),
+          _schema_only(schema_only) {
+    if (_params.__isset.file_scan_type) {
+        _file_scan_type = _params.file_scan_type;
+    }
+}
 
 FileScanner::~FileScanner() = default;
 
@@ -203,12 +208,12 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
             column_pointers.emplace(col_pointer);
         }
 
-        col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
+        col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), std::move(col));
 
         // The column builder in ctx->evaluate may build column as non-nullable.
         // See be/src/column/column_builder.h#L79.
         if (!col->is_nullable()) {
-            col = ColumnHelper::cast_to_nullable_column(col);
+            col = ColumnHelper::cast_to_nullable_column(std::move(col));
         }
 
         dest_chunk->append_column(col, slot->id());
@@ -411,8 +416,13 @@ void FileScanner::sample_files(size_t total_file_count, int64_t sample_file_coun
     } else {
         step = static_cast<double>(total_file_count - 1) / (sample_file_count - 1);
     }
-    for (size_t i = 0; i < sample_file_count - 1; ++i) {
-        sample_file_indexes->emplace_back(std::round(i * step));
+
+    double next_index = 0;
+    size_t i = 0;
+    while (i < total_file_count - 1) {
+        sample_file_indexes->emplace_back(i);
+        next_index += step;
+        i = static_cast<size_t>(std::round(next_index));
     }
     sample_file_indexes->emplace_back(total_file_count - 1);
 }
@@ -465,7 +475,12 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
             return Status::InvalidArgument(err_msg);
         }
 
-        RETURN_IF_ERROR_WITH_WARN(p_scanner->open(), "open file scanner failed: ");
+        auto st = p_scanner->open();
+        // Opening a scanner on an empty file may return EOF, but the file schema is still available, such as ORC file
+        if (!st.ok() && !st.is_end_of_file()) {
+            LOG(WARNING) << "open file scanner failed: " << st;
+            return st;
+        }
 
         DeferOp defer([&p_scanner] { p_scanner->close(); });
 

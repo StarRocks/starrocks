@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import org.jetbrains.annotations.Nullable;
@@ -73,9 +74,13 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
+        if (!predicate.getChild(1).isVariable()) {
+            return predicate;
+        }
+
         ScalarOperator result = predicate.commutative();
         Preconditions.checkState(!(result.getChild(0).isConstant() && result.getChild(1).isVariable()),
-                "Normalized predicate error: " + result);
+                "Normalized predicate error: %s", result);
         return result;
     }
 
@@ -275,7 +280,7 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
             ConstantOperator op = collectionElement.getChild(1).cast();
             int index = 0;
-            Optional<ConstantOperator> res = op.castTo(Type.INT);
+            Optional<ConstantOperator> res = op.castTo(IntegerType.INT);
             if (!res.isPresent()) {
                 throw new SemanticException("Invalid index for struct element: " + collectionElement);
             } else {

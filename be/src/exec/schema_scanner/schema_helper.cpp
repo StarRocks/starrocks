@@ -192,6 +192,13 @@ Status SchemaHelper::get_tablet_schedules(const SchemaScannerState& state, const
     });
 }
 
+Status SchemaHelper::get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                    TGetFeThreadsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getFeThreads(*response, request);
+    });
+}
+
 Status SchemaHelper::get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
                                     TGetRoleEdgesResponse* response) {
     return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
@@ -272,10 +279,10 @@ Status SchemaHelper::get_warehouse_queries(const SchemaScannerState& state, cons
     });
 }
 
-Status SchemaHelper::get_dynamic_tablet_jobs_info(const SchemaScannerState& state, const TDynamicTabletJobsRequest& req,
-                                                  TDynamicTabletJobsResponse* res) {
+Status SchemaHelper::get_tablet_reshard_jobs_info(const SchemaScannerState& state, const TTabletReshardJobsRequest& req,
+                                                  TTabletReshardJobsResponse* res) {
     return _call_rpc(state,
-                     [&req, &res](FrontendServiceConnection& client) { client->getDynamicTabletJobsInfo(*res, req); });
+                     [&req, &res](FrontendServiceConnection& client) { client->getTabletReshardJobsInfo(*res, req); });
 }
 
 void fill_data_column_with_null(Column* data_column) {

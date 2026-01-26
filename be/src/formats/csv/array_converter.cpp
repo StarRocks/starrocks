@@ -28,14 +28,33 @@ Status ArrayConverter::write_string(OutputStream* os, const Column& column, size
 
     auto begin = offset_datas[row_num];
     auto end = offset_datas[row_num + 1];
+    char collection_delim = ',';
+    bool is_hive_format = false;
 
-    RETURN_IF_ERROR(os->write('['));
+    if (options.array_format_type == ArrayFormatType::kHive) {
+        collection_delim = HiveTextArrayReader::get_collection_delimiter(options.array_hive_collection_delimiter,
+                                                                         options.array_hive_mapkey_delimiter,
+                                                                         options.array_hive_nested_level);
+        is_hive_format = true;
+    } else {
+        RETURN_IF_ERROR(os->write('['));
+    }
+
     for (auto i = begin; i < end; i++) {
-        RETURN_IF_ERROR(_element_converter->write_quoted_string(os, elements, i, options));
+        if (is_hive_format) {
+            Options sub_options = options;
+            sub_options.array_hive_nested_level++;
+            // In Hive, we should use write_string() instead of write_quoted_string
+            RETURN_IF_ERROR(_element_converter->write_string(os, elements, i, sub_options));
+        } else {
+            RETURN_IF_ERROR(_element_converter->write_quoted_string(os, elements, i, options));
+        }
         if (i + 1 < end) {
-            RETURN_IF_ERROR(os->write(','));
+            RETURN_IF_ERROR(os->write(collection_delim));
         }
     }
+    RETURN_IF(is_hive_format, Status::OK());
+
     return os->write(']');
 }
 
@@ -54,8 +73,8 @@ bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& 
     }
 
     auto* array = down_cast<ArrayColumn*>(column);
-    auto* offsets = array->offsets_column().get();
-    auto* elements = array->elements_column().get();
+    auto* offsets = array->offsets_column_raw_ptr();
+    auto* elements = array->elements_column_raw_ptr();
 
     std::vector<Slice> fields;
     if (!s.empty() && !_array_reader->split_array_elements(s, fields)) {
@@ -68,7 +87,7 @@ bool ArrayConverter::read_string(Column* column, const Slice& s, const Options& 
         sub_options.invalid_field_as_null = false;
     }
     sub_options.array_hive_nested_level++;
-    DCHECK_EQ(old_size, offsets->get_data().back());
+    DCHECK_EQ(old_size, offsets->immutable_data().back());
     for (const auto& f : fields) {
         if (!_array_reader->read_quoted_string(_element_converter, elements, f, sub_options)) {
             elements->resize(old_size);

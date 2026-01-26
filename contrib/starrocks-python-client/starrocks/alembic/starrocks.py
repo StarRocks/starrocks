@@ -16,7 +16,6 @@ import logging
 from typing import Any, Optional
 
 from alembic.ddl.mysql import MySQLImpl
-from alembic.operations.ops import AlterTableOp
 from sqlalchemy import Column, MetaData, Table
 
 from starrocks import datatype

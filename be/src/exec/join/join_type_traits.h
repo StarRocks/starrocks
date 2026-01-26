@@ -14,18 +14,15 @@
 
 #pragma once
 
-#include "util/runtime_profile.h"
-
-#define JOIN_HASH_MAP_H
-
-#include "join_hash_map_helper.h"
-#include "join_hash_map_method.hpp"
-#include "join_hash_table_descriptor.h"
-#include "join_key_constructor.hpp"
-
 #if defined(__aarch64__)
 #include "arm_acle.h"
 #endif
+
+#include <string>
+
+#include "exec/join/join_hash_map_method_fwd.h"
+#include "exec/join/join_key_constructor_fwd.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 

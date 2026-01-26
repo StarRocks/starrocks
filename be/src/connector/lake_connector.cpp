@@ -20,8 +20,12 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exprs/jsonpath.h"
+#include "runtime/current_thread.h"
 #include "runtime/global_dict/parser.h"
+#include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
@@ -29,6 +33,7 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks::connector {
 
@@ -121,7 +126,7 @@ void LakeDataSource::close(RuntimeState* state) {
     if (_reader) {
         // close reader to update statistics before update counters
         _reader->close();
-        update_counter();
+        update_counter(state);
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -133,12 +138,18 @@ void LakeDataSource::close(RuntimeState* state) {
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size()));
-    auto* chunk_ptr = chunk->get();
+    ASSIGN_OR_RETURN(auto chunk_ptr,
+                     ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
+    chunk->reset(chunk_ptr);
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
+        Status status = _prj_iter->get_next(chunk_ptr);
+        // update counter when eof or error
+        if (UNLIKELY(!status.ok())) {
+            update_realtime_counter(chunk_ptr);
+            return status;
+        }
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
@@ -173,8 +184,23 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id, version));
-    _tablet_schema = _tablet.get_schema();
+    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
+    auto& lake_scan_node = _provider->_t_lake_scan_node;
+    if (lake_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = lake_scan_node.schema_key;
+        TableSchemaKeyPB schema_key_pb;
+        schema_key_pb.set_schema_id(t_schema_key.schema_id);
+        schema_key_pb.set_db_id(t_schema_key.db_id);
+        schema_key_pb.set_table_id(t_schema_key.table_id);
+        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
+                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
+                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+    } else {
+        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
+        // so fallback to the old way to get schema from tablet metadata
+        _tablet_schema = _tablet.get_schema();
+    }
     return Status::OK();
 }
 
@@ -280,6 +306,11 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+
+    if (thrift_lake_scan_node.__isset.sorted_by_keys_per_tablet) {
+        _params.sorted_by_keys_per_tablet = thrift_lake_scan_node.sorted_by_keys_per_tablet;
+    }
+
     _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
     _params.lake_io_opts.cache_file_only = _runtime_state->query_options().__isset.enable_cache_select &&
                                            _runtime_state->query_options().enable_cache_select &&
@@ -287,7 +318,19 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
+    if (thrift_lake_scan_node.__isset.enable_prune_column_after_index_filter) {
+        _params.prune_column_after_index_filter = thrift_lake_scan_node.enable_prune_column_after_index_filter;
+    }
+    if (thrift_lake_scan_node.__isset.enable_gin_filter) {
+        _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
+    }
+
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
+    _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
+    if (_params.enable_join_runtime_filter_pushdown) {
+        ASSIGN_OR_RETURN(_params.runtime_filter_preds,
+                         _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, parser));
+    }
     decide_chunk_size(!pred_tree.empty());
     _has_any_predicate = !pred_tree.empty();
 
@@ -409,6 +452,103 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+// Inherit default value from JSON parent column for extended subcolumn.
+// This method extracts the default value of a JSON subfield based on the access path
+// and sets it to the column if extraction succeeds.
+void LakeDataSource::_inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                                      const ColumnAccessPath* path) {
+    if (!root_column.has_default_value() || root_column.type() != TYPE_JSON) {
+        return;
+    }
+
+    const std::string& json_default = root_column.default_value();
+    auto json_value_or = JsonValue::parse_json_or_string(Slice(json_default));
+    if (!json_value_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON default value: " << json_value_or.status();
+        return;
+    }
+
+    // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
+    const std::string& linear = path->linear_path();
+    const std::string& parent = path->path();
+    std::string json_path_str;
+    if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
+        // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
+        json_path_str = "$" + linear.substr(parent.size());
+    } else {
+        json_path_str = "$";
+    }
+
+    auto json_path_or = JsonPath::parse(Slice(json_path_str));
+    if (!json_path_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON path: " << json_path_str;
+        return;
+    }
+
+    vpack::Builder builder;
+    vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
+    if (extracted.isNone() || extracted.isNull()) {
+        return;
+    }
+
+    const LogicalType value_type = column->type();
+    std::string default_value_str;
+
+    if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
+        if (extracted.isString()) {
+            default_value_str = extracted.copyString();
+        } else {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
+        }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (value_type == TYPE_BOOLEAN) {
+        if (extracted.isString()) {
+            vpack::ValueLength len;
+            const char* str = extracted.getStringUnchecked(len);
+            StringParser::ParseResult parse_result;
+            auto as_int = StringParser::string_to_int<int32_t>(str, len, &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                default_value_str = (as_int != 0) ? "1" : "0";
+            } else {
+                bool b = StringParser::string_to_bool(str, len, &parse_result);
+                if (parse_result != StringParser::PARSE_SUCCESS) {
+                    return;
+                }
+                default_value_str = b ? "1" : "0";
+            }
+        } else if (extracted.isBool()) {
+            default_value_str = extracted.getBool() ? "1" : "0";
+        } else if (extracted.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
+        } else {
+            return;
+        }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (extracted.isString()) {
+        default_value_str = extracted.copyString();
+    } else if (extracted.isBool()) {
+        default_value_str = extracted.getBool() ? "1" : "0";
+    } else if (extracted.isNumber()) {
+        vpack::Options options = vpack::Options::Defaults;
+        options.singleLinePrettyPrint = true;
+        default_value_str = extracted.toJson(&options);
+    } else {
+        return;
+    }
+
+    column->set_default_value(default_value_str);
+}
+
 // Extend the schema fields based on the column access paths.
 // This ensures that only the necessary subfields required by the query are retained in the schema.
 Status LakeDataSource::_extend_schema_by_access_paths() {
@@ -437,6 +577,10 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
         column.set_is_nullable(true);
         int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
         column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // Inherit default value from parent column if exists
+        const auto& root_column = _tablet_schema->column(static_cast<size_t>(root_column_index));
+        _inherit_default_value_from_json(&column, root_column, path.get());
 
         // For UNIQUE/AGG tables, extended flat JSON subcolumns behave like value columns
         // and must carry a valid aggregation for pre-aggregation. Use REPLACE.
@@ -629,6 +773,19 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 
+    const std::string gin_filter_name = "GinFilter";
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
+    _gin_prefix_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinPrefixFilter", gin_filter_name);
+    _gin_ngram_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinNgramDictFilter", gin_filter_name);
+    _gin_predicate_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinDictFilter", gin_filter_name);
+    _gin_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinNGramDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinNGramFilteredDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_predicate_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
+
     // SegmentRead
     const std::string segment_read_name = "SegmentRead";
     _block_load_timer = ADD_TIMER(_runtime_profile, segment_read_name);
@@ -638,6 +795,9 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _block_seek_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockSeekCount", TUnit::UNIT, segment_read_name);
     _pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PredFilter", segment_read_name);
     _pred_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT, segment_read_name);
+    _rf_pred_filter_timer = ADD_TIMER(_runtime_profile, "RuntimeFilterEvalTime");
+    _rf_pred_input_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterInputRows", TUnit::UNIT);
+    _rf_pred_output_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterOutputRows", TUnit::UNIT);
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, segment_read_name);
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", segment_read_name);
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", segment_read_name);
@@ -696,7 +856,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
-void LakeDataSource::update_counter() {
+void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
@@ -728,8 +888,13 @@ void LakeDataSource::update_counter() {
     cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
     cond_evaluate_ns += _reader->stats().branchless_cond_evaluate_ns;
     cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
+
     // In order to avoid exposing too detailed metrics, we still record these infos on `_pred_filter_timer`
     // When we support metric classification, we can disassemble it again.
+    COUNTER_UPDATE(_rf_pred_filter_timer, _reader->stats().rf_cond_evaluate_ns);
+    COUNTER_UPDATE(_rf_pred_input_rows, _reader->stats().rf_cond_input_rows);
+    COUNTER_UPDATE(_rf_pred_output_rows, _reader->stats().rf_cond_output_rows);
+
     COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
@@ -748,6 +913,16 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_counter, _reader->stats().gin_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
@@ -891,6 +1066,9 @@ void LakeDataSource::update_counter() {
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+    }
+    if (state && state->query_ctx()) {
+        state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);
     }
 }
 

@@ -14,15 +14,15 @@
 
 package com.starrocks.sql;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -51,11 +51,13 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -67,7 +69,7 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -134,7 +136,7 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
-    private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
+    private final ComputeResource computeResource;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -148,12 +150,24 @@ public class LoadPlanner {
     private ImmutableMap<String, String> batchWriteParameters;
     private Set<Long> batchWriteBackendIds;
 
+    @VisibleForTesting
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
                        Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
                        BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+        this(loadJobId, loadId, txnId, dbId, destTable, strictMode, timezone, timeoutS,
+                startTime, partialUpdate, context, sessionVariables, loadMemLimit, execMemLimit,
+                brokerDesc, brokerFileGroups, fileStatusesList, filesAdded, WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
+                       boolean strictMode, String timezone, long timeoutS,
+                       long startTime, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+                       List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, ComputeResource computeResource) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -168,8 +182,10 @@ public class LoadPlanner {
         } else {
             this.context = new ConnectContext();
         }
-        if (this.context.getSessionVariable().getEnableAdaptiveSinkDop()) {
-            this.parallelInstanceNum = this.context.getSessionVariable().getSinkDegreeOfParallelism();
+        this.computeResource = computeResource;
+        SessionVariable sv = this.context.getSessionVariable();
+        if (sv.getEnableAdaptiveSinkDop()) {
+            this.parallelInstanceNum = sv.getSinkDegreeOfParallelism(this.computeResource.getWarehouseId());
         } else {
             this.parallelInstanceNum = Config.load_parallel_instance_num;
         }
@@ -219,6 +235,7 @@ public class LoadPlanner {
         this.startTime = System.currentTimeMillis();
         this.sessionVariables = sessionVariables;
         this.computeResource = streamLoadInfo.getComputeResource();
+        this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -233,15 +250,10 @@ public class LoadPlanner {
         this.timeoutS = timeoutS;
         this.etlJobType = EtlJobType.STREAM_LOAD;
         this.context.getSessionVariable().setEnablePipelineEngine(true);
-        this.computeResource = streamLoadInfo.getComputeResource();
     }
 
     public long getWarehouseId() {
         return computeResource.getWarehouseId();
-    }
-
-    public void setComputeResource(ComputeResource computeResource) {
-        this.computeResource = computeResource;
     }
 
     public ComputeResource getComputeResource() {
@@ -327,7 +339,7 @@ public class LoadPlanner {
                 fragments.add(scanFragment);
 
                 // Exchange node
-                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
+                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexMetaId(olapDestTable.getBaseIndexMetaId());
                 List<Expr> partitionExprs = Lists.newArrayList();
                 keyColumns.forEach(column -> {
                     partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
@@ -411,7 +423,7 @@ public class LoadPlanner {
         if (isPrimaryKey) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
-            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, Type.TINYINT));
+            slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
             slotDesc.setIsNullable(false);
         }
         descTable.computeMemLayout();
@@ -598,7 +610,7 @@ public class LoadPlanner {
         }
 
         if (KeysType.AGG_KEYS.equals(olapDestTable.getKeysType())) {
-            for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexIdToSchema().entrySet()) {
+            for (Map.Entry<Long, List<Column>> entry : olapDestTable.getIndexMetaIdToSchema().entrySet()) {
                 List<Column> schema = entry.getValue();
                 for (Column column : schema) {
                     if (column.getAggregationType() == AggregateType.REPLACE

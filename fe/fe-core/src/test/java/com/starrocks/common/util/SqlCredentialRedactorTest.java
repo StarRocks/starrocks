@@ -16,6 +16,7 @@ package com.starrocks.common.util;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 public class SqlCredentialRedactorTest {
 
@@ -130,10 +131,10 @@ public class SqlCredentialRedactorTest {
         String redacted1 = SqlCredentialRedactor.redact(sql1);
         Assertions.assertFalse(redacted1.contains("AKIAIOSFODNN7EXAMPLE"));
 
-        // Test without quotes on key
+        // Test without quotes on key(not supported)
         String sql2 = "aws.s3.secret_key = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\"";
         String redacted2 = SqlCredentialRedactor.redact(sql2);
-        Assertions.assertFalse(redacted2.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+        Assertions.assertTrue(redacted2.contains("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
 
         // Test with extra spaces
         String sql3 = "\"aws.s3.access_key\"   =   \"AKIAIOSFODNN7EXAMPLE\"";
@@ -189,5 +190,39 @@ public class SqlCredentialRedactorTest {
             index += 3;
         }
         Assertions.assertEquals(2, count, "Should have exactly 2 redacted values");
+    }
+
+    /**
+     * java.regex uses NFA algorithm, it cannot guarantee O(N) complexity, might run into timeout
+     * when the string is very long.
+     * RE2 is O(n)
+     */
+    @Test
+    @Timeout(10)
+    public void testLongString() {
+        {
+            // long key
+            String longString = "1234567890".repeat(104857);
+            String longSql = "INSERT INTO t1 VALUES(\"" + longString + "\", 1)";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
+        {
+            // long key & value
+            String longString = "a".repeat(104857);
+            String longSql = "ALTER TABLE t1 SET PROPERTIES(\"" + longString + "\"= \"" + longString + "\")";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+            longSql = "ALTER TABLE t1 SET PROPERTIES('" + longString + "'= '" + longString + "')";
+            redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
+        {
+            // long value
+            String longString = '"' + "a".repeat(104857) + '"';
+            String longSql = "ALTER  TABLE t1 SET PROPERTIES('key'= " + longString + ")";
+            String redacted = SqlCredentialRedactor.redact(longSql);
+            Assertions.assertEquals(longSql, redacted);
+        }
     }
 }

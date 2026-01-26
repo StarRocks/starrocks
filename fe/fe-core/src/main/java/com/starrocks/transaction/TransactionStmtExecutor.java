@@ -18,8 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -52,6 +52,8 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -59,8 +61,8 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
@@ -90,7 +92,7 @@ public class TransactionStmtExecutor {
     }
 
     // Overload allowing explicit label override for creating the transaction state.
-    // If labelOverride is null or empty, it falls back to the default label built from executionId.
+    // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
     public static void beginStmt(ConnectContext context, BeginStmt stmt,
                                  TransactionState.LoadJobSourceType sourceType,
                                  String labelOverride) {
@@ -98,18 +100,34 @@ public class TransactionStmtExecutor {
         if (context.getTxnId() != 0) {
             // Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-            String label = explicitTxnState.getTransactionState().getLabel();
+            String existingLabel = explicitTxnState.getTransactionState().getLabel();
             long transactionId = explicitTxnState.getTransactionState().getTransactionId();
+
+            // If user explicitly specifies a different label, throw an error
+            String requestedLabel = stmt.getLabel();
+            if (requestedLabel != null && !requestedLabel.isEmpty() && !requestedLabel.equals(existingLabel)) {
+                throw new SemanticException("Transaction already exists with label '" + existingLabel +
+                        "', cannot begin with different label '" + requestedLabel + "'");
+            }
+
             context.getState().setOk(0, 0,
-                    buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
+                    buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
             return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getTransactionIDGenerator().getNextTransactionId();
-        String label = (labelOverride != null && !labelOverride.isEmpty())
-                ? labelOverride
-                : DebugUtil.printId(context.getExecutionId());
+        // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
+        String stmtLabel = stmt.getLabel();
+        String label;
+        if (stmtLabel != null && !stmtLabel.isEmpty()) {
+            FeNameFormat.checkLabel(stmtLabel);
+            label = stmtLabel;
+        } else if (labelOverride != null && !labelOverride.isEmpty()) {
+            label = labelOverride;
+        } else {
+            label = DebugUtil.printId(context.getExecutionId());
+        }
         TransactionState transactionState = new TransactionState(
                 transactionId,
                 label,
@@ -290,8 +308,9 @@ public class TransactionStmtExecutor {
                 if (dmlStmt instanceof InsertStmt) {
                     Preconditions.checkArgument(explicitTxnStateItems.size() == callbackIds.size());
 
+                    TableRef tableRef = dmlStmt.getTableRef();
                     Table targetTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .getTable(database.getFullName(), dmlStmt.getTableName().getTbl());
+                            .getTable(database.getFullName(), tableRef.getTableName());
                     // collect table-level metrics
                     TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
                     entity.counterInsertLoadFinishedTotal.increase(1L);
@@ -440,7 +459,6 @@ public class TransactionStmtExecutor {
             }
             if (!txnState.getTableIdList().contains(targetTable.getId())) {
                 txnState.getTableIdList().add(targetTable.getId());
-                txnState.addTableIndexes((OlapTable) targetTable);
             }
 
             String label = txnState.getLabel();

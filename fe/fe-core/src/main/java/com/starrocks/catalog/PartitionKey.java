@@ -38,27 +38,25 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.io.Text;
-import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.MaxLiteral;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -67,7 +65,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Objects;
 
-public class PartitionKey implements Comparable<PartitionKey>, Writable {
+public class PartitionKey implements Comparable<PartitionKey> {
     private static final Logger LOG = LogManager.getLogger(PartitionKey.class);
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
@@ -104,7 +102,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
-            partitionKey.keys.add(LiteralExpr.createInfinity(TypeFactory.createType(column.getPrimitiveType()), isMax));
+            partitionKey.keys.add(LiteralExprFactory.createInfinity(TypeFactory.createType(column.getPrimitiveType()), isMax));
             partitionKey.types.add(column.getPrimitiveType());
         }
         return partitionKey;
@@ -114,7 +112,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (PrimitiveType type : types) {
-            partitionKey.keys.add(LiteralExpr.createInfinity(TypeFactory.createType(type), isMax));
+            partitionKey.keys.add(LiteralExprFactory.createInfinity(TypeFactory.createType(type), isMax));
             partitionKey.types.add(type);
         }
         return partitionKey;
@@ -156,7 +154,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         // fill the vacancy with MIN
         for (; i < columns.size(); ++i) {
             Type type = TypeFactory.createType(columns.get(i).getPrimitiveType());
-            partitionKey.keys.add(LiteralExpr.createInfinity(type, false));
+            partitionKey.keys.add(LiteralExprFactory.createInfinity(type, false));
             partitionKey.types.add(columns.get(i).getPrimitiveType());
         }
 
@@ -166,14 +164,14 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
 
     public static PartitionKey ofDateTime(LocalDateTime dateTime) throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
-        partitionKey.keys.add(new DateLiteral(dateTime, Type.DATETIME));
+        partitionKey.keys.add(new DateLiteral(dateTime, DateType.DATETIME));
         partitionKey.types.add(PrimitiveType.DATETIME);
         return partitionKey;
     }
 
     public static PartitionKey ofDate(LocalDate date) throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
-        partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), Type.DATE));
+        partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), DateType.DATE));
         partitionKey.types.add(PrimitiveType.DATE);
         return partitionKey;
     }
@@ -230,11 +228,11 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             try {
                 LiteralExpr newKey = key1;
                 if (key1.getType() != destType) {
-                    newKey = (LiteralExpr) key1.castTo(destType);
+                    newKey = (LiteralExpr) ExprCastFunction.castTo(key1, destType);
                 }
                 LiteralExpr newOtherKey = key2;
                 if (key2.getType() != destType) {
-                    newOtherKey = (LiteralExpr) key2.castTo(destType);
+                    newOtherKey = (LiteralExpr) ExprCastFunction.castTo(key2, destType);
                 }
                 ret = newKey.compareLiteral(newOtherKey);
             } catch (AnalysisException e) {
@@ -474,7 +472,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             PrimitiveType type = PrimitiveType.valueOf(typeArray[index].toUpperCase());
             LiteralExpr expr = NullLiteral.create(TypeFactory.createType(type));
             try {
-                expr = LiteralExpr.create(keyArray[index], TypeFactory.createType(type));
+                expr = LiteralExprFactory.create(keyArray[index], TypeFactory.createType(type));
             } catch (AnalysisException ignored) {
             }
             typeList.add(type);
@@ -496,70 +494,6 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             }
         }
         return Math.max(higher, 0);
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        int count = keys.size();
-        if (count != types.size()) {
-            throw new IOException("Size of keys and types are not equal");
-        }
-
-        out.writeInt(count);
-        for (int i = 0; i < count; i++) {
-            PrimitiveType type = types.get(i);
-            Text.writeString(out, type.toString());
-            if (keys.get(i) == MaxLiteral.MAX_VALUE) {
-                out.writeBoolean(true);
-            } else {
-                out.writeBoolean(false);
-                keys.get(i).write(out);
-            }
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        int count = in.readInt();
-        for (int i = 0; i < count; i++) {
-            PrimitiveType type = PrimitiveType.valueOf(Text.readString(in));
-            types.add(type);
-
-            LiteralExpr literal = null;
-            boolean isMax = in.readBoolean();
-            if (isMax) {
-                literal = MaxLiteral.MAX_VALUE;
-            } else {
-                switch (type) {
-                    case TINYINT:
-                    case SMALLINT:
-                    case INT:
-                    case BIGINT:
-                        literal = IntLiteral.read(in);
-                        break;
-                    case LARGEINT:
-                        literal = LargeIntLiteral.read(in);
-                        break;
-                    case DATE:
-                    case DATETIME:
-                        literal = DateLiteral.read(in);
-                        break;
-                    case CHAR:
-                    case VARCHAR:
-                        literal =  StringLiteral.read(in);
-                        break;
-                    default:
-                        throw new IOException("type[" + type.name() + "] not supported: ");
-                }
-            }
-            literal.setType(TypeFactory.createType(type));
-            keys.add(literal);
-        }
-    }
-
-    public static PartitionKey read(DataInput in) throws IOException {
-        PartitionKey key = new PartitionKey();
-        key.readFields(in);
-        return key;
     }
 
     @Override

@@ -35,7 +35,7 @@ import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
-import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.LexerATNSimulator;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
 import org.antlr.v4.runtime.atn.PredictionMode;
@@ -177,6 +177,14 @@ public class SqlParser {
         return statements;
     }
 
+    public static Expr parseExpression(String expressionSql, SessionVariable sessionVariable) {
+        ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
+                com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .visit(expressionContext);
+    }
+
     /**
      * We need not only sqlMode but also other parameters to define the property of parser.
      * Please consider use {@link #parse(String, SessionVariable)}
@@ -252,6 +260,18 @@ public class SqlParser {
         com.starrocks.sql.parser.StarRocksLexer lexer =
                 new com.starrocks.sql.parser.StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         lexer.setSqlMode(sessionVariable.getSqlMode());
+        if (Config.enable_concurrent_parse_optimization) {
+            DFA[] lexerDecisionDFA = new DFA[StarRocksLexer._ATN.getNumberOfDecisions()];
+            for (int i = 0; i < StarRocksLexer._ATN.getNumberOfDecisions(); i++) {
+                lexerDecisionDFA[i] = new DFA(StarRocksLexer._ATN.getDecisionState(i), i);
+            }
+            lexer.setInterpreter(new LexerATNSimulator(
+                    lexer,
+                    StarRocksLexer._ATN,
+                    lexerDecisionDFA,
+                    new PredictionContextCache()
+            ));
+        }
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         int exprLimit = Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit());
         int tokenLimit = Math.max(MIN_TOKEN_LIMIT, sessionVariable.getParseTokensLimit());
@@ -260,7 +280,7 @@ public class SqlParser {
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
         parser.addParseListener(new PostProcessListener(tokenLimit, exprLimit));
-        if (!Config.enable_parser_context_cache) {
+        if (!Config.enable_parser_context_cache || Config.enable_concurrent_parse_optimization) {
             DFA[] decisionDFA = new DFA[parser.getATN().getNumberOfDecisions()];
             for (int i = 0; i < parser.getATN().getNumberOfDecisions(); i++) {
                 decisionDFA[i] = new DFA(parser.getATN().getDecisionState(i), i);
@@ -283,21 +303,5 @@ public class SqlParser {
             parser.setErrorHandler(new StarRocksDefaultErrorStrategy());
             return Pair.create(parseFunction.apply(parser), parser);
         }
-    }
-
-    public static String getTokenDisplay(Token t) {
-        if (t == null) {
-            return "<no token>";
-        }
-
-        String s = t.getText();
-        if (s == null) {
-            if (t.getType() == Token.EOF) {
-                s = EOF;
-            } else {
-                s = "<" + t.getType() + ">";
-            }
-        }
-        return s;
     }
 }

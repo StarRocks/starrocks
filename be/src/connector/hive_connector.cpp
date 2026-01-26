@@ -20,11 +20,14 @@
 #include "connector/hive_chunk_sink.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner/cache_select_scanner.h"
+#include "exec/hdfs_scanner/hdfs_scanner_json.h"
 #include "exec/hdfs_scanner/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "exec/hdfs_scanner/jni_scanner.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
@@ -50,6 +53,13 @@ HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, con
     }
 }
 
+HiveDataSourceProvider::HiveDataSourceProvider(ConnectorScanNode* scan_node, const THdfsScanNode& hdfs_scan_node)
+        : _scan_node(scan_node), _hdfs_scan_node(hdfs_scan_node) {
+    if (_hdfs_scan_node.__isset.bucket_properties) {
+        _bucket_properties = _hdfs_scan_node.bucket_properties;
+    }
+}
+
 DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
@@ -62,6 +72,9 @@ const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* st
 
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
+
+HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const THdfsScanRange& hdfs_scan_range)
+        : _provider(provider), _scan_range(hdfs_scan_range) {}
 
 Status HiveDataSource::_check_all_slots_nullable() {
     for (const auto* slot : _tuple_desc->slots()) {
@@ -201,8 +214,34 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
+    _init_global_late_materialization_context(state);
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
+}
+
+void HiveDataSource::_init_global_late_materialization_context(RuntimeState* state) {
+    const auto& slots = _tuple_desc->slots();
+    int32_t row_source_slot_id = -1;
+    bool will_be_lazy_read = std::any_of(slots.begin(), slots.end(), [&](const SlotDescriptor* slot) {
+        if (slot->col_name() == "_row_source_id") {
+            row_source_slot_id = slot->id();
+            return true;
+        }
+        return false;
+    });
+
+    if (will_be_lazy_read) {
+        auto glm_ctx_mgr = state->query_ctx()->global_late_materialization_ctx_mgr();
+        pipeline::IcebergGlobalLateMaterilizationContext* glm_ctx =
+                static_cast<pipeline::IcebergGlobalLateMaterilizationContext*>(
+                        glm_ctx_mgr->get_or_create_ctx(row_source_slot_id, [&]() {
+                            auto ctx = state->query_ctx()->object_pool()->add(
+                                    new pipeline::IcebergGlobalLateMaterilizationContext());
+                            ctx->hdfs_scan_node = _provider->_hdfs_scan_node;
+                            return ctx;
+                        }));
+        _scan_range_id = glm_ctx->assign_scan_range_id(_scan_range);
+    }
 }
 
 void HiveDataSource::_update_has_any_predicate() {
@@ -245,9 +284,14 @@ Status HiveDataSource::_init_partition_values() {
     if (!(_hive_table != nullptr && _has_partition_columns)) return Status::OK();
     auto* partition_desc = _hive_table->get_partition(_scan_range.partition_id);
     if (partition_desc == nullptr) {
+        const auto& full_path = _scan_range.full_path;
+        const auto& relative_path = _scan_range.relative_path;
+        const auto& table_name =
+                _provider->_hdfs_scan_node.__isset.table_name ? _provider->_hdfs_scan_node.table_name : "unknown";
         return Status::InternalError(
-                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map",
-                            _scan_range.partition_id));
+                fmt::format("Plan inconsistency. scan_range.partition_id = {} not found in partition description map. "
+                            "full_path = {}, relative_path = {}, table_name = {}.",
+                            _scan_range.partition_id, full_path, relative_path, table_name));
     }
 
     const auto& partition_values = partition_desc->partition_key_value_evals();
@@ -260,7 +304,7 @@ Status HiveDataSource::_init_partition_values() {
         int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
         ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
         DCHECK(partition_value_col->is_constant());
-        partition_chunk->append_column(partition_value_col, slot_id);
+        partition_chunk->append_column(std::move(partition_value_col), slot_id);
     }
 
     // eval conjuncts and skip if no rows.
@@ -681,11 +725,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
             FSOptions(hdfs_scan_node.__isset.cloud_configuration ? &hdfs_scan_node.cloud_configuration : nullptr);
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(native_file_path, fsOptions));
-
     HdfsScannerParams scanner_params;
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
+    scanner_params.scan_range_id = _scan_range_id;
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
@@ -812,7 +856,23 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;
         scanner = new HdfsOrcScanner();
     } else if (format == THdfsFileFormat::TEXT) {
-        scanner = new HdfsTextScanner();
+        const auto* hdfs_desc = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
+        const auto* file_desc = dynamic_cast<const FileTableDescriptor*>(_hive_table);
+        if (hdfs_desc != nullptr || file_desc != nullptr) {
+            std::string serde_lib;
+            if (hdfs_desc != nullptr) {
+                serde_lib = hdfs_desc->get_serde_lib();
+            } else {
+                serde_lib = file_desc->get_serde_lib();
+            }
+            if (serde_lib == OPENXJSON_SERDE_LIB) {
+                scanner = new HdfsJsonScanner();
+            } else {
+                scanner = new HdfsTextScanner();
+            }
+        } else {
+            scanner = new HdfsTextScanner();
+        }
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_FILE ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
@@ -880,8 +940,8 @@ Status HiveDataSource::_init_chunk_if_needed(ChunkPtr* chunk, size_t n) {
     if ((*chunk) != nullptr && (*chunk)->num_columns() != 0) {
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(*chunk, ChunkHelper::new_chunk_checked(*_tuple_desc, n));
 
-    *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
     return Status::OK();
 }
 

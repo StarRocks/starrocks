@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 
@@ -33,11 +34,11 @@ public abstract class PartitionDiffer {
     protected final MaterializedView mv;
     // whether it's used for query rewrite or refresh, the difference is that query rewrite will not
     // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
-    protected final boolean isQueryRewrite;
+    protected final MVTimelinessArbiter.QueryRewriteParams queryRewriteParams;
 
-    public PartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
+    public PartitionDiffer(MaterializedView mv, MVTimelinessArbiter.QueryRewriteParams queryRewriteParams) {
         this.mv = mv;
-        this.isQueryRewrite = isQueryRewrite;
+        this.queryRewriteParams = queryRewriteParams;
     }
 
     /**
@@ -58,6 +59,10 @@ public abstract class PartitionDiffer {
                                                              Map<Table, PCellSortedSet> refBaseTablePartitionMap);
     /**
      * Generate the reference map between the base table and the mv.
+     *
+     * NOTE: the result with base table's partition cell is not the normalized cell by mv's partition exprs, but the exact base
+     * tables' partition cell.
+     *
      * @param basePartitionMaps src partition sorted set of the base table
      * @param mvPartitionMap mv partition sorted set
      * @return base table -> <partition name, mv partition names> mapping
@@ -67,6 +72,10 @@ public abstract class PartitionDiffer {
 
     /**
      * Generate the mapping from materialized view partition to base table partition.
+     *
+     * NOTE: the result with base table's partition cell is not the normalized cell by mv's partition exprs, but the exact base
+     * tables' partition cell.
+     *
      * @param mvPCells : materialized view partition sorted set
      * @param baseTablePCells: base table partition sorted set map
      * @return mv partition name -> <base table, base partition names> mapping

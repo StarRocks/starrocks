@@ -72,16 +72,25 @@ public class TempPartitionTest extends StarRocksTestBase {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
 
+    private static long defaultRetentionPeriod;
+
     @BeforeAll
     public static void setup() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         Config.alter_scheduler_interval_millisecond = 100;
         starRocksAssert = new StarRocksAssert(ctx);
+
+        // temporarily disable partition duration to prevent CatalogRecycleBin waiting too long time
+        // and blocking ut progress
+        defaultRetentionPeriod = Config.partition_recycle_retention_period_secs;
+        Config.partition_recycle_retention_period_secs = 0;
     }
 
     @AfterAll
     public static void tearDown() {
+        Config.partition_recycle_retention_period_secs = defaultRetentionPeriod;
+
         File file2 = new File(tempPartitionFile);
         file2.delete();
         File file3 = new File(tblFile);
@@ -651,7 +660,6 @@ public class TempPartitionTest extends StarRocksTestBase {
 
         Partition p2 = tbl2.getPartition("p2");
         Assertions.assertNotNull(p2);
-        Assertions.assertFalse(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
         Assertions.assertEquals(1, p2.getDistributionInfo().getBucketNum());
 
         stmtStr = "alter table db2.tbl2 replace partition (p2) with temporary partition (tp4)";
@@ -660,7 +668,6 @@ public class TempPartitionTest extends StarRocksTestBase {
         // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition. and p2 bucket is 3, 'in_memory' is true.
         p2 = tbl2.getPartition("p2");
         Assertions.assertNotNull(p2);
-        Assertions.assertTrue(tbl2.getPartitionInfo().getIsInMemory(p2.getId()));
         Assertions.assertEquals(3, p2.getDistributionInfo().getBucketNum());
     }
 

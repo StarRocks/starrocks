@@ -31,7 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
@@ -46,11 +46,11 @@ public class PushDownAggRuleTest {
     @Test
     public void transform(@Mocked LogicalOlapScanOperator scanOp) {
         Map<ColumnRefOperator, Column> aggMap = Maps.newHashMap();
-        aggMap.put(new ColumnRefOperator(1, Type.INT, "id", true), null);
+        aggMap.put(new ColumnRefOperator(1, IntegerType.INT, "id", true), null);
 
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
-        scanColumnMap.put(new ColumnRefOperator(1, Type.INT, "id", true), null);
-        scanColumnMap.put(new ColumnRefOperator(2, Type.INT, "name", true), null);
+        scanColumnMap.put(new ColumnRefOperator(1, IntegerType.INT, "id", true), null);
+        scanColumnMap.put(new ColumnRefOperator(2, IntegerType.INT, "name", true), null);
 
         new Expectations(scanOp) {{
                 scanOp.getColRefToColumnMetaMap();
@@ -61,10 +61,10 @@ public class PushDownAggRuleTest {
         OptExpression filter = new OptExpression(new LogicalFilterOperator(
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                         new BinaryPredicateOperator(BinaryType.EQ,
-                                new ColumnRefOperator(1, Type.INT, "id", true),
+                                new ColumnRefOperator(1, IntegerType.INT, "id", true),
                                 ConstantOperator.createInt(1)),
                         new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
-                                new ColumnRefOperator(2, Type.INT, "name", true)))));
+                                new ColumnRefOperator(2, IntegerType.INT, "name", true)))));
 
         OptExpression scan =
                 new OptExpression(scanOp);

@@ -77,9 +77,9 @@ private:
     void _assign_ordinals_tmpl();
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
-
-protected:
     ChunkPtr _late_materialize(const ChunkPtr& chunk);
+
+    void _reset();
 
     size_t _total_rows = 0; // Total rows of sorting data
     size_t _staging_unsorted_rows = 0;
@@ -107,6 +107,20 @@ protected:
     std::vector<SlotId> _column_id_to_slot_id;
     std::vector<ChunkUniquePtr> _early_materialized_chunks;
     std::vector<ChunkUniquePtr> _late_materialized_chunks;
+
+protected:
+    size_t _reserved_bytes(const ChunkPtr& chunk);
+    size_t _get_revocable_mem_bytes();
+    std::function<StatusOr<ChunkPtr>()> _get_chunk_iterator();
+    bool _have_no_staging_data() const;
+
+    // used in spill
+    // index for _staging_unsorted_chunk_idx
+    size_t _process_staging_unsorted_chunk_idx = 0;
+    // index for _sorted_chunk_idx
+    size_t _process_sorted_chunk_idx = 0;
+    // index for _early_materialized_chunks
+    size_t _process_early_materialized_chunks_idx = 0;
 };
 
 } // namespace starrocks

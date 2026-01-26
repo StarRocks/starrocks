@@ -93,7 +93,7 @@ public class AnalyzeSnapshotTest {
         BlobStorage storage = new BlobStorage(brokerName, Maps.newHashMap());
         Repository repo = new Repository(10000, "repo", false, location, storage);
         repo.initRepository();
-        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
+        GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo);
 
         analyzeSuccess("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT = \"backup1\" AND TIMESTAMP = \"2018-05-05-15-34-26\";");
         analyzeSuccess("SHOW SNAPSHOT ON `repo` WHERE SNAPSHOT IN (\"backup1\")");

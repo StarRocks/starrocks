@@ -145,7 +145,19 @@ public:
         return ArrayGenerate<type>::process(context, columns);
     }
 
+    template <LogicalType type>
+    static Status array_generate_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayGenerate<type>::prepare(context, scope);
+    }
+
+    template <LogicalType type>
+    static Status array_generate_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        return ArrayGenerate<type>::close(context, scope);
+    }
+
     DEFINE_VECTORIZED_FN(concat);
+
+    DEFINE_VECTORIZED_FN(arrays_zip);
 
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
     DEFINE_VECTORIZED_FN(array_cum_sum_double);
@@ -170,6 +182,7 @@ public:
     }
 
     DEFINE_VECTORIZED_FN(array_map);
+    DEFINE_VECTORIZED_FN(array_sort_lambda);
     DEFINE_VECTORIZED_FN(array_filter);
     DEFINE_VECTORIZED_FN(all_match);
     DEFINE_VECTORIZED_FN(any_match);

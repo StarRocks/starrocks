@@ -17,8 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
@@ -33,18 +32,18 @@ public class TablesConfigSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_ENGINE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TABLE_MODEL", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PRIMARY_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PARTITION_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DISTRIBUTE_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DISTRIBUTE_TYPE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("DISTRIBUTE_BUCKET", ScalarType.INT)
-                        .column("SORT_KEY", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("PROPERTIES", TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("TABLE_ID", Type.BIGINT)
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_ENGINE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TABLE_MODEL", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PRIMARY_KEY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PARTITION_KEY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DISTRIBUTE_KEY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DISTRIBUTE_TYPE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("DISTRIBUTE_BUCKET", IntegerType.INT)
+                        .column("SORT_KEY", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("PROPERTIES", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("TABLE_ID", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_TABLES_CONFIG);
     }
 }

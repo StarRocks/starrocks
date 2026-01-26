@@ -25,6 +25,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -35,7 +36,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -50,10 +51,10 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -340,7 +341,7 @@ public class MVPCTRefreshPlanBuilder {
                         "relation {}, filtered partition names:{} ",
                 mv.getName(), tableRelation.getName(), tablePartitionNames);
         tableRelation.setPartitionNames(
-                new PartitionNames(false, new ArrayList<>(tablePartitionNames.getPartitionNames())));
+                new PartitionRef(new ArrayList<>(tablePartitionNames.getPartitionNames()), false, NodePosition.ZERO));
         tracePartitionNames(table, tablePartitionNames);
         return true;
     }
@@ -421,7 +422,7 @@ public class MVPCTRefreshPlanBuilder {
                 return expr;
             } else if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)
+                if (functionCallExpr.getFunctionName().equalsIgnoreCase(FunctionSet.STR2DATE)
                         && functionCallExpr.getChild(0) instanceof SlotRef) {
                     SlotRef slot = functionCallExpr.getChild(0).cast();
                     if (slot.getColumnName().equalsIgnoreCase(mvPartitionInfoRefColName)) {
@@ -430,7 +431,7 @@ public class MVPCTRefreshPlanBuilder {
                 }
             } else {
                 // alias name.
-                SlotRef slotRef = expr.unwrapSlotRef();
+                SlotRef slotRef = ExprUtils.unwrapSlotRef(expr);
                 if (slotRef != null && slotRef.getColumnName().equals(mvPartitionInfoRefColName)) {
                     return outputExpressions.get(i);
                 }

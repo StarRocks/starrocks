@@ -15,30 +15,40 @@
 package com.starrocks.mysql.nio;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.RequestPackage;
+import com.starrocks.mysql.ssl.SSLDecoder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GracefulExitFlag;
+import com.starrocks.sql.ast.StatementBase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xnio.ChannelListener;
 import org.xnio.conduits.ConduitStreamSourceChannel;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MySQLReadListener implements ChannelListener<ConduitStreamSourceChannel> {
     private static final Logger LOG = LogManager.getLogger(MySQLReadListener.class);
     private final ConnectContext ctx;
     private final ConnectProcessor connectProcessor;
-    private final MysqlPackageDecoder decoder = new MysqlPackageDecoder();
+    private final MysqlPackageDecoder packageDecoder = new MysqlPackageDecoder();
 
     protected static final int DEFAULT_BUFFER_SIZE = 16 * 1024;
     private final ByteBuffer readBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
+    private final SSLDecoder sslDecoder;
+    private volatile boolean terminated = false;
+    private final AtomicInteger pendingTasks = new AtomicInteger(0);
 
     public MySQLReadListener(ConnectContext connectContext, ConnectProcessor connectProcessor) {
         this.ctx = connectContext;
         this.connectProcessor = connectProcessor;
+        this.sslDecoder = this.ctx.getMysqlChannel().getSSLDecoder();
     }
 
     @Override
@@ -52,25 +62,32 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
                 }
 
                 if (bytesRead == -1) {
+                    terminated = true;
                     LOG.info("Client closed connection: {} remote={}", ctx.getConnectionId(),
                             ctx.getMysqlChannel().getRemoteHostPortString());
-                    if (!Config.mysql_service_kill_after_disconnect) {
-                        return;
+                    if (Config.mysql_service_kill_after_disconnect) {
+                        killRunningQuery();
+                    } else {
+                        tryCleanup();
                     }
-                    if (!ctx.isKilled() && ctx.getState().isRunning()) {
-                        ctx.kill(false, "client closed");
-                    }
-                    ctx.cleanup();
                     return;
                 }
 
                 readBuffer.flip();
-                decoder.consume(readBuffer);
+
+                if (sslDecoder != null) {
+                    sslDecoder.feed(readBuffer);
+                    packageDecoder.consume(sslDecoder.decode());
+                } else {
+                    packageDecoder.consume(readBuffer);
+                }
+
                 readBuffer.compact();
 
                 RequestPackage pkg;
-                while ((pkg = decoder.poll()) != null) {
+                while ((pkg = packageDecoder.poll()) != null) {
                     final RequestPackage req = pkg;
+                    pendingTasks.incrementAndGet();
                     channel.getWorker().execute(() -> {
                         handleRequest(req);
                     });
@@ -83,11 +100,57 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
         }
     }
 
+    private void tryCleanup() {
+        if (terminated && pendingTasks.get() == 0) {
+            ctx.cleanup();
+        }
+    }
+
+    private void taskCompleted() {
+        pendingTasks.decrementAndGet();
+        tryCleanup();
+    }
+
+    private void killRunningQuery() {
+        if (!ctx.isKilled() && ctx.getState().isRunning()) {
+            ctx.kill(false, "client closed");
+        }
+        ctx.cleanup();
+    }
+
+    /**
+     * Determines if the connection should be terminated.
+     * <p>
+     * Termination logic:
+     * <ul>
+     *   <li>Returns {@code true} if the terminated flag is already set (client disconnected)</li>
+     *   <li>Returns {@code false} if no statement has been executed yet (executor is null)</li>
+     *   <li>During graceful exit (leader transfer), returns {@code true} only if the last executed
+     *       statement is NOT a pre-query SQL. Pre-query SQLs (like {@code select @@query_timeout},
+     *       {@code set query_timeout=xxx}, {@code select connection_id()}) are initialization queries
+     *       sent by JDBC drivers and should not cause connection termination to avoid breaking
+     *       client connections during leadership transitions.</li>
+     * </ul>
+     *
+     * @return {@code true} if the connection should be terminated, {@code false} otherwise
+     */
+    private boolean isTerminated() {
+        if (terminated) {
+            return true;
+        }
+        StmtExecutor executor = connectProcessor.getExecutor();
+        if (executor == null) {
+            return false;
+        }
+        final StatementBase lastStmt = executor.getParsedStmt();
+        return GracefulExitFlag.isGracefulExit() && !SqlUtils.isPreQuerySQL(lastStmt);
+    }
+
     private synchronized void handleRequest(RequestPackage req) {
         ctx.setThreadLocalInfo();
         try {
             connectProcessor.processOnce(req);
-            if (ctx.isKilled()) {
+            if (ctx.isKilled() || isTerminated()) {
                 ctx.stopAcceptQuery();
                 ctx.cleanup();
             }
@@ -100,6 +163,7 @@ public class MySQLReadListener implements ChannelListener<ConduitStreamSourceCha
             ctx.setKilled();
             ctx.cleanup();
         } finally {
+            taskCompleted();
             ConnectContext.remove();
         }
     }

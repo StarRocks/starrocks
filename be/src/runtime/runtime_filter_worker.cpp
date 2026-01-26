@@ -181,6 +181,8 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
 
         // rf metadata
         PTransmitRuntimeFilterParams params;
+        params.set_transmit_timeout_ms(timeout_ms);
+        params.set_transmit_via_http_min_size(rpc_http_min_size);
         prepare_params(params, state, rf_desc);
 
         // print before setting data, otherwise it's too big.
@@ -224,7 +226,19 @@ void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBui
 
     if (!need_sender_grf) return;
 
+    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
+        timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
+    }
+
+    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
+    if (state->query_options().__isset.runtime_filter_rpc_http_min_size) {
+        rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
+    }
+
     PTransmitRuntimeFilterParams params;
+    params.set_transmit_timeout_ms(timeout_ms);
+    params.set_transmit_via_http_min_size(rpc_http_min_size);
     prepare_params(params, state, rf_desc);
 
     VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters for skew join's boradcast site. join filter_id="
@@ -236,19 +250,11 @@ void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBui
     std::string* rf_data = params.mutable_data();
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(keyColumn);
     rf_data->resize(max_size);
-    size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(
+    auto actual_size = RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(
             keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
-    rf_data->resize(actual_size);
+    RETURN_IF(!actual_size.status().ok(), (void)nullptr);
+    rf_data->resize(actual_size.value());
     *(params.mutable_columntype()) = type_desc.to_protobuf();
-    int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
-    if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
-        timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
-    }
-
-    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
-    if (state->query_options().__isset.runtime_filter_rpc_http_min_size) {
-        rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
-    }
     state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
                                                                          timeout_ms, rpc_http_min_size,
                                                                          EventType::SEND_SKEW_JOIN_BROADCAST_RF);
@@ -343,26 +349,27 @@ Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
     return Status::OK();
 }
 
-void merge_membership_filter(RuntimeFilterMergerStatus* rf_state, RuntimeFilter* rf, size_t rf_version,
-                             size_t filter_id, size_t be_number) {
-    auto membership_filter = rf->get_membership_filter();
-    if (!membership_filter->can_use_bf()) {
-        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. some partial rf's size exceeds "
-                     "global_runtime_filter_build_max_size, stop building bf and only reserve min/max filter";
-        rf_state->exceeded = false;
+void finalize_membership_filters(RuntimeFilterMergerStatus* rf_state, const size_t rf_version, const size_t filter_id) {
+    for (const auto& [_, filter] : rf_state->filters) {
+        const auto* membership_filter = filter->get_membership_filter();
+        if (!membership_filter->can_use_bf()) {
+            VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. some partial rf's size exceeds "
+                         "global_runtime_filter_build_max_size, stop building bf and only reserve min/max filter. "
+                      << "filter_id=" << filter_id;
+            rf_state->exceeded = false;
+        }
+        rf_state->current_size += membership_filter->size();
     }
 
-    rf_state->current_size += membership_filter->size();
     if (rf_state->current_size > rf_state->max_size) {
-        // alreay exceeds max size, no need to build bloom filter, but still reserve min/max filter.
+        // already exceeds max size, no need to build bloom filter, but still reserve min/max filter.
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building bf since size too "
                      "large. filter_id="
                   << filter_id << ", rf_size=" << rf_state->current_size;
         rf_state->exceeded = false;
     }
 
-    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. merged filter_id=" << filter_id
-              << ", be_number=" << be_number;
+    VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. merged filter_id=" << filter_id;
 
     if (!rf_state->exceeded) {
         VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter, clear bf in all filters";
@@ -441,7 +448,7 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     if (status->is_skew_join && status->skew_broadcast_rf_material == nullptr) return;
 
     if (rf->type() != RuntimeFilterSerializeType::IN_FILTER) {
-        merge_membership_filter(status, rf, rf_version, filter_id, be_number);
+        finalize_membership_filters(status, rf_version, filter_id);
     }
 
     _send_total_runtime_filter(rf_version, filter_id);
@@ -489,10 +496,10 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
 
     // store material of broadcast join rf
     status->skew_broadcast_rf_material = nullptr;
-    int rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
+    auto rf_version = RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(
             &(status->pool), &(status->skew_broadcast_rf_material),
             reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size(), params.columntype());
-
+    RETURN_IF(!rf_version.ok(), (void)nullptr);
     if (status->skew_broadcast_rf_material == nullptr) {
         // something wrong with deserialization.
         return;
@@ -502,7 +509,7 @@ void RuntimeFilterMerger::store_skew_broadcast_join_runtime_filter(PTransmitRunt
     if (status->filters.size() < status->expect_number) return;
 
     // this only happens when boradcast's rf is the last rf instance arrived
-    _send_total_runtime_filter(rf_version, filter_id);
+    _send_total_runtime_filter(rf_version.value(), filter_id);
 }
 
 #define WARN_IF_RF_RPC_ERROR(closure)                                                                                 \
@@ -616,6 +623,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     if (_query_options.__isset.runtime_filter_rpc_http_min_size) {
         rpc_http_min_size = _query_options.runtime_filter_rpc_http_min_size;
     }
+
+    // we pass this options to the receiver, and receiver can use this option to forward rf to others.
+    request.set_transmit_timeout_ms(timeout_ms);
+    request.set_transmit_via_http_min_size(rpc_http_min_size);
 
     int64_t now = UnixMillis();
     status->broadcast_filter_ts = now;
@@ -856,6 +867,16 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     } else {
         _exec_env->add_rf_event({params.query_id(), params.filter_id(), "", "RECV_TOTAL_RF"});
         ev.type = RECEIVE_TOTAL_RF;
+    }
+    if (params.has_transmit_timeout_ms()) {
+        ev.transmit_timeout_ms = params.transmit_timeout_ms();
+    } else {
+        ev.transmit_timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    }
+    if (params.has_transmit_via_http_min_size()) {
+        ev.transmit_via_http_min_size = params.transmit_via_http_min_size();
+    } else {
+        ev.transmit_via_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
     }
     ev.query_id.hi = params.query_id().hi();
     ev.query_id.lo = params.query_id().lo();

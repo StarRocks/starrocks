@@ -330,9 +330,13 @@ public class RuntimeProfile {
                         // Running profile will report multiple times, we only need the last time value
                         if (tcounter.isSetMin_value()) {
                             counter.setMinValue(tcounter.getMin_value());
+                        } else {
+                            counter.clearMinValue();
                         }
                         if (tcounter.isSetMax_value()) {
                             counter.setMaxValue(tcounter.getMax_value());
+                        } else {
+                            counter.clearMaxValue();
                         }
                         tCounterMap.remove(topName);
                     }
@@ -368,9 +372,13 @@ public class RuntimeProfile {
                 // Running profile will report multiple times, we only need the last time value
                 if (tcounter.isSetMin_value()) {
                     counter.setMinValue(tcounter.getMin_value());
+                } else {
+                    counter.clearMinValue();
                 }
                 if (tcounter.isSetMax_value()) {
                     counter.setMaxValue(tcounter.getMax_value());
+                } else {
+                    counter.clearMaxValue();
                 }
             }
         }

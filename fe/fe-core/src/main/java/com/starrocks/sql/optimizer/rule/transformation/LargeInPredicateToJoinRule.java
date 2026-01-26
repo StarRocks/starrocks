@@ -15,8 +15,8 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.sql.common.LargeInPredicateException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -136,7 +136,7 @@ public class LargeInPredicateToJoinRule extends TransformationRule {
         
         if (analysis.largeInPredicates.size() > 1) {
             throw new LargeInPredicateException(
-                    "LargeInPredicate does not support multiple LargeInPredicate in one query, found: %d",
+                    "LargeInPredicate does not support multiple LargeInPredicate in one query, found: %s",
                     analysis.largeInPredicates.size());
         }
 

@@ -16,12 +16,15 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.combinator.AggStateCombineCombinator;
 import com.starrocks.catalog.combinator.AggStateIf;
@@ -41,7 +44,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.FunctionName;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
@@ -56,16 +58,25 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.NullType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -87,8 +98,8 @@ public class FunctionAnalyzer {
             throw new SemanticException("Cannot pass '*' to scalar function.", functionCallExpr.getPos());
         }
 
-        FunctionName fnName = functionCallExpr.getFnName();
-        if (fnName.getFunction().equals(FunctionSet.DATE_TRUNC)) {
+        String fnName = functionCallExpr.getFunctionName();
+        if (fnName.equals(FunctionSet.DATE_TRUNC)) {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant",
                         functionCallExpr.getChild(0).getPos());
@@ -115,7 +126,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_DIFFERENCE)) {
+        if (fnName.equals(FunctionSet.ARRAY_DIFFERENCE)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() == 1);
             if (!functionCallExpr.getChild(0).getType().isNull()) {
                 Preconditions.checkState(functionCallExpr.getChild(0).getType().isArrayType());
@@ -127,7 +138,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
+        if (fnName.equals(FunctionSet.ARRAY_MAP)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() > 1,
                     "array_map should have at least two inputs", functionCallExpr.getPos());
             Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
@@ -137,7 +148,7 @@ public class FunctionAnalyzer {
             // which puts various arguments/inputs at the tail e.g.,
             // array_map(x+y <- (x,y), arr1, arr2)
             functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(0).getType()));
-        } else if (fnName.getFunction().equals(FunctionSet.MAP_APPLY)) {
+        } else if (fnName.equals(FunctionSet.MAP_APPLY)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() > 1,
                     "map_apply should have at least two inputs");
             Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
@@ -145,7 +156,7 @@ public class FunctionAnalyzer {
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
         }
 
-        if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName.getFunction())) {
+        if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
             if (!functionCallExpr.getChild(0).getType().isStringType() ||
                     !functionCallExpr.getChild(0).getType().isStringType()) {
                 throw new SemanticException(
@@ -160,14 +171,14 @@ public class FunctionAnalyzer {
             }
         }
         Function fn = functionCallExpr.getFn();
-        final String funcName = fnName.getFunction();
+        final String funcName = fnName;
         if (fn instanceof StateFunctionCombinator) {
             // analyze `_state` combinator function by using its arg function
-            FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            String argFuncName = AggStateUtils.getAggFuncNameOfCombinator(fnName);
             analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
         } else if (fn instanceof AggStateCombineCombinator) {
             // analyze `_state` combinator function by using its arg function
-            FunctionName argFuncName = new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            String argFuncName = AggStateUtils.getAggFuncNameOfCombinator(fnName);
             analyzeBuiltinAggFunction(argFuncName, functionCallExpr.getParams(), functionCallExpr);
         } else if (fn instanceof StateMergeCombinator || fn instanceof StateUnionCombinator) {
             if (Arrays.stream(fn.getArgs()).anyMatch(Type::isWildcardDecimal)) {
@@ -213,17 +224,16 @@ public class FunctionAnalyzer {
                 }
             }
         } else if (fn instanceof AggStateIf) {
-            FunctionName argFuncNameWithoutIf =
-                    new FunctionName(AggStateUtils.getAggFuncNameOfCombinator(fnName.getFunction()));
+            String argFuncNameWithoutIf = AggStateUtils.getAggFuncNameOfCombinator(fnName);
             FunctionParams params = functionCallExpr.getParams();
             
             // Validate that the condition parameter (last parameter) is boolean type or can be cast to boolean
             if (!params.exprs().isEmpty()) {
                 Expr conditionExpr = params.exprs().get(params.exprs().size() - 1);
-                if (!TypeManager.canCastTo(conditionExpr.getType(), Type.BOOLEAN)) {
+                if (!TypeManager.canCastTo(conditionExpr.getType(), BooleanType.BOOLEAN)) {
                     throw new SemanticException(String.format(
                         "The condition expression in %s function must be boolean type or castable to boolean, but got %s",
-                        fnName.getFunction(), conditionExpr.getType().toSql()), functionCallExpr.getPos());
+                        fnName, conditionExpr.getType().toSql()), functionCallExpr.getPos());
                 }
             }
             
@@ -240,20 +250,20 @@ public class FunctionAnalyzer {
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
-        FunctionName fnName = functionCallExpr.getFnName();
+        String fnName = functionCallExpr.getFunctionName();
         FunctionParams fnParams = functionCallExpr.getParams();
         analyzeBuiltinAggFunction(fnName, fnParams, functionCallExpr);
     }
 
-    private static void analyzeBuiltinAggFunction(FunctionName fnName,
+    private static void analyzeBuiltinAggFunction(String fnName,
                                                   FunctionParams fnParams,
                                                   FunctionCallExpr functionCallExpr) {
-        if (fnParams.isStar() && !fnName.getFunction().equals(FunctionSet.COUNT)) {
+        if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
         }
 
-        if (fnName.getFunction().equals(FunctionSet.COUNT)) {
+        if (fnName.equals(FunctionSet.COUNT)) {
             // for multiple exprs count must be qualified with distinct
             if (functionCallExpr.getChildren().size() > 1 && !fnParams.isDistinct()) {
                 throw new SemanticException(
@@ -263,11 +273,11 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.COUNT_IF) && fnParams.isDistinct()) {
+        if (fnName.equals(FunctionSet.COUNT_IF) && fnParams.isDistinct()) {
             throw new SemanticException("COUNT_IF does not support DISTINCT", functionCallExpr.getPos());
         }
 
-        if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
+        if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() - fnParams.getOrderByElemNum() < 2) {
                 throw new SemanticException(
                         "group_concat requires at least one parameter: " + ExprToSql.toSql(functionCallExpr),
@@ -285,24 +295,15 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.LAG)
-                || fnName.getFunction().equals(FunctionSet.LEAD)) {
+        if (fnName.equals(FunctionSet.LAG)
+                || fnName.equals(FunctionSet.LEAD)) {
             if (!functionCallExpr.isAnalyticFnCall()) {
-                throw new SemanticException(fnName.getFunction() + " only used in analytic function",
+                throw new SemanticException(fnName + " only used in analytic function",
                         functionCallExpr.getPos());
-            } else {
-                if (functionCallExpr.getChildren().size() > 2) {
-                    if (!functionCallExpr.getChild(2).isConstant()) {
-                        throw new SemanticException(
-                                "The default parameter (parameter 3) of LAG must be a constant: "
-                                        + ExprToSql.toSql(functionCallExpr), functionCallExpr.getChild(2).getPos());
-                    }
-                }
-                return;
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.SESSION_NUMBER)) {
+        if (fnName.equals(FunctionSet.SESSION_NUMBER)) {
             if (!functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
                         "The delta parameter (parameter 2) of SESSION_NUMBER must be a constant: "
@@ -310,9 +311,9 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName.getFunction())) {
+        if (FunctionSet.onlyAnalyticUsedFunctions.contains(fnName)) {
             if (!functionCallExpr.isAnalyticFnCall()) {
-                throw new SemanticException(fnName.getFunction() + " only used in analytic function",
+                throw new SemanticException(fnName + " only used in analytic function",
                         functionCallExpr.getPos());
             }
         }
@@ -323,7 +324,7 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
+        if (fnName.equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>", arg.getPos());
             }
@@ -334,7 +335,7 @@ public class FunctionAnalyzer {
             // For Array<BOOLEAN> that have different size, we just extend result array to Compatible with it
         }
 
-        if (fnName.getFunction().equals(FunctionSet.WINDOW_FUNNEL)) {
+        if (fnName.equals(FunctionSet.WINDOW_FUNNEL)) {
             Expr modeArg = functionCallExpr.getChild(2);
             if (modeArg instanceof IntLiteral) {
                 IntLiteral modeIntLiteral = (IntLiteral) modeArg;
@@ -363,16 +364,16 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.MAX_BY) || fnName.getFunction().equals(FunctionSet.MIN_BY)) {
+        if (fnName.equals(FunctionSet.MAX_BY) || fnName.equals(FunctionSet.MIN_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
-                        fnName.getFunction() + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
+                        fnName + " requires two parameters: " + ExprToSql.toSql(functionCallExpr),
                         functionCallExpr.getPos());
             }
 
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
-                        fnName.getFunction() + " function args must be column", functionCallExpr.getPos());
+                        fnName + " function args must be column", functionCallExpr.getPos());
             }
 
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
@@ -386,33 +387,33 @@ public class FunctionAnalyzer {
         }
 
         // SUM and AVG cannot be applied to non-numeric types
-        if ((fnName.getFunction().equals(FunctionSet.SUM)
-                || fnName.getFunction().equals(FunctionSet.AVG))
+        if ((fnName.equals(FunctionSet.SUM)
+                || fnName.equals(FunctionSet.AVG))
                 && ((!arg.getType().isNumericType() && !arg.getType().isBoolean()
                 && !arg.getType().isStringType() && !arg.getType().isNull() &&
                 !(arg instanceof NullLiteral)) ||
                 !arg.getType().canApplyToNumeric())) {
             throw new SemanticException(
-                    fnName.getFunction() + " requires a numeric parameter: " + ExprToSql.toSql(functionCallExpr),
+                    fnName + " requires a numeric parameter: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
         }
 
-        if ((fnName.getFunction().equals(FunctionSet.MIN)
-                || fnName.getFunction().equals(FunctionSet.MAX)
-                || fnName.getFunction().equals(FunctionSet.NDV)
-                || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
-                || fnName.getFunction().equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
-                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
+        if ((fnName.equals(FunctionSet.MIN)
+                || fnName.equals(FunctionSet.MAX)
+                || fnName.equals(FunctionSet.NDV)
+                || fnName.equals(FunctionSet.APPROX_COUNT_DISTINCT)
+                || fnName.equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
+                || fnName.equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
 
-        if ((fnName.getFunction().equals(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {
+        if ((fnName.equals(FunctionSet.BITMAP_UNION_INT) && !arg.getType().isIntegerType())) {
             throw new SemanticException("BITMAP_UNION_INT params only support Integer getType()",
                     functionCallExpr.getPos());
         }
 
-        if (fnName.getFunction().equals(FunctionSet.INTERSECT_COUNT)) {
+        if (fnName.equals(FunctionSet.INTERSECT_COUNT)) {
             if (functionCallExpr.getChildren().size() <= 2) {
                 throw new SemanticException("intersect_count(bitmap_column, column_to_filter, filter_values) " +
                         "function requires at least three parameters", functionCallExpr.getPos());
@@ -439,7 +440,7 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.BITMAP_AGG)) {
+        if (fnName.equals(FunctionSet.BITMAP_AGG)) {
             if (functionCallExpr.getChildren().size() != 1) {
                 throw new SemanticException(fnName + " function could only have one child", functionCallExpr.getPos());
             }
@@ -453,10 +454,10 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if (fnName.getFunction().equals(FunctionSet.BITMAP_COUNT)
-                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION)
-                || fnName.getFunction().equals(FunctionSet.BITMAP_UNION_COUNT)
-                || fnName.getFunction().equals(FunctionSet.BITMAP_INTERSECT)) {
+        if (fnName.equals(FunctionSet.BITMAP_COUNT)
+                || fnName.equals(FunctionSet.BITMAP_UNION)
+                || fnName.equals(FunctionSet.BITMAP_UNION_COUNT)
+                || fnName.equals(FunctionSet.BITMAP_INTERSECT)) {
             if (functionCallExpr.getChildren().size() != 1) {
                 throw new SemanticException(fnName + " function could only have one child", functionCallExpr.getPos());
             }
@@ -469,70 +470,68 @@ public class FunctionAnalyzer {
             return;
         }
 
-        if ((fnName.getFunction().equals(FunctionSet.HLL_UNION_AGG)
-                || fnName.getFunction().equals(FunctionSet.HLL_UNION)
-                || fnName.getFunction().equals(FunctionSet.HLL_CARDINALITY)
-                || fnName.getFunction().equals(FunctionSet.HLL_RAW_AGG))
+        if ((fnName.equals(FunctionSet.HLL_UNION_AGG)
+                || fnName.equals(FunctionSet.HLL_UNION)
+                || fnName.equals(FunctionSet.HLL_CARDINALITY)
+                || fnName.equals(FunctionSet.HLL_RAW_AGG))
                 && !arg.getType().isHllType()) {
             throw new SemanticException("HLL_UNION_AGG, HLL_RAW_AGG and HLL_CARDINALITY's params must be hll column",
                     functionCallExpr.getPos());
         }
 
-        if (fnName.getFunction().equals(FunctionSet.MIN)
-                || fnName.getFunction().equals(FunctionSet.MAX)
-                || fnName.getFunction().equals(FunctionSet.NDV)
-                || fnName.getFunction().equals(FunctionSet.HLL_UNION_AGG)) {
+        if (fnName.equals(FunctionSet.MIN)
+                || fnName.equals(FunctionSet.MAX)
+                || fnName.equals(FunctionSet.NDV)
+                || fnName.equals(FunctionSet.HLL_UNION_AGG)) {
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
         }
 
-        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX)) {
+        // Validate percentile_approx function parameters
+        // Note: Constant validation and value range checks are performed in TypeChecker during optimization phase
+        if (fnName.equals(FunctionSet.PERCENTILE_APPROX)) {
             List<Expr> children = functionCallExpr.getChildren();
             if (children.size() != 2 && children.size() != 3) {
-                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
-                        functionCallExpr.getPos());
+                throw new SemanticException("percentile_approx(expr, DOUBLE|ARRAY<DOUBLE> [, DOUBLE compression]) " +
+                        "requires two or three parameters", functionCallExpr.getPos());
             }
-            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
-                throw new SemanticException(
-                        "percentile_approx requires the first parameter's type is numeric type");
-            }
-            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
-                throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
-            }
+            // Validate first parameter (value expression) is numeric type
+            validateNumericParameter(functionCallExpr.getChild(0), "first", "value", 
+                    "percentile_approx", functionCallExpr.getPos());
+            // Validate second parameter (percentile) is numeric or array type
+            validatePercentileParameter(functionCallExpr.getChild(1), "second", 
+                    "percentile_approx", functionCallExpr.getPos());
+            // Validate optional third parameter (compression) is numeric type
             if (children.size() == 3) {
-                if (!functionCallExpr.getChild(2).getType().isNumericType()) {
-                    throw new SemanticException(
-                            "percentile_approx requires the third parameter's type is numeric type");
-                }
+                validateNumericParameter(functionCallExpr.getChild(2), "third", "compression", 
+                        "percentile_approx", functionCallExpr.getPos());
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX_WEIGHTED)) {
+        // Validate percentile_approx_weighted function parameters
+        // Note: Constant validation and value range checks are performed in TypeChecker during optimization phase
+        if (fnName.equals(FunctionSet.PERCENTILE_APPROX_WEIGHTED)) {
             List<Expr> children = functionCallExpr.getChildren();
             if (children.size() != 3 && children.size() != 4) {
-                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
-                        functionCallExpr.getPos());
+                throw new SemanticException("percentile_approx_weighted(expr, weight, DOUBLE|ARRAY<DOUBLE> percentile " +
+                        "[, DOUBLE compression]) requires three or four parameters", functionCallExpr.getPos());
             }
-            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
-                throw new SemanticException(
-                        "percentile_approx requires the first parameter's type is numeric type");
-            }
-            // 1th column cannot be constant
-            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
-                throw new SemanticException("percentile_approx requires the second parameter's type is bigint type column");
-            }
-            if (!functionCallExpr.getChild(2).getType().isNumericType()) {
-                throw new SemanticException(
-                        "percentile_approx requires the third parameter's type is numeric type");
-            }
+            // Validate first parameter (value expression) is numeric type
+            validateNumericParameter(functionCallExpr.getChild(0), "first", "value", 
+                    "percentile_approx_weighted", functionCallExpr.getPos());
+            // Validate second parameter (weight) is numeric type
+            validateNumericParameter(functionCallExpr.getChild(1), "second", "weight", 
+                    "percentile_approx_weighted", functionCallExpr.getPos());
+            // Validate third parameter (percentile) is numeric or array type
+            validatePercentileParameter(functionCallExpr.getChild(2), "third", 
+                    "percentile_approx_weighted", functionCallExpr.getPos());
+            // Validate optional fourth parameter (compression) is numeric type
             if (children.size() == 4) {
-                if (!functionCallExpr.getChild(3).getType().isNumericType()) {
-                    throw new SemanticException(
-                            "percentile_approx requires the fourth parameter's type is numeric type");
-                }
+                validateNumericParameter(functionCallExpr.getChild(3), "fourth", "compression", 
+                        "percentile_approx_weighted", functionCallExpr.getPos());
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.DICT_MERGE)) {
+        if (fnName.equals(FunctionSet.DICT_MERGE)) {
             if (functionCallExpr.hasChild(1)) {
                 Expr kExpr = functionCallExpr.getChild(1);
                 Optional<Long> k = extractIntegerValue(kExpr);
@@ -544,7 +543,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.APPROX_TOP_K)) {
+        if (fnName.equals(FunctionSet.APPROX_TOP_K)) {
             Optional<Long> k = Optional.empty();
             Optional<Long> counterNum = Optional.empty();
             Expr kExpr = null;
@@ -585,17 +584,17 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.EXCHANGE_BYTES) ||
-                fnName.getFunction().equals(FunctionSet.EXCHANGE_SPEED)) {
+        if (fnName.equals(FunctionSet.EXCHANGE_BYTES) ||
+                fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
             if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
-                throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1",
+                throw new SemanticException(fnName + " should run in new_planner_agg_stage = 1",
                         functionCallExpr.getPos());
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_DISC) ||
-                fnName.getFunction().equals(FunctionSet.PERCENTILE_CONT) ||
-                fnName.getFunction().equals(FunctionSet.LC_PERCENTILE_DISC)) {
+        if (fnName.equals(FunctionSet.PERCENTILE_DISC) ||
+                fnName.equals(FunctionSet.PERCENTILE_CONT) ||
+                fnName.equals(FunctionSet.LC_PERCENTILE_DISC)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " requires two parameters");
             }
@@ -615,7 +614,7 @@ public class FunctionAnalyzer {
         }
 
         // ds_hll_count_distinct
-        if (fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT)) {
+        if (fnName.equals(FunctionSet.DS_HLL_COUNT_DISTINCT)) {
             int argSize = functionCallExpr.getChildren().size();
             if (argSize > 3) {
                 throw new SemanticException(fnName + " requires one/two/three parameters: ds_hll_count_distinct(col, <log_k>, " +
@@ -647,8 +646,8 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
-                fnName.getFunction().equals(FunctionSet.CORR)) {
+        if (fnName.equals(FunctionSet.COVAR_POP) || fnName.equals(FunctionSet.COVAR_SAMP) ||
+                fnName.equals(FunctionSet.CORR)) {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
@@ -657,7 +656,7 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.MANN_WHITNEY_U_TEST)) {
+        if (fnName.equals(FunctionSet.MANN_WHITNEY_U_TEST)) {
             if (functionCallExpr.getChildren().size() >= 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
                     throw new SemanticException(fnName + "'s third parameter should be a string literal.");
@@ -698,6 +697,68 @@ public class FunctionAnalyzer {
     }
 
     /**
+     * Validate that a function parameter is of numeric type.
+     * 
+     * @param paramExpr The parameter expression to validate
+     * @param paramPosition The position description (e.g., "first", "second")
+     * @param paramName The parameter name (e.g., "value", "weight", "compression")
+     * @param functionName The function name for error messages
+     * @param pos The position in the source code for error reporting
+     * @throws SemanticException if the parameter is not numeric type
+     */
+    private static void validateNumericParameter(Expr paramExpr, String paramPosition, 
+                                                  String paramName, String functionName, 
+                                                  NodePosition pos) {
+        if (!paramExpr.getType().isNumericType()) {
+            throw new SemanticException(
+                    String.format("%s requires the %s parameter (%s) to be numeric type, but got: %s",
+                            functionName, paramPosition, paramName, paramExpr.getType().toSql()),
+                    pos);
+        }
+    }
+
+    /**
+     * Validate that a percentile parameter is either numeric type or array of numeric type.
+     * <p>
+     * The percentile parameter can be:
+     * - A single numeric value (e.g., 0.5 for median)
+     * - An array of numeric values (e.g., [0.25, 0.5, 0.75] for quartiles)
+     * <p>
+     * Note: This method only validates the type. Constant validation and value range checks
+     * (ensuring values are between 0 and 1) are performed in TypeChecker during the optimization phase.
+     * 
+     * @param percentileExpr The percentile parameter expression to validate
+     * @param paramPosition The position description (e.g., "second", "third")
+     * @param functionName The function name for error messages
+     * @param pos The position in the source code for error reporting
+     * @throws SemanticException if the parameter is not numeric or array type, or if array elements are not numeric
+     */
+    private static void validatePercentileParameter(Expr percentileExpr, String paramPosition, 
+                                                     String functionName, NodePosition pos) {
+        Type percentileType = percentileExpr.getType();
+        
+        // Check if parameter is numeric or array type
+        if (!percentileType.isNumericType() && !percentileType.isArrayType()) {
+            throw new SemanticException(
+                    String.format("%s requires the %s parameter (percentile) to be numeric type or array type, but got: %s",
+                            functionName, paramPosition, percentileType.toSql()),
+                    pos);
+        }
+        
+        // If it's an array, validate that array elements are numeric type
+        if (percentileType.isArrayType()) {
+            ArrayType arrayType = (ArrayType) percentileType;
+            Type itemType = arrayType.getItemType();
+            if (!itemType.isNumericType()) {
+                throw new SemanticException(
+                        String.format("%s requires the %s parameter (percentile) to be ARRAY<NUMERIC>, but got: ARRAY<%s>",
+                                functionName, paramPosition, itemType.toSql()),
+                        pos);
+            }
+        }
+    }
+
+    /**
      * Get function by function call expression and argument types.
      *
      * @param session       current connect context
@@ -719,7 +780,7 @@ public class FunctionAnalyzer {
         }
 
         // argument type may be changed in getFunctionImpl, so we need to update it
-        String fnName = node.getFnName().getFunction();
+        String fnName = node.getFunctionName();
         if (!newArgumentTypes.isEmpty()) {
             argumentTypes = newArgumentTypes.toArray(new Type[0]);
         }
@@ -746,7 +807,39 @@ public class FunctionAnalyzer {
                 }
             }
         }
+
+        if (fn instanceof SqlFunction) {
+            fn = analyzeSqlFunction((SqlFunction) fn, node, session);
+        }
         return fn;
+    }
+
+    private static Function analyzeSqlFunction(SqlFunction fn, FunctionCallExpr node, ConnectContext context) {
+        Expr expr;
+        if (node.getChildren().size() != fn.getArgNames().length) {
+            throw new SemanticException("View function " + fn.getFunctionName() + " expected "
+                    + fn.getArgNames().length + " arguments, but got " + node.getChildren().size(), node.getPos());
+        }
+        try {
+            Map<String, Type> argsMap = Maps.newHashMap();
+            for (int i = 0; i < node.getChildren().size(); i++) {
+                argsMap.put(fn.getArgNames()[i], fn.getArgs()[i]);
+            }
+
+            expr = SqlParser.parseExpression(fn.getSql(), context.getSessionVariable());
+            ExpressionAnalyzer.analyzeExpressionResolveSlot(expr, context, slotRef -> {
+                if (!argsMap.containsKey(slotRef.getColName())) {
+                    throw new SemanticException("Cannot find argument %s in function args", slotRef.getColName());
+                }
+                slotRef.setType(argsMap.get(slotRef.getColName()));
+            });
+        } catch (Exception e) {
+            throw new SemanticException("Failed to parse view definition: " + fn.getSql());
+        }
+        SqlFunction v = (SqlFunction) fn.copy();
+        v.setAnalyzeExpr(expr);
+        v.setRetType(expr.getType());
+        return v;
     }
 
     /**
@@ -770,7 +863,7 @@ public class FunctionAnalyzer {
         newArgumentTypes.clear();
 
         // get fn from normalized function
-        String fnName = node.getFnName().getFunction();
+        String fnName = node.getFunctionName();
         FunctionParams params = node.getParams();
         Boolean[] isArgumentConstants = node.getChildren().stream().map(Expr::isConstant).toArray(Boolean[]::new);
         fn = getAdjustedAnalyzedAggregateFunction(session, fnName, params, argumentTypes, isArgumentConstants, node.getPos());
@@ -789,13 +882,14 @@ public class FunctionAnalyzer {
         }
 
         // get fn from udf
-        fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
+        fn = AnalyzerUtils.getUdfFunction(session, FunctionName.createFnName(node.getFnName().toString()), argumentTypes);
         if (fn != null) {
             return fn;
         }
 
         // get fn from meta functions
-        return ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+        FunctionName functionName = FunctionName.createFnName(node.getFnName().toString());
+        return ScalarOperatorEvaluator.INSTANCE.getMetaFunction(functionName, argumentTypes);
     }
 
     /**
@@ -813,7 +907,7 @@ public class FunctionAnalyzer {
                                                         Type[] argumentTypes,
                                                         List<Type> newArgumentTypes) {
         Function fn = null;
-        String fnName = node.getFnName().getFunction();
+        String fnName = node.getFunctionName();
         // throw exception direct
         if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
             // For the typeof function, the parameter type of the function is the result of this function.
@@ -823,8 +917,8 @@ public class FunctionAnalyzer {
             // stored in the parameter of the function, so that the StringLiteral can be obtained in the
             // subsequent rule rewriting, and then the typeof can be replaced.
             Type originType = argumentTypes[0];
-            argumentTypes[0] = Type.STRING;
-            fn = new Function(new FunctionName("typeof_internal"), argumentTypes, Type.STRING, false);
+            argumentTypes[0] = StringType.STRING;
+            fn = new Function(new FunctionName("typeof_internal"), argumentTypes, StringType.STRING, false);
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
@@ -879,7 +973,7 @@ public class FunctionAnalyzer {
                 FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
                 // Convert bitmap_union(to_bitmap(v1)) to bitmap_agg(v1) when v1's type
                 // is a numeric type.
-                if (FunctionSet.TO_BITMAP.equals(arg0Func.getFnName().getFunction())) {
+                if (FunctionSet.TO_BITMAP.equals(arg0Func.getFunctionName())) {
                     Expr toBitmapArg0 = arg0Func.getChild(0);
                     Type toBitmapArg0Type = toBitmapArg0.getType();
                     if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
@@ -914,9 +1008,9 @@ public class FunctionAnalyzer {
             }
         } else if (FunctionSet.FIELD.equalsIgnoreCase(fnName)) {
             Type targetType = argumentTypes[0];
-            Type returnType = Type.INT;
+            Type returnType = IntegerType.INT;
             if (targetType.isNull()) {
-                targetType = Type.INT;
+                targetType = IntegerType.INT;
             } else {
                 for (int i = 1; i < argumentTypes.length; i++) {
                     if (argumentTypes[i].isNull()) {
@@ -928,7 +1022,7 @@ public class FunctionAnalyzer {
                             throw new SemanticException("Parameter's type is invalid");
                         }
                     } else {
-                        targetType = Type.DOUBLE;
+                        targetType = FloatType.DOUBLE;
                     }
                 }
             }
@@ -954,14 +1048,19 @@ public class FunctionAnalyzer {
             Preconditions.checkState(argumentTypes.length == 2);
             if (argumentTypes[1].isNull() &&
                     argumentTypes[0].isArrayType() && ((ArrayType) argumentTypes[0]).getItemType().isNull()) {
-                argumentTypes[0] = Type.ARRAY_BOOLEAN;
-                argumentTypes[1] = Type.BOOLEAN;
+                argumentTypes[0] = ArrayType.ARRAY_BOOLEAN;
+                argumentTypes[1] = BooleanType.BOOLEAN;
                 fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             }
         } else if (FunctionSet.ICEBERG_TRANSFORM_BUCKET.equalsIgnoreCase(fnName) ||
                 FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
-            Preconditions.checkState(argumentTypes.length == 2);
-            Type[] args = new Type[] {argumentTypes[0], Type.INT};
+            if (argumentTypes.length != 2) {
+                String functionName = fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, "");
+                throw new SemanticException(String.format(
+                        "Function '%s' requires exactly 2 arguments: column and number, but got %d argument(s)",
+                        functionName, argumentTypes.length));
+            }
+            Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
@@ -969,7 +1068,7 @@ public class FunctionAnalyzer {
             if (FunctionSet.ICEBERG_TRANSFORM_TRUNCATE.equalsIgnoreCase(fnName)) {
                 fn.setRetType(args[0]);
             } else {
-                fn.setRetType(Type.INT);
+                fn.setRetType(IntegerType.INT);
             }
         }
         // add new argument types
@@ -990,7 +1089,7 @@ public class FunctionAnalyzer {
      * datetime.
      */
     private static Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
-        Function fn = ExprUtils.getBuiltinFunction(node.getFnName().getFunction(),
+        Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName(),
                 argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn == null) {
             return null;
@@ -1012,28 +1111,59 @@ public class FunctionAnalyzer {
         return fn;
     }
 
-    private static Function getArrayGenerateFunction(FunctionCallExpr node) {
-        // add the default parameters for array_generate
-        if (node.getChildren().size() == 1) {
-            Expr secondParam = node.getChild(0);
-            node.clearChildren();
-            node.addChild(new IntLiteral(1));
-            node.addChild(secondParam);
+    /**
+     * Check if array_generate function should use date function signature.
+     * Date signature is used when the first two parameters are date/datetime types or string types.
+     *
+     * @param node function call expression
+     * @return true if date signature should be used
+     */
+    public static boolean isArrayGenerateDateSignature(FunctionCallExpr node) {
+        if (node.getChildren().size() >= 2) {
+            Type type0 = node.getChild(0).getType();
+            Type type1 = node.getChild(1).getType();
+            return type0.isDateType() || type1.isDateType() ||
+                   type0.isStringType() || type1.isStringType();
         }
-        if (node.getChildren().size() == 2) {
-            Expr startExpr = node.getChild(0);
-            Expr endExpr = node.getChild(1);
+        return false;
+    }
 
-            if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
-                BigInteger start = toBigInteger(startExpr);
-                BigInteger end = toBigInteger(endExpr);
-                if (start != null && end != null) {
-                    node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+    private static Function getArrayGenerateFunction(FunctionCallExpr node) {
+        boolean hasDateFunctionSignatureOverloading = isArrayGenerateDateSignature(node);
+
+        if (hasDateFunctionSignatureOverloading) {
+            if (node.getChildren().size() == 2) {
+                IntLiteral e3 = new IntLiteral(1, IntegerType.INT);
+                node.addChild(e3);
+                node.addChild(new StringLiteral("day"));
+            }
+
+            if (node.getChildren().size() == 3) {
+                node.addChild(new StringLiteral("day"));
+            }
+        } else {
+            // add the default parameters for array_generate
+            if (node.getChildren().size() == 1) {
+                Expr secondParam = node.getChild(0);
+                node.clearChildren();
+                node.addChild(new IntLiteral(1));
+                node.addChild(secondParam);
+            }
+            if (node.getChildren().size() == 2) {
+                Expr startExpr = node.getChild(0);
+                Expr endExpr = node.getChild(1);
+
+                if (!(startExpr instanceof NullLiteral || endExpr instanceof NullLiteral)) {
+                    BigInteger start = toBigInteger(startExpr);
+                    BigInteger end = toBigInteger(endExpr);
+                    if (start != null && end != null) {
+                        node.addChild(new IntLiteral(start.compareTo(end) <= 0 ? 1 : -1));
+                    } else {
+                        node.addChild(new IntLiteral(1));
+                    }
                 } else {
                     node.addChild(new IntLiteral(1));
                 }
-            } else {
-                node.addChild(new IntLiteral(1));
             }
         }
 
@@ -1041,7 +1171,7 @@ public class FunctionAnalyzer {
         return ExprUtils.getBuiltinFunction(
             FunctionSet.ARRAY_GENERATE,
             argTypes,
-            Function.CompareMode.IS_SUPERTYPE_OF);
+            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     private static BigInteger toBigInteger(Expr expr) {
@@ -1059,9 +1189,9 @@ public class FunctionAnalyzer {
                                                                             List<Boolean> isAscOrder) {
         Type[] argsTypes = new Type[argumentTypes.length];
         for (int i = 0; i < argumentTypes.length; ++i) {
-            argsTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+            argsTypes[i] = argumentTypes[i] == NullType.NULL ? BooleanType.BOOLEAN : argumentTypes[i];
             if (fnName.equals(FunctionSet.GROUP_CONCAT) && i < argumentTypes.length - isAscOrder.size()) {
-                argsTypes[i] = Type.VARCHAR;
+                argsTypes[i] = VarcharType.VARCHAR;
             }
         }
         ArrayList<Type> structTypes = new ArrayList<>(argsTypes.length);
@@ -1134,7 +1264,7 @@ public class FunctionAnalyzer {
                 fn.setRetType(new ArrayType(argsTypes[0]));     // return null if scalar agg with empty input
                 outputConst = argumentIsConstants[0];
             } else {
-                fn.setRetType(Type.VARCHAR);
+                fn.setRetType(VarcharType.VARCHAR);
                 for (int i = 0; i < argSize - isAscOrder.size() - 1; i++) {
                     if (!argumentIsConstants[i]) {
                         outputConst = false;
@@ -1145,7 +1275,7 @@ public class FunctionAnalyzer {
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
-            argumentTypes[1] = Type.DOUBLE;
+            argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
@@ -1221,7 +1351,7 @@ public class FunctionAnalyzer {
             fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, fnName, params, argumentTypes, pos);
         } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
             fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(fnName, argumentTypes);
-        } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
+        } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(DateType.TIME))) {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn instanceof AggregateFunction) {
                 throw new SemanticException("Time Type can not used in " + fnName + " function", pos);

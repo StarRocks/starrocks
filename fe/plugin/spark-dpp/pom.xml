@@ -94,6 +94,12 @@ under the License.
             <artifactId>RoaringBitmap</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+        </dependency>
+
         <!-- spark -->
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core_2.12 -->
         <dependency>

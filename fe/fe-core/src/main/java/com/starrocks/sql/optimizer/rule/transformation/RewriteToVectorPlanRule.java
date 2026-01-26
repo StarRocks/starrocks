@@ -42,7 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.ArrayType;
-import com.starrocks.type.Type;
+import com.starrocks.type.FloatType;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -145,10 +145,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                                                      VectorSearchOptions opts) {
         // Add index distanceColumn to the scan operator, including table, colRefToColumnMetaMap, and columnMetaToColRefMap.
         String distanceColumnName = scanOp.getVectorSearchOptions().getDistanceColumnName();
-        Column distanceColumn = new Column(distanceColumnName, Type.FLOAT);
+        Column distanceColumn = new Column(distanceColumnName, FloatType.FLOAT);
         scanOp.getTable().addColumn(distanceColumn);
 
-        ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, Type.FLOAT, false);
+        ColumnRefOperator distanceColRef = context.getColumnRefFactory().create(distanceColumnName, FloatType.FLOAT, false);
         Map<ColumnRefOperator, Column> newColRefToColumnMetaMap = new HashMap<>(scanOp.getColRefToColumnMetaMap());
         newColRefToColumnMetaMap.put(distanceColRef, distanceColumn);
 

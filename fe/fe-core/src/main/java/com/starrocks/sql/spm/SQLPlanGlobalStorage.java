@@ -187,14 +187,14 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             sb.append(";");
             executor.executeDML(sb.toString());
 
-            for (BaselinePlan plan : plans) {
-                allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
-            }
-
             BaselinePlan.Info info = new BaselinePlan.Info();
             info.setReplayIds(plans.stream().map(BaselinePlan::getId).collect(Collectors.toList()));
             info.setReplayBindSQLHash(plans.stream().map(BaselinePlan::getBindSqlHash).collect(Collectors.toList()));
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateSPMBaseline(info, wal -> {
+                for (BaselinePlan plan : plans) {
+                    allBaselineIds.add(new BaselineId(plan.getId(), plan.getBindSqlHash()));
+                }
+            });
         } catch (Exception e) {
             LOG.warn("sql plan baselines store baseline fail", e);
         }
@@ -211,10 +211,6 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
     public void dropBaselinePlan(List<Long> baseLineIds) {
         try {
             List<BaselineId> ids = allBaselineIds.stream().filter(b -> baseLineIds.contains(b.id)).toList();
-            for (BaselineId id : ids) {
-                allBaselineIds.remove(id);
-                cache.invalidate(id.id);
-            }
             if (!StatisticUtils.checkStatisticTables(List.of(StatsConstants.SPM_BASELINE_TABLE_NAME))) {
                 return;
             }
@@ -223,7 +219,12 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
             executor.executeDML(DELETE_SQL + "(" + s + ");");
             BaselinePlan.Info p = new BaselinePlan.Info();
             p.setReplayIds(ids.stream().map(BaselineId::id).collect(Collectors.toList()));
-            GlobalStateMgr.getCurrentState().getEditLog().logDropSPMBaseline(p);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropSPMBaseline(p, wal -> {
+                for (BaselineId id : ids) {
+                    allBaselineIds.remove(id);
+                    cache.invalidate(id.id);
+                }
+            });
         } catch (Exception e) {
             LOG.warn("sql plan baselines drop baseline fail", e);
         }
@@ -309,9 +310,10 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
 
         BaselinePlan.Info p = new BaselinePlan.Info();
         p.setReplayIds(ids);
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateSPMBaseline(p, isEnable);
-        // invalidate cache
-        cache.invalidateAll(ids);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateSPMBaseline(p, isEnable, wal -> {
+            // invalidate cache
+            cache.invalidateAll(ids);
+        });
     }
 
     @Override
@@ -377,4 +379,11 @@ class SQLPlanGlobalStorage implements SQLPlanStorage {
         }
     }
 
+    protected Set<Long> getAllBaselineIds() {
+        return allBaselineIds.stream().map(BaselineId::id).collect(Collectors.toSet());
+    }
+
+    protected LoadingCache<Long, BaselinePlan> getCache() {
+        return cache;
+    }
 }

@@ -34,6 +34,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/bit_util.h"
 #include "util/runtime_profile.h"
@@ -474,6 +475,8 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
 
 Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SerdeContext& ctx,
                                                  SpilledPartition* partition) {
+    TRY_CATCH_ALLOC_SCOPE_START()
+
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_output_stream == nullptr) {
@@ -497,6 +500,7 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
 
     mem_table->reset();
     TRACE_SPILL_LOG << fmt::format("spill partition[{}] done ", partition->debug_string());
+    TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
 
@@ -588,13 +592,23 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
 // undergoing flushing that are skewed and merge the duplicated rows into one row, so that the skewed data
 // can be eliminated.
 Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<SpilledPartition*>& partitions) {
+    if (partitions.empty()) {
+        return Status::OK();
+    }
     // opt_aggregator_params is set when spill_partitionwise_agg_skew_elimination is true, so
     // it indicates that the skew elimination is enabled.
     if (!_spiller->options().opt_aggregator_params.has_value()) {
-        return Status::OK();
-    }
-
-    if (partitions.empty()) {
+        for (auto& partition : partitions) {
+            auto mem_table = std::dynamic_pointer_cast<UnorderedMemTable>(partition->spill_writer->mem_table());
+            auto& chunks = mem_table->get_chunks();
+            // if the partition are not spilttable, we can remove the hash column to save serde/flush time.
+            if (!_spiller->options().splittable) {
+                std::for_each(chunks.begin(), chunks.end(), [](auto& chunk) {
+                    DCHECK(chunk != nullptr);
+                    chunk->remove_column_by_slot_id(Chunk::HASH_AGG_SPILL_HASH_SLOT_ID);
+                });
+            }
+        }
         return Status::OK();
     }
 
@@ -638,8 +652,11 @@ Status PartitionedSpillerWriter::_pick_and_compact_skew_partitions(std::vector<S
             COUNTER_UPDATE(_spiller->metrics().skew_mem_table_output_bytes, output_mem_size);
             COUNTER_UPDATE(_spiller->metrics().skew_mem_table_input_rows, input_num_rows);
             COUNTER_UPDATE(_spiller->metrics().skew_mem_table_output_rows, output_num_rows);
-            COUNTER_SET(_spiller->metrics().skew_mem_table_skew_ratio,
-                        (input_mem_size - output_mem_size) * 100.0 / input_mem_size);
+            int64_t skew_ratio =
+                    input_mem_size > 0
+                            ? (static_cast<int64_t>((input_mem_size - output_mem_size) * 100 / input_mem_size))
+                            : 0;
+            COUNTER_SET(_spiller->metrics().skew_mem_table_skew_ratio, skew_ratio);
         }
     }
     return Status::OK();
@@ -681,7 +698,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         }
         const auto& curr_chunk = chunks[curr_chunk_idx];
         const auto row_idx = idx - (curr_num_rows - curr_chunk->num_rows());
-        auto* hash_column = down_cast<UInt32Column*>(curr_chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
         auto hash_value = hash_column->get_data()[row_idx];
         ++hash_value_counts[hash_value];
     }
@@ -690,7 +707,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         if (curr_chunk == nullptr || curr_chunk->is_empty()) {
             continue;
         }
-        auto* hash_column = down_cast<UInt32Column*>(curr_chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(curr_chunk->columns().back().get());
         auto& hash_values = hash_column->get_data();
         for (auto& hash_value : hash_values) {
             auto it = hash_value_counts.find(hash_value);
@@ -713,7 +730,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
     auto merger = std::make_shared<Aggregator>(aggregator_params);
     merger->set_aggr_mode(AM_STREAMING_POST_CACHE);
     RuntimeProfile* profile = _runtime_state->runtime_profile()->create_child("spillable_pw_skew_elimination", true);
-    RETURN_IF_ERROR(merger->prepare(_runtime_state, _runtime_state->obj_pool(), profile));
+    RETURN_IF_ERROR(merger->prepare(_runtime_state, profile));
     RETURN_IF_ERROR(merger->open(_runtime_state));
     DeferOp defer([&merger, this]() { merger->close(_runtime_state); });
     auto target_hash_value = mode_elem_it->first;
@@ -722,7 +739,7 @@ Status PartitionedSpillerWriter::_compact_skew_chunks(size_t num_rows, std::vect
         if (chunk == nullptr || chunk->is_empty()) {
             continue;
         }
-        auto* hash_column = down_cast<UInt32Column*>(chunk->columns().back().get());
+        auto* hash_column = down_cast<const UInt32Column*>(chunk->columns().back().get());
         auto& hash_values = hash_column->get_data();
         std::vector<uint32_t> indices;
         Filter filter;
@@ -820,7 +837,7 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                 if (chunk->is_empty()) {
                     continue;
                 }
-                auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
+                auto hash_column = down_cast<const SpillHashColumn*>(chunk->columns().back().get());
                 const auto& hash_data = hash_column->get_data();
                 // hash data
                 std::vector<uint32_t> shuffle_result;

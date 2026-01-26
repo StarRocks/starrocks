@@ -168,6 +168,11 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames, List<Type> columnTypes) {
+        return buildQueryFullStatisticsSQL(tableId, columnNames, columnTypes, null);
+    }
+
+    public static String buildQueryFullStatisticsSQL(Long tableId, List<String> columnNames, List<Type> columnTypes,
+                                                     List<Long> partitionIds) {
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, false);
 
         List<String> querySQL = new ArrayList<>();
@@ -175,8 +180,19 @@ public class StatisticSQLBuilder {
             VelocityContext context = new VelocityContext();
             context.put("updateTime", "now()");
             context.put("type", type);
-            context.put("predicate", "table_id = " + tableId + " and column_name in (" +
-                    names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
+            
+            // Build predicate with partition_id filter to exclude temp partitions
+            StringBuilder predicateBuilder = new StringBuilder();
+            predicateBuilder.append("table_id = ").append(tableId);
+            predicateBuilder.append(" and column_name in (")
+                    .append(names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")))
+                    .append(")");
+            if (partitionIds != null && !partitionIds.isEmpty()) {
+                predicateBuilder.append(" and partition_id in (")
+                        .append(partitionIds.stream().map(String::valueOf).collect(Collectors.joining(", ")))
+                        .append(")");
+            }
+            context.put("predicate", predicateBuilder.toString());
 
             if (type.startsWith("array") || type.startsWith("map")) {
                 querySQL.add(build(context, QUERY_COLLECTION_FULL_STATISTIC_TEMPLATE));
@@ -240,8 +256,27 @@ public class StatisticSQLBuilder {
         return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
     }
 
+    public static String buildDropStatisticsSQL(List<Long> tableIds, StatsConstants.AnalyzeType analyzeType) {
+        Preconditions.checkState(tableIds != null && !tableIds.isEmpty());
+        String tableName;
+        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            tableName = SAMPLE_STATISTICS_TABLE_NAME;
+        } else {
+            tableName = FULL_STATISTICS_TABLE_NAME;
+        }
+
+        String tids = tableIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        return "DELETE FROM " + tableName + " WHERE TABLE_ID IN (" + tids + ")";
+    }
+
     public static String buildDropMultipleStatisticsSQL(Long tableId) {
         return "DELETE FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME + " WHERE TABLE_ID = " + tableId;
+    }
+
+    public static String buildDropMultipleStatisticsSQL(List<Long> tableIds) {
+        Preconditions.checkState(tableIds != null && !tableIds.isEmpty());
+        String tids = tableIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        return "DELETE FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME + " WHERE TABLE_ID IN (" + tids + ")";
     }
 
     public static String buildDropExternalStatSQL(String tableUUID) {
@@ -310,6 +345,12 @@ public class StatisticSQLBuilder {
         return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id = "
                 + tableId + " and column_name in (" + Joiner.on(", ")
                 .join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+    }
+
+    public static String buildDropHistogramSQL(List<Long> tableIds) {
+        Preconditions.checkState(tableIds != null && !tableIds.isEmpty());
+        String tids = tableIds.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        return "delete from " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME + " where table_id in (" + tids + ")";
     }
 
     public static String buildDropExternalHistogramSQL(String tableUUID, List<String> columnNames) {

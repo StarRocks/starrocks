@@ -131,7 +131,6 @@ Status PipelineExecutorSet::start() {
                                            std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR),
                                            _conf.metrics->get_connector_scan_executor_metrics());
     _connector_scan_executor->initialize(num_connector_scan_threads());
-
     LOG(INFO) << "[WORKGROUP] start executors " << to_string();
 
     return Status::OK();

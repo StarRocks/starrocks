@@ -194,9 +194,9 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         String mv = "create materialized view join_null_mv_2\n" +
                 "distributed by hash(empid)\n" +
                 "as\n" +
-                "select empid, depts.deptno, depts.name from emps_null join depts using (deptno);";
+                "select empid, deptno, depts.name from emps_null join depts using (deptno);";
         starRocksAssert.withMaterializedView(mv);
-        sql("select empid, emps_null.deptno \n" +
+        sql("select empid, deptno \n" +
                 "from emps_null join depts using (deptno) \n" +
                 "where empid < 10")
                 .match("join_null_mv_2");
@@ -207,10 +207,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         String mv = "create materialized view join_null_mv\n" +
                 "distributed by hash(empid)\n" +
                 "as\n" +
-                "select empid, depts_null.deptno, depts_null.name from emps_null join depts_null using (deptno)\n";
+                "select empid, deptno, depts_null.name from emps_null join depts_null using (deptno)\n";
         starRocksAssert.withMaterializedView(mv);
-        sql("select empid, depts_null.deptno, depts_null.name from emps_null " +
-                "join depts_null using (deptno) where depts_null.deptno < 10;")
+        sql("select empid, deptno, depts_null.name from emps_null " +
+                "join depts_null using (deptno) where deptno < 10;")
                 .match("join_null_mv");
     }
 

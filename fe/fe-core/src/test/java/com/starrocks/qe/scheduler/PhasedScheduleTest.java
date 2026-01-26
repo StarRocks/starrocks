@@ -76,6 +76,7 @@ public class PhasedScheduleTest extends SchedulerTestBase {
     public void testPhasedScheduleWithCTE() throws Exception {
         connectContext.getSessionVariable().setEnablePhasedScheduler(true);
         connectContext.getSessionVariable().setPhasedSchedulerMaxConcurrency(1);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
 
         String sql =
                 "with a as (select count(*) from lineitem) " +

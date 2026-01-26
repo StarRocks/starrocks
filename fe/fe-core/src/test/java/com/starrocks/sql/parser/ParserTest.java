@@ -15,6 +15,7 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -23,8 +24,11 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -35,7 +39,6 @@ import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.JoinOperator;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -610,7 +613,7 @@ class ParserTest {
             String sql = "ALTER TABLE test_db.test_table\n" + //
                     "SPLIT TABLET\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -627,7 +630,7 @@ class ParserTest {
                 SplitTabletClause splitTabletClause = (SplitTabletClause) alterClauses.get(0);
                 Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
                 Assertions.assertEquals(null, splitTabletClause.getTabletList());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -639,7 +642,7 @@ class ParserTest {
                     "SPLIT TABLET\n" + //
                     "    PARTITION (partiton_name1, partition_name2)\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -657,7 +660,7 @@ class ParserTest {
                 Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
                         splitTabletClause.getPartitionNames().getPartitionNames());
                 Assertions.assertEquals(null, splitTabletClause.getTabletList());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -668,7 +671,7 @@ class ParserTest {
             String sql = "ALTER TABLE test_db.test_table\n" + //
                     "SPLIT TABLET (1, 2, 3)\n" + //
                     "PROPERTIES (\n" + //
-                    "    \"dynamic_tablet_split_size\"=\"1024\")";
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
 
             SessionVariable sessionVariable = new SessionVariable();
             try {
@@ -686,7 +689,7 @@ class ParserTest {
                 Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
                 Assertions.assertEquals(Lists.newArrayList(1L, 2L, 3L),
                         splitTabletClause.getTabletList().getTabletIds());
-                Assertions.assertEquals(Map.of("dynamic_tablet_split_size", "1024"), splitTabletClause.getProperties());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), splitTabletClause.getProperties());
                 Assertions.assertNotNull(splitTabletClause.toString());
             } catch (Exception e) {
                 Assertions.fail("sql should success. errMsg: " + e.getMessage());
@@ -695,5 +698,46 @@ class ParserTest {
 
         SplitTabletClause splitTabletClause = new SplitTabletClause(null, null, null);
         Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+    }
+
+    @Test
+    void testSkewHintWithNegativeValues() {
+        String[] sqls = {
+                "select * from t1 join [skew|t1.c_int(-100)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_int(-100, -200)] t2 on t1.c_int = t2.c_int",
+                "select * from t1 join [skew|t1.c_float(-10.5)] t2 on t1.c_float = t2.c_float",
+                "select * from t1 join [skew|t1.c_decimal(-10.5)] t2 on t1.c_decimal = t2.c_decimal"
+        };
+        SessionVariable sessionVariable = new SessionVariable();
+        for (String sql : sqls) {
+            SqlParser.parse(sql, sessionVariable);
+        }
+    }
+
+    @Test
+    void testAlterDatabaseSet() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        {
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertInstanceOf(AlterDatabaseSetStmt.class, stmt);
+            Analyzer.analyze(stmt, ctx);
+            com.starrocks.sql.ast.AlterDatabaseSetStmt setStmt = (com.starrocks.sql.ast.AlterDatabaseSetStmt) stmt;
+            Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, setStmt.getCatalogName());
+            Assertions.assertEquals("db1", setStmt.getDbName());
+            Assertions.assertEquals("sv1", setStmt.getProperties().get("storage_volume"));
+        }
+        {
+            ctx.setCurrentCatalog("external_catalog");
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () -> {
+                Analyzer.analyze(stmt, ctx);
+            });
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Unsupported operation alter db properties under external catalog"),
+                    exception.getMessage());
+        }
     }
 }

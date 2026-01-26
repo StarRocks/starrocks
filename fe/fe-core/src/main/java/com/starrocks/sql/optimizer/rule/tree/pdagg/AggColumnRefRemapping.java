@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.tree.pdagg;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.Map;
@@ -26,7 +27,7 @@ import java.util.stream.Collectors;
 // After rewrite, the post-rewrite tree must replace the old slotId with the new one,
 // ColumnRefRemapping is used to keep the mapping: old slotId->new slotId
 public class AggColumnRefRemapping {
-    private final Map<ColumnRefOperator, ColumnRefOperator> remapping;
+    private final Map<ColumnRefOperator, ScalarOperator> remapping;
     private Optional<ReplaceColumnRefRewriter> cachedReplacer = Optional.empty();
     private Optional<ColumnRefSet> cachedColumnRefSet = Optional.empty();
     public static final AggColumnRefRemapping EMPTY_REMAPPING = new AggColumnRefRemapping();
@@ -35,7 +36,7 @@ public class AggColumnRefRemapping {
         remapping = Maps.newHashMap();
     }
 
-    public AggColumnRefRemapping(Map<ColumnRefOperator, ColumnRefOperator> remapping) {
+    public AggColumnRefRemapping(Map<ColumnRefOperator, ScalarOperator> remapping) {
         this.remapping = remapping;
     }
 
@@ -66,7 +67,7 @@ public class AggColumnRefRemapping {
         return remapping.isEmpty();
     }
 
-    public Map<ColumnRefOperator, ColumnRefOperator> getRemapping() {
+    public Map<ColumnRefOperator, ScalarOperator> getRemapping() {
         return remapping;
     }
 }

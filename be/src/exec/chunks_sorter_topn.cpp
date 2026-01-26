@@ -26,11 +26,14 @@
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
+#include "util/defer_op.h"
 #include "util/orlp/pdqsort.h"
 #include "util/runtime_profile.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(chunks_sorter_topn_sort_bad_alloc);
 
 void get_compare_results_colwise(size_t rows_to_sort, const Columns& order_by_columns,
                                  std::vector<CompareVector>& compare_results_array,
@@ -201,6 +204,10 @@ std::vector<RuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* pool)
 
 Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_output_timer);
+    return _do_get_next(chunk, eos);
+}
+
+Status ChunksSorterTopn::_do_get_next(ChunkPtr* chunk, bool* eos) {
     if (_merged_runs.num_chunks() == 0) {
         *chunk = nullptr;
         *eos = true;
@@ -228,6 +235,9 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
     if (_sort_cnt) {
         COUNTER_UPDATE(_sort_cnt, 1);
     }
+
+    CancelableDefer defer = [this]() { _reset(); };
+
     // Chunks for this batch.
     DataSegments segments;
 
@@ -252,6 +262,10 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
     // the first ordered group only contains permutations.first
     // the second ordered group contains both permutations.second and _merged_segment
     RETURN_IF_ERROR(_merge_sort_data_as_merged_segment(state, permutations, segments));
+
+    FAIL_POINT_TRIGGER_EXECUTE(chunks_sorter_topn_sort_bad_alloc, { throw std::bad_alloc(); });
+
+    defer.cancel();
 
     return Status::OK();
 }
@@ -443,6 +457,7 @@ Status ChunksSorterTopn::_build_filter_from_high_low_comparison(const DataSegmen
     // First compare the chunk with last row of this segment.
     const size_t max_value_row_id = _get_number_of_rows_to_sort() - 1;
     const auto& [run, max_rid] = _get_run_by_row_id(max_value_row_id);
+
     get_compare_results_colwise(max_rid, run->orderby, compare_results_array, data_segments, sort_descs);
 
     include_num = 0;
@@ -780,6 +795,52 @@ void ChunksSorterTopn::_rank_pruning() {
             _merged_runs.pop_back();
         }
     }
+}
+
+void ChunksSorterTopn::_reset() {
+    _raw_chunks.clear();
+    while (_merged_runs.num_chunks() != 0) {
+        _merged_runs.pop_front();
+    }
+}
+
+size_t ChunksSorterTopn::_reserved_bytes(const ChunkPtr& chunk) {
+    // This function estimates the memory required for the next push_chunk/set_finishing operation.
+    // Since push_chunk/set_finishing may perform capacity expansion, the peak memory requirement is
+    // twice the original memory.
+    size_t reserved_bytes = 0;
+    if (chunk) {
+        reserved_bytes += chunk->memory_usage();
+    }
+    reserved_bytes += _raw_chunks.mem_usage * 2;
+    reserved_bytes += _merged_runs.mem_usage() * 2;
+    return reserved_bytes;
+}
+
+size_t ChunksSorterTopn::_get_revocable_mem_bytes() {
+    size_t revocable_mem_bytes = 0;
+    revocable_mem_bytes += _raw_chunks.mem_usage;
+    revocable_mem_bytes += _merged_runs.mem_usage();
+    return revocable_mem_bytes;
+}
+
+std::function<StatusOr<ChunkPtr>()> ChunksSorterTopn::_get_chunk_iterator() {
+    return [this]() -> StatusOr<ChunkPtr> {
+        if (_process_raw_chunks_idx < _raw_chunks.chunks.size()) {
+            return std::move(_raw_chunks.chunks[_process_raw_chunks_idx++]);
+        }
+        ChunkPtr chunk;
+        bool eos = false;
+        RETURN_IF_ERROR(_do_get_next(&chunk, &eos));
+        if (eos) {
+            return Status::EndOfFile("No more chunk to restore");
+        }
+        return chunk;
+    };
+}
+
+bool ChunksSorterTopn::_have_no_staging_data() const {
+    return _raw_chunks.chunks.empty() && _merged_runs.num_chunks() == 0;
 }
 
 } // namespace starrocks

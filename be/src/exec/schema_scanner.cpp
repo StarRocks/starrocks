@@ -28,6 +28,7 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
+#include "exec/schema_scanner/schema_be_tablet_write_log_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
@@ -40,6 +41,7 @@
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 #include "exec/schema_scanner/schema_fe_metrics_scanner.h"
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_fe_threads_scanner.h"
 #include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
@@ -55,6 +57,7 @@
 #include "exec/schema_scanner/schema_table_privileges_scanner.h"
 #include "exec/schema_scanner/schema_tables_config_scanner.h"
 #include "exec/schema_scanner/schema_tables_scanner.h"
+#include "exec/schema_scanner/schema_tablet_reshard_jobs_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
 #include "exec/schema_scanner/schema_temp_tables_scanner.h"
@@ -180,6 +183,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeMetricsScanner>();
     case TSchemaTableType::SCH_FE_METRICS:
         return std::make_unique<SchemaFeMetricsScanner>();
+    case TSchemaTableType::SCH_FE_THREADS:
+        return std::make_unique<SchemaFeThreadsScanner>();
     case TSchemaTableType::SCH_BE_TXNS:
         return std::make_unique<SchemaBeTxnsScanner>();
     case TSchemaTableType::SCH_BE_CONFIGS:
@@ -196,6 +201,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeBvarsScanner>();
     case TSchemaTableType::SCH_BE_CLOUD_NATIVE_COMPACTIONS:
         return std::make_unique<SchemaBeCloudNativeCompactionsScanner>();
+    case TSchemaTableType::SCH_BE_TABLET_WRITE_LOG:
+        return std::make_unique<SchemaBeTabletWriteLogScanner>();
     case TSchemaTableType::STARROCKS_ROLE_EDGES:
         return std::make_unique<StarrocksRoleEdgesScanner>();
     case TSchemaTableType::STARROCKS_GRANT_TO_ROLES:
@@ -240,6 +247,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<WarehouseMetricsScanner>();
     case TSchemaTableType::SCH_WAREHOUSE_QUERIES:
         return std::make_unique<WarehouseQueriesScanner>();
+    case TSchemaTableType::SCH_TABLET_RESHARD_JOBS:
+        return std::make_unique<SchemaTabletReshardJobsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

@@ -81,7 +81,7 @@ TEST(HashMapTest, Basic) {
             AggHashMapVariant::Type::phase1_string, AggHashMapVariant::Type::phase2_string,
             AggHashMapVariant::Type::phase1_int32, AggHashMapVariant::Type::phase2_int32,
             AggHashMapVariant::Type::phase1_int32_two_level};
-    for (auto hash_map_type : hash_map_types) {
+    for (const auto& hash_map_type : hash_map_types) {
         std::any it_any;
 
         RuntimeState dummy;
@@ -118,15 +118,16 @@ TEST(HashMapTest, Insert) {
         // key columns
         const int num_rows = 32;
         std::vector<std::pair<LogicalType, bool>> types = {{TYPE_INT, true}, {TYPE_INT, false}};
-        Columns key_columns;
+        MutableColumns key_columns_mut;
         Buffer<AggDataPtr> agg_states(chunk_size);
-        for (auto type : types) {
-            key_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(type.first), type.second));
+        for (const auto& type : types) {
+            key_columns_mut.emplace_back(ColumnHelper::create_column(TypeDescriptor(type.first), type.second));
             for (int i = 0; i < num_rows; ++i) {
-                key_columns.back()->append_datum(Datum(rand() % 16000));
+                key_columns_mut.back()->append_datum(Datum(rand() % 16000));
             }
-            key_columns.back()->append_default();
+            key_columns_mut.back()->append_default();
         }
+        Columns key_columns = ColumnHelper::to_columns(std::move(key_columns_mut));
         auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
         key.build_hash_map(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states);
         using TestHashMapKey = TestAggHashMap::key_type;
@@ -134,14 +135,15 @@ TEST(HashMapTest, Insert) {
         for (auto [key, _] : key.hash_map) {
             resv.emplace_back(key);
         }
-        Columns res_columns;
-        for (auto type : types) {
+        MutableColumns res_columns;
+        for (const auto& type : types) {
             res_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(type.first), type.second));
         }
         key.insert_keys_to_columns(resv, res_columns, resv.size());
-        auto& l = down_cast<Int32Column*>(down_cast<NullableColumn*>(res_columns[0].get())->data_column().get())
+        auto& l = down_cast<Int32Column*>(down_cast<NullableColumn*>(res_columns[0].get())->data_column_raw_ptr())
                           ->get_data();
-        auto& r = down_cast<Int32Column*>(down_cast<NullableColumn*>(key_columns[0].get())->data_column().get())
+        auto& r = down_cast<Int32Column*>(
+                          down_cast<NullableColumn*>(key_columns[0]->as_mutable_raw_ptr())->data_column_raw_ptr())
                           ->get_data();
         std::set<int32_t> keys_sets;
         for (int& i : r) {

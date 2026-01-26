@@ -36,14 +36,13 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -64,15 +63,18 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionKeyDesc;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.type.Type;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -102,7 +104,7 @@ public class SparkLoadPendingTaskTest {
 
         // columns
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.BIGINT, true, null, false, null, ""));
+        columns.add(new Column("c1", IntegerType.BIGINT, true, null, false, null, ""));
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         idToColumn.put(columns.get(0).getColumnId(), columns.get(0));
 
@@ -115,7 +117,7 @@ public class SparkLoadPendingTaskTest {
         long partitionId = 2L;
         DistributionInfo distributionInfo = new HashDistributionInfo(2, Lists.newArrayList(columns.get(0)));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
-        Partition partition = new Partition(partitionId, 21, "p1", null, distributionInfo);
+        Partition partition = new Partition(partitionId, 21, "p1", new MaterializedIndex(), distributionInfo);
         List<Partition> partitions = Lists.newArrayList(partition);
 
         // file group
@@ -138,19 +140,19 @@ public class SparkLoadPendingTaskTest {
                 result = table;
                 table.getPartitions();
                 result = partitions;
-                table.getIndexIdToSchema();
+                table.getIndexMetaIdToSchema();
                 result = indexIdToSchema;
                 table.getDefaultDistributionInfo();
                 result = distributionInfo;
-                table.getSchemaHashByIndexId(indexId);
+                table.getSchemaHashByIndexMetaId(indexId);
                 result = 123;
                 table.getPartitionInfo();
                 result = partitionInfo;
                 table.getPartition(partitionId);
                 result = partition;
-                table.getKeysTypeByIndexId(indexId);
+                table.getKeysTypeByIndexMetaId(indexId);
                 result = KeysType.DUP_KEYS;
-                table.getBaseIndexId();
+                table.getBaseIndexMetaId();
                 result = indexId;
                 table.getIdToColumn();
                 result = idToColumn;
@@ -243,9 +245,9 @@ public class SparkLoadPendingTaskTest {
 
         // c1 is partition column, c2 is distribution column
         List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
-        columns.add(new Column("c2", TypeFactory.createVarchar(10), true, null, false, null, ""));
-        columns.add(new Column("c3", Type.INT, false, AggregateType.SUM, false, null, ""));
+        columns.add(new Column("c1", IntegerType.INT, true, null, false, null, ""));
+        columns.add(new Column("c2", TypeFactory.createVarcharType(10), true, null, false, null, ""));
+        columns.add(new Column("c3", IntegerType.INT, false, AggregateType.SUM, false, null, ""));
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         for (Column column : columns) {
@@ -267,11 +269,11 @@ public class SparkLoadPendingTaskTest {
         int distributionColumnIndex = 1;
         DistributionInfo distributionInfo =
                 new HashDistributionInfo(3, Lists.newArrayList(columns.get(distributionColumnIndex)));
-        Partition partition1 = new Partition(partition1Id, 21, "p1", null,
+        Partition partition1 = new Partition(partition1Id, 21, "p1", new MaterializedIndex(),
                 distributionInfo);
-        Partition partition2 = new Partition(partition2Id, 51, "p2", null,
+        Partition partition2 = new Partition(partition2Id, 51, "p2", new MaterializedIndex(),
                 new HashDistributionInfo(4, Lists.newArrayList(columns.get(distributionColumnIndex))));
-        Partition partition3 = new Partition(partition3Id, 61, "tp3", null,
+        Partition partition3 = new Partition(partition3Id, 61, "tp3", new MaterializedIndex(),
                 distributionInfo);
         int partitionColumnIndex = 0;
         List<Partition> partitions = Lists.newArrayList(partition1, partition2);
@@ -301,13 +303,13 @@ public class SparkLoadPendingTaskTest {
                 result = table;
                 table.getPartitions();
                 result = partitions;
-                table.getIndexIdToSchema();
+                table.getIndexMetaIdToSchema();
                 result = indexIdToSchema;
                 table.getDefaultDistributionInfo();
                 result = distributionInfo;
-                table.getSchemaHashByIndexId(index1Id);
+                table.getSchemaHashByIndexMetaId(index1Id);
                 result = 123;
-                table.getSchemaHashByIndexId(index2Id);
+                table.getSchemaHashByIndexMetaId(index2Id);
                 result = 234;
                 table.getPartitionInfo();
                 result = partitionInfo;
@@ -317,11 +319,11 @@ public class SparkLoadPendingTaskTest {
                 result = partition2;
                 table.getPartition(partition3Id);
                 result = partition3;
-                table.getKeysTypeByIndexId(index1Id);
+                table.getKeysTypeByIndexMetaId(index1Id);
                 result = KeysType.AGG_KEYS;
-                table.getKeysTypeByIndexId(index2Id);
+                table.getKeysTypeByIndexMetaId(index2Id);
                 result = KeysType.AGG_KEYS;
-                table.getBaseIndexId();
+                table.getBaseIndexMetaId();
                 result = index1Id;
                 table.getIdToColumn();
                 result = idToColumn;
@@ -390,7 +392,7 @@ public class SparkLoadPendingTaskTest {
         // file group
         aggKeyToFileGroups = Maps.newHashMap();
         brokerFileGroups = Lists.newArrayList();
-        PartitionNames partitionNames = new PartitionNames(true, Lists.newArrayList("tp3"));
+        PartitionRef partitionNames = new PartitionRef(Lists.newArrayList("tp3"), true, NodePosition.ZERO);
         desc = new DataDescription("testTable", partitionNames, Lists.newArrayList("abc.txt"),
                 null, null, null, null, false, null);
         brokerFileGroup = new BrokerFileGroup(desc);

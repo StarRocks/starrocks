@@ -221,16 +221,15 @@ public class SetTest extends PlanTestBase {
     public void testSetOpCast() throws Exception {
         String sql = "select * from t0 union all (select * from t1 union all select k1,k7,k8 from  baseall)";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [26, BIGINT, true] | [27, VARCHAR(20), true] | [28, DOUBLE, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR(20), true] | [5: cast, DOUBLE, true]\n" +
-                "  |      [23: v4, BIGINT, true] | [24: cast, VARCHAR(20), true] | [25: cast, DOUBLE, true]");
-        Assertions.assertTrue(plan.contains(
-                "  |  19 <-> [19: k7, VARCHAR, true]\n" +
-                        "  |  20 <-> [20: k8, DOUBLE, true]\n" +
-                        "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)"));
+        assertContains(plan, "  0:UNION\n"
+                + "  |  output exprs:\n"
+                + "  |      [27, BIGINT, true] | [28, VARCHAR, true] | [29, DOUBLE, true]\n"
+                + "  |  child exprs:\n"
+                + "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR, true] | [5: cast, DOUBLE, true]\n"
+                + "  |      [24: v4, BIGINT, true] | [25: cast, VARCHAR, true] | [26: cast, DOUBLE, true]");
+        Assertions.assertTrue(plan.contains("  |  20 <-> [20: k8, DOUBLE, true]\n"
+                        + "  |  22 <-> cast([11: k1, TINYINT, true] as BIGINT)\n"
+                        + "  |  23 <-> [19: k7, VARCHAR, true]"));
 
         sql = "select * from t0 union all (select cast(v4 as int), v5,v6 " +
                 "from t1 except select cast(v7 as int), v8, v9 from t2)";
@@ -567,7 +566,7 @@ public class SetTest extends PlanTestBase {
         // order by null literal with limit offset
         sql = "select v1+v2 as x from t0 union all select v4 as x from t1 order by null limit 10, 20";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:MERGING-EXCHANGE\n" +
+        assertContains(plan, "  6:EXCHANGE\n" +
                 "     offset: 10\n" +
                 "     limit: 20");
 
@@ -657,23 +656,23 @@ public class SetTest extends PlanTestBase {
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "|  output exprs:\n" +
-                "  |      [13, VARCHAR(32), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [1: k1, VARCHAR, true]\n" +
-                "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [14: k1, VARCHAR(32), true]\n");
+        assertContains(plan, "  |  output exprs:\n"
+                + "  |      [14, VARCHAR, true]\n"
+                + "  |  child exprs:\n"
+                + "  |      [5: cast, VARCHAR, true]\n"
+                + "  |      [13: cast, VARCHAR, false]\n"
+                + "  |      [15: cast, VARCHAR, true]");
 
         sql = "select k1 from db1.tbl6 union all select 1 union" +
                 " all select 2 union all select * from (values (3)) t";
         plan = getVerboseExplain(sql);
 
-        assertContains(plan, "  |  output exprs:\n" +
-                "  |      [13, VARCHAR(32), true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [1: k1, VARCHAR, true]\n" +
-                "  |      [12: cast, VARCHAR(32), false]\n" +
-                "  |      [14: k1, VARCHAR(32), true]");
+        assertContains(plan, "  |  output exprs:\n"
+                + "  |      [14, VARCHAR, true]\n"
+                + "  |  child exprs:\n"
+                + "  |      [5: cast, VARCHAR, true]\n"
+                + "  |      [13: cast, VARCHAR, false]\n"
+                + "  |      [15: cast, VARCHAR, true]");
 
         sql = "select 1 union all select 2 union all select * from (values (1)) t;";
         plan = getVerboseExplain(sql);
@@ -721,5 +720,36 @@ public class SetTest extends PlanTestBase {
         assertContains(plan, "constant exprs: \n"
                 + "         row([1,2,3], [4,5,6]) | row([1,2,3], [4,5,6]).col1[true]\n"
                 + "         row([5,6,7], [6,7]) | row([5,6,7], [6,7]).col1[true]");
+    }
+
+    @Test
+    public void testUnionMulNull() throws Exception {
+        String sql = "WITH\n" +
+                "`CTE_0` AS (\n" +
+                "    SELECT \"table\" AS `TABLE_NAME`\n" +
+                "),\n" +
+                "`CTE_1` AS (\n" +
+                "    SELECT `TABLE_NAME` AS `TABLE_NAME`\n" +
+                "    FROM `CTE_0`\n" +
+                "    LIMIT 2147483646\n" +
+                ")\n" +
+                "SELECT `TABLE_NAME` FROM `CTE_1`\n" +
+                "    UNION ALL (SELECT NULL)\n" +
+                "    UNION ALL (SELECT NULL)\n" +
+                "    UNION ALL (SELECT NULL)";
+        final String plan = getCostExplain(sql);
+        assertContains(plan, "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [14, VARCHAR, true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [4: TABLE_NAME, VARCHAR, false]\n" +
+                "  |      [17: TABLE_NAME, VARCHAR, true]");
+    }
+
+    @Test
+    public void testUnionStringType() throws Exception {
+        String sql = "select 'a' union all select ta from tall;";
+        ExecPlan plan = getExecPlan(sql);
+        assertContains("varchar", plan.getOutputColumns().get(0).getType().toSql());
     }
 }

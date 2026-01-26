@@ -385,7 +385,7 @@ select * from multi_level_expr_par_tbl;
 
 
 
--- name: test_ctas_from_normal_table
+-- name: test_ctas_from_normal_table @native
 CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
 -- result:
 -- !result
@@ -559,7 +559,7 @@ select * from test;
 
 
 
--- name: test_create_table_like
+-- name: test_create_table_like @native
 CREATE TABLE base_tbl (
                     `k1`  date,
                     `k2`  datetime,

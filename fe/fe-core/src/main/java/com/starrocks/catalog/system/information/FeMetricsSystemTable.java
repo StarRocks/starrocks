@@ -17,7 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -31,10 +31,10 @@ public class FeMetricsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("FE_ID", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("NAME", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("LABELS", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("VALUE", TypeFactory.createType(PrimitiveType.BIGINT))
+                        .column("FE_ID", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("NAME", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("LABELS", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("VALUE", IntegerType.BIGINT)
                         .build(), TSchemaTableType.SCH_FE_METRICS);
     }
 }

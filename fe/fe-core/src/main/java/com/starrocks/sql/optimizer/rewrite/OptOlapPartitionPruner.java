@@ -41,6 +41,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -432,7 +433,7 @@ public class OptOlapPartitionPruner {
             List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
             if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
-                String functionName = functionCallExpr.getFnName().getFunction();
+                String functionName = functionCallExpr.getFunctionName();
                 return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
                         || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
                         && !tmpIdToRange.containsKey(candidatePartitions.get(0));
@@ -454,7 +455,7 @@ public class OptOlapPartitionPruner {
             for (int i = 0; i < minRange.getKeys().size(); ++i) {
                 LiteralExpr rangeKey = minRange.getKeys().get(i);
                 PrimitiveType type = minRange.getTypes().get(i);
-                nullValue.pushColumn(LiteralExpr.createInfinity(rangeKey.getType(), false), type);
+                nullValue.pushColumn(LiteralExprFactory.createInfinity(rangeKey.getType(), false), type);
             }
 
             return minRange.compareTo(nullValue) <= 0;

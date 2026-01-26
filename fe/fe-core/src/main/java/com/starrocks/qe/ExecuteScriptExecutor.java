@@ -25,7 +25,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.type.Type;
+import com.starrocks.type.StringType;
 import groovy.lang.Binding;
 import groovy.lang.GroovyShell;
 import org.apache.commons.lang.StringUtils;
@@ -41,7 +41,7 @@ public class ExecuteScriptExecutor {
 
     static ShowResultSet makeResultSet(String result) {
         ShowResultSetMetaData meta =
-                ShowResultSetMetaData.builder().addColumn(new Column("result", Type.STRING)).build();
+                ShowResultSetMetaData.builder().addColumn(new Column("result", StringType.STRING)).build();
         List<List<String>> rowset = Lists.newArrayList();
         String[] lines = result.split("\n");
         for (String line : lines) {

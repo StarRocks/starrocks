@@ -32,7 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
-import com.starrocks.type.Type;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -111,8 +111,8 @@ public class HiveStatisticsProviderTest {
     @Test
     public void testGetTableStatistics() throws AnalysisException {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
-        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
-        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
@@ -147,7 +147,7 @@ public class HiveStatisticsProviderTest {
     @Test
     public void testCreateUnpartitionedStats() {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
-        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1"));
         Map<String, HivePartitionStats> statisticsMap = hmsOps.getPartitionStatistics(
                 hiveTable, Lists.newArrayList("col1=1"));
@@ -166,8 +166,8 @@ public class HiveStatisticsProviderTest {
     @Test
     public void testCreateUnknownStatistics() throws AnalysisException {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
-        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
-        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
+        ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, IntegerType.INT, "col1", true);
+        ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "col2", true);
         PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(

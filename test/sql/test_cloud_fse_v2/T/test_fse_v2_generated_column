@@ -1,0 +1,42 @@
+-- name: test_fse_v2_generated_column @cloud
+create database test_gen_col_${uuid0};
+use test_gen_col_${uuid0};
+
+CREATE TABLE `t_gen` (
+    k1 int,
+    v0 int,
+    v1 int
+)
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+
+INSERT INTO t_gen VALUES (1, 1, 1);
+
+ALTER TABLE t_gen DROP COLUMN v0;
+
+ALTER TABLE t_gen ADD COLUMN v0 int default '10';
+
+-- Verify table structure and data after schema changes
+SELECT * FROM t_gen ORDER BY k1;
+
+-- Create generated column using v0 and v1
+ALTER TABLE t_gen ADD COLUMN v2 bigint AS v0+v1;
+function: wait_alter_table_finish()
+
+-- Verify the generated column can be queried and values are correct
+-- For existing row: v0 should be 10 (default), v1 is 1, so v2 should be 11
+SELECT k1, v0, v1, v2 FROM t_gen ORDER BY k1;
+
+-- Insert more data to verify generated column works correctly
+-- New row: v0 will be 10 (default), v1 is 2, so v2 should be 12
+INSERT INTO t_gen (k1, v1) VALUES (2, 2);
+SELECT k1, v0, v1, v2 FROM t_gen ORDER BY k1;
+
+-- Insert data with explicit v0 value
+-- New row: v0 is 20, v1 is 3, so v2 should be 23
+INSERT INTO t_gen (k1, v0, v1) VALUES (3, 20, 3);
+SELECT k1, v0, v1, v2 FROM t_gen ORDER BY k1;
+
+-- Verify generated column expression is correct: v2 = v0 + v1
+SELECT k1, v0, v1, v2, (v0 + v1) as expected_v2 FROM t_gen ORDER BY k1;

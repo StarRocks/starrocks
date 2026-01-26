@@ -84,12 +84,10 @@ public class TaskRunManager implements MemoryTrackable {
         status.setPriority(option.getPriority());
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
-        if (!arrangeTaskRun(taskRun, false)) {
+        if (!arrangeTaskRun(taskRun)) {
             LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
-        // Only log create task run status when it's not rejected and created.
-        GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
@@ -163,7 +161,7 @@ public class TaskRunManager implements MemoryTrackable {
     // The manual priority is higher. For manual tasks, we do not merge operations.
     // For automatic tasks, we will compare the definition, and if they are the same,
     // we will perform the merge operation.
-    public boolean arrangeTaskRun(TaskRun taskRun, boolean isReplay) {
+    public boolean arrangeTaskRun(TaskRun taskRun) {
         if (!tryTaskRunLock()) {
             return false;
         }
@@ -225,35 +223,27 @@ public class TaskRunManager implements MemoryTrackable {
 
             // recheck it again to avoid pending task run is too much
             long validPendingCount = taskRunScheduler.getPendingQueueCount();
-            if (validPendingCount >= Config.task_runs_queue_length || !taskRunScheduler.addPendingTaskRun(taskRun)) {
+            if (validPendingCount >= Config.task_runs_queue_length) {
                 LOG.warn("failed to offer task: {}", taskRun);
                 return false;
             }
+            GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(taskRun.getStatus(),
+                    wal -> taskRunScheduler.addPendingTaskRun(taskRun));
 
-            // if it 's not replay, update the status of the old TaskRun to MERGED in FOLLOWER/LEADER.
-            // if it is replay, no need to update the status of the old TaskRun because follower FE cannot
-            // update edit log.
-            if (!isReplay) {
-                // TODO: support batch update to reduce the number of edit logs.
-                for (TaskRun oldTaskRun : mergedTaskRuns) {
-                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    // update the state of the old TaskRun to MERGED in FOLLOWER
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
-                            oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+            // TODO: support batch update to reduce the number of edit logs.
+            for (TaskRun oldTaskRun : mergedTaskRuns) {
+                final long finishTime = System.currentTimeMillis();
+                // update the state of the old TaskRun to MERGED in FOLLOWER
+                TaskRunStatusChange statusChange = new TaskRunStatusChange(oldTaskRun.getTaskId(), oldTaskRun.getStatus(),
+                        oldTaskRun.getStatus().getState(), Constants.TaskRunState.MERGED);
+                statusChange.setFinishTime(finishTime);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
                     // update the state of the old TaskRun to MERGED in LEADER
+                    oldTaskRun.getStatus().setFinishTime(finishTime);
                     oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
                     taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
                     taskRunHistory.addHistory(oldTaskRun.getStatus());
-                }
-            } else {
-                for (TaskRun oldTaskRun : mergedTaskRuns) {
-                    // update the state of the old TaskRun to MERGED in LEADER
-                    oldTaskRun.getStatus().setFinishTime(System.currentTimeMillis());
-                    oldTaskRun.getStatus().setState(Constants.TaskRunState.MERGED);
-                    taskRunScheduler.removePendingTaskRun(oldTaskRun, Constants.TaskRunState.MERGED);
-                    taskRunHistory.addHistory(oldTaskRun.getStatus());
-                }
+                });
             }
         } finally {
             taskRunUnlock();
@@ -274,13 +264,13 @@ public class TaskRunManager implements MemoryTrackable {
 
             Future<?> future = taskRun.getFuture();
             if (future.isDone()) {
-                taskRunScheduler.removeRunningTask(taskId);
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
-
-                taskRunHistory.addHistory(taskRun.getStatus());
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange, wal -> {
+                    taskRunScheduler.removeRunningTask(taskId);
+                    taskRunHistory.addHistory(taskRun.getStatus());
+                });
             }
         }
     }
@@ -290,11 +280,6 @@ public class TaskRunManager implements MemoryTrackable {
         taskRunScheduler.scheduledPendingTaskRun(pendingTaskRun -> {
             if (taskRunExecutor.executeTaskRun(pendingTaskRun)) {
                 LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
-                long taskId = pendingTaskRun.getTaskId();
-                // RUNNING state persistence is for FE FOLLOWER update state
-                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                        Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
             } else {
                 LOG.warn("failed to scheduled task-run {}", pendingTaskRun);
             }

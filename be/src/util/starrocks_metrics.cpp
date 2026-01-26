@@ -55,12 +55,6 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
-    REGISTER_STARROCKS_METRIC(pipe_scan_executor_queuing);
-    REGISTER_STARROCKS_METRIC(pipe_driver_schedule_count);
-    REGISTER_STARROCKS_METRIC(pipe_driver_execution_time);
-    REGISTER_STARROCKS_METRIC(pipe_driver_queue_len);
-    REGISTER_STARROCKS_METRIC(pipe_poller_block_queue_len);
-
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_eos_total);
     REGISTER_STARROCKS_METRIC(load_channel_add_chunks_duration_us);
@@ -73,6 +67,15 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_execute_duration_us);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_pending_duration_us);
 
+    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_blocks_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_blocks_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_local_bytes_write_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_read_total);
+    REGISTER_STARROCKS_METRIC(load_spill_remote_bytes_write_total);
+
     REGISTER_STARROCKS_METRIC(delta_writer_commit_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_task_total);
     REGISTER_STARROCKS_METRIC(delta_writer_wait_flush_duration_us);
@@ -81,6 +84,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_writer_txn_commit_duration_us);
 
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
+    REGISTER_STARROCKS_METRIC(memtable_finalize_task_total);
     REGISTER_STARROCKS_METRIC(memtable_finalize_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
     REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
@@ -258,6 +262,12 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
+
+    // data cache metrics
+    REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_quota_bytes);
+    REGISTER_STARROCKS_METRIC(datacache_disk_used_bytes);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,
@@ -280,6 +290,8 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
     if (init_system_metrics) {
         _system_metrics.install(&_metrics, disk_devices, network_interfaces);
     }
+
+    _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {

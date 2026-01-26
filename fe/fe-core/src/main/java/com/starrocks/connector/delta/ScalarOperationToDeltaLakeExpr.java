@@ -28,8 +28,11 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.type.BooleanType;
+import com.starrocks.type.DateType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import io.delta.kernel.expressions.And;
 import io.delta.kernel.expressions.Column;
 import io.delta.kernel.expressions.Literal;
@@ -261,39 +264,39 @@ public class ScalarOperationToDeltaLakeExpr {
 
             switch (destType) {
                 case BOOLEAN:
-                    res = operator.castTo(Type.BOOLEAN);
+                    res = operator.castTo(BooleanType.BOOLEAN);
                     break;
                 case BYTE:
                     if (srcType.isIntegerType()) {
-                        res = operator.castTo(Type.TINYINT);
+                        res = operator.castTo(IntegerType.TINYINT);
                     }
                     break;
                 case SMALLINT:
                     if (srcType.isIntegerType()) {
-                        res = operator.castTo(Type.SMALLINT);
+                        res = operator.castTo(IntegerType.SMALLINT);
                     }
                     break;
                 case INTEGER:
                     if (srcType.isIntegerType()) {
-                        res = operator.castTo(Type.INT);
+                        res = operator.castTo(IntegerType.INT);
                     }
                     break;
                 case LONG:
                     if (srcType.isIntegerType()) {
-                        res = operator.castTo(Type.BIGINT);
+                        res = operator.castTo(IntegerType.BIGINT);
                     }
                     break;
                 case DATE:
-                    res = operator.castTo(Type.DATE);
+                    res = operator.castTo(DateType.DATE);
                     break;
                 case TIMESTAMP:
                 case TIMESTAMP_NTZ:
-                    res = operator.castTo(Type.DATETIME);
+                    res = operator.castTo(DateType.DATETIME);
                     break;
                 case STRING:
                     // num and string has different comparator
                     if (!operator.getType().isNumericType()) {
-                        res = operator.castTo(Type.VARCHAR);
+                        res = operator.castTo(VarcharType.VARCHAR);
                     }
                     break;
                 default:

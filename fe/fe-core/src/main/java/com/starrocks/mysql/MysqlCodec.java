@@ -15,6 +15,7 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
@@ -26,10 +27,10 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-import static com.starrocks.type.Type.CHARSET_BINARY;
-import static com.starrocks.type.Type.CHARSET_UTF8;
-
 public class MysqlCodec {
+    public static final int CHARSET_BINARY = 63;
+    public static final int CHARSET_UTF8 = 33;
+
     public static byte readByte(ByteBuffer buffer) {
         return buffer.get();
     }
@@ -334,7 +335,7 @@ public class MysqlCodec {
                 ScalarType charType = ((ScalarType) type);
                 int charLength = charType.getLength();
                 if (charLength == -1) {
-                    charLength = 64;
+                    charLength = GlobalVariable.getMaxUnknownStringMetaLength();  // default 64
                 }
                 // utf8 charset
                 return charLength * 3;

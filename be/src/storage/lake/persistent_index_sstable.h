@@ -20,6 +20,7 @@
 
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table.h"
@@ -37,10 +38,9 @@ class FilterPolicy;
 } // namespace sstable
 
 namespace lake {
-using KeyIndex = size_t;
-using KeyIndexSet = std::set<KeyIndex>;
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+class PersistentIndexBlockCache;
 
 class PersistentIndexSstable {
 public:
@@ -52,7 +52,7 @@ public:
                 TabletManager* tablet_mgr = nullptr);
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
-                                WritableFile* wf, uint64_t* filesz);
+                                WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 
     // multi_get can get multi keys at onces
     // |keys| : Address point to first element of key array.
@@ -69,9 +69,23 @@ public:
 
     size_t memory_usage() const;
 
+    // Sample keys from the table for parallel compaction task splitting.
+    Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
     // `_delvec` should only be modified in `init()` via publish version thread
     // which is thread-safe. And after that, it should be immutable.
     DelVectorPtr delvec() const { return _delvec; }
+
+    void set_fileset_id(const UniqueId& fileset_id) {
+        _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+    }
+
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
+                                                                 const std::string& location, Cache* cache,
+                                                                 bool need_filter = true,
+                                                                 const DelVectorPtr& delvec = nullptr,
+                                                                 const TabletMetadataPtr& metadata = nullptr,
+                                                                 TabletManager* tablet_mgr = nullptr);
 
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
@@ -91,6 +105,7 @@ public:
     uint64_t num_entries() const;
     FileInfo file_info() const;
     std::string file_path() const { return _wf->filename(); }
+    std::pair<Slice, Slice> key_range() const;
 
 private:
     std::unique_ptr<sstable::TableBuilder> _table_builder;

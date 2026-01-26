@@ -41,6 +41,7 @@ typedef i32 TPlanNodeId
 typedef i32 TTupleId
 typedef i32 TSlotId
 typedef i64 TTableId
+typedef i64 TDatabaseId
 typedef i64 TTabletId
 typedef i64 TVersion
 typedef i64 TVersionHash
@@ -217,6 +218,7 @@ enum TTaskType {
     REPLICATE_SNAPSHOT,
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
+    EXTERNAL_CLUSTER_SNAPSHOT,
     NUM_TASK_TYPE
 }
 
@@ -432,7 +434,8 @@ enum TTableType {
     ICEBERG_SNAPSHOTS_TABLE,
     ICEBERG_MANIFESTS_TABLE,
     ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE
+    ICEBERG_PARTITIONS_TABLE,
+    BENCHMARK_TABLE
 }
 
 enum TKeysType {
@@ -576,6 +579,12 @@ struct TIcebergColumnStats {
     6: optional map<i32, binary> upper_bounds;
 }
 
+enum TIcebergFileContent {
+    DATA,
+    POSITION_DELETES,
+    EQUALITY_DELETES,
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -585,6 +594,8 @@ struct TIcebergDataFile {
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
     8: optional string partition_null_fingerprint;
+    9: optional TIcebergFileContent file_content;
+    10: optional string referenced_data_file;
 }
 
 struct THiveFileInfo {
@@ -627,4 +638,28 @@ struct TParquetOptions {
     3: optional bool use_dict
     // for files table function
     4: optional string version
+}
+
+enum TVariantType {
+    NORMAL_VALUE = 0,
+    NULL_VALUE = 1,
+    MINIMUM = 2,
+    MAXIMUM = 3,
+}
+
+struct TVariant {
+    1: optional TTypeDesc type
+    2: optional string value
+    3: optional TVariantType variant_type
+}
+
+struct TTuple {
+    1: optional list<TVariant> values
+}
+
+struct TTabletRange {
+    1: optional TTuple lower_bound
+    2: optional TTuple upper_bound
+    3: optional bool lower_bound_included
+    4: optional bool upper_bound_included
 }

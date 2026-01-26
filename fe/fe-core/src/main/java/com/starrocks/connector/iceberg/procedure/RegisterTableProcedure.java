@@ -21,7 +21,7 @@ import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -43,9 +43,9 @@ public class RegisterTableProcedure extends Procedure {
                 SYSTEM_DATABASE,
                 PROCEDURE_NAME,
                 Arrays.asList(
-                        new NamedArgument(DATABASE_NAME, Type.VARCHAR, false),
-                        new NamedArgument(TABLE_NAME, Type.VARCHAR, true),
-                        new NamedArgument(METADATA_FILE, Type.VARCHAR, true)
+                        new NamedArgument(DATABASE_NAME, VarcharType.VARCHAR, false),
+                        new NamedArgument(TABLE_NAME, VarcharType.VARCHAR, true),
+                        new NamedArgument(METADATA_FILE, VarcharType.VARCHAR, true)
                 )
         );
         this.catalogName = catalogName;

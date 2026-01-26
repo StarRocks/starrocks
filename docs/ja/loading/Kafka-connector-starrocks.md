@@ -18,10 +18,12 @@ Kafka コネクタは Kafka Connect とシームレスに統合でき、StarRock
 
 ### バージョン要件
 
-| コネクタ | Kafka                    | StarRocks | Java |
-|-----------|--------------------------|-----------| ---- |
-| 1.0.4     | 3.4                      | 2.5 and later | 8    |
-| 1.0.3     | 3.4                      | 2.5 and later | 8    |
+| コネクタ   | Kafka     | StarRocks     | Java |
+| --------- | --------- | ------------- | ---- |
+| 1.0.6     | 3.4+/4.0+ | 2.5 and later | 8    |
+| 1.0.5     | 3.4       | 2.5 and later | 8    |
+| 1.0.4     | 3.4       | 2.5 and later | 8    |
+| 1.0.3     | 3.4       | 2.5 and later | 8    |
 
 ### Kafka 環境のセットアップ
 
@@ -36,11 +38,11 @@ Kafka コネクタを Kafka Connect に提出します：
 
 - 自己管理の Kafka クラスター：
 
-  [starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) をダウンロードして解凍します。
+  [starrocks-connector-for-kafka-x.y.z-with-dependencies.jar](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) をダウンロードします。
 
 - Confluent Cloud：
 
-  現在、Kafka コネクタは Confluent Hub にアップロードされていません。[starrocks-kafka-connector-xxx.tar.gz](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) をダウンロードして解凍し、ZIP ファイルにパッケージして Confluent Cloud にアップロードする必要があります。
+  現在、Kafka コネクタは Confluent Hub にアップロードされていません。[starrocks-connector-for-kafka-x.y.z-with-dependencies.jar](https://github.com/StarRocks/starrocks-connector-for-kafka/releases) をダウンロードし、ZIP ファイルにパッケージして Confluent Cloud にアップロードする必要があります。
 
 ### ネットワーク構成
 
@@ -117,14 +119,14 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 解凍後の Kafka コネクタの絶対パス。例：
-        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar の絶対パス。
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
 
    2. Kafka Connect を実行します。
 
         ```Bash
-        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector/* bin/connect-standalone.sh config/connect-standalone.properties config/connect-starrocks-sink.properties
         ```
 
 #### 分散モードで Kafka Connect を実行
@@ -143,14 +145,14 @@ CREATE TABLE test_tbl (id INT, city STRING);
         value.converter=org.apache.kafka.connect.json.JsonConverter
         key.converter.schemas.enable=true
         value.converter.schemas.enable=false
-        # 解凍後の Kafka コネクタの絶対パス。例：
-        plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+        # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar の絶対パス。
+        plugin.path=/home/kafka-connect/starrocks-kafka-connector
         ```
 
     2. Kafka Connect を実行します。
 
         ```BASH
-        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector-1.0.3/* bin/connect-distributed.sh config/connect-distributed.properties
+        CLASSPATH=/home/kafka-connect/starrocks-kafka-connector/* bin/connect-distributed.sh config/connect-distributed.properties
         ```
 
 2. Kafka コネクタを設定して作成します。分散モードでは、REST API を通じて Kafka コネクタを設定して作成する必要があります。パラメータと説明については、[Parameters](#Parameters) を参照してください。
@@ -652,7 +654,7 @@ PROPERTIES (
    ```Bash
    mkdir plugins
    tar -zxvf debezium-debezium-connector-postgresql-2.5.3.zip -C plugins
-   tar -zxvf starrocks-kafka-connector-1.0.3.tar.gz -C plugins
+   mv starrocks-connector-for-kafka-x.y.z-with-dependencies.jar plugins
    ```
 
    このディレクトリは、**config/connect-standalone.properties** の設定項目 `plugin.path` の値です。
@@ -725,8 +727,8 @@ PROPERTIES (
    key.converter.schemas.enable=true
    value.converter.schemas.enable=false
 
-   # 解凍後の starrocks-kafka-connector の絶対パス。例：
-   plugin.path=/home/kafka-connect/starrocks-kafka-connector-1.0.3
+   # starrocks-connector-for-kafka-x.y.z-with-dependencies.jar の絶対パス。
+   plugin.path=/home/kafka-connect/starrocks-kafka-connector
 
    # フラッシュポリシーを制御するパラメータ。詳細については、使用上の注意セクションを参照してください。
    offset.flush.interval.ms=10000

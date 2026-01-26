@@ -22,10 +22,12 @@ import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.AlterUserInfo;
+import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.OperationType;
+import com.starrocks.persist.SecurityIntegrationPersistInfo;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -218,7 +220,7 @@ public class AuthenticationMgr {
                 return;
             }
 
-            UserProperty userProperty = null;
+            UserProperty userProperty;
             String userName = userIdentity.getUser();
             if (userNameToProperty.containsKey(userName)) {
                 userProperty = userNameToProperty.get(userName);
@@ -227,14 +229,8 @@ public class AuthenticationMgr {
             }
 
             if (stmt.getProperties() != null) {
-                // If we create the user with properties, we need to call userProperty.update to check and update userProperty.
-                // If there are failures, update method will throw an exception
-                userProperty.update(userIdentity, UserProperty.changeToPairList(stmt.getProperties()));
+                userProperty.update(UserProperty.changeToPairList(stmt.getProperties()));
             }
-
-            // If all checks are passed, we can add the user to the userToAuthenticationInfo and userNameToProperty
-            userToAuthenticationInfo.put(userIdentity, info);
-            userNameToProperty.put(userName, userProperty);
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             AuthorizationMgr authorizationManager = globalStateMgr.getAuthorizationMgr();
@@ -244,9 +240,14 @@ public class AuthenticationMgr {
 
             short pluginId = authorizationManager.getProviderPluginId();
             short pluginVersion = authorizationManager.getProviderPluginVersion();
+            final UserProperty finalUserProperty = userProperty;
             globalStateMgr.getEditLog().logCreateUser(
-                    userIdentity, info, userProperty, collection, pluginId, pluginVersion);
-
+                    new CreateUserInfo(userIdentity, info, userProperty, collection, pluginId, pluginVersion),
+                    wal -> {
+                        userToAuthenticationInfo.put(userIdentity, info);
+                        userNameToProperty.put(userName, finalUserProperty);
+                        authorizationManager.setUserPrivilegeCollection(userIdentity, collection);
+                    });
         } catch (PrivilegeException e) {
             throw new DdlException("failed to create user " + userIdentity + " : " + e.getMessage(), e);
         } finally {
@@ -267,58 +268,62 @@ public class AuthenticationMgr {
                 return;
             }
 
-            updateUserNoLock(userIdentity, userAuthenticationInfo, true);
-            if (properties != null && properties.size() > 0) {
+            UserProperty.UpdateInfo updateInfo = null;
+            if (properties != null && !properties.isEmpty()) {
                 UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
-                userProperty.update(userIdentity, UserProperty.changeToPairList(properties));
+                updateInfo = userProperty.checkUpdate(UserProperty.changeToPairList(properties));
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(userIdentity, userAuthenticationInfo, properties);
-        } catch (AuthenticationException e) {
-            throw new DdlException("failed to alter user " + userIdentity, e);
+            final UserProperty.UpdateInfo finalUpdateInfo = updateInfo;
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterUser(
+                    new AlterUserInfo(userIdentity, userAuthenticationInfo, properties),
+                    wal -> {
+                        // update user authentication info
+                        userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
+                        if (finalUpdateInfo != null) {
+                            UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
+                            userProperty.update(finalUpdateInfo);
+                        }
+                    });
         } finally {
             writeUnlock();
-        }
-    }
-
-    private void updateUserPropertyNoLock(String user, List<Pair<String, String>> properties, boolean isReplay)
-            throws DdlException {
-        UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
-        if (userProperty == null) {
-            throw new DdlException("user '" + user + "' doesn't exist");
-        }
-        if (isReplay) {
-            userProperty.updateForReplayJournal(properties);
-        } else {
-            userProperty.update(user, properties);
         }
     }
 
     public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
         try {
             writeLock();
-            updateUserPropertyNoLock(user, properties, false);
-            UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(propertyInfo);
+            UserProperty userProperty = userNameToProperty.getOrDefault(user, null);
+            if (userProperty == null) {
+                throw new DdlException("user '" + user + "' doesn't exist");
+            }
+            UserProperty.UpdateInfo result = userProperty.checkUpdate(properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserPropertyV2(
+                    new UserPropertyInfo(user, properties), wal -> userProperty.update(result));
             LOG.info("finished to update user '{}' with properties: {}", user, properties);
         } finally {
             writeUnlock();
         }
     }
 
-    public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
+    public void replayUpdateUserProperty(UserPropertyInfo info) {
         try {
             writeLock();
-            updateUserPropertyNoLock(info.getUser(), info.getProperties(), true);
+            UserProperty userProperty = userNameToProperty.getOrDefault(info.getUser(), null);
+            if (userProperty == null) {
+                return;
+            }
+
+            userProperty.updateForReplayJournal(info.getProperties());
         } finally {
             writeUnlock();
         }
     }
 
     public void replayAlterUser(UserIdentity userIdentity, UserAuthenticationInfo info,
-                                Map<String, String> properties) throws AuthenticationException {
+                                Map<String, String> properties) {
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info, true);
+            userToAuthenticationInfo.put(userIdentity, info);
             // updateForReplayJournal will catch all exceptions when replaying user properties
             UserProperty userProperty = userNameToProperty.get(userIdentity.getUser());
             userProperty.updateForReplayJournal(UserProperty.changeToPairList(properties));
@@ -327,15 +332,16 @@ public class AuthenticationMgr {
         }
     }
 
-    public void dropUser(DropUserStmt stmt) throws DdlException {
+    public void dropUser(DropUserStmt stmt) {
         UserRef user = stmt.getUser();
         writeLock();
         try {
             UserIdentity userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-            dropUserNoLock(userIdentity);
-            // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity, wal -> {
+                dropUserNoLock(userIdentity);
+                // drop user privilege as well
+                GlobalStateMgr.getCurrentState().getAuthorizationMgr().onDropUser(userIdentity);
+            });
         } finally {
             writeUnlock();
         }
@@ -355,7 +361,7 @@ public class AuthenticationMgr {
     private void dropUserNoLock(UserIdentity userIdentity) {
         // 1. remove from userToAuthenticationInfo
         if (!userToAuthenticationInfo.containsKey(userIdentity)) {
-            LOG.info("Operation DROP USER failed for " + userIdentity + " : user " + userIdentity + " not exists");
+            LOG.info("Operation DROP USER failed for {} : user {} not exists", userIdentity, userIdentity);
             return;
         }
         userToAuthenticationInfo.remove(userIdentity);
@@ -378,7 +384,7 @@ public class AuthenticationMgr {
             throws AuthenticationException, PrivilegeException {
         writeLock();
         try {
-            updateUserNoLock(userIdentity, info, false);
+            userToAuthenticationInfo.put(userIdentity, info);
             if (userProperty != null) {
                 userNameToProperty.put(userIdentity.getUser(), userProperty);
             }
@@ -389,20 +395,6 @@ public class AuthenticationMgr {
         } finally {
             writeUnlock();
         }
-    }
-
-    private void updateUserNoLock(UserIdentity userIdentity, UserAuthenticationInfo info, boolean shouldExists)
-            throws AuthenticationException {
-        if (userToAuthenticationInfo.containsKey(userIdentity)) {
-            if (!shouldExists) {
-                throw new AuthenticationException("user " + userIdentity.getUser() + " already exists");
-            }
-        } else {
-            if (shouldExists) {
-                throw new AuthenticationException("failed to find user " + userIdentity.getUser());
-            }
-        }
-        userToAuthenticationInfo.put(userIdentity, info);
     }
 
     private boolean hasUserNameNoLock(String userName) {
@@ -533,24 +525,24 @@ public class AuthenticationMgr {
     //=========================================== Security Integration ==================================================
 
     public void createSecurityIntegration(String name,
-                                          Map<String, String> propertyMap,
-                                          boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        // atomic op
-        SecurityIntegration result = nameToSecurityIntegrationMap.putIfAbsent(name, securityIntegration);
-        if (result != null) {
+                                          Map<String, String> propertyMap) throws DdlException {
+        if (nameToSecurityIntegrationMap.containsKey(name)) {
             throw new DdlException("security integration '" + name + "' already exists");
         }
-        if (!isReplay) {
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logCreateSecurityIntegration(name, propertyMap);
-            LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-        }
+        SecurityIntegration securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logCreateSecurityIntegration(new SecurityIntegrationPersistInfo(name, propertyMap), wal -> {
+            nameToSecurityIntegrationMap.put(name, securityIntegration);
+        });
+        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
     }
 
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegration securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        nameToSecurityIntegrationMap.put(name, securityIntegration);
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps) throws DdlException {
         SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
         if (securityIntegration == null) {
             throw new DdlException("security integration '" + name + "' not found");
@@ -559,30 +551,28 @@ public class AuthenticationMgr {
             Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
             // update props
             newProps.putAll(alterProps);
-            SecurityIntegration newSecurityIntegration;
-            newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
-            // update map
-            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
-            if (!isReplay) {
-                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-                editLog.logAlterSecurityIntegration(name, alterProps);
-                LOG.info("finished to alter security integration '{}' with updated properties {}",
-                        name, alterProps);
-            }
+            SecurityIntegration newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logAlterSecurityIntegration(new SecurityIntegrationPersistInfo(name, alterProps), wal -> {
+                // update map
+                nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            });
+            LOG.info("finished to alter security integration '{}' with updated properties {}", name, alterProps);
         }
     }
 
-    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
+
+
+    public void dropSecurityIntegration(String name) throws DdlException {
         if (!nameToSecurityIntegrationMap.containsKey(name)) {
             throw new DdlException("security integration '" + name + "' not found");
         }
 
-        SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
-        if (!isReplay && result != null) {
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropSecurityIntegration(name);
-            LOG.info("finished to drop security integration '{}'", name);
-        }
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logDropSecurityIntegration(new SecurityIntegrationPersistInfo(name, null), wal -> {
+            nameToSecurityIntegrationMap.remove(name);
+        });
+        LOG.info("finished to drop security integration '{}'", name);
     }
 
     public SecurityIntegration getSecurityIntegration(String name) {
@@ -593,19 +583,24 @@ public class AuthenticationMgr {
         return new HashSet<>(nameToSecurityIntegrationMap.values());
     }
 
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        createSecurityIntegration(name, propertyMap, true);
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration != null) {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration =
+                    SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            // update map
+            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            LOG.info("finished to replay alter security integration '{}' with updated properties {}",
+                    name, alterProps);
+        }
     }
 
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        alterSecurityIntegration(name, alterProps, true);
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        dropSecurityIntegration(name, true);
+    public void replayDropSecurityIntegration(String name) throws DdlException {
+        nameToSecurityIntegrationMap.remove(name);
     }
 
     // ---------------------------------------- Group Provider Statement --------------------------------------
@@ -623,10 +618,10 @@ public class AuthenticationMgr {
 
         GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
         groupProvider.init();
-        this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_CREATE_GROUP_PROVIDER,
-                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateGroupProvider(
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()),
+                wal -> nameToGroupProviderMap.put(stmt.getName(), groupProvider));
     }
 
     public void replayCreateGroupProvider(String name, Map<String, String> properties) {
@@ -650,11 +645,11 @@ public class AuthenticationMgr {
             }
         }
 
-        this.nameToGroupProviderMap.remove(stmt.getName());
         groupProvider.destroy();
 
-        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER,
-                new GroupProviderLog(stmt.getName(), null));
+        GlobalStateMgr.getCurrentState().getEditLog().logDropGroupProvider(
+                new GroupProviderLog(stmt.getName(), null),
+                wal -> nameToGroupProviderMap.remove(stmt.getName()));
     }
 
     public void replayDropGroupProvider(String name) {

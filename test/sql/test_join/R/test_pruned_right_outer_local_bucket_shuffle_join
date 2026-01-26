@@ -15,32 +15,32 @@ insert into t1 select generate_series, generate_series from TABLE(generate_serie
 -- !result
 with 
   w1 as (select k1 from t1 where k1 = 10),
-  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
-  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+  w2 as (select k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select k1 from w1 right outer join [colocate] w2 using(k1))
 select count(1) from w3;
 -- result:
 10000
 -- !result
 with 
   w1 as (select k1 from t1 where k1 = 10),
-  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
-  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+  w2 as (select k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select k1 from w1 right outer join [colocate] w2 using(k1))
 select count(1) from w3;
 -- result:
 10000
 -- !result
 with 
   w1 as (select k1 from t1 where k1 = 10),
-  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
-  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+  w2 as (select k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select k1 from w1 right outer join [colocate] w2 using(k1))
 select count(1) from w3;
 -- result:
 10000
 -- !result
 with 
   w1 as (select k1 from t1 where k1 = 10),
-  w2 as (select tt1.k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
-  w3 as (select w1.k1 from w1 right outer join [colocate] w2 using(k1))
+  w2 as (select k1 from t1 tt1 right outer join [bucket] t1 tt2 using(k1)),
+  w3 as (select k1 from w1 right outer join [colocate] w2 using(k1))
 select count(1) from w3;
 -- result:
 10000

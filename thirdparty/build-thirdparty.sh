@@ -476,16 +476,19 @@ build_llvm() {
     cd llvm-build
     rm -rf CMakeCache.txt CMakeFiles/
 
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
+    BASE_DY_LIB_BASE=$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=$(dirname $($STARROCKS_GCC_HOME/bin/g++ -print-file-name=libstdc++.so)):$LD_LIBRARY_PATH
+
+    LDFLAGS="-L${TP_LIB_DIR}" \
     $CMAKE_CMD -S ../llvm -G "${CMAKE_GENERATOR}" \
     -DLLVM_ENABLE_EH:Bool=True \
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
     -DLLVM_ENABLE_TERMINFO:Bool=False \
     -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
-    -DLLVM_INCLUDE_TOOLS:BOOL=False \
-    -DLLVM_BUILD_TOOLS:BOOL=False \
+    -DLLVM_BUILD_LLVM_DYLIB:BOOL=ON \
+    -DLLVM_INCLUDE_TOOLS:BOOL=ON \
+    -DLLVM_BUILD_TOOLS:BOOL=ON \
     -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
@@ -493,12 +496,12 @@ build_llvm() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../llvm-build
 
-    # TODO(yueyang): Add more targets.
-    # This is a little bit hack, we need to minimize the build time and binary size.
     REQUIRES_RTTI=1 ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+    ${BUILD_SYSTEM} install-LLVM
 
+    export LD_LIBRARY_PATH="${BASE_DY_LIB_BASE}"
     restore_compile_flags
 }
 # protobuf
@@ -559,6 +562,14 @@ build_gtest() {
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+}
+
+# xxhash
+build_xxhash() {
+    check_if_source_exist $XXHASH_SOURCE
+    mkdir -p $TP_INCLUDE_DIR
+    # xxhash.h is in the root directory of xxHash source
+    mkdir -p $TP_INCLUDE_DIR/xxhash && cp $TP_SOURCE_DIR/$XXHASH_SOURCE/xxhash.h $TP_INCLUDE_DIR/xxhash/
 }
 
 # rapidjson
@@ -1119,14 +1130,14 @@ build_breakpad() {
 }
 
 #hadoop
-build_hadoop() {
-    check_if_source_exist $HADOOP_SOURCE
-    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
-    # remove unnecessary doc and logs
-    rm -rf $TP_INSTALL_DIR/hadoop/logs/* $TP_INSTALL_DIR/hadoop/share/doc/hadoop
+build_hadoop_src() {
+    check_if_source_exist $HADOOPSRC_SOURCE
+    cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
+    cd hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs
+    make
     mkdir -p $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h $TP_INSTALL_DIR/include/hdfs
+    cp $TP_SOURCE_DIR/$HADOOPSRC_SOURCE/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a $TP_INSTALL_DIR/lib
 }
 
 #jdk
@@ -1362,6 +1373,8 @@ build_avro_c() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     mkdir -p build
     cd build
+    
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR=lib64 -DCMAKE_BUILD_TYPE=Release
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -1374,6 +1387,8 @@ build_avro_cpp() {
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c++
     mkdir -p build
     cd build
+
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=${TP_INSTALL_DIR} -DBoost_USE_STATIC_RUNTIME=ON  -DCMAKE_PREFIX_PATH=${TP_INSTALL_DIR} -DSNAPPY_INCLUDE_DIR=${TP_INSTALL_DIR}/include -DSNAPPY_LIBRARIES=${TP_INSTALL_DIR}/lib
     LIBRARY_PATH=${TP_INSTALL_DIR}/lib64:$LIBRARY_PATH LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib64:$LD_LIBRARY_PATH ${BUILD_SYSTEM} -j$PARALLEL
 
@@ -1656,6 +1671,18 @@ build_flamegraph() {
     chmod +x $TP_INSTALL_DIR/flamegraph/*.pl
 }
 
+# benchgen
+build_benchgen() {
+    check_if_source_exist ${BENCHGEN_SOURCE}
+    cd ${TP_SOURCE_DIR}/${BENCHGEN_SOURCE}
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DBENCHGEN_ARROW_PREFIX="${TP_INSTALL_DIR}" -S . -B build
+    ${CMAKE_CMD} --build build -j "${PARALLEL}"
+    ${CMAKE_CMD} --install build
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1664,6 +1691,8 @@ restore_compile_flags() {
     export CFLAGS=$GLOBAL_CFLAGS
     # c++ flags
     export CXXFLAGS=$GLOBAL_CXXFLAGS
+
+    unset LDFLAGS
 }
 
 strip_binary() {
@@ -1728,7 +1757,7 @@ declare -a all_packages=(
     fmt
     fmt_shared
     ryu
-    hadoop
+    hadoop_src
     jdk
     ragel
     hyperscan
@@ -1759,11 +1788,14 @@ declare -a all_packages=(
     libdivide
     flamegraph
     tenann
+    xxhash
+    pprof
+    benchgen
 )
 
 # Machine specific packages
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
-    all_packages+=(breakpad libdeflate pprof)
+    all_packages+=(breakpad libdeflate)
 fi
 
 # Initialize packages array - if none specified, build all

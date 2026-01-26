@@ -17,6 +17,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.FeConstants;
@@ -27,9 +28,11 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.sql.ast.expression.TableName;
-import com.starrocks.type.Type;
+import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -86,8 +89,10 @@ public class ShowCreateTableStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx.setDatabase("testDb");
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("testDb", "testTbl")),
+                null, NodePosition.ZERO);
         ShowCreateTableStmt stmt =
-                new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);
+                new ShowCreateTableStmt(tableRef, ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assertions.assertEquals("testDb", stmt.getDb());
         Assertions.assertEquals("testTbl", stmt.getTable());
@@ -128,7 +133,7 @@ public class ShowCreateTableStmtTest {
     @Test
     public void testHiveTableMapProperties() {
         List<Column> fullSchema = new ArrayList<>();
-        fullSchema.add(new Column("id", Type.INT));
+        fullSchema.add(new Column("id", IntegerType.INT));
         Map<String, String> props = new HashMap<>();
         props.put("COLUMN_STATS_ACCURATE", "{\"BASIC_STATS\":\"true\"}");
 
@@ -221,5 +226,152 @@ public class ShowCreateTableStmtTest {
         Assertions.assertTrue(resultSet.getResultRows().get(0).get(1)
                         .contains("AS dict_mapping('test.dict', k1, k2, k3, k4, k5, TRUE) COMMENT"),
                 resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowCreateTableWithUniqueAndForeignKeyConstraints() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.parent_uk1 (\n" +
+                        "  k1 INT NOT NULL,\n" +
+                        "  k2 VARCHAR(20) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "  \"replication_num\" = \"1\",\n" +
+                        "  \"unique_constraints\" = \"k1,k2\"\n" +
+                        ");")
+                .withTable("CREATE TABLE test.parent_uk2 (\n" +
+                        "  id INT NOT NULL,\n" +
+                        "  name VARCHAR(50) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(id)\n" +
+                        "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "  \"replication_num\" = \"1\",\n" +
+                        "  \"unique_constraints\" = \"id\"\n" +
+                        ");");
+
+        // Test showing unique constraints
+        String showParent1 = "show create table test.parent_uk1";
+        ShowCreateTableStmt stmt1 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showParent1, ctx);
+        ShowResultSet result1 = ShowExecutor.execute(stmt1, ctx);
+        String createTable1 = result1.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable1.contains("unique_constraints"),
+                "SHOW CREATE TABLE should include unique_constraints. Got: " + createTable1);
+        Assertions.assertTrue(createTable1.contains("k1") && createTable1.contains("k2"),
+                "unique_constraints should include column names. Got: " + createTable1);
+
+        String showParent2 = "show create table test.parent_uk2";
+        ShowCreateTableStmt stmt2 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showParent2, ctx);
+        ShowResultSet result2 = ShowExecutor.execute(stmt2, ctx);
+        String createTable2 = result2.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable2.contains("unique_constraints"),
+                "SHOW CREATE TABLE should include unique_constraints. Got: " + createTable2);
+
+        // Create child table with foreign key constraints
+        starRocksAssert.withTable("CREATE TABLE test.child_fk (\n" +
+                "  id INT,\n" +
+                "  parent1_k1 INT,\n" +
+                "  parent1_k2 VARCHAR(20),\n" +
+                "  parent2_id INT,\n" +
+                "  value VARCHAR(100)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"foreign_key_constraints\" = \"(parent1_k1, parent1_k2) REFERENCES parent_uk1(k1, k2);" +
+                "                                 (parent2_id) REFERENCES parent_uk2(id)\"\n" +
+                ");");
+
+        // Test showing foreign key constraints
+        String showChild = "show create table test.child_fk";
+        ShowCreateTableStmt stmt3 = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showChild, ctx);
+        ShowResultSet result3 = ShowExecutor.execute(stmt3, ctx);
+        String createTable3 = result3.getResultRows().get(0).get(1);
+        Assertions.assertTrue(createTable3.contains("foreign_key_constraints"),
+                "SHOW CREATE TABLE should include foreign_key_constraints. Got: " + createTable3);
+        Assertions.assertTrue(createTable3.contains("parent_uk1") && createTable3.contains("parent_uk2"),
+                "foreign_key_constraints should include parent table names. Got: " + createTable3);
+        Assertions.assertTrue(createTable3.contains("parent1_k1") && createTable3.contains("parent1_k2"),
+                "foreign_key_constraints should include child column names. Got: " + createTable3);
+    }
+
+    private String buildComplexTypeTableDdl(String tableName, String columnDef) {
+        return "CREATE TABLE test." + tableName + " (\n" +
+                "  k1 INT,\n" +
+                "  " + columnDef + "\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "  \"replication_num\" = \"1\",\n" +
+                "  \"fast_schema_evolution\" = \"true\"\n" +
+                ");";
+    }
+
+    private void verifyShowCreateTableNoCast(String tableName, String columnDef,
+                                             String expectedFragment) throws Exception {
+        starRocksAssert.withTable(buildComplexTypeTableDdl(tableName, columnDef));
+
+        String showSql = "show create table test." + tableName;
+        ShowCreateTableStmt stmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
+        ShowResultSet result = ShowExecutor.execute(stmt, ctx);
+        String output = result.getResultRows().get(0).get(1);
+
+        Assertions.assertTrue(output.contains(expectedFragment),
+                String.format("Expected output to contain '%s'. Got: %s", expectedFragment, output));
+        Assertions.assertFalse(output.contains("CAST"),
+                String.format("Output should not contain CAST. Got: %s", output));
+    }
+
+    @Test
+    public void testComplexTypeDefaultValueRemoveCast() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test");
+
+        verifyShowCreateTableNoCast(
+                "test_array_struct",
+                "k2 ARRAY<STRUCT<id INT, name STRING>> DEFAULT [row(1, 'alice'), row(2, 'bob')]",
+                "DEFAULT [row(1, 'alice'),row(2, 'bob')]"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_map_struct",
+                "k2 MAP<STRING, STRUCT<id INT, score DOUBLE>> DEFAULT map{'user1': row(1, 95.5), 'user2': row(2, 88.0)}",
+                "row(1, 95.5)"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_struct_array",
+                "k2 STRUCT<id INT, tags ARRAY<STRING>> DEFAULT row(1, ['tag1', 'tag2', 'tag3'])",
+                "row(1, ['tag1','tag2','tag3'])"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_struct_nested",
+                "k2 STRUCT<user STRUCT<id INT, name STRING>, meta STRUCT<created_at STRING, updated_at STRING>> " +
+                        "DEFAULT row(row(100, 'admin'), row('2024-01-01', '2024-01-02'))",
+                "row(row(100, 'admin'), row('2024-01-01', '2024-01-02'))"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_complex_nested",
+                "k2 MAP<INT, STRUCT<id INT, items ARRAY<STRUCT<item_id INT, quantity INT>>>> " +
+                        "DEFAULT map{1: row(100, [row(1, 5), row(2, 3)])}",
+                "row(100, [row(1, 5),row(2, 3)])"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_array_map_struct",
+                "k2 ARRAY<MAP<STRING, STRUCT<val INT>>> DEFAULT [map{'a': row(1)}, map{'b': row(2)}]",
+                "row(1)"
+        );
+
+        verifyShowCreateTableNoCast(
+                "test_map_array_struct",
+                "k2 MAP<STRING, ARRAY<STRUCT<x INT, y INT>>> DEFAULT map{'point1': [row(1, 2), row(3, 4)]}",
+                "[row(1, 2),row(3, 4)]"
+        );
     }
 }

@@ -46,6 +46,7 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(false);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test
@@ -2087,6 +2088,23 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
     }
 
     @Test
+    public void testRefBaseTablePartitionWithTransform3() throws Exception {
+        final String sql = "CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY ds\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n," +
+                "\"partition_retention_condition\" = \"ds >= current_date() - interval 1 month\"\n" +
+                ")\n" +
+                "AS SELECT id, data, date_trunc('month', ts) as ds  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;";
+        starRocksAssert.withMaterializedView(sql);
+        MaterializedView mv = getMv("test", "test_mv1");
+        String reason = mv.getInactiveReason();
+        Assertions.assertNull(reason);
+    }
+
+    @Test
     public void testRewriteWithIcebergView1() throws Exception {
         starRocksAssert.withView("CREATE VIEW iceberg_view1 AS " +
                 "SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` order by id, ts;");
@@ -2133,5 +2151,36 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
         PlanTestBase.assertContains(plan2, "test_mv2");
         mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getOrLoadPlanContext(mv2, 3000);
         Assertions.assertTrue(mvPlanContexts.size() == 1);
+    }
+
+    @Test
+    public void testIcebergPartialRefreshWithTheSameTables() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(a) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select  t1.a, t1.b, t1.d " +
+                " from  iceberg0.partitioned_db.part_tbl1 as t1;");
+        // partial refresh
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " partition start('2023-08-01') " +
+                "end ('2023-08-02') force with sync mode");
+        String query = "select count(1) " +
+                " from (select t1.a from iceberg0.partitioned_db.part_tbl1 as t1 where t1.d='2023-08-01' " +
+                " UNION ALL select t1.a from iceberg0.partitioned_db.part_tbl1 as t1 where t1.d='2023-08-02') t;";
+        String plan = getFragmentPlan(query);
+        // for non partial refresh partitions, should still scan base table
+        PlanTestBase.assertContains(plan, "  7:IcebergScanNode\n" +
+                "     TABLE: partitioned_db.part_tbl1\n" +
+                "     PREDICATES: 19: d = '2023-08-02'");
+        // for partial refresh partitions, should scan mv
+        PlanTestBase.assertContains(plan, "  1:OlapScanNode\n" +
+                        "     TABLE: test_mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=1/1");
+        starRocksAssert.dropMaterializedView(mvName);
     }
 }

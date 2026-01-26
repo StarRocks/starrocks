@@ -112,7 +112,7 @@ public class DropPartitionTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210201");
-        long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210201;";
         dropPartition(dropPartitionSql);
         List<Replica> replicaList =
@@ -135,7 +135,7 @@ public class DropPartitionTest {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210202");
         long partitionId = partition.getId();
-        long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
         String dropPartitionSql = " alter table test.tbl1 drop partition p20210202 force;";
         dropPartition(dropPartitionSql);
         List<Replica> replicaList;
@@ -161,7 +161,7 @@ public class DropPartitionTest {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         Partition partition = table.getPartition("p20210203");
-        long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+        long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
         table.dropPartitionAndReserveTablet("p20210203");
         List<Replica> replicaList =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
@@ -210,7 +210,7 @@ public class DropPartitionTest {
         for (String partitionName : partitionNames) {
             Table table = getTable(dbName, tableName);
             Partition partition = table.getPartition(partitionName);
-            long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+            long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
             tabletIds.add(tabletId);
         }
         dropPartition(String.format(dropPartitionSql, dbName, tableName));
@@ -233,7 +233,7 @@ public class DropPartitionTest {
         for (String partitionName : partitionNames) {
             Table table = getTable(dbName, tableName);
             Partition partition = table.getPartition(partitionName);
-            long tabletId = partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().get(0).getId();
+            long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
             tabletIds.add(tabletId);
             paritionIds.add(partition.getId());
         }
@@ -293,5 +293,24 @@ public class DropPartitionTest {
     private Table getTable(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+    }
+
+    @Test
+    public void testDropPartitionWithRetention() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+
+        // partition is not in recycle bin
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
+
+        Partition partition = table.getPartition("p20210203");
+        long tabletId = partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0).getId();
+        table.dropPartitionWithRetention(db.getId(), "p20210203", 100);
+        partition = table.getPartition("p20210203");
+
+        // after drop with retention, partition is put into recycle bin
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getRecycleBin().getPartitions(table.getId()).isEmpty());
+        // but partition has been removed from inner state
+        Assertions.assertNull(partition);
     }
 }

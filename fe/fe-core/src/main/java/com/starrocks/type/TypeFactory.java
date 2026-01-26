@@ -15,6 +15,8 @@
 package com.starrocks.type;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
@@ -31,59 +33,6 @@ public class TypeFactory {
     }
 
     /**
-     * Create a scalar type with specified parameters.
-     *
-     * @param type      the primitive type
-     * @param len       length for CHAR/VARCHAR types
-     * @param precision precision for DECIMAL types
-     * @param scale     scale for DECIMAL types
-     * @return the created ScalarType
-     */
-    public static ScalarType createType(PrimitiveType type, int len, int precision, int scale) {
-        switch (type) {
-            case CHAR:
-                return createCharType(len);
-            case VARCHAR:
-                return createVarcharType(len);
-            case VARBINARY:
-                return createVarbinary(len);
-            case DECIMALV2:
-                return createDecimalV2Type(precision, scale);
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-            case DECIMAL256:
-                return createDecimalV3Type(type, precision, scale);
-            default:
-                return createType(type);
-        }
-    }
-
-    /**
-     * Create a scalar type from a primitive type.
-     *
-     * @param type the primitive type
-     * @return the created ScalarType
-     */
-    public static ScalarType createType(PrimitiveType type) {
-        ScalarType res = Type.PRIMITIVE_TYPE_SCALAR_TYPE_MAP.get(type);
-        Preconditions.checkNotNull(res, "unknown type " + type);
-        return res;
-    }
-
-    /**
-     * Create a scalar type from a string type name.
-     *
-     * @param type the type name
-     * @return the created ScalarType
-     */
-    public static ScalarType createType(String type) {
-        ScalarType res = Type.STATIC_TYPE_MAP.get(type);
-        Preconditions.checkNotNull(res, "unknown type " + type);
-        return res;
-    }
-
-    /**
      * Create a CHAR type with specified length.
      *
      * @param len the length of the CHAR type
@@ -95,8 +44,55 @@ public class TypeFactory {
         return type;
     }
 
+    /**
+     * Create a VARCHAR type with specified length.
+     *
+     * @param len the length of the VARCHAR type
+     * @return the created VARCHAR type
+     */
+    public static ScalarType createVarcharType(int len) {
+        ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
+        type.setLength(len);
+        return type;
+    }
+
+    /**
+     * Get the maximum varchar length for OLAP tables.
+     *
+     * @return the maximum varchar length
+     */
+    public static int getOlapMaxVarcharLength() {
+        return Config.max_varchar_length;
+    }
+
+    // 1GB for each line, it's enough
+    public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
+
+    /**
+     * Create a default catalog string type.
+     * Uses maximum catalog varchar length for external catalogs like Hive.
+     *
+     * @return the created catalog string type
+     */
+
+    public static ScalarType createDefaultCatalogString() {
+        return createVarcharType(CATALOG_MAX_VARCHAR_LENGTH);
+    }
+
     private static boolean isDecimalV3Enabled() {
         return Config.enable_decimal_v3;
+    }
+
+    /**
+     * Create a VARBINARY type with specified length.
+     *
+     * @param len the length of the VARBINARY type
+     * @return the created VARBINARY type
+     */
+    public static ScalarType createVarbinary(int len) {
+        ScalarType type = new ScalarType(PrimitiveType.VARBINARY);
+        type.setLength(len);
+        return type;
     }
 
     /**
@@ -158,7 +154,7 @@ public class TypeFactory {
      * @return the created DecimalV2 type
      */
     public static ScalarType createDecimalV2Type(int precision) {
-        return createDecimalV2Type(precision, ScalarType.DEFAULT_SCALE);
+        return createDecimalV2Type(precision, DecimalType.DEFAULT_SCALE);
     }
 
     /**
@@ -308,114 +304,47 @@ public class TypeFactory {
         }
     }
 
-    /**
-     * Get the maximum varchar length for OLAP tables.
-     *
-     * @return the maximum varchar length
-     */
-    public static int getOlapMaxVarcharLength() {
-        return Config.max_varchar_length;
+    protected static final ImmutableMap<PrimitiveType, ScalarType> PRIMITIVE_TYPE_SCALAR_TYPE_MAP =
+            ImmutableList.<Type>builder()
+                    // Special types
+                    .add(InvalidType.INVALID)
+                    .add(NullType.NULL)
+                    .add(UnknownType.UNKNOWN_TYPE)
+                    // Integer types
+                    .addAll(IntegerType.INTEGER_TYPES)
+                    // Float types
+                    .addAll(FloatType.FLOAT_TYPES)
+                    // Decimal types
+                    .add(DecimalType.DECIMALV2)
+                    .addAll(DecimalType.DECIMAL_TYPES)
+                    // String types
+                    .add(CharType.CHAR)
+                    .add(VarcharType.VARCHAR)
+                    .add(VarbinaryType.VARBINARY)
+                    // Date types
+                    .add(DateType.DATE)
+                    .add(DateType.DATETIME)
+                    .add(DateType.TIME)
+                    // Complex types
+                    .add(JsonType.JSON)
+                    .add(VariantType.VARIANT)
+                    // Aggregate types
+                    .add(HLLType.HLL)
+                    .add(BitmapType.BITMAP)
+                    .add(PercentileType.PERCENTILE)
+                    // Function type
+                    .add(FunctionType.FUNCTION)
+                    .build()
+                    .stream()
+                    .collect(ImmutableMap.toImmutableMap(Type::getPrimitiveType, x -> (ScalarType) x));
+
+    public static ScalarType createType(PrimitiveType type) {
+        ScalarType res = PRIMITIVE_TYPE_SCALAR_TYPE_MAP.get(type);
+        Preconditions.checkNotNull(res, "unknown type " + type);
+        return res;
     }
 
-    /**
-     * Create a default string type.
-     * Uses default string length.
-     *
-     * @return the created string type
-     */
-    public static ScalarType createDefaultString() {
-        ScalarType stringType = createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
-        return stringType;
+    static {
+        StringType.STRING = new StringType(Config.max_varchar_length);
     }
-
-    /**
-     * Create a default catalog string type.
-     * Uses maximum catalog varchar length for external catalogs like Hive.
-     *
-     * @return the created catalog string type
-     */
-    public static ScalarType createDefaultCatalogString() {
-        return createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
-    }
-
-    /**
-     * Create a VARCHAR type with maximum OLAP varchar length.
-     *
-     * @return the created VARCHAR type
-     */
-    public static ScalarType createOlapMaxVarcharType() {
-        ScalarType stringType = createVarcharType(getOlapMaxVarcharLength());
-        return stringType;
-    }
-
-    /**
-     * Create a VARCHAR type with specified length.
-     *
-     * @param len the length of the VARCHAR type
-     * @return the created VARCHAR type
-     */
-    public static ScalarType createVarcharType(int len) {
-        // length checked in analysis
-        ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
-        type.setLength(len);
-        return type;
-    }
-
-    /**
-     * Create a VARCHAR type with specified length.
-     * Alias for createVarcharType(int).
-     *
-     * @param len the length of the VARCHAR type
-     * @return the created VARCHAR type
-     */
-    public static ScalarType createVarchar(int len) {
-        // length checked in analysis
-        ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
-        type.setLength(len);
-        return type;
-    }
-
-    /**
-     * Create a VARBINARY type with specified length.
-     *
-     * @param len the length of the VARBINARY type
-     * @return the created VARBINARY type
-     */
-    public static ScalarType createVarbinary(int len) {
-        ScalarType type = new ScalarType(PrimitiveType.VARBINARY);
-        type.setLength(len);
-        return type;
-    }
-
-    /**
-     * Create an HLL type.
-     * HLL is used for HyperLogLog approximate counting.
-     *
-     * @return the created HLL type
-     */
-    public static ScalarType createHllType() {
-        ScalarType type = new ScalarType(PrimitiveType.HLL);
-        type.setLength(ScalarType.MAX_HLL_LENGTH);
-        return type;
-    }
-
-    /**
-     * Create an UNKNOWN type.
-     * Used for unresolved type references.
-     *
-     * @return the created UNKNOWN type
-     */
-    public static ScalarType createUnknownType() {
-        return new ScalarType(PrimitiveType.UNKNOWN_TYPE);
-    }
-
-    /**
-     * Create a JSON type.
-     *
-     * @return the created JSON type
-     */
-    public static ScalarType createJsonType() {
-        return new ScalarType(PrimitiveType.JSON);
-    }
-
 }

@@ -24,7 +24,6 @@ import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 
@@ -114,13 +113,13 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return TypeFactory.createVarcharType(columnSize);
                 } else {
-                    return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return TypeFactory.createVarcharType(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
                 }
             case Types.CLOB:
             case Types.NCLOB:
             // LONG
             case Types.LONGVARCHAR:
-                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
             case Types.BLOB:
             case Types.BINARY:
             case Types.VARBINARY:
@@ -129,7 +128,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return TypeFactory.createVarbinary(columnSize);
                 } else {
-                    return TypeFactory.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                    return TypeFactory.createVarbinary(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
                 }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
@@ -140,7 +139,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             case -102:
             // TIMESTAMP WITH TIME ZONE
             case -101:
-                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -153,7 +152,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
-                return TypeFactory.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+                return TypeFactory.createVarcharType(TypeFactory.CATALOG_MAX_VARCHAR_LENGTH);
             }
             return TypeFactory.createUnifiedDecimalType(precision, max(digits, 0));
         }
@@ -167,6 +166,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName.toUpperCase());
             ps.setString(2, tableName.toUpperCase());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<String> list = ImmutableList.builder();
             while (rs.next()) {
@@ -197,6 +197,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName.toUpperCase());
             ps.setString(2, tableName.toUpperCase());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<String> list = ImmutableList.builder();
             while (rs.next()) {
@@ -215,6 +216,7 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         try (PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, jdbcTable.getCatalogDBName());
             ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setQueryTimeout(getQueryTimeoutSeconds());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<Partition> list = ImmutableList.builder();
             long createTime = TimeUtils.getEpochSeconds();
