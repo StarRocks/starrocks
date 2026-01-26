@@ -794,20 +794,22 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 
+    private ConnectContext buildConnectContext() {
+        ConnectContext context = ConnectContext.buildInner();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        context.setQualifiedUser(UserIdentity.ROOT.getUser());
+        return context;
+    }
+
     protected void executeSql(String sql) throws Exception {
         LOG.info("execute sql : {}", sql);
         ConnectContext context = ConnectContext.get();
-        boolean contextCreated = false;
-        try {
-            if (context == null) {
-                context = ConnectContext.buildInner();
-                context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                context.setCurrentUserIdentity(UserIdentity.ROOT);
-                context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                context.setQualifiedUser(UserIdentity.ROOT.getUser());
-                context.setThreadLocalInfo();
-                contextCreated = true;
-            }
+        if (context == null) {
+            context = buildConnectContext();
+        }
+        try (var scope = context.bindScope()) {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             if (parsedStmt instanceof InsertStmt) {
                 ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
@@ -827,12 +829,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Execute sql fail | Error Message [{}] | {} | SQL [{}]",
-                            context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
+                        context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
                 throw new AlterCancelException(context.getState().getErrorMessage());
-            }
-        } finally {
-            if (contextCreated) {
-                ConnectContext.remove();
             }
         }
     }

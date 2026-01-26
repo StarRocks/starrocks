@@ -135,22 +135,18 @@ public class WebBaseAction extends BaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
-        try {
-            if (!checkAuthWithCookie(request, response)) {
-                return;
-            }
+        if (!checkAuthWithCookie(request, response)) {
+            return;
+        }
 
-            HttpMethod method = request.getRequest().method();
-            if (method.equals(HttpMethod.GET)) {
-                executeGet(request, response);
-            } else if (method.equals(HttpMethod.POST)) {
-                executePost(request, response);
-            } else {
-                response.appendContent(new RestBaseResult("HTTP method is not allowed: " + method.name()).toJson());
-                writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
-            }
-        } finally {
-            ConnectContext.remove();
+        HttpMethod method = request.getRequest().method();
+        if (method.equals(HttpMethod.GET)) {
+            executeGet(request, response);
+        } else if (method.equals(HttpMethod.POST)) {
+            executePost(request, response);
+        } else {
+            response.appendContent(new RestBaseResult("HTTP method is not allowed: " + method.name()).toJson());
+            writeResponse(request, response, HttpResponseStatus.METHOD_NOT_ALLOWED);
         }
     }
 

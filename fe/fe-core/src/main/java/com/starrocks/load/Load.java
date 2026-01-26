@@ -595,145 +595,79 @@ public class Load {
         }
 
         if (dbName != null && !dbName.isEmpty()) {
-            boolean contextCreated = false;
-            try {
-                for (Entry<String, Expr> entry : exprsByName.entrySet()) {
-                    if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
-                        if (ConnectContext.get() == null) {
-                            ConnectContext context = new ConnectContext();
-                            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                            context.setCurrentUserIdentity(UserIdentity.ROOT);
-                            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                            context.setQualifiedUser(UserIdentity.ROOT.getUser());
-                            context.setThreadLocalInfo();
-                            contextCreated = true;
-                        }
-                        ConnectContext.get().setDatabase(dbName);
-                        break;
+            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
+                if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
+                    if (ConnectContext.get() == null) {
+                        ConnectContext context = new ConnectContext();
+                        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        context.setCurrentUserIdentity(UserIdentity.ROOT);
+                        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+                        context.setQualifiedUser(UserIdentity.ROOT.getUser());
+                        context.setThreadLocalInfo();
                     }
-                }
-
-                LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);
-
-                // analyze all exprs
-                // If use vectorized load, try analyze source column type that is not in starrocks table
-                // 1. analyze all exprs using varchar type for source columns that are not in starrocks table.
-                // 2. replace src slot desc with cast return type after expr analyzed.
-                //    If more than one, choose last one except VARCHAR.
-                // 3. reanalyze all exprs using new type, and be will transform data from orig data type directly.
-                //
-                // Column type rules:
-                // 1. Column only exists in the schema, directly use the type in the schema.
-                // 2. Column only exists in mapping expr args, use the type inferred from expr. If more than one, choose last one except VARCHAR.
-                // 3. Column exists in both schema and expr args, use VARCHAR.
-                // 4. Column from path, use VARCHAR.
-                //
-                // Example:
-                // CREATE TABLE `expr_test` (
-                //    `k1`   DATE,
-                //    `k4`   INT,
-                //    `k5`   INT,
-                //    `k20`  CHAR(20),
-                //    `k21`  INT,
-                //    `k22`  VARCHAR(20)
-                // );
-                //
-                // LOAD LABEL label0 (
-                //    DATA INFILE("hdfs://host:port/path/k5=2021-03-01/file0")
-                //    INTO TABLE expr_test
-                //    FORMAT AS "orc"
-                //    (k1,k2,k3,k4)
-                //    COLUMNS FROM PATH AS (k5)
-                //    SET (k21=year(k2), k20=k2, k22=substr(k3,1,3), k4=year(k4))
-                // ) WITH BROKER broker0;
-                //
-                // k1: k1 is in expr_test table, uses DATE type. (Rule 1)
-                // k2: after exprs are analyzed, k21=year(CAST k2 as DATETIME), k20=SlotRef(k2 as VARCHAR),
-                //     k2 maybe DATETIME or VARCHAR type.
-                //     If more than one, choose last one except VARCHAR, so replace k2 VARCHAR type with DATETIME. (Rule 2)
-                // k3: after exprs are analyzed, k22=substr(SlotRef(k3 as VARCHAR),1,3)), so k3 uses VARCHAR type same as before. (Rule 2)
-                // k4: exists in both schema and expr args, so type is VARCHAR. (Rule 3)
-                // k5: The data from path is varchar type. so type is VARCHAR. (Rule 4)
-                //
-                // If use old load, analyze all exprs using varchar type.
-                if (useVectorizedLoad) {
-                    // 1. analyze all exprs using varchar type
-                    Map<String, Expr> copiedExprsByName = Maps.newHashMap(exprsByName);
-                    Map<String, Expr> copiedMvDefineExpr = Maps.newHashMap(mvDefineExpr);
-                    analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, copiedExprsByName, copiedMvDefineExpr,
-                            slotDescByName, useVectorizedLoad);
-
-                    // 2. replace src slot desc with cast return type after expr analyzed
-                    replaceSrcSlotDescType(tbl, copiedExprsByName, srcTupleDesc, varcharColumns);
-                }
-
-                // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
-                analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
-                LOG.debug("after init column, exprMap: {}", exprsByName);
-            } finally {
-                if (contextCreated) {
-                    ConnectContext.remove();
+                    ConnectContext.get().setDatabase(dbName);
+                    break;
                 }
             }
-        } else {
-            LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);
-
-            // analyze all exprs
-            // If use vectorized load, try analyze source column type that is not in starrocks table
-            // 1. analyze all exprs using varchar type for source columns that are not in starrocks table.
-            // 2. replace src slot desc with cast return type after expr analyzed.
-            //    If more than one, choose last one except VARCHAR.
-            // 3. reanalyze all exprs using new type, and be will transform data from orig data type directly.
-            //
-            // Column type rules:
-            // 1. Column only exists in the schema, directly use the type in the schema.
-            // 2. Column only exists in mapping expr args, use the type inferred from expr. If more than one, choose last one except VARCHAR.
-            // 3. Column exists in both schema and expr args, use VARCHAR.
-            // 4. Column from path, use VARCHAR.
-            //
-            // Example:
-            // CREATE TABLE `expr_test` (
-            //    `k1`   DATE,
-            //    `k4`   INT,
-            //    `k5`   INT,
-            //    `k20`  CHAR(20),
-            //    `k21`  INT,
-            //    `k22`  VARCHAR(20)
-            // );
-            //
-            // LOAD LABEL label0 (
-            //    DATA INFILE("hdfs://host:port/path/k5=2021-03-01/file0")
-            //    INTO TABLE expr_test
-            //    FORMAT AS "orc"
-            //    (k1,k2,k3,k4)
-            //    COLUMNS FROM PATH AS (k5)
-            //    SET (k21=year(k2), k20=k2, k22=substr(k3,1,3), k4=year(k4))
-            // ) WITH BROKER broker0;
-            //
-            // k1: k1 is in expr_test table, uses DATE type. (Rule 1)
-            // k2: after exprs are analyzed, k21=year(CAST k2 as DATETIME), k20=SlotRef(k2 as VARCHAR),
-            //     k2 maybe DATETIME or VARCHAR type.
-            //     If more than one, choose last one except VARCHAR, so replace k2 VARCHAR type with DATETIME. (Rule 2)
-            // k3: after exprs are analyzed, k22=substr(SlotRef(k3 as VARCHAR),1,3)), so k3 uses VARCHAR type same as before. (Rule 2)
-            // k4: exists in both schema and expr args, so type is VARCHAR. (Rule 3)
-            // k5: The data from path is varchar type. so type is VARCHAR. (Rule 4)
-            //
-            // If use old load, analyze all exprs using varchar type.
-            if (useVectorizedLoad) {
-                // 1. analyze all exprs using varchar type
-                Map<String, Expr> copiedExprsByName = Maps.newHashMap(exprsByName);
-                Map<String, Expr> copiedMvDefineExpr = Maps.newHashMap(mvDefineExpr);
-                analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, copiedExprsByName, copiedMvDefineExpr,
-                        slotDescByName, useVectorizedLoad);
-
-                // 2. replace src slot desc with cast return type after expr analyzed
-                replaceSrcSlotDescType(tbl, copiedExprsByName, srcTupleDesc, varcharColumns);
-            }
-
-            // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
-            analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
-            LOG.debug("after init column, exprMap: {}", exprsByName);
         }
+
+        LOG.debug("slotDescByName: {}, exprsByName: {}, mvDefineExpr: {}", slotDescByName, exprsByName, mvDefineExpr);
+
+        // analyze all exprs
+        // If use vectorized load, try analyze source column type that is not in starrocks table
+        // 1. analyze all exprs using varchar type for source columns that are not in starrocks table.
+        // 2. replace src slot desc with cast return type after expr analyzed.
+        //    If more than one, choose last one except VARCHAR.
+        // 3. reanalyze all exprs using new type, and be will transform data from orig data type directly.
+        //
+        // Column type rules:
+        // 1. Column only exists in the schema, directly use the type in the schema.
+        // 2. Column only exists in mapping expr args, use the type inferred from expr. If more than one, choose last one except VARCHAR.
+        // 3. Column exists in both schema and expr args, use VARCHAR.
+        // 4. Column from path, use VARCHAR.
+        //
+        // Example:
+        // CREATE TABLE `expr_test` (
+        //    `k1`   DATE,
+        //    `k4`   INT,
+        //    `k5`   INT,
+        //    `k20`  CHAR(20),
+        //    `k21`  INT,
+        //    `k22`  VARCHAR(20)
+        // );
+        //
+        // LOAD LABEL label0 (
+        //    DATA INFILE("hdfs://host:port/path/k5=2021-03-01/file0")
+        //    INTO TABLE expr_test
+        //    FORMAT AS "orc"
+        //    (k1,k2,k3,k4)
+        //    COLUMNS FROM PATH AS (k5)
+        //    SET (k21=year(k2), k20=k2, k22=substr(k3,1,3), k4=year(k4))
+        // ) WITH BROKER broker0;
+        //
+        // k1: k1 is in expr_test table, uses DATE type. (Rule 1)
+        // k2: after exprs are analyzed, k21=year(CAST k2 as DATETIME), k20=SlotRef(k2 as VARCHAR),
+        //     k2 maybe DATETIME or VARCHAR type.
+        //     If more than one, choose last one except VARCHAR, so replace k2 VARCHAR type with DATETIME. (Rule 2)
+        // k3: after exprs are analyzed, k22=substr(SlotRef(k3 as VARCHAR),1,3)), so k3 uses VARCHAR type same as before. (Rule 2)
+        // k4: exists in both schema and expr args, so type is VARCHAR. (Rule 3)
+        // k5: The data from path is varchar type. so type is VARCHAR. (Rule 4)
+        //
+        // If use old load, analyze all exprs using varchar type.
+        if (useVectorizedLoad) {
+            // 1. analyze all exprs using varchar type
+            Map<String, Expr> copiedExprsByName = Maps.newHashMap(exprsByName);
+            Map<String, Expr> copiedMvDefineExpr = Maps.newHashMap(mvDefineExpr);
+            analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, copiedExprsByName, copiedMvDefineExpr,
+                    slotDescByName, useVectorizedLoad);
+
+            // 2. replace src slot desc with cast return type after expr analyzed
+            replaceSrcSlotDescType(tbl, copiedExprsByName, srcTupleDesc, varcharColumns);
+        }
+
+        // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
+        analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
+        LOG.debug("after init column, exprMap: {}", exprsByName);
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
