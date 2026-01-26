@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -107,6 +108,12 @@ public class AdminStmtAnalyzer {
             if (Strings.isNullOrEmpty(dbName) && Strings.isNullOrEmpty(session.getDatabase())) {
                 throw new SemanticException(PARSER_ERROR_MSG.noDbSelected(), pos);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                             ConnectContext session) {
             return null;
         }
 

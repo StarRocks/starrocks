@@ -1977,6 +1977,13 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
                 "revoke OPERATE on system from test",
                 "Access denied;");
 
+        // AdminShowAutomatedSnapshotStmt
+        verifyGrantRevoke(
+                "ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT;",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied;");
+
         // AdminShowReplicaDistributionStatement
         verifyGrantRevoke(
                 "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
