@@ -69,9 +69,13 @@ public class PaimonColumnConverterTest {
 
     @Test
     public void testConvertVarchar() {
-        VarCharType paimonType = new VarCharType();
+        VarCharType paimonType = new VarCharType(20);
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+<<<<<<< HEAD
         Type srType = ScalarType.createDefaultCatalogString();
+=======
+        Type srType = TypeFactory.createVarcharType(20);
+>>>>>>> 057059450a ([BugFix] Fix incorrect length for VARCHAR field type in Paimon Catalog (#68383))
         Assertions.assertEquals(result, srType);
     }
 
@@ -168,10 +172,17 @@ public class PaimonColumnConverterTest {
     public void testConvertMap() {
         MapType paimonType = new MapType(new VarCharType(20), new TimestampType());
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+<<<<<<< HEAD
         Assertions.assertTrue(result instanceof com.starrocks.catalog.MapType);
         com.starrocks.catalog.MapType srType = (com.starrocks.catalog.MapType) result;
         Assertions.assertEquals(ScalarType.createDefaultCatalogString(), srType.getKeyType());
         Assertions.assertEquals(Type.DATETIME, srType.getValueType());
+=======
+        Assertions.assertTrue(result instanceof com.starrocks.type.MapType);
+        com.starrocks.type.MapType srType = (com.starrocks.type.MapType) result;
+        Assertions.assertEquals(TypeFactory.createVarcharType(20), srType.getKeyType());
+        Assertions.assertEquals(com.starrocks.type.DateType.DATETIME, srType.getValueType());
+>>>>>>> 057059450a ([BugFix] Fix incorrect length for VARCHAR field type in Paimon Catalog (#68383))
     }
 
     @Test
