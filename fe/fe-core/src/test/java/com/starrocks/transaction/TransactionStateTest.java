@@ -22,6 +22,8 @@ import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
@@ -46,6 +48,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -259,5 +262,76 @@ public class TransactionStateTest {
         assertEquals(2, ids.size());
         assertEquals(id1, ids.get(0));
         assertEquals(id2, ids.get(1));
+    }
+
+    @Test
+    public void testPartitionLoadedIndexes() {
+        long tableId = 100L;
+        long physicalPartitionId = 200L;
+        long indexMetaId1 = 300L;
+        long indexId11 = 300L;
+        long indexId12 = 301L;
+        long indexMetaId2 = 400L;
+        long indexId21 = 400L;
+        long indexId22 = 401L;
+
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(tableId),
+                3000, "label_partition_indexes", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        // Mock PhysicalPartition and MaterializedIndex
+        MaterializedIndex baseIndex1 = new MaterializedIndex(indexId11, indexMetaId1, MaterializedIndex.IndexState.NORMAL, 0L);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, physicalPartitionId, baseIndex1);
+        MaterializedIndex rollupIndex1 = new MaterializedIndex(indexId21, indexMetaId2, MaterializedIndex.IndexState.NORMAL, 1L);
+        physicalPartition.createRollupIndex(rollupIndex1);
+
+        // Test fallback (no indexes added yet)
+        List<MaterializedIndex> loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size()); // Should return all indexes by default
+        List<Long> loadedIndexIds = loadedIndexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+        assertTrue(loadedIndexIds.contains(indexId11));
+        assertTrue(loadedIndexIds.contains(indexId21));
+
+        // Multi-version materialized index
+        MaterializedIndex baseIndex2 = new MaterializedIndex(indexId12, indexMetaId1, MaterializedIndex.IndexState.NORMAL, 0L);
+        physicalPartition.addMaterializedIndex(baseIndex2, true);
+        MaterializedIndex rollupIndex2 = new MaterializedIndex(indexId22, indexMetaId2, MaterializedIndex.IndexState.NORMAL, 1L);
+        physicalPartition.addMaterializedIndex(rollupIndex2, false);
+
+        // Test fallback (no indexes added yet)
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size()); // Should return all latest indexes by default
+        loadedIndexIds = loadedIndexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+        assertTrue(loadedIndexIds.contains(indexId12));
+        assertTrue(loadedIndexIds.contains(indexId22));
+
+        // Add 2 specific indexes
+        loadedIndexIds = Lists.newArrayList(indexId11, indexId21);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+
+        // Test retrieval
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId11, loadedIndexes.get(0).getId());
+        assertEquals(indexId21, loadedIndexes.get(1).getId());
+
+        // Add 2 specific latest indexes
+        loadedIndexIds = Lists.newArrayList(indexId12, indexId22);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+
+        // Test retrieval
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId12, loadedIndexes.get(0).getId());
+        assertEquals(indexId22, loadedIndexes.get(1).getId());
+
+        // Test Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState readTxn = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        List<MaterializedIndex> readLoadedIndexes = readTxn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, readLoadedIndexes.size());
+        assertEquals(indexId12, readLoadedIndexes.get(0).getId());
+        assertEquals(indexId22, readLoadedIndexes.get(1).getId());
     }
 }
