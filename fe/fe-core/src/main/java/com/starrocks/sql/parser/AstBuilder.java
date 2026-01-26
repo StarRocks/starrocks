@@ -5517,8 +5517,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
     @Override
+<<<<<<< HEAD
     public ParseNode visitBeginStatement(StarRocksParser.BeginStatementContext context) {
         return new BeginStmt(createPos(context));
+=======
+    public ParseNode visitBeginStatement(com.starrocks.sql.parser.StarRocksParser.BeginStatementContext context) {
+        String label = null;
+        if (context.label != null) {
+            label = ((Identifier) visit(context.label)).getValue();
+        }
+        return new BeginStmt(createPos(context), label);
+>>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
     }
 
     @Override
