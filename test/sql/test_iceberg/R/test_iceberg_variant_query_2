@@ -1,0 +1,394 @@
+-- name: test_iceberg_variant_query_2
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hadoop", "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/warehouse/");
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/warehouse/iceberg_variant > /dev/null
+-- result:
+0
+
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_variant;
+-- result:
+-- !result
+CREATE TABLE variant_boundary_arrays_test (
+    test_id INT,
+    test_label STRING,
+    element_count INT,
+    variant_col VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+CREATE TABLE variant_boundary_nesting_test (
+    test_id INT,
+    test_label STRING,
+    nesting_level INT,
+    variant_col VARIANT
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+CREATE TABLE variant_boundary_numeric_test (
+    test_id INT,
+    test_label STRING,
+    numeric_type STRING,
+    variant_col VARIANT,
+    expected_value STRING
+)
+properties(
+  'format-version' = '3'
+);
+-- result:
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_boundary_arrays_test/data/00000-24-674b8b26-6472-4128-8c32-9d66ef01aaef-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/variant_boundary_arrays_test/data/00000-24-674b8b26-6472-4128-8c32-9d66ef01aaef-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_boundary_nesting_test/data/00000-3259-51ac14b0-15f6-4c29-97c4-a01fcf3682e7-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/variant_boundary_nesting_test/data/00000-3259-51ac14b0-15f6-4c29-97c4-a01fcf3682e7-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp ./sql/test_iceberg/data/variant_boundary_numeric_test/data/00000-3870-872c970a-5f72-465f-8b93-54fde4db0ffa-0-00001.parquet oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/variant_boundary_numeric_test/data/00000-3870-872c970a-5f72-465f-8b93-54fde4db0ffa-0-00001.parquet > /dev/null
+-- result:
+0
+
+-- !result
+alter table variant_boundary_arrays_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/variant_boundary_arrays_test/data/00000-24-674b8b26-6472-4128-8c32-9d66ef01aaef-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_boundary_nesting_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/variant_boundary_nesting_test/data/00000-3259-51ac14b0-15f6-4c29-97c4-a01fcf3682e7-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+alter table variant_boundary_numeric_test execute add_files(location='oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/variant_boundary_numeric_test/data/00000-3870-872c970a-5f72-465f-8b93-54fde4db0ffa-0-00001.parquet', file_format='parquet');
+-- result:
+-- !result
+SELECT 'Query 1: Validate large array element extraction' AS test_description;
+-- result:
+Query 1: Validate large array element extraction
+-- !result
+SELECT
+    test_id,
+    test_label,
+    element_count,
+    get_variant_int(variant_col, '$[0]') as first_element,
+    get_variant_int(variant_col, concat('$[', cast(element_count / 2 as string), ']')) as middle_element,
+    get_variant_int(variant_col, concat('$[', cast(element_count - 1 as string), ']')) as last_element,
+    CASE
+        WHEN get_variant_int(variant_col, '$[0]') = 1 AND
+             get_variant_int(variant_col, concat('$[', cast(element_count - 1 as string), ']')) = element_count
+        THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_arrays_test
+WHERE test_id <= 3
+ORDER BY test_id;
+-- result:
+1	array_100_elements	100	1	51	100	PASS
+2	array_1000_elements	1000	1	501	1000	PASS
+3	array_10000_elements	10000	1	5001	10000	PASS
+-- !result
+SELECT 'Query 2: Validate large map key extraction' AS test_description;
+-- result:
+Query 2: Validate large map key extraction
+-- !result
+SELECT
+    test_id,
+    test_label,
+    element_count,
+    get_variant_int(variant_col, '$.k1') as first_key,
+    get_variant_int(variant_col, '$.k10') as tenth_key,
+    get_variant_int(variant_col, concat('$.k', cast(element_count as string))) as last_key,
+    CASE
+        WHEN get_variant_int(variant_col, '$.k1') = 1 THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_arrays_test
+WHERE test_id > 3
+ORDER BY test_id;
+-- result:
+4	map_10_keys	10	1	10	10	PASS
+5	map_50_keys	50	1	10	50	PASS
+6	map_100_keys	100	1	10	100	PASS
+-- !result
+SELECT 'Query 3: Validate deep nesting path extraction' AS test_description;
+-- result:
+Query 3: Validate deep nesting path extraction
+-- !result
+SELECT
+    test_id,
+    test_label,
+    nesting_level,
+    CASE nesting_level
+        WHEN 8 THEN get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8')
+        WHEN 10 THEN get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10')
+        WHEN 15 THEN get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15')
+        WHEN 20 THEN get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.l18.l19.l20')
+    END as extracted_value,
+    CASE
+        WHEN nesting_level = 8 AND get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8') = 'deep_value_8' THEN 'PASS'
+        WHEN nesting_level = 10 AND get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10') = 'deep_value_10' THEN 'PASS'
+        WHEN nesting_level = 15 AND get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15') = 'deep_value_15' THEN 'PASS'
+        WHEN nesting_level = 20 AND get_variant_string(variant_col, '$.l1.l2.l3.l4.l5.l6.l7.l8.l9.l10.l11.l12.l13.l14.l15.l16.l17.l18.l19.l20') = 'deep_value_20' THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_nesting_test
+WHERE test_id <= 4
+ORDER BY test_id;
+-- result:
+1	nesting_8_levels	8	deep_value_8	PASS
+2	nesting_10_levels	10	deep_value_10	PASS
+3	nesting_15_levels	15	deep_value_15	PASS
+4	nesting_20_levels	20	deep_value_20	PASS
+-- !result
+SELECT 'Query 4: Validate mixed array/object deep nesting' AS test_description;
+-- result:
+Query 4: Validate mixed array/object deep nesting
+-- !result
+SELECT
+    test_id,
+    test_label,
+    nesting_level,
+    get_variant_string(variant_col, '$.a[0].b.c[0].d.e[0].f.g[0].h.i') as extracted_value,
+    CASE
+        WHEN get_variant_string(variant_col, '$.a[0].b.c[0].d.e[0].f.g[0].h.i') = 'mixed_deep_10' THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_nesting_test
+WHERE test_id = 5;
+-- result:
+5	mixed_nesting_10_levels	10	mixed_deep_10	PASS
+-- !result
+SELECT 'Query 5: Validate nested array access' AS test_description;
+-- result:
+Query 5: Validate nested array access
+-- !result
+SELECT
+    test_id,
+    test_label,
+    get_variant_int(variant_col, '$[0][0][0][0][0]') as deeply_nested_value,
+    CASE
+        WHEN get_variant_int(variant_col, '$[0][0][0][0][0]') = 42 THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_nesting_test
+WHERE test_id = 6;
+-- result:
+6	nested_array_5_levels	42	PASS
+-- !result
+SELECT 'Query 6: Validate INT min/max boundary values' AS test_description;
+-- result:
+Query 6: Validate INT min/max boundary values
+-- !result
+SELECT
+    test_id,
+    test_label,
+    numeric_type,
+    get_variant_int(variant_col, '$') as extracted_int,
+    CAST(variant_col AS BIGINT) as cast_bigint,
+    expected_value,
+    CASE
+        WHEN CAST(get_variant_int(variant_col, '$') AS STRING) = expected_value THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE numeric_type = 'INT'
+ORDER BY test_id;
+-- result:
+1	int_min	INT	-2147483648	-2147483648	-2147483648	PASS
+2	int_max	INT	2147483647	2147483647	2147483647	PASS
+3	int_zero	INT	0	0	0	PASS
+4	int_negative_one	INT	-1	-1	-1	PASS
+-- !result
+SELECT 'Query 7: Validate BIGINT min/max boundary values' AS test_description;
+-- result:
+Query 7: Validate BIGINT min/max boundary values
+-- !result
+SELECT
+    test_id,
+    test_label,
+    numeric_type,
+    CAST(variant_col AS BIGINT) as extracted_bigint,
+    expected_value,
+    CASE
+        WHEN CAST(CAST(variant_col AS BIGINT) AS STRING) = expected_value THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE numeric_type = 'BIGINT'
+ORDER BY test_id;
+-- result:
+5	bigint_min	BIGINT	-9223372036854775808	-9223372036854775808	PASS
+6	bigint_max	BIGINT	9223372036854775807	9223372036854775807	PASS
+-- !result
+SELECT 'Query 8: Validate SMALLINT boundary values' AS test_description;
+-- result:
+Query 8: Validate SMALLINT boundary values
+-- !result
+SELECT
+    test_id,
+    test_label,
+    numeric_type,
+    get_variant_int(variant_col, '$') as original_value,
+    CAST(variant_col AS SMALLINT) as cast_smallint,
+    expected_value,
+    CASE
+        WHEN CAST(CAST(variant_col AS SMALLINT) AS STRING) = expected_value THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE numeric_type = 'SMALLINT'
+ORDER BY test_id;
+-- result:
+7	smallint_min	SMALLINT	-32768	-32768	-32768	PASS
+8	smallint_max	SMALLINT	32767	32767	32767	PASS
+-- !result
+SELECT 'Query 9: Validate DOUBLE extreme values' AS test_description;
+-- result:
+Query 9: Validate DOUBLE extreme values
+-- !result
+SELECT
+    test_id,
+    test_label,
+    numeric_type,
+    get_variant_double(variant_col, '$') as extracted_double,
+    CAST(variant_col AS DOUBLE) as cast_double,
+    expected_value,
+    CASE
+        WHEN get_variant_double(variant_col, '$') IS NOT NULL THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE numeric_type = 'DOUBLE'
+ORDER BY test_id;
+-- result:
+9	double_very_small	DOUBLE	5e-324	5e-324	4.9E-324	PASS
+10	double_very_large	DOUBLE	1.7976931348623157e+308	1.7976931348623157e+308	1.7976931348623157E308	PASS
+11	double_negative_large	DOUBLE	-1.7976931348623157e+308	-1.7976931348623157e+308	-1.7976931348623157E308	PASS
+12	double_negative_zero	DOUBLE	0.0	0.0	-0.0	PASS
+13	double_positive_zero	DOUBLE	0.0	0.0	0.0	PASS
+18	one_plus_epsilon	DOUBLE	1.0000000000000002	1.0000000000000002	1.0000000000000002	PASS
+19	negative_one_minus_epsilon	DOUBLE	-1.0000000000000002	-1.0000000000000002	-1.0000000000000002	PASS
+-- !result
+SELECT 'Query 10: Validate DECIMAL precision and scale' AS test_description;
+-- result:
+Query 10: Validate DECIMAL precision and scale
+-- !result
+SELECT
+    test_id,
+    test_label,
+    numeric_type,
+    get_variant_string(variant_col, '$') as extracted_string,
+    expected_value,
+    CASE
+        WHEN get_variant_string(variant_col, '$') = expected_value THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE numeric_type LIKE 'DECIMAL%'
+ORDER BY test_id;
+-- result:
+14	decimal_max_precision_38_0	DECIMAL(38,0)	99999999999999999999999999999999999999	99999999999999999999999999999999999999	PASS
+15	decimal_high_scale_38_38	DECIMAL(38,38)	0.99999999999999999999999999999999999999	0.99999999999999999999999999999999999999	PASS
+16	decimal_zero	DECIMAL(10,2)	0.0	0.00	FAIL
+17	decimal_negative	DECIMAL(10,2)	-12345.67	-12345.67	PASS
+-- !result
+SELECT 'Query 11: Validate negative zero handling' AS test_description;
+-- result:
+Query 11: Validate negative zero handling
+-- !result
+SELECT
+    test_id,
+    test_label,
+    get_variant_double(variant_col, '$') as extracted_value,
+    CAST(variant_col AS DOUBLE) as cast_value,
+    expected_value,
+    CASE
+        WHEN CAST(variant_col AS DOUBLE) = 0.0 THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE test_label IN ('double_negative_zero', 'double_positive_zero')
+ORDER BY test_id;
+-- result:
+12	double_negative_zero	0.0	0.0	-0.0	PASS
+13	double_positive_zero	0.0	0.0	0.0	PASS
+-- !result
+SELECT 'Query 12: Verify variant_typeof for numeric types' AS test_description;
+-- result:
+Query 12: Verify variant_typeof for numeric types
+-- !result
+SELECT
+    test_id,
+    test_label,
+    numeric_type,
+    variant_typeof(variant_query(variant_col, '$')) as detected_type,
+    CASE
+        WHEN numeric_type = 'INT' AND variant_typeof(variant_query(variant_col, '$')) = 'Int32' THEN 'PASS'
+        WHEN numeric_type = 'BIGINT' AND variant_typeof(variant_query(variant_col, '$')) = 'Int64' THEN 'PASS'
+        WHEN numeric_type = 'SMALLINT' AND variant_typeof(variant_query(variant_col, '$')) = 'Int16' THEN 'PASS'
+        WHEN numeric_type = 'DOUBLE' AND variant_typeof(variant_query(variant_col, '$')) = 'Double' THEN 'PASS'
+        ELSE 'FAIL'
+    END as test_result
+FROM variant_boundary_numeric_test
+WHERE test_id <= 10
+ORDER BY test_id;
+-- result:
+1	int_min	INT	Int32	PASS
+2	int_max	INT	Int32	PASS
+3	int_zero	INT	Int8	FAIL
+4	int_negative_one	INT	Int8	FAIL
+5	bigint_min	BIGINT	Int64	PASS
+6	bigint_max	BIGINT	Int64	PASS
+7	smallint_min	SMALLINT	Int16	PASS
+8	smallint_max	SMALLINT	Int16	PASS
+9	double_very_small	DOUBLE	Double	PASS
+10	double_very_large	DOUBLE	Double	PASS
+-- !result
+SELECT 'Query 13: Array size and access performance summary' AS test_description;
+-- result:
+Query 13: Array size and access performance summary
+-- !result
+SELECT
+    test_label,
+    element_count,
+    CASE
+        WHEN get_variant_int(variant_col, '$[0]') IS NOT NULL AND
+             get_variant_int(variant_col, concat('$[', cast(element_count - 1 as string), ']')) IS NOT NULL
+        THEN 'ACCESSIBLE'
+        ELSE 'ERROR'
+    END as accessibility_status
+FROM variant_boundary_arrays_test
+WHERE test_id <= 3
+ORDER BY element_count;
+-- result:
+array_100_elements	100	ACCESSIBLE
+array_1000_elements	1000	ACCESSIBLE
+array_10000_elements	10000	ACCESSIBLE
+-- !result
+drop table variant_boundary_arrays_test force;
+-- result:
+-- !result
+drop table variant_boundary_nesting_test force;
+-- result:
+-- !result
+drop table variant_boundary_numeric_test force;
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_2/${uuid0}/ > /dev/null
+-- result:
+0
+
+-- !result
