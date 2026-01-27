@@ -40,6 +40,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -80,6 +81,7 @@ import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPhysicalPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -93,6 +95,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropPhysicalPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -2898,5 +2901,391 @@ public class AlterTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBasic() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_random_physical_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a random distribution table
+        String createSQL = "CREATE TABLE test.test_random_physical_partition (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048),\n" +
+                "      v1 DATETIME\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb("test").getTable("test_random_physical_partition");
+        Assertions.assertNotNull(table);
+
+        // Verify it's a random distribution table
+        Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                table.getDefaultDistributionInfo().getType());
+
+        // Get the default partition (non-partitioned table has one partition)
+        Partition defaultPartition = table.getPartitions().iterator().next();
+        int originalPhysicalPartitionCount = defaultPartition.getSubPartitions().size();
+        Assertions.assertEquals(1, originalPhysicalPartitionCount);
+
+        // Test: ADD PHYSICAL PARTITION without specifying partition name (for non-partitioned table)
+        String alterSQL = "ALTER TABLE test.test_random_physical_partition ADD PHYSICAL PARTITION";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        Assertions.assertEquals(1, alterTableStmt.getAlterClauseList().size());
+        Assertions.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof AddPhysicalPartitionClause);
+
+        dropSQL = "drop table test_random_physical_partition";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testAddPhysicalPartitionWithBuckets() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_random_physical_partition_buckets";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a random distribution table
+        String createSQL = "CREATE TABLE test.test_random_physical_partition_buckets (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048),\n" +
+                "      v1 DATETIME\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 8\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Test: ADD PHYSICAL PARTITION with specific bucket number
+        String alterSQL = "ALTER TABLE test.test_random_physical_partition_buckets ADD PHYSICAL PARTITION BUCKETS 16";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPhysicalPartitionClause clause = (AddPhysicalPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals(16, clause.getBucketNum());
+        Assertions.assertNull(clause.getPartitionName());
+
+        dropSQL = "drop table test_random_physical_partition_buckets";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testAddPhysicalPartitionForPartitionedTable() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_partitioned_random";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a partitioned random distribution table
+        String createSQL = "CREATE TABLE test.test_partitioned_random (\n" +
+                "      k1 DATE,\n" +
+                "      k2 INT,\n" +
+                "      v1 VARCHAR(2048)\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    PARTITION p20230101 VALUES LESS THAN ('2023-01-02'),\n" +
+                "    PARTITION p20230102 VALUES LESS THAN ('2023-01-03')\n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Test: ADD PHYSICAL PARTITION with partition name
+        String alterSQL = "ALTER TABLE test.test_partitioned_random ADD PHYSICAL PARTITION p20230101";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPhysicalPartitionClause clause = (AddPhysicalPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals("p20230101", clause.getPartitionName());
+        Assertions.assertEquals(0, clause.getBucketNum()); // 0 means auto-infer
+
+        // Test: ADD PHYSICAL PARTITION with partition name and bucket number
+        alterSQL = "ALTER TABLE test.test_partitioned_random ADD PHYSICAL PARTITION p20230102 BUCKETS 20";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        clause = (AddPhysicalPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals("p20230102", clause.getPartitionName());
+        Assertions.assertEquals(20, clause.getBucketNum());
+
+        dropSQL = "drop table test_partitioned_random";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testAddPhysicalPartitionHashDistributionError() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_hash_physical_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a hash distribution table
+        String createSQL = "CREATE TABLE test.test_hash_physical_partition (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048)\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Test: ADD PHYSICAL PARTITION should fail for hash distribution
+        String alterSQL = "ALTER TABLE test.test_hash_physical_partition ADD PHYSICAL PARTITION";
+        AnalysisException e = assertThrows(AnalysisException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        });
+        Assertions.assertTrue(e.getMessage().contains("Only random distribution table supports adding physical partition"));
+
+        dropSQL = "drop table test_hash_physical_partition";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testAddPhysicalPartitionNonExistentPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_nonexistent_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a partitioned random distribution table
+        String createSQL = "CREATE TABLE test.test_nonexistent_partition (\n" +
+                "      k1 DATE,\n" +
+                "      k2 INT\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    PARTITION p1 VALUES LESS THAN ('2023-01-02')\n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Test: ADD PHYSICAL PARTITION with non-existent partition name should fail
+        String alterSQL = "ALTER TABLE test.test_nonexistent_partition ADD PHYSICAL PARTITION nonexistent";
+        AnalysisException e = assertThrows(AnalysisException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        });
+        Assertions.assertTrue(e.getMessage().contains("Partition 'nonexistent' does not exist"));
+
+        dropSQL = "drop table test_nonexistent_partition";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testDropPhysicalPartitionBasic() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_drop_physical_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a random distribution table
+        String createSQL = "CREATE TABLE test.test_drop_physical_partition (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048)\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Get the table and add a physical partition first
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_drop_physical_partition");
+        // Add a new physical partition
+        String addPhysicalPartitionSQL = "ALTER TABLE test.test_drop_physical_partition ADD PHYSICAL PARTITION";
+        AlterTableStmt addStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(addPhysicalPartitionSQL, ctx);
+        DDLStmtExecutor.execute(addStmt, ctx);
+
+        // Get the newly added physical partition ID (not the default one)
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_drop_physical_partition");
+        Partition partition = table.getPartitions().iterator().next();
+        long defaultPhysicalPartitionId = partition.getDefaultPhysicalPartition().getId();
+        long newPhysicalPartitionId = -1;
+        for (PhysicalPartition pp : partition.getSubPartitions()) {
+            if (pp.getId() != defaultPhysicalPartitionId) {
+                newPhysicalPartitionId = pp.getId();
+                break;
+            }
+        }
+        Assertions.assertTrue(newPhysicalPartitionId > 0, "Should have added a new physical partition");
+
+        // Test: DROP PHYSICAL PARTITION with the real ID
+        String alterSQL = "ALTER TABLE test.test_drop_physical_partition DROP PHYSICAL PARTITION " + newPhysicalPartitionId;
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        Assertions.assertEquals(1, alterTableStmt.getAlterClauseList().size());
+        Assertions.assertTrue(alterTableStmt.getAlterClauseList().get(0) instanceof DropPhysicalPartitionClause);
+        DropPhysicalPartitionClause clause = (DropPhysicalPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals(newPhysicalPartitionId, clause.getPhysicalPartitionId());
+        Assertions.assertFalse(clause.isForceDrop());
+
+        dropSQL = "drop table test_drop_physical_partition";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testDropPhysicalPartitionWithForce() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_drop_physical_partition_force";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a random distribution table
+        String createSQL = "CREATE TABLE test.test_drop_physical_partition_force (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048)\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 8\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Get the table and add a physical partition first
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_drop_physical_partition_force");
+
+        // Add a new physical partition
+        String addPhysicalPartitionSQL = "ALTER TABLE test.test_drop_physical_partition_force ADD PHYSICAL PARTITION";
+        AlterTableStmt addStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(addPhysicalPartitionSQL, ctx);
+        DDLStmtExecutor.execute(addStmt, ctx);
+
+        // Get the default physical partition ID to test FORCE drop
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_drop_physical_partition_force");
+        Partition partition = table.getPartitions().iterator().next();
+        long defaultPhysicalPartitionId = partition.getDefaultPhysicalPartition().getId();
+
+        // Test: DROP PHYSICAL PARTITION with FORCE (using default physical partition ID)
+        String alterSQL = "ALTER TABLE test.test_drop_physical_partition_force DROP PHYSICAL PARTITION " 
+                + defaultPhysicalPartitionId + " FORCE";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        DropPhysicalPartitionClause clause = (DropPhysicalPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        Assertions.assertEquals(defaultPhysicalPartitionId, clause.getPhysicalPartitionId());
+        Assertions.assertTrue(clause.isForceDrop());
+
+        dropSQL = "drop table test_drop_physical_partition_force";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testDropPhysicalPartitionHashDistributionError() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_drop_hash_physical_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a hash distribution table
+        String createSQL = "CREATE TABLE test.test_drop_hash_physical_partition (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048)\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Test: DROP PHYSICAL PARTITION should fail for hash distribution
+        String alterSQL = "ALTER TABLE test.test_drop_hash_physical_partition DROP PHYSICAL PARTITION 12345";
+        AnalysisException e = assertThrows(AnalysisException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        });
+        Assertions.assertTrue(e.getMessage().contains("Only random distribution table supports dropping physical partition"));
+
+        dropSQL = "drop table test_drop_hash_physical_partition";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+    }
+
+    @Test
+    public void testDropPhysicalPartitionNonExistent() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String dropSQL = "drop table if exists test_drop_nonexistent_physical";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+
+        // Create a random distribution table
+        String createSQL = "CREATE TABLE test.test_drop_nonexistent_physical (\n" +
+                "      k1 INT,\n" +
+                "      k2 VARCHAR(2048)\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1)\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        // Test: DROP PHYSICAL PARTITION with non-existent ID should fail during analysis
+        String alterSQL = "ALTER TABLE test.test_drop_nonexistent_physical DROP PHYSICAL PARTITION 99999999";
+        AnalysisException e = assertThrows(AnalysisException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        });
+        Assertions.assertTrue(e.getMessage().contains("Physical partition '99999999' does not exist"));
+
+        dropSQL = "drop table test_drop_nonexistent_physical";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 }

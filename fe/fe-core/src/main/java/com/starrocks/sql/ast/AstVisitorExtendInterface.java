@@ -527,6 +527,14 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitAddPhysicalPartitionClause(AddPhysicalPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropPhysicalPartitionClause(DropPhysicalPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitDropPartitionClause(DropPartitionClause clause, C context) {
         return visitNode(clause, context);
     }

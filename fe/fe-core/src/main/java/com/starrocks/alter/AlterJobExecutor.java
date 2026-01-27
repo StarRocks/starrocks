@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPhysicalPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -79,6 +80,7 @@ import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
+import com.starrocks.sql.ast.DropPhysicalPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -722,6 +724,36 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         }
         ErrorReport.wrapWithRuntimeException(() ->
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(context, db, table.getName(), clause));
+        return null;
+    }
+
+    @Override
+    public Void visitAddPhysicalPartitionClause(AddPhysicalPartitionClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable olapTable)) {
+            throw new SemanticException("Only OLAP table supports adding physical partition");
+        }
+
+        try (AutoCloseableLock ignore =
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .addPhysicalPartition(context, db, olapTable, clause));
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitDropPhysicalPartitionClause(DropPhysicalPartitionClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable olapTable)) {
+            throw new SemanticException("Only OLAP table supports dropping physical partition");
+        }
+
+        try (AutoCloseableLock ignore =
+                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .dropPhysicalPartition(db, olapTable, clause));
+        }
+
         return null;
     }
 

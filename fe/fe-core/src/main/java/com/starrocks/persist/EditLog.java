@@ -261,6 +261,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_DROP_PHYSICAL_PARTITION: {
+                    DropPhysicalPartitionLog log = (DropPhysicalPartitionLog) journal.data();
+                    globalStateMgr.getLocalMetastore().replayDropPhysicalPartition(log);
+                    break;
+                }
                 case OperationType.OP_DROP_PARTITION: {
                     DropPartitionInfo info = (DropPartitionInfo) journal.data();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
@@ -1569,6 +1574,10 @@ public class EditLog {
 
     public void logAddSubPartitions(AddSubPartitionsInfoV2 info) {
         logJsonObject(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
+    }
+
+    public void logDropPhysicalPartition(DropPhysicalPartitionLog log) {
+        logJsonObject(OperationType.OP_DROP_PHYSICAL_PARTITION, log);
     }
 
     public void logDropPartitions(DropPartitionsInfo info, WALApplier walApplier) {

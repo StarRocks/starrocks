@@ -146,6 +146,7 @@ import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropPartitionsInfo;
+import com.starrocks.persist.DropPhysicalPartitionLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -183,6 +184,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPhysicalPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -207,6 +209,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPhysicalPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HintNode;
@@ -1771,6 +1774,153 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         } finally {
             table.setAutomaticBucketing(false);
+        }
+    }
+
+    /**
+     * add a new physical partition to an existing logical partition.
+     */
+    public void addPhysicalPartition(ConnectContext context, Database db, OlapTable olapTable,
+                                      AddPhysicalPartitionClause clause) throws DdlException {
+        String partitionName = clause.getPartitionName();
+        Partition partition;
+
+        if (partitionName == null) {
+            // For non-partitioned table, get the single partition
+            if (olapTable.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Partition name must be specified for partitioned table");
+            }
+            Collection<Partition> partitions = olapTable.getPartitions();
+            if (partitions.size() != 1) {
+                throw new DdlException("Non-partitioned table should have exactly one partition");
+            }
+            partition = partitions.iterator().next();
+        } else {
+            partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new DdlException("Partition '" + partitionName + "' does not exist");
+            }
+        }
+
+        // Validate distribution type
+        if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new DdlException("Only random distribution table supports adding physical partition");
+        }
+
+        // Get compute resource
+        long warehouseId = context.getCurrentWarehouseId();
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
+        final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
+
+        // If user specified bucket number, we need to set it on the table temporarily
+        int userBucketNum = clause.getBucketNum();
+        long originalMutableBucketNum = olapTable.getMutableBucketNum();
+        try {
+            if (userBucketNum > 0) {
+                olapTable.setMutableBucketNum(userBucketNum);
+            }
+
+            // Add one physical partition
+            addSubPartitions(db, olapTable, partition, 1, computeResource);
+
+            LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
+                    partition.getName(), olapTable.getName());
+        } finally {
+            // Restore the original mutable bucket num
+            if (userBucketNum > 0) {
+                olapTable.setMutableBucketNum(originalMutableBucketNum);
+            }
+        }
+    }
+
+    /**
+     * Drop an existing physical partition from a logical partition.
+     */
+    public void dropPhysicalPartition(Database db, OlapTable olapTable,
+                                       DropPhysicalPartitionClause clause) throws DdlException {
+        long physicalPartitionId = clause.getPhysicalPartitionId();
+
+        PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+        if (physicalPartition == null) {
+            throw new DdlException("Physical partition '" + physicalPartitionId + "' does not exist");
+        }
+
+        // Find the parent partition
+        Partition partition = olapTable.getPartition(physicalPartition.getParentId());
+        if (partition == null) {
+            throw new DdlException("Parent partition for physical partition '" + physicalPartitionId + "' does not exist");
+        }
+
+        // Cannot drop the last physical partition
+        if (partition.getSubPartitions().size() <= 1) {
+            throw new DdlException("Cannot drop the last physical partition of partition '" + partition.getName() + "'");
+        }
+
+        // Cannot drop default physical partition unless force
+        boolean isDefault = partition.getDefaultPhysicalPartition().getId() == physicalPartitionId;
+        if (isDefault && !clause.isForceDrop()) {
+            throw new DdlException("Cannot drop default physical partition. Use FORCE to drop it.");
+        }
+
+        // Remove the physical partition from the logical partition
+        partition.removeSubPartition(physicalPartitionId);
+
+        // Remove from OlapTable's physical partition map
+        olapTable.removePhysicalPartition(physicalPartition);
+
+        // Remove tablets from inverted index
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                invertedIndex.deleteTablet(tablet.getId());
+            }
+        }
+
+        // Log the drop operation for persistence
+        DropPhysicalPartitionLog log = new DropPhysicalPartitionLog(db.getId(), olapTable.getId(),
+                partition.getId(), physicalPartitionId);
+        GlobalStateMgr.getCurrentState().getEditLog().logDropPhysicalPartition(log);
+
+        LOG.info("Successfully dropped physical partition '{}' from partition '{}' in table '{}'",
+                physicalPartitionId, partition.getName(), olapTable.getName());
+    }
+
+    public void replayDropPhysicalPartition(DropPhysicalPartitionLog log) throws DdlException {
+        Database db = getDb(log.getDbId());
+        if (db == null) {
+            LOG.warn("replay drop physical partition failed, db is null, log: {}", log);
+            return;
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), log.getTableId(), LockType.WRITE)) {
+            OlapTable olapTable = (OlapTable) getTable(db.getId(), log.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replay drop physical partition failed, table is null, log: {}", log);
+                return;
+            }
+            Partition partition = olapTable.getPartition(log.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay drop physical partition failed, partition is null, log: {}", log);
+                return;
+            }
+            PhysicalPartition physicalPartition = partition.getSubPartition(log.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                LOG.warn("replay drop physical partition failed, physical partition is null, log: {}", log);
+                return;
+            }
+
+            partition.removeSubPartition(log.getPhysicalPartitionId());
+            olapTable.removePhysicalPartition(physicalPartition);
+
+            // Remove tablets from inverted index
+            if (!isCheckpointThread()) {
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
+                }
+            }
         }
     }
 

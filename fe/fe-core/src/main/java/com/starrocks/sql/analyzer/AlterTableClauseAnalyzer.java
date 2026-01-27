@@ -24,6 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
@@ -34,11 +35,13 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -59,6 +62,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AddPhysicalPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
@@ -77,6 +81,7 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPhysicalPartitionClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
@@ -1381,6 +1386,83 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             partitionDescs.set(0, newDesc);
             addPartitionClause.setPartitionDesc(newDesc);
         }
+    }
+
+    @Override
+    public Void visitAddPhysicalPartitionClause(AddPhysicalPartitionClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Only OLAP table supports adding physical partition");
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+
+        // Check if the table uses random distribution
+        if (olapTable.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new SemanticException("Only random distribution table supports adding physical partition");
+        }
+
+        String partitionName = clause.getPartitionName();
+        if (partitionName != null) {
+            // Check if the partition exists
+            Partition partition = olapTable.getPartition(partitionName);
+            if (partition == null) {
+                throw new SemanticException("Partition '" + partitionName + "' does not exist");
+            }
+        } else {
+            // For non-partitioned table, must have exactly one partition
+            if (olapTable.getPartitionInfo().isPartitioned()) {
+                throw new SemanticException("Partition name must be specified for partitioned table");
+            }
+        }
+
+        // Validate bucket number if specified
+        int bucketNum = clause.getBucketNum();
+        if (bucketNum < 0) {
+            throw new SemanticException("Bucket number must be non-negative");
+        }
+        if (bucketNum > Config.max_bucket_number_per_partition) {
+            throw new SemanticException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitDropPhysicalPartitionClause(DropPhysicalPartitionClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            throw new SemanticException("Only OLAP table supports dropping physical partition");
+        }
+
+        OlapTable olapTable = (OlapTable) table;
+
+        // Check if the table uses random distribution
+        if (olapTable.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+            throw new SemanticException("Only random distribution table supports dropping physical partition");
+        }
+
+        long physicalPartitionId = clause.getPhysicalPartitionId();
+        PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(physicalPartitionId);
+        if (physicalPartition == null) {
+            throw new SemanticException("Physical partition '" + physicalPartitionId + "' does not exist");
+        }
+
+        // Find the parent partition
+        Partition partition = olapTable.getPartition(physicalPartition.getParentId());
+        if (partition == null) {
+            throw new SemanticException("Parent partition for physical partition '" + physicalPartitionId + "' does not exist");
+        }
+
+        // Cannot drop the last physical partition
+        if (partition.getSubPartitions().size() <= 1) {
+            throw new SemanticException("Cannot drop the last physical partition of partition '" + partition.getName() + "'");
+        }
+
+        // Cannot drop default physical partition unless force
+        if (partition.getDefaultPhysicalPartition().getId() == physicalPartitionId && !clause.isForceDrop()) {
+            throw new SemanticException("Cannot drop default physical partition. Use FORCE to drop it.");
+        }
+
+        return null;
     }
 
     private void analyzeAddPartition(OlapTable olapTable, List<PartitionDesc> partitionDescs,
