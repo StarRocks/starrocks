@@ -221,9 +221,9 @@ public class ImplicitCastRuleTest {
                 ConstantOperator.createDate(LocalDate.of(2024, 12, 9).atStartOfDay()),
                 ConstantOperator.createDate(LocalDateTime.now()));
         ScalarOperator result1 = rule.apply(op1, null);
-        assertTrue(result1.getChild(0) instanceof CastOperator);
-        assertTrue(result1.getChild(1) instanceof CastOperator);
-        assertTrue(result1.getChild(2) instanceof CastOperator);
+        assertTrue(result1.getChild(0).getType().isDateType());
+        assertTrue(result1.getChild(1).getType().isDateType());
+        assertTrue(result1.getChild(2).getType().isDateType());
 
     }
 

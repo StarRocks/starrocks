@@ -156,14 +156,6 @@ public class TypeManager {
         Preconditions.checkState(!types.isEmpty());
         Type compatibleType = types.get(0);
 
-        // date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
-        // The above example needs to convert the string type to the date type
-        if (!isBetween && types.size() > 1 && types.stream().skip(1).allMatch(e -> e == types.get(1))) {
-            if (compatibleType.isVarchar() && types.get(1).isDateType() ||
-                    compatibleType.isDateType() && types.get(1).isVarchar()) {
-                return getCompatibleTypeForBinary(false, types.get(0), types.get(1));
-            }
-        }
         for (int i = 1; i < types.size(); i++) {
             compatibleType = getCompatibleTypeForBetweenAndIn(compatibleType, types.get(i), isBetween);
         }
@@ -171,6 +163,11 @@ public class TypeManager {
         if (VarcharType.VARCHAR.equals(compatibleType)) {
             if (types.get(0).isDateType()) {
                 return types.get(0);
+            }
+            //date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
+            if (!isBetween && types.size() > 1 && types.get(1).isDateType() &&
+                    types.stream().skip(1).allMatch(e -> e == types.get(1))) {
+                return types.get(1);
             }
         }
 

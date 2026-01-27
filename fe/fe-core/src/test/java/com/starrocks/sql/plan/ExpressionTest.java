@@ -869,16 +869,13 @@ public class ExpressionTest extends PlanTestBase {
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('1970-01-01', '1970-01-01', '1970-02-01') ",
                 "c4 IN ('1970-01-01', '1970-01-01', '1970-02-01')");
         testPlanContains("SELECT * FROM test_in_pred_norm WHERE c4 IN ('292278994-08-17', '1970-01-01', '1970-02-01') ",
-                "CAST(5: c4 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-01-01 00:00:00', '1970-02-01 00:00:00')");
-
+                "5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-01-01', '1970-02-01')");
         // common expression
-        testPlanContains("SELECT " +
-                        "c4 IN ('292278994-08-17', '1970-02-01') AND " +
-                        "c5 IN ('292278994-08-17', '1970-02-01') AND " +
-                        "c5 IN ('292278994-08-17', '1970-02-01')  " +
-                        " FROM test_in_pred_norm",
-                "<slot 7> : (CAST(5: c4 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-02-01 00:00:00')) " +
-                        "AND (CAST(6: c5 AS DATETIME) IN (CAST('292278994-08-17' AS DATETIME), '1970-02-01 00:00:00'))");
+        testPlanContains(
+                "SELECT " + "c4 IN ('292278994-08-17', '1970-02-01') AND " + "c5 IN ('292278994-08-17', '1970-02-01') AND " +
+                        "c5 IN ('292278994-08-17', '1970-02-01')  " + " FROM test_in_pred_norm",
+                "<slot 7> : (5: c4 IN (CAST('292278994-08-17' AS DATE), '1970-02-01')) AND " +
+                        "(6: c5 IN (CAST('292278994-08-17' AS DATE), '1970-02-01'))");
 
         String plan = getFragmentPlan("SELECT " +
                 "c4 IN ('292278994-08-17', '1970-02-01') AND c4 IN ('292278994-08-18', '1970-02-01') AND " +
