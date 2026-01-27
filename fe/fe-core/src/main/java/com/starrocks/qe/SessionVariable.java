@@ -942,7 +942,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SCAN_OLAP_PARTITION_NUM_LIMIT = "scan_olap_partition_num_limit";
 
-    public static final String SCAN_PAIMON_PARTITION_NUM_LIMIT = "scan_paimon_partition_num_limit";
+    public static final String SCAN_LAKE_PARTITION_NUM_LIMIT = "scan_lake_partition_num_limit";
 
     public static final String ENABLE_CROSS_JOIN = "enable_cross_join";
 
@@ -2864,9 +2864,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SCAN_OLAP_PARTITION_NUM_LIMIT)
     private int scanOlapPartitionNumLimit = 0;
 
-    // For the maximum number of partitions allowed to be scanned in a single paimon table, 0 means no limit.
-    @VarAttr(name = SCAN_PAIMON_PARTITION_NUM_LIMIT)
-    private int scanPaimonPartitionNumLimit = 0;
+    // For the maximum number of partitions allowed to be scanned in a single lake table, 0 means no limit.
+    @VarAttr(name = SCAN_LAKE_PARTITION_NUM_LIMIT)
+    private int scanLakePartitionNumLimit = 0;
 
     @VarAttr(name = ENABLE_CROSS_JOIN)
     private boolean enableCrossJoin = true;
@@ -5333,12 +5333,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.scanOlapPartitionNumLimit = scanOlapPartitionNumLimit;
     }
 
-    public int getScanPaimonPartitionNumLimit() {
-        return scanPaimonPartitionNumLimit;
+    public int getScanLakePartitionNumLimit() {
+        return scanLakePartitionNumLimit;
     }
 
-    public void setScanPaimonPartitionNumLimit(int scanPaimonPartitionNumLimit) {
-        this.scanPaimonPartitionNumLimit = scanPaimonPartitionNumLimit;
+    public void setScanLakePartitionNumLimit(int scanLakePartitionNumLimit) {
+        this.scanLakePartitionNumLimit = scanLakePartitionNumLimit;
     }
 
     public boolean isEnableCrossJoin() {

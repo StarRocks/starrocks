@@ -36,35 +36,35 @@ public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
         // 1.partition table
         String sql1 = "select * from partitioned_table;";
 
-        // param default value: 0
+        // variable default value: 0
         String plan1 = getFragmentPlan(sql1);
         assertContains(plan1, "partitions=10/10");
 
-        // param value > scan partition num
-        connectContext.getSessionVariable().setScanPaimonPartitionNumLimit(20);
+        // variable value > scan partition num
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(20);
         String plan2 = getFragmentPlan(sql1);
         assertContains(plan2, "partitions=10/10");
 
-        // param value < scan partition num
-        connectContext.getSessionVariable().setScanPaimonPartitionNumLimit(3);
+        // variable value < scan partition num
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(3);
         String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
                 "Number of partitions allowed: 3, number of partitions to be scanned: 10. " +
-                "Please adjust the SQL or change the limit by set variable scan_paimon_partition_num_limit.";
+                "Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
         ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class, msg,
                 () -> getFragmentPlan(sql1));
 
         // 2.unpartition table
         String sql2 = "select * from unpartitioned_table;";
 
-        connectContext.getSessionVariable().setScanPaimonPartitionNumLimit(3);
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(3);
         String plan3 = getFragmentPlan(sql2);
         assertContains(plan3, "partitions=1/1");
 
         // 3.system table
         String sql3 = "select * from partitioned_table$snapshots;";
 
-        connectContext.getSessionVariable().setScanPaimonPartitionNumLimit(3);
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(3);
         String plan4 = getFragmentPlan(sql3);
-        assertContains(plan4, "partitions=0/10");
+        assertContains(plan4, "partitions=0/1");
     }
 }

@@ -460,16 +460,14 @@ public class OptExternalPartitionPruner {
                 if (split instanceof DataSplit) {
                     DataSplit dataSplit = (DataSplit) split;
                     selectedPartitions.add(dataSplit.partition());
-                } else {
-                    // paimon system table, do nothing
                 }
             }
-            int scanPaimonPartitionNumLimit = context.getSessionVariable().getScanPaimonPartitionNumLimit();
-            if (scanPaimonPartitionNumLimit > 0 && selectedPartitions.size() > scanPaimonPartitionNumLimit) {
+            int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
+            if (scanLakePartitionNumLimit > 0 && selectedPartitions.size() > scanLakePartitionNumLimit) {
                 String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
-                        "Number of partitions allowed: " + scanPaimonPartitionNumLimit +
+                        "Number of partitions allowed: " + scanLakePartitionNumLimit +
                         ", number of partitions to be scanned: " + selectedPartitions.size() +
-                        ". Please adjust the SQL or change the limit by set variable scan_paimon_partition_num_limit.";
+                        ". Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
                 LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
                 throw new AnalysisException(msg);
             }
