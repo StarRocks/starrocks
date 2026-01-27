@@ -52,13 +52,20 @@ public class ColumnIdExpr {
     }
 
     public Expr convertToColumnNameExpr(Map<ColumnId, Column> idToColumn) {
-        setColumnName(idToColumn, expr);
-        return expr;
+        // Clone the expression to avoid mutating the original stored expression.
+        // This fixes a bug where nested MVs fail to reactivate after their base MV
+        // goes through an INACTIVE -> ACTIVE cycle, because the original SlotRef's
+        // column name was being mutated in place.
+        Expr clonedExpr = expr.clone();
+        setColumnName(idToColumn, clonedExpr);
+        return clonedExpr;
     }
 
     public Expr convertToColumnNameExpr(List<Column> schema) {
-        setColumnName(MetaUtils.buildIdToColumn(schema), expr);
-        return expr;
+        // Clone the expression to avoid mutating the original stored expression.
+        Expr clonedExpr = expr.clone();
+        setColumnName(MetaUtils.buildIdToColumn(schema), clonedExpr);
+        return clonedExpr;
     }
 
     public Expr getExpr() {
