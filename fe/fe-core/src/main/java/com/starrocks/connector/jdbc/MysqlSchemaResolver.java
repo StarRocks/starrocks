@@ -39,22 +39,44 @@ import static java.lang.Math.max;
 public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
+    protected boolean isInternalSchema(String schemaName) {
+        return schemaName.equalsIgnoreCase("information_schema") ||
+                schemaName.equalsIgnoreCase("mysql") ||
+                schemaName.equalsIgnoreCase("performance_schema") ||
+                schemaName.equalsIgnoreCase("sys");
+    }
+
+    @Override
     public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
                 String schemaName = resultSet.getString("TABLE_CAT");
                 // skip internal schemas
-                if (!schemaName.equalsIgnoreCase("information_schema") &&
-                        !schemaName.equalsIgnoreCase("mysql") &&
-                        !schemaName.equalsIgnoreCase("performance_schema") &&
-                        !schemaName.equalsIgnoreCase("sys")) {
+                if (!isInternalSchema(schemaName)) {
                     schemaNames.add(schemaName);
                 }
             }
             return schemaNames.build();
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean databaseExists(Connection connection, String dbName) throws SQLException {
+        // Skip internal schemas to maintain consistency with listSchemas()
+        if (isInternalSchema(dbName)) {
+            return false;
+        }
+        try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
+            while (resultSet.next()) {
+                String catalogName = resultSet.getString("TABLE_CAT");
+                if (catalogName.equals(dbName)) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
