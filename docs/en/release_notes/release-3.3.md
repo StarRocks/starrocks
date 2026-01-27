@@ -11,6 +11,37 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.22
+
+Release Date: January 27, 2026
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- CVE-2025-27818. [#67335](https://github.com/StarRocks/starrocks/pull/67335)
+- SIGSEGV crash in CN when querying non-partitioned Iceberg tables with DATE/TIME predicates on ARM64/Graviton architectures. [#66864](https://github.com/StarRocks/starrocks/pull/66864)
+- Deadlock caused by lock ordering issues when closing `LocalTabletsChannel` and `LakeTabletsChannel`. [#66748](https://github.com/StarRocks/starrocks/pull/66748)
+- Potential BE crash when executing `CACHE SELECT` queries with filter conditions. [#67375](https://github.com/StarRocks/starrocks/pull/67375)
+- Issue where the Multicast Sink Operator could get stuck in the `OUTPUT_FULL` state if an upstream operator (for example, LIMIT) finished early, causing the query to hang. [#67153](https://github.com/StarRocks/starrocks/pull/67153)
+- Potential Segfault caused by failure to invalidate cache pointers when `ObjectColumn` is resized or moved. [#66957](https://github.com/StarRocks/starrocks/pull/66957)
+- Potential errors or OOM issues when Java UDFs handle Nullable columns containing all NULLs. [#67025](https://github.com/StarRocks/starrocks/pull/67025)
+- BE crash caused by the optimization logic of Ranking Window Functions when `PARTITION BY` and `ORDER BY` are missing. [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- Incorrect result issue where `COUNT(DISTINCT)` was not correctly rewritten to `multi_distinct_count` when queried alongside non-distinct aggregations (like SUM) on a single-bucket table. [#66767](https://github.com/StarRocks/starrocks/pull/66767)
+- Incorrect results when `regexp_replace` processes multiple rows with `enable_hyperscan_vec` enabled. [#67380](https://github.com/StarRocks/starrocks/pull/67380)
+- Potential incorrect results with Sorted Streaming Aggregate in shared-data mode. [#67376](https://github.com/StarRocks/starrocks/pull/67376)
+- Query failure where the optimizer generated access paths using the old column name after the column was renamed. [#67533](https://github.com/StarRocks/starrocks/pull/67533)
+- Incorrect Bitmap column type propagation in the rewrite rule from `bitmap_to_array` to `unnest_bitmap`. [#66855](https://github.com/StarRocks/starrocks/pull/66855)
+- Dependency derivation error in Low Cardinality optimization logic by adopting the Union-Find algorithm to correctly handle column relationships. [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+- "Compute node not found" error in Short-circuit Read under shared-data clusters by adding a fallback mechanism to non-short-circuit mode. [#67323](https://github.com/StarRocks/starrocks/pull/67323)
+- "Version not found" error during Replication publishing caused by FE Replicas not updating the minimum readable version. [#67538](https://github.com/StarRocks/starrocks/pull/67538)
+- Logic error in physical partition comparison during replication transactions to ensure deterministic comparison using ID order. [#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- Inaccurate statistics for counters like scan rows in Cloud Native Tables. [#67307](https://github.com/StarRocks/starrocks/pull/67307)
+- Issue where expired Tablets were not cleaned up from the scheduler, causing the scheduling queue to pile up. [#66718](https://github.com/StarRocks/starrocks/pull/66718)
+- Inaccurate SQL statements displayed in the Profile when multiple statements are submitted. [#67097](https://github.com/StarRocks/starrocks/pull/67097)
+- Issue where the transaction ID was empty in `publish_version` logs in the new FE. [#66732](https://github.com/StarRocks/starrocks/pull/66732)
+- Performance issue caused by unnecessary Protobuf message copying after `set_allocated`. [#67844](https://github.com/StarRocks/starrocks/pull/67844)
+
 ## 3.3.21
 
 Release Date: December 25, 2025

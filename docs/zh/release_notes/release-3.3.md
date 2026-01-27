@@ -11,6 +11,37 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.22
+
+发布日期：2026 年 1 月 27 日
+
+### 问题修复
+
+修复了以下问题：
+
+- CVE-2025-27818。[#67335](https://github.com/StarRocks/starrocks/pull/67335)
+- 在 ARM64/Graviton 架构下，对非分区 Iceberg 表使用 DATE/TIME 谓词查询时，CN 发生 SIGSEGV 崩溃的问题。[#66864](https://github.com/StarRocks/starrocks/pull/66864)
+- 关闭 `LocalTabletsChannel` 和 `LakeTabletsChannel` 时，由于锁顺序问题导致的死锁。[#66748](https://github.com/StarRocks/starrocks/pull/66748)
+- 执行带有过滤条件的 `CACHE SELECT` 查询时，可能导致 BE 崩溃的问题。[#67375](https://github.com/StarRocks/starrocks/pull/67375)
+- 当上游算子（如 LIMIT）提前结束时，Multicast Sink Operator 可能卡在 `OUTPUT_FULL` 状态，导致查询挂起的问题。[#67153](https://github.com/StarRocks/starrocks/pull/67153)
+- 在 `ObjectColumn` 发生 resize 或移动时，未能正确失效缓存指针而导致潜在段错误（Segfault）的问题。[#66957](https://github.com/StarRocks/starrocks/pull/66957)
+- Java UDF 在处理所有值均为 NULL 的 Nullable 列时，可能出现错误或 OOM 的问题。[#67025](https://github.com/StarRocks/starrocks/pull/67025)
+- 当 Ranking 窗口函数缺少 `PARTITION BY` 和 `ORDER BY` 子句时，其优化逻辑可能导致 BE 崩溃的问题。[#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- 在单 Bucket 表上，将 `COUNT(DISTINCT)` 与非 DISTINCT 聚合（如 SUM）一起查询时，未能正确重写为 `multi_distinct_count`，从而导致结果错误的问题。[#66767](https://github.com/StarRocks/starrocks/pull/66767)
+- 在开启 `enable_hyperscan_vec` 的情况下，`regexp_replace` 处理多行数据时可能返回错误结果的问题。[#67380](https://github.com/StarRocks/starrocks/pull/67380)
+- 在 Shared-data 模式下，Sorted Streaming Aggregate 可能产生错误结果的问题。[#67376](https://github.com/StarRocks/starrocks/pull/67376)
+- 列重命名后，优化器仍使用旧列名生成访问路径，导致查询失败的问题。[#67533](https://github.com/StarRocks/starrocks/pull/67533)
+- 从 `bitmap_to_array` 重写为 `unnest_bitmap` 的规则中，Bitmap 列类型传递不正确的问题。[#66855](https://github.com/StarRocks/starrocks/pull/66855)
+- 低基数（Low Cardinality）优化逻辑中，由于依赖关系推导错误，通过引入 Union-Find 算法以正确处理列之间的关系。[#66724](https://github.com/StarRocks/starrocks/pull/66724)
+- 在 Shared-data 集群下使用 Short-circuit Read 时可能出现 “Compute node not found” 错误，通过增加回退到非 Short-circuit 模式的机制进行修复。[#67323](https://github.com/StarRocks/starrocks/pull/67323)
+- 在副本发布（Replication publishing）过程中，由于 FE 副本未更新最小可读版本而导致的 “Version not found” 错误。[#67538](https://github.com/StarRocks/starrocks/pull/67538)
+- 在复制事务中，对物理分区进行比较时存在逻辑错误，现通过使用 ID 顺序进行确定性比较进行修复。[#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- Cloud Native Tables 中诸如扫描行数等计数器统计不准确的问题。[#67307](https://github.com/StarRocks/starrocks/pull/67307)
+- 已过期的 Tablet 未能从调度器中清理，导致调度队列堆积的问题。[#66718](https://github.com/StarRocks/starrocks/pull/66718)
+- 在一次提交多个 SQL 语句时，Profile 中显示的 SQL 语句不准确的问题。[#67097](https://github.com/StarRocks/starrocks/pull/67097)
+- 新 FE 中 `publish_version` 日志里事务 ID 为空的问题。[#66732](https://github.com/StarRocks/starrocks/pull/66732)
+- 在调用 `set_allocated` 之后发生不必要的 Protobuf 消息拷贝，从而导致的性能问题。[#67844](https://github.com/StarRocks/starrocks/pull/67844)
+
 ## 3.3.21
 
 发布日期：2025 年 12 月 25 日
