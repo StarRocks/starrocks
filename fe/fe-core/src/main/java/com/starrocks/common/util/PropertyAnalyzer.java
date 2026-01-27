@@ -214,6 +214,7 @@ public class PropertyAnalyzer {
 
     // default: same as cluster query_timeout
     public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
+    public static final String PROPERTIES_ENABLE_QUERY = "enable_query";
 
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_STRATEGY = "partition_refresh_strategy";

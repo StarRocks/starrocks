@@ -3955,6 +3955,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    private void alterEnableQuery(OlapTable table,
+                                 Map<String, String> properties,
+                                 List<Runnable> appliers) {
+        boolean enableQuery = PropertyAnalyzer.analyzeBooleanProp(
+                properties, PropertyAnalyzer.PROPERTIES_ENABLE_QUERY, true);
+        appliers.add(() -> table.setEnableQuery(enableQuery));
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -3994,6 +4002,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
             alterTableQueryTimeout(table, properties, appliers);
+        }
+        if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_QUERY)) {
+            alterEnableQuery(table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
