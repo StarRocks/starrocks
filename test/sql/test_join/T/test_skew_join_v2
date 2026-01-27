@@ -41,7 +41,7 @@ PROPERTIES (
 );
 
 set enable_optimize_skew_join_v1=false;
-set enable_optimize_skew_join_v2=false;
+set enable_optimize_skew_join_v2=true;
 
 -- tinyint
 truncate table t1;

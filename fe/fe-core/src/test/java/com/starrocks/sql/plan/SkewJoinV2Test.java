@@ -333,4 +333,54 @@ public class SkewJoinV2Test extends PlanTestBase {
         String sqlPlan = getVerboseExplain(sql);
         assertCContains(sqlPlan, "join op: ASOF LEFT OUTER JOIN (PARTITIONED)");
     }
+
+    @Test
+    public void testSkewJoinV2NullableForLeftJoin() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE s_t1 (\n" +
+                "    c_key      INT NOT NULL,\n" +
+                "    c_tinyint  TINYINT,\n" +
+                "    c_smallint SMALLINT,\n" +
+                "    c_int      INT,\n" +
+                "    c_bigint   BIGINT,\n" +
+                "    c_largeint LARGEINT,\n" +
+                "    c_float    FLOAT,\n" +
+                "    c_double   DOUBLE,\n" +
+                "    c_decimal  DECIMAL(26,2),\n" +
+                "    c_date     DATE,\n" +
+                "    c_datetime DATETIME,\n" +
+                "    c_string   STRING\n" +
+                ")\n" +
+                "DUPLICATE KEY(c_key)\n" +
+                "DISTRIBUTED BY HASH(c_key) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\"=\"1\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE s_t2 (\n" +
+                "    c_key      INT NOT NULL,\n" +
+                "    c_tinyint  TINYINT,\n" +
+                "    c_smallint SMALLINT,\n" +
+                "    c_int      INT,\n" +
+                "    c_bigint   BIGINT,\n" +
+                "    c_largeint LARGEINT,\n" +
+                "    c_float    FLOAT,\n" +
+                "    c_double   DOUBLE,\n" +
+                "    c_decimal  DECIMAL(26,2),\n" +
+                "    c_date     DATE,\n" +
+                "    c_datetime DATETIME,\n" +
+                "    c_string   STRING\n" +
+                ")\n" +
+                "DUPLICATE KEY(c_key)\n" +
+                "DISTRIBUTED BY HASH(c_key) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\"=\"1\"\n" +
+                ");");
+        String query = "select t1.c_key, t2.c_key from s_t1 t1 left join [skew|t1.c_bigint(1,2,99999)] s_t2 t2 " +
+                "on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;\n";
+        String plan = getVerboseExplain(query);
+        // ensure concatenate operator's right table is nullable
+        PlanTestBase.assertContains(plan, "  12:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [1: c_key, INT, false] | [13: c_key, INT, true]\n" +
+                "  |      [1: c_key, INT, false] | [13: c_key, INT, true]");
+    }
 }

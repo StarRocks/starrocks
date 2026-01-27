@@ -44,7 +44,7 @@ PROPERTIES (
 set enable_optimize_skew_join_v1=false;
 -- result:
 -- !result
-set enable_optimize_skew_join_v2=false;
+set enable_optimize_skew_join_v2=true;
 -- result:
 -- !result
 truncate table t1;

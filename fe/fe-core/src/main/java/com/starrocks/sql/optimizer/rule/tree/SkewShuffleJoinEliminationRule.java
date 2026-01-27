@@ -146,6 +146,12 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             }
             int skewColumnSide = skewColumnAndValues.skewColumnSide;
 
+            // if this is a left join, and the right side is skew side, we cannot do optimization because
+            // the right side's broadcast will cause result incorrect.
+            if (originalShuffleJoinOperator.getJoinType().isAnyLeftOuterJoin() && skewColumnSide == 1) {
+                return visitChild(opt, context);
+            }
+
             // rewrite plan
             OptExpression skewOptInput = opt.inputAt(skewColumnSide);
             OptExpression nonSkewOptInput = opt.inputAt(1 - skewColumnSide);
@@ -177,8 +183,17 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             LocalExchangerType localExchangerType =
                     opt.isExistRequiredDistribution() ? LocalExchangerType.PASS_THROUGH : LocalExchangerType.DIRECT;
-            PhysicalConcatenateOperator concatenateOperator =
-                    buildConcatenateOperator(opt.getOutputColumns().getColumnRefOperators(columnRefFactory), 2,
+            List<ColumnRefOperator> outputColumns =
+                    opt.getOutputColumns().getColumnRefOperators(columnRefFactory);
+            if (originalShuffleJoinOperator.getJoinType().isAnyLeftOuterJoin()) {
+                ColumnRefSet rightOutputColumns = opt.inputAt(1).getOutputColumns();
+                for (ColumnRefOperator outputColumn : outputColumns) {
+                    if (rightOutputColumns.contains(outputColumn)) {
+                        outputColumn.setNullable(true);
+                    }
+                }
+            }
+            PhysicalConcatenateOperator concatenateOperator = buildConcatenateOperator(outputColumns, 2,
                             localExchangerType, originalShuffleJoinOperator.getLimit());
 
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
