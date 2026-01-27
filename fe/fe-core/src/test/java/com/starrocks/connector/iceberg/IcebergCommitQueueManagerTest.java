@@ -1278,4 +1278,36 @@ public class IcebergCommitQueueManagerTest {
             queueManager.shutdownAll();
         }
     }
+
+    @Test
+    public void testTableNameWithPercentSign() {
+        // Test that table names with % characters are properly escaped
+        // to avoid IllegalFormatException in String.format()
+        IcebergCommitQueueManager.Config config =
+                new IcebergCommitQueueManager.Config(true, 120, 10);
+        IcebergCommitQueueManager queueManager =
+                new IcebergCommitQueueManager(config);
+
+        try {
+            // Table name with various % patterns that could be misinterpreted as format specifiers
+            String[] problematicNames = {
+                "table%swith%spercent",
+                "table%s",
+                "table%d",
+                "table%%d",
+                "table%100s"
+            };
+
+            for (String tableName : problematicNames) {
+                // Submit commit - should not throw IllegalFormatException
+                IcebergCommitQueueManager.CommitResult result =
+                        queueManager.submitCommit("catalog", "db", tableName, () -> {});
+                assertTrue(result.isSuccess(), "Commit should succeed for table: " + tableName);
+            }
+
+            assertEquals(problematicNames.length, queueManager.getActiveTableCount());
+        } finally {
+            queueManager.shutdownAll();
+        }
+    }
 }

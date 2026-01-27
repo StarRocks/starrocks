@@ -2397,19 +2397,17 @@ public class IcebergMetadataTest extends TableTestBase {
         // Test that concurrent commits to the same table are serialized by the commit queue
         // This test verifies that the commit queue integration in IcebergMetadata is working correctly
 
-        // Save original config values
-        boolean originalEnableQueue = Config.enable_iceberg_commit_queue;
-        int originalTimeout = Config.iceberg_commit_queue_timeout_seconds;
+        // Create a commit queue manager for testing
+        IcebergCommitQueueManager.Config config = new IcebergCommitQueueManager.Config(true, 30, 100);
+        IcebergCommitQueueManager manager = new IcebergCommitQueueManager(config);
 
         try {
-            // Enable commit queue with short timeout for testing
-            Config.enable_iceberg_commit_queue = true;
-            Config.iceberg_commit_queue_timeout_seconds = 30;
-
             IcebergHiveCatalog icebergHiveCatalog =
                     new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+            // Use 9-argument constructor to pass the commit queue manager
             IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                    Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+                    Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null,
+                    new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(), manager);
             IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
                     "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
@@ -2477,10 +2475,12 @@ public class IcebergMetadataTest extends TableTestBase {
             assertTrue(exceptions.isEmpty(),
                     "There should be no exceptions: " + exceptions);
 
+            // Verify that the commit queue manager was used
+            assertEquals(1, manager.getActiveTableCount(),
+                    "Commit queue should have one active table");
+
         } finally {
-            // Restore original config values
-            Config.enable_iceberg_commit_queue = originalEnableQueue;
-            Config.iceberg_commit_queue_timeout_seconds = originalTimeout;
+            manager.shutdownAll();
         }
     }
 

@@ -375,13 +375,27 @@ public class IcebergCommitQueueManager {
         result.rethrowIfFailed();
     }
 
+    /**
+     * Escapes percent signs in a string for safe use in String.format() patterns.
+     * Guava's ThreadFactoryBuilder.setNameFormat() uses String.format() internally,
+     * so any % characters in the name must be escaped to %% to avoid being interpreted
+     * as format specifiers.
+     *
+     * @param name the name to escape
+     * @return the name with % escaped to %%
+     */
+    private static String escapeForFormat(String name) {
+        return name.replace("%", "%%");
+    }
+
     private TableCommitExecutor getOrCreateTableExecutor(TableCommitKey key) {
         try {
             return tableExecutors.get(key, () -> {
                 Config config = configSupplier.get();
                 ThreadFactory threadFactory = new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat("iceberg-commit-" + key.catalogName + "-" + key.dbName + "-" + key.tableName + "-%d")
+                        .setNameFormat("iceberg-commit-" + escapeForFormat(key.catalogName) + "-" +
+                                    escapeForFormat(key.dbName) + "-" + escapeForFormat(key.tableName) + "-%d")
                         .build();
                 // Use bounded ThreadPoolExecutor with CallerRunsPolicy to enforce maxQueueSize
                 // When queue is full, tasks are executed in the caller thread (blocks until capacity available)

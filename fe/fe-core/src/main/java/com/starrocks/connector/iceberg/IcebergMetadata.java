@@ -27,7 +27,6 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -253,26 +252,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         this.properties = properties;
         this.procedureRegistry = procedureRegistry;
 
-        // Use the shared commit queue manager from IcebergConnector if provided,
-        // otherwise create a new one (for backwards compatibility and testing)
+        // Use the shared commit queue manager from IcebergConnector if provided.
+        // When null (e.g., for testing or backwards compatibility), fall back to direct commit without queueing.
+        this.commitQueueManager = commitQueueManager;
         if (commitQueueManager != null) {
-            this.commitQueueManager = commitQueueManager;
             LOG.info("IcebergMetadata using shared commit queue manager for catalog {}", catalogName);
         } else {
-            // Initialize commit queue manager with a supplier that reads the latest FE configuration
-            // This allows runtime config changes (enable_iceberg_commit_queue, iceberg_commit_queue_timeout_seconds)
-            // to take effect immediately without FE restart.
-            this.commitQueueManager = new IcebergCommitQueueManager(() -> {
-                IcebergCommitQueueManager.Config queueConfig = new IcebergCommitQueueManager.Config(
-                        Config.enable_iceberg_commit_queue,
-                        Config.iceberg_commit_queue_timeout_seconds,
-                        Config.iceberg_commit_queue_max_size
-                );
-                return queueConfig;
-            });
-            LOG.info("Iceberg commit queue initialized for catalog {}: enabled={}, timeoutSeconds={}, maxSize={}",
-                    catalogName, Config.enable_iceberg_commit_queue,
-                    Config.iceberg_commit_queue_timeout_seconds, Config.iceberg_commit_queue_max_size);
+            LOG.info("IcebergMetadata will use direct commit (no queue) for catalog {}", catalogName);
         }
     }
 
@@ -1374,8 +1360,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         final List<TIcebergDataFile> dataFiles = commitInfos.stream()
                 .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
 
-        // Use commit queue to serialize commits to the same table and avoid optimistic locking conflicts
-        commitQueueManager.submitCommitAndRethrow(catalogName, queueDbName, queueTableName, () -> {
+        // Commit task that performs the actual Iceberg transaction commit
+        IcebergCommitQueueManager.CommitTask commitTask = () -> {
             IcebergTable table = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
             org.apache.iceberg.Table nativeTbl = table.getNativeTable();
             Transaction transaction = nativeTbl.newTransaction();
@@ -1390,7 +1376,26 @@ public class IcebergMetadata implements ConnectorMetadata {
                 commitDataOperation(transaction, nativeTbl, dataFiles, branch, isOverwrite, isRewrite, extra,
                         dbName, tableName);
             }
-        });
+        };
+
+        // Use commit queue if available and enabled, otherwise execute directly (original logic)
+        if (commitQueueManager != null && commitQueueManager.isEnabled()) {
+            // Use commit queue to serialize commits to the same table and avoid optimistic locking conflicts
+            commitQueueManager.submitCommitAndRethrow(catalogName, queueDbName, queueTableName, commitTask);
+        } else {
+            // Direct execution without queueing (original logic)
+            // The commit task internally uses commitWithCleanup which already handles exceptions
+            // and converts them to RuntimeException. We need to catch Exception due to the
+            // CommitTask.execute() signature, but RuntimeException and Error will propagate as-is.
+            try {
+                commitTask.execute();
+            } catch (RuntimeException | Error e) {
+                throw e;
+            } catch (Exception e) {
+                // Should not reach here as commitWithCleanup already handles all exceptions
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
