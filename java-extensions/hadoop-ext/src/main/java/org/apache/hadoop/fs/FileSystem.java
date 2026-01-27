@@ -35,8 +35,6 @@
 package org.apache.hadoop.fs;
 
 import com.starrocks.connector.hadoop.HadoopExt;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +44,7 @@ import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.Options.HandleOpt;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.impl.AbstractFSBuilderImpl;
+import org.apache.hadoop.fs.impl.DefaultBulkDeleteOperation;
 import org.apache.hadoop.fs.impl.FutureDataInputStreamBuilderImpl;
 import org.apache.hadoop.fs.impl.OpenFileParameters;
 import org.apache.hadoop.fs.permission.AclEntry;
@@ -62,8 +61,8 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.DelegationTokenIssuer;
 import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Preconditions;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.tracing.TraceScope;
 import org.apache.hadoop.tracing.Tracer;
 import org.apache.hadoop.util.ClassUtil;
@@ -198,7 +197,8 @@ import static org.apache.hadoop.util.Preconditions.checkArgument;
 @InterfaceAudience.Public
 @InterfaceStability.Stable
 public abstract class FileSystem extends Configured
-        implements Closeable, DelegationTokenIssuer, PathCapabilities {
+        implements Closeable, DelegationTokenIssuer,
+            PathCapabilities, BulkDeleteSource {
     public static final String FS_DEFAULT_NAME_KEY =
             CommonConfigurationKeys.FS_DEFAULT_NAME_KEY;
     public static final String DEFAULT_FS =
@@ -209,7 +209,7 @@ public abstract class FileSystem extends Configured
      * so must be considered something to only be changed with care.
      */
     @InterfaceAudience.Private
-    public static final Log LOG = LogFactory.getLog(FileSystem.class);
+    public static final Logger LOG = LoggerFactory.getLogger(FileSystem.class);
 
     /**
      * The SLF4J logger to use in logging within the FileSystem class itself.
@@ -332,7 +332,7 @@ public abstract class FileSystem extends Configured
      * @return the uri of the default filesystem
      */
     public static URI getDefaultUri(Configuration conf) {
-        URI uri = URI.create(fixName(conf.get(FS_DEFAULT_NAME_KEY, DEFAULT_FS)));
+        URI uri = URI.create(fixName(conf.getTrimmed(FS_DEFAULT_NAME_KEY, DEFAULT_FS)));
         if (uri.getScheme() == null) {
             throw new IllegalArgumentException("No scheme in default FS: " + uri);
         }
@@ -2974,7 +2974,7 @@ public abstract class FileSystem extends Configured
             if (perm.getUserAction().implies(mode)) {
                 return;
             }
-        } else if (ugi.getGroups().contains(stat.getGroup())) {
+        } else if (ugi.getGroupsSet().contains(stat.getGroup())) {
             if (perm.getGroupAction().implies(mode)) {
                 return;
             }
@@ -3614,6 +3614,10 @@ public abstract class FileSystem extends Configured
     public boolean hasPathCapability(final Path path, final String capability)
             throws IOException {
         switch (validatePathCapabilityArgs(makeQualified(path), capability)) {
+            case CommonPathCapabilities.BULK_DELETE:
+                // bulk delete has default implementation which
+                // can called on any FileSystem.
+                return true;
             case CommonPathCapabilities.FS_SYMLINKS:
                 // delegate to the existing supportsSymlinks() call.
                 return supportsSymlinks() && areSymlinksEnabled();
@@ -3659,15 +3663,7 @@ public abstract class FileSystem extends Configured
                             LOGGER.info("Full exception loading: {}", fs, e);
                         }
                     } catch (ServiceConfigurationError ee) {
-                        LOG.warn("Cannot load filesystem: " + ee);
-                        Throwable cause = ee.getCause();
-                        // print all the nested exception messages
-                        while (cause != null) {
-                            LOG.warn(cause.toString());
-                            cause = cause.getCause();
-                        }
-                        // and at debug: the full stack
-                        LOG.debug("Stack Trace", ee);
+                        LOGGER.warn("Cannot load filesystem", ee);
                     }
                 }
                 FILE_SYSTEMS_LOADED = true;
@@ -3713,7 +3709,15 @@ public abstract class FileSystem extends Configured
             throw new UnsupportedFileSystemException("No FileSystem for scheme "
                     + "\"" + scheme + "\"");
         }
-        LOGGER.debug("FS for {} is {}", scheme, clazz);
+        if (LOGGER.isDebugEnabled()) {
+            LOGGER.debug("FS for {} is {}", scheme, clazz);
+            final String jarLocation = ClassUtil.findContainingJar(clazz);
+            if (jarLocation != null) {
+                LOGGER.debug("Jar location for {} : {}", clazz, jarLocation);
+            } else {
+                LOGGER.debug("Class location for {} : {}", clazz, ClassUtil.findClassLocation(clazz));
+            }
+        }
         return clazz;
     }
 
@@ -5171,5 +5175,20 @@ public abstract class FileSystem extends Configured
             throws IOException {
         methodNotSupported();
         return null;
+    }
+
+    /**
+     * Create a bulk delete operation.
+     * The default implementation returns an instance of {@link DefaultBulkDeleteOperation}.
+     *
+     * @param path base path for the operation.
+     * @return an instance of the bulk delete.
+     * @throws IllegalArgumentException any argument is invalid.
+     * @throws IOException              if there is an IO problem.
+     */
+    @Override
+    public BulkDelete createBulkDelete(Path path)
+            throws IllegalArgumentException, IOException {
+        return new DefaultBulkDeleteOperation(path, this);
     }
 }
