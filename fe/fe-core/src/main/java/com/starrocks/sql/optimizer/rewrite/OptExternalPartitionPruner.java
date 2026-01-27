@@ -460,8 +460,6 @@ public class OptExternalPartitionPruner {
                 if (split instanceof DataSplit) {
                     DataSplit dataSplit = (DataSplit) split;
                     selectedPartitions.add(dataSplit.partition());
-                } else {
-                    // paimon system table, do nothing
                 }
             }
             int scanPaimonPartitionNumLimit = context.getSessionVariable().getScanPaimonPartitionNumLimit();
