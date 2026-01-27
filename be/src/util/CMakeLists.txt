@@ -51,6 +51,7 @@ set(UTIL_FILES
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp
+  metrics/file_scan_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp

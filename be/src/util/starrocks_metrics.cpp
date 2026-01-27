@@ -291,6 +291,8 @@ void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool in
         _system_metrics.install(&_metrics, disk_devices, network_interfaces);
     }
 
+    _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
+
     if (init_jvm_metrics) {
         auto status = _jvm_metrics.init();
         if (!status.ok()) {

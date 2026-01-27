@@ -70,14 +70,18 @@ AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _serdes(nullptr),
-          _closed(false) {}
+          _closed(false) {
+    _file_format_str = "avro_stream";
+}
 
 AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter, std::string schema_text)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
           _schema_text(std::move(schema_text)),
-          _closed(false) {}
+          _closed(false) {
+    _file_format_str = "avro_stream";
+}
 
 AvroScanner::~AvroScanner() {
 #if BE_TEST
@@ -161,6 +165,7 @@ Status AvroScanner::open() {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
         return st;
     }
+    ++_counter->num_files_read;
 
     for (const auto& desc : _src_slot_descriptors) {
         if (desc == nullptr) {

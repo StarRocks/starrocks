@@ -133,6 +133,7 @@ char* CSVScanner::ScannerCSVReader::_find_line_delimiter(CSVBuffer& buffer, size
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                        ScannerCounter* counter, bool schema_only)
         : FileScanner(state, profile, scan_range.params, counter, schema_only), _scan_range(scan_range) {
+    _file_format_str = "csv";
     if (scan_range.params.__isset.multi_column_separator) {
         _parse_options.column_delimiter = scan_range.params.multi_column_separator;
     } else {
@@ -268,6 +269,9 @@ Status CSVScanner::_init_reader() {
             }
             CSVReader::Record dummy;
             RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+        } else {
+            // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
+            ++_counter->num_files_read;
         }
 
         // only the first range needs to skip header
