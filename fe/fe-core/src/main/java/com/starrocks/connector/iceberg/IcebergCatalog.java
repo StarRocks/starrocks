@@ -322,22 +322,13 @@ public interface IcebergCatalog extends MemoryTrackable {
                             int specId = row.get(1, Integer.class);
                             PartitionSpec spec = nativeTable.specs().get(specId);
 
-<<<<<<< HEAD
-                        String partitionName =
-                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
-                        long lastUpdated =
-                                getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
-                        Partition partition = new Partition(lastUpdated);
-                        partitionMap.put(partitionName, partition);
-=======
                             String partitionName =
-                                    PartitionUtil.convertIcebergPartitionToPartitionName(nativeTable, spec, partitionData);
+                                    PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
                             long lastUpdated =
                                     getPartitionLastUpdatedTime(icebergTable, row, 9, partitionName, snapshotId);
-                            Partition partition = new Partition(lastUpdated, specId);
+                            Partition partition = new Partition(lastUpdated);
                             partitionMap.put(partitionName, partition);
                         }
->>>>>>> 56deb55655 ([BugFix] Fix CloseableIterable resource leak in IcebergCatalog.getPartitions() (#67792))
                     }
                 }
             } catch (IOException e) {
