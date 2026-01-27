@@ -9,7 +9,7 @@ This topic describes how to create and modify bloom filter indexes, along with h
 
 A bloom filter index is a space-efficiency data structure that is used to detect the possible presence of filtered data in data files of a table. If the bloom filter index detects that the data to be filtered are not in a certain data file, StarRocks skips scanning the data file. Bloom filter indexes can reduce response time when the column (such as ID) has a relatively high cardinality.
 
-If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./Prefix_index_sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key and has a relatively high cardinality, you can create a bloom filter index for the column.
+If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./Prefix_index_sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, **which is not used as a sort key** and has a **relatively high cardinality**, you can create a bloom filter index for the column.
 
 ## How it works
 
@@ -30,20 +30,20 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
 
 ## Create bloom filter indexes
 
-You can create a bloom filter index for a column when you create a table by specifying the `bloom_filter_columns` parameter in `PROPERTIES`. For example, create bloom filter indexes for the `k1` and `k2` columns in `table1`.
+You can create a bloom filter index for a column when you create a table by specifying the `bloom_filter_columns` parameter in `PROPERTIES`. For example, create a bloom filter index for the `v1` column in `table1`.
 
 ```SQL
 CREATE TABLE table1
 (
     k1 BIGINT,
     k2 LARGEINT,
-    v1 VARCHAR(2048) REPLACE,
+    v1 VARCHAR(2048),
     v2 SMALLINT DEFAULT "10"
 )
 ENGINE = olap
-PRIMARY KEY(k1, k2)
+DUPLICATE KEY(k1, k2)
 DISTRIBUTED BY HASH (k1, k2)
-PROPERTIES("bloom_filter_columns" = "k1,k2");
+PROPERTIES("bloom_filter_columns" = "v1");
 ```
 
 You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
@@ -60,16 +60,16 @@ SHOW CREATE TABLE table1;
 
 You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) statement.
 
-- The following statement adds a bloom filter index on the `v1` column.
+- The following statement adds a bloom filter index on the `v2` column.
 
     ```SQL
-    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1,k2,v1");
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "v1,v2");
     ```
 
-- The following statement reduces the bloom filter index on the `k2` column.
-  
+- The following statement reduces the bloom filter index to only the `v1` column.
+
     ```SQL
-    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1");
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "v1");
     ```
 
 - The following statement deletes all bloom filter indexes of `table1`.
