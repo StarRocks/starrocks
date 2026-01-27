@@ -25,7 +25,7 @@ under the License.
 
     <groupId>com.starrocks</groupId>
     <artifactId>starrocks-fe</artifactId>
-    <version>main</version>
+    <version>4.1.0-rc01</version>
     <packaging>pom</packaging>
 
     <modules>
