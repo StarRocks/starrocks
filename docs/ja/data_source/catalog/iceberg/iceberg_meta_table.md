@@ -21,6 +21,7 @@ displayed_sidebar: docs
 | `partitions`           | テーブル内のパーティションの詳細を表示します。               |
 | `files`                | テーブルの現在のスナップショット内のデータファイルと削除ファイルの詳細を表示します。 |
 | `refs`                 | Iceberg の参照に関する詳細を表示し、ブランチやタグを含みます。 |
+| `properties`           | テーブルプロパティをキーと値のペアで表示します。             |
 
 ## `history` テーブル
 
@@ -170,3 +171,26 @@ SELECT * FROM [<catalog>.][<database>.]table$refs;
 | max_reference_age_in_ms | 参照が期限切れになるまでの最大年齢。                         |
 | min_snapshots_to_keep   | ブランチのみ、ブランチ内で保持する最小スナップショット数。   |
 | max_snapshot_age_in_ms  | ブランチのみ、ブランチ内で許可される最大スナップショット年齢。ブランチ内の古いスナップショットは期限切れになります。 |
+
+## `properties` テーブル
+
+使用法:
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$properties;
+```
+
+出力:
+
+| フィールド | 説明                       |
+| :-------- | :------------------------- |
+| key       | テーブルプロパティの名前。 |
+| value     | テーブルプロパティの値。   |
+
+出力例:
+
+| key                             | value                              |
+| :------------------------------ | :--------------------------------- |
+| location                        | s3://bucket/warehouse/db/my_table  |
+| write.format.default            | parquet                            |
+| write.parquet.compression-codec | zstd                               |
