@@ -337,6 +337,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
 
+    // table level query timeout in seconds
+    // default value -1 means use cluster query_timeout
+    @SerializedName(value = "tableQueryTimeout")
+    private int tableQueryTimeout = -1;
+
     /**
      * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
      * This version is more lightweight, modifying only FE metadata instead of both FE and tablet metadata.
@@ -433,6 +438,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
                 buildLakeCompactionMaxParallel();
+                buildTableQueryTimeout();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -1299,6 +1305,41 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return cloudNativeFastSchemaEvolutionV2;
     }
 
+    public TableProperty buildTableQueryTimeout() {
+        String timeoutStr = properties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+
+        if (timeoutStr == null) {
+            tableQueryTimeout = -1;
+            return this;
+        }
+        try {
+            int timeout = Integer.parseInt(timeoutStr);
+            if (timeout > 0) {
+                tableQueryTimeout = timeout;
+                return this;
+            }
+
+            // -1 means unset table_query_timeout and fallback to default behavior.
+            if (timeout == -1) {
+                LOG.info("table_query_timeout reset to default");
+            } else {
+                LOG.warn("Invalid table_query_timeout value: {}. Must be > 0 or -1 for default. Using default (-1).",
+                        timeoutStr);
+            }
+        } catch (NumberFormatException e) {
+            LOG.warn("Invalid table_query_timeout value: {}. Must be a valid integer. Using default (-1).",
+                    timeoutStr, e);
+        }
+
+        properties.remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        tableQueryTimeout = -1;
+        return this;
+    }
+
+    public int getTableQueryTimeout() {
+        return tableQueryTimeout;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1336,5 +1377,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompactionStrategy();
         buildLakeCompactionMaxParallel();
         buildEnableStatisticCollectOnFirstLoad();
+        buildTableQueryTimeout();
     }
 }
