@@ -778,38 +778,44 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
 
+    private ConnectContext buildConnectContext() {
+        ConnectContext context = ConnectContext.buildInner();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        context.setQualifiedUser(UserIdentity.ROOT.getUser());
+        return context;
+    }
+
     protected void executeSql(String sql) throws Exception {
         LOG.info("execute sql : {}", sql);
         ConnectContext context = ConnectContext.get();
         if (context == null) {
-            context = ConnectContext.buildInner();
-            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            context.setCurrentUserIdentity(UserIdentity.ROOT);
-            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-            context.setQualifiedUser(UserIdentity.ROOT.getUser());
-            context.setThreadLocalInfo();
+            context = buildConnectContext();
         }
-        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-        if (parsedStmt instanceof InsertStmt) {
-            ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
-        }
-        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
+        try (var scope = context.bindScope()) {
+            StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+            if (parsedStmt instanceof InsertStmt) {
+                ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
+            }
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
-        // set default session variables for stats context
-        SessionVariable sessionVariable = context.getSessionVariable();
-        sessionVariable.setUsePageCache(false);
-        sessionVariable.setEnableMaterializedViewRewrite(false);
-        sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
+            // set default session variables for stats context
+            SessionVariable sessionVariable = context.getSessionVariable();
+            sessionVariable.setUsePageCache(false);
+            sessionVariable.setEnableMaterializedViewRewrite(false);
+            sessionVariable.setInsertTimeoutS((int) timeoutMs / 2000);
 
-        context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
-        context.setStartTime();
-        executor.execute();
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setStartTime();
+            executor.execute();
 
-        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            LOG.warn("Execute sql fail | Error Message [{}] | {} | SQL [{}]",
+            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                LOG.warn("Execute sql fail | Error Message [{}] | {} | SQL [{}]",
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
-            throw new AlterCancelException(context.getState().getErrorMessage());
+                throw new AlterCancelException(context.getState().getErrorMessage());
+            }
         }
     }
 

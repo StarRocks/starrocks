@@ -110,8 +110,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 AuditLog.getInternalAudit().info("SPM auto capture failed, db not exists: {}", queryHistory.getDb());
                 continue;
             }
-            try {
-                connect.setThreadLocalInfo();
+            try (var scope = connect.bindScope()) {
                 List<StatementBase> stmt = SqlParser.parse(queryHistory.getOriginSQL(), connect.getSessionVariable());
                 Preconditions.checkState(stmt.size() == 1);
                 Preconditions.checkState(stmt.get(0) instanceof QueryStatement);
