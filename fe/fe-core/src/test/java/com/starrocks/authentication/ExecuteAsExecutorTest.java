@@ -131,7 +131,7 @@ public class ExecuteAsExecutorTest {
     }
 
     @Test
-    public void testExecuteAsChainUsesOriginalLoginUserForImpersonateCheck() throws Exception {
+    void testExecuteAsChainUsesOriginalLoginUserForImpersonateCheck() throws Exception {
         // Create users
         authenticationMgr.createUser(
                 new CreateUserStmt(new UserRef("admin_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));

@@ -215,30 +215,35 @@ public class MysqlProto {
     }
 
     /**
+     * Session state snapshot for restoring when CHANGE USER fails.
+     */
+    private record SessionSnapshot(
+            UserIdentity userIdentity,
+            Set<Long> roleIds,
+            String qualifiedUser,
+            String resourceGroup,
+            Set<String> groups,
+            String distinguishedName,
+            UserIdentity originalUserIdentity,
+            Set<String> originalGroups,
+            Set<Long> originalRoleIds) {
+    }
+
+    /**
      * Helper method to restore previous session state when CHANGE USER fails.
      * This ensures the session remains unchanged including the original user context
      * for EXECUTE AS chaining.
      */
-    private static void restorePreviousSession(
-            ConnectContext context,
-            UserIdentity previousUserIdentity,
-            Set<Long> previousRoleIds,
-            String previousQualifiedUser,
-            String previousResourceGroup,
-            Set<String> previousGroups,
-            String previousDistinguishedName,
-            UserIdentity prevOriginalUserIdentity,
-            Set<String> prevOriginalGroups,
-            Set<Long> prevOriginalRoleIds) {
-        context.setCurrentUserIdentity(previousUserIdentity);
-        context.setCurrentRoleIds(previousRoleIds);
-        context.setQualifiedUser(previousQualifiedUser);
-        context.getSessionVariable().setResourceGroup(previousResourceGroup);
-        context.setGroups(previousGroups != null ? previousGroups : Collections.emptySet());
-        context.setDistinguishedName(previousDistinguishedName != null ? previousDistinguishedName : "");
-        if (prevOriginalUserIdentity != null) {
+    private static void restorePreviousSession(ConnectContext context, SessionSnapshot snapshot) {
+        context.setCurrentUserIdentity(snapshot.userIdentity);
+        context.setCurrentRoleIds(snapshot.roleIds);
+        context.setQualifiedUser(snapshot.qualifiedUser);
+        context.getSessionVariable().setResourceGroup(snapshot.resourceGroup);
+        context.setGroups(snapshot.groups != null ? snapshot.groups : Collections.emptySet());
+        context.setDistinguishedName(snapshot.distinguishedName != null ? snapshot.distinguishedName : "");
+        if (snapshot.originalUserIdentity != null) {
             context.getAccessControlContext().setOriginalUserContext(
-                    prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+                    snapshot.originalUserIdentity, snapshot.originalGroups, snapshot.originalRoleIds);
         } else {
             // Reset original context to null if previous session had none.
             // This prevents the new user's original context (set by authenticate() before failure)
@@ -279,6 +284,12 @@ public class MysqlProto {
         Set<Long> prevOriginalRoleIds = prevOriginalUserIdentity == null ? null
                 : new HashSet<>(acc.getOriginalRoleIds());
 
+        // Create session snapshot for restoration on failure
+        SessionSnapshot sessionSnapshot = new SessionSnapshot(
+                previousUserIdentity, previousRoleIds, previousQualifiedUser, previousResourceGroup,
+                previousGroups, previousDistinguishedName,
+                prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+
         // Reset original user context before re-authentication to prevent security issue:
         // a new user should not inherit IMPERSONATE privileges from the previous login user.
         acc.resetOriginalUserContext();
@@ -292,9 +303,7 @@ public class MysqlProto {
                     changeUserPacket.getUser());
             sendResponsePacket(context);
             context.getSerializer().setCapability(context.getCapability());
-            restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
-                    previousResourceGroup, previousGroups, previousDistinguishedName,
-                    prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+            restorePreviousSession(context, sessionSnapshot);
             return false;
         }
         // set database
@@ -308,9 +317,7 @@ public class MysqlProto {
                         previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());
                 sendResponsePacket(context);
                 context.getSerializer().setCapability(context.getCapability());
-                restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
-                        previousResourceGroup, previousGroups, previousDistinguishedName,
-                        prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+                restorePreviousSession(context, sessionSnapshot);
                 return false;
             }
         }
@@ -322,9 +329,7 @@ public class MysqlProto {
             context.getState().setError(userChangeResult.second);
             sendResponsePacket(context);
             context.getSerializer().setCapability(context.getCapability());
-            restorePreviousSession(context, previousUserIdentity, previousRoleIds, previousQualifiedUser,
-                    previousResourceGroup, previousGroups, previousDistinguishedName,
-                    prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+            restorePreviousSession(context, sessionSnapshot);
             if (!context.getDatabase().equals(originalDb)) {
                 try {
                     context.changeCatalogDb(originalDb);

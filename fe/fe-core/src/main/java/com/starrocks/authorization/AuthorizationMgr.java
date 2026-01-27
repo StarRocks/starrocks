@@ -914,22 +914,17 @@ public class AuthorizationMgr {
                 checkUser = current;
                 checkGroups = context.getGroups();
                 checkRoleIds = context.getCurrentRoleIds();
-            } else if (current == null) {
-                // No current identity: use original
-                checkUser = original;
-                checkGroups = acc.getOriginalGroups();
-                checkRoleIds = acc.getOriginalRoleIds();
-            } else if (current.equals(original)) {
-                // Not impersonating (current == original): use current* to respect SET ROLE
-                checkUser = current;
-                checkGroups = context.getGroups();
-                checkRoleIds = context.getCurrentRoleIds();
-            } else {
-                // Impersonating: use original(login) user context for IMPERSONATE checks.
+            } else if (current == null || !current.equals(original)) {
+                // No current identity OR impersonating: use original(login) user context
                 // This allows chaining EXECUTE AS on the same session based on the original user's privileges.
                 checkUser = original;
                 checkGroups = acc.getOriginalGroups();
                 checkRoleIds = acc.getOriginalRoleIds();
+            } else {
+                // Not impersonating (current == original): use current* to respect SET ROLE
+                checkUser = current;
+                checkGroups = context.getGroups();
+                checkRoleIds = context.getCurrentRoleIds();
             }
 
             PrivilegeCollectionV2 collection = mergePrivilegeCollection(checkUser, checkGroups, checkRoleIds);
