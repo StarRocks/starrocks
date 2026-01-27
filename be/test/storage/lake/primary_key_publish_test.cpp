@@ -2146,6 +2146,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_parallel_upsert_with_multiple_memtables) 
     // update memory usage, should large than zero
     EXPECT_TRUE(_update_mgr->mem_tracker()->consumption() > 0);
     ASSERT_EQ(chunk_size, read_rows(tablet_id, version));
+    if (config::enable_pk_index_parallel_execution) {
+        ExecEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait();
+    }
     // reset configs
     config::enable_pk_index_parallel_execution = old_enable_pk_index_parallel_execution;
     config::pk_index_parallel_execution_min_rows = old_pk_index_parallel_execution_min_rows;
