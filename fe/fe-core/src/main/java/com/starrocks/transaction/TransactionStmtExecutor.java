@@ -80,8 +80,6 @@ public class TransactionStmtExecutor {
     private static final Logger LOG = LogManager.getLogger(TransactionStmtExecutor.class);
 
     public static void beginStmt(ConnectContext context, BeginStmt stmt) {
-<<<<<<< HEAD
-=======
         beginStmt(context, stmt, TransactionState.LoadJobSourceType.INSERT_STREAMING);
     }
 
@@ -95,16 +93,12 @@ public class TransactionStmtExecutor {
     public static void beginStmt(ConnectContext context, BeginStmt stmt,
                                  TransactionState.LoadJobSourceType sourceType,
                                  String labelOverride) {
->>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         if (context.getTxnId() != 0) {
             //Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
             String existingLabel = explicitTxnState.getTransactionState().getLabel();
             long transactionId = explicitTxnState.getTransactionState().getTransactionId();
-<<<<<<< HEAD
-            context.getState().setOk(0, 0, buildMessage(label, TransactionStatus.PREPARE, transactionId, -1));
-=======
 
             // If user explicitly specifies a different label, throw an error
             String requestedLabel = stmt.getLabel();
@@ -115,18 +109,11 @@ public class TransactionStmtExecutor {
 
             context.getState().setOk(0, 0,
                     buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
->>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
             return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getTransactionIDGenerator().getNextTransactionId();
-<<<<<<< HEAD
-        String label = DebugUtil.printId(context.getExecutionId());
-        TransactionState transactionState = new TransactionState(transactionId, label, null,
-                TransactionState.LoadJobSourceType.INSERT_STREAMING,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-=======
         // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
         String stmtLabel = stmt.getLabel();
         String label;
@@ -145,7 +132,6 @@ public class TransactionStmtExecutor {
                 sourceType,
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                         FrontendOptions.getLocalHostAddress()),
->>>>>>> 90f36ee400 ([Enhancement] Support WITH LABEL syntax for BEGIN/START TRANSACTION (#68320))
                 context.getExecTimeout() * 1000L);
 
         transactionState.setPrepareTime(System.currentTimeMillis());
