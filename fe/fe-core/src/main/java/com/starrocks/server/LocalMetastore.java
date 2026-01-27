@@ -130,6 +130,7 @@ import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.listener.LoadJobMVListener;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mv.MVMetaVersionRepairer;
@@ -1547,19 +1548,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         }
         if (!isTempPartition) {
-            try {
-                for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
-                    if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
-                        Database mvDb = getDb(mvId.getDbId());
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), materializedView.getName(), false, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
-                    }
-                }
-            } catch (MetaNotFoundException e) {
-                throw new DdlException("fail to refresh materialized views when dropping partition", e);
-            }
+            LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
         }
 
         if (clause.getPartitionName() != null) {
@@ -4578,12 +4567,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // Use session-aware lookup to support temporary tables.
         long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
         Locker locker = new Locker();
+        OlapTable olapTable = null;
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         try {
             // Retrieve the table again under the lock, make sure the table still exists.
-            OlapTable olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
+            olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
             if (!truncateEntireTable) {
                 for (String partName : tblRef.getPartitionNames().getPartitionNames()) {
                     Partition partition = olapTable.getPartition(partName);
@@ -4653,7 +4643,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         try {
             // The table could also be changed during the unlock-READ and lock-WRITE.
-            OlapTable olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
+            olapTable = validateTableForTruncate(context, db, tableId, dbTbl);
             // check partitions
             for (Map.Entry<String, Partition> entry : origPartitions.entrySet()) {
                 Partition partition = olapTable.getPartition(entry.getValue().getId());
@@ -4706,29 +4696,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
             GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info);
-
-            // refresh mv
-            Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
-            for (MvId mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
-                if (materializedView == null) {
-                    LOG.warn("Table related materialized view {}.{} can not be found", mvId.getDbId(), mvId.getId());
-                    continue;
-                }
-                if (materializedView.isLoadTriggeredRefresh()) {
-                    Database mvDb = getDb(mvId.getDbId());
-                    refreshMaterializedView(mvDb.getFullName(), getTable(mvDb.getId(), mvId.getId()).getName(), false, null,
-                            Constants.TaskRunPriority.NORMAL.value(), true, false);
-                }
-            }
         } catch (DdlException e) {
             deleteUselessTablets(tabletIdSet);
             throw e;
-        } catch (MetaNotFoundException e) {
-            LOG.warn("Table related materialized view can not be found", e);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
         }
+
+        LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
 
         LOG.info("finished to truncate table {}, partitions: {}",
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
@@ -4949,8 +4924,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), olapTable.getId(),
                     partitionNames, tempPartitionNames, isStrictRange, useTempPartitionName);
             GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+
+            // trigger to refresh related mvs
+            LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
+          
             LOG.info("finished to replace partitions {} with temp partitions {} from table: {}",
                     clause.getPartitionNames(), clause.getTempPartitionNames(), tableName);
+
         }
     }
 
