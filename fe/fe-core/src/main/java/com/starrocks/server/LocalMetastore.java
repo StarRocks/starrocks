@@ -4695,24 +4695,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
-<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info);
-
-            // refresh mv
-            Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
-            for (MvId mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) getTable(mvId.getDbId(), mvId.getId());
-                if (materializedView == null) {
-                    LOG.warn("Table related materialized view {}.{} can not be found", mvId.getDbId(), mvId.getId());
-                    continue;
-                }
-                if (materializedView.isLoadTriggeredRefresh()) {
-                    Database mvDb = getDb(mvId.getDbId());
-                    refreshMaterializedView(mvDb.getFullName(), getTable(mvDb.getId(), mvId.getId()).getName(), false, null,
-                            Constants.TaskRunPriority.NORMAL.value(), true, false);
-                }
-            }
-=======
 
             final OlapTable finalOlapTable = olapTable;
             GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info, wal -> {
@@ -4726,7 +4709,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                             finalOlapTable.getId(), e.getMessage());
                 }
             });
->>>>>>> 9ae7851a8e ([Enhancement] Trigger to refresh related mvs for more table changes (#68430))
         } catch (DdlException e) {
             deleteUselessTablets(tabletIdSet);
             throw e;
