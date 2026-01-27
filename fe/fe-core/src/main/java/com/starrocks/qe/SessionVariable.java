@@ -54,6 +54,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorSinkShuffleMode;
+import com.starrocks.connector.ConnectorSinkSortScope;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.datacache.DataCachePopulateMode;
 import com.starrocks.monitor.unit.TimeValue;
@@ -322,6 +323,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SKIP_PAGE_CACHE = "skip_page_cache";
 
+    public static final String SKIP_BLACK_LIST = "skip_black_list";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -581,6 +584,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_CONNECTOR_SINK_SPILL = "enable_connector_sink_spill";
     public static final String CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD = "connector_sink_spill_mem_limit_threshold";
+    public static final String CONNECTOR_SINK_SORT_SCOPE = "connector_sink_sort_scope";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -868,6 +872,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
     public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
     public static final String DATA_SKEW_ROW_PERCENTAGE_THRESHOLD = "data_skew_row_percentage_threshold";
+    public static final String ENABLE_SPLIT_WINDOW_SKEW_TO_UNION = "enable_split_window_skew_to_union";
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
@@ -1164,6 +1169,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = SKIP_PAGE_CACHE)
     private boolean skipPageCache = false;
+
+    @VariableMgr.VarAttr(name = SKIP_BLACK_LIST)
+    private boolean skipBlackList = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1471,6 +1479,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_SINK_SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double connectorSinkSpillMemLimitThreshold = 0.5;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SORT_SCOPE)
+    private String connectorSinkSortScope = ConnectorSinkSortScope.FILE.scopeName();
 
     // execute sql don't return result, for performance test
     @VarAttr(name = ENABLE_EXECUTION_ONLY, flag = VariableMgr.INVISIBLE)
@@ -2539,6 +2550,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return connectorSinkTargetMaxFileSize;
     }
 
+    public String getConnectorSinkSortScope() {
+        return connectorSinkSortScope;
+    }
+
+    public void setConnectorSinkSortScope(String connectorSinkSortScope) {
+        this.connectorSinkSortScope = connectorSinkSortScope;
+    }
+
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
     private boolean enableFileMetaCache = true;
 
@@ -2782,6 +2801,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DATA_SKEW_ROW_PERCENTAGE_THRESHOLD)
     private double dataSkewRowPercentageThreshold = 0.2;
+
+    @VariableMgr.VarAttr(name = ENABLE_SPLIT_WINDOW_SKEW_TO_UNION)
+    private boolean enableSplitWindowSkewToUnion = false;
 
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
@@ -3335,6 +3357,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return dataSkewRowPercentageThreshold;
     }
 
+    public boolean isEnableSplitWindowSkewToUnion() {
+        return enableSplitWindowSkewToUnion;
+    }
+
+    public void setEnableSplitWindowSkewToUnion(boolean enableSplitWindowSkewToUnion) {
+        this.enableSplitWindowSkewToUnion = enableSplitWindowSkewToUnion;
+    }
+
     public boolean getHudiMORForceJNIReader() {
         return hudiMORForceJNIReader;
     }
@@ -3465,6 +3495,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isSkipPageCache() {
         return skipPageCache;
+    }
+
+    public boolean isSkipBlackList() {
+        return skipBlackList;
     }
 
     public int getStatisticCollectParallelism() {

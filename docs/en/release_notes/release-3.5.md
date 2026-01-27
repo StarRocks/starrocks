@@ -26,6 +26,38 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.12
+
+Release Date: January 22, 2026
+
+### Improvements
+
+- Added a cleaner for BrpcStubCache to clean up unused connections. [#61417](https://github.com/StarRocks/starrocks/pull/61417)
+- Supports batch processing for statistics delete (for dropped tables) and Edit Log write requests. [#67896](https://github.com/StarRocks/starrocks/pull/67896)
+- Preserves SQL comments in Audit Logs when encryption is required. [#63298](https://github.com/StarRocks/starrocks/pull/63298)
+- Added the `warehouse_name` label to the materialized view metrics. [#67715](https://github.com/StarRocks/starrocks/pull/67715)
+- Improved identifier wrapping for JDBC table and column names. [#67853](https://github.com/StarRocks/starrocks/pull/67853)
+- Added the `CLIENT_FACTORY`  property to the Iceberg JDBC catalog. [#67613](https://github.com/StarRocks/starrocks/pull/67613)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Variadic functions return wrong dates when mixing DATE and DATETIME types. [#67947](https://github.com/StarRocks/starrocks/pull/67947)
+- `NormalizePredicateRule` oscillation on non-deterministic expressions. [#67923](https://github.com/StarRocks/starrocks/pull/67923)
+- Low cardinality bugs with the Lambda function. [#67843](https://github.com/StarRocks/starrocks/pull/67843)
+- Subfield expression does not collect children subfields. [#67850](https://github.com/StarRocks/starrocks/pull/67850)
+- NPE in RBO Join reorder when child statistics are missing. [#67693](https://github.com/StarRocks/starrocks/pull/67693)
+- BE crash due to MemTable finalize failed. [#67787](https://github.com/StarRocks/starrocks/pull/67787)
+- Temporary partitions are not cleaned up after FE restart for dynamic overwrite. [#67629](https://github.com/StarRocks/starrocks/pull/67629)
+- Inaccurate I/O statistics of Compaction. [#67524](https://github.com/StarRocks/starrocks/pull/67524)
+- Incorrect logic in physical partition comparison across clusters during replication transaction. [#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- Issue with SQL Server and Oracle identifier symbol handling. [#67965](https://github.com/StarRocks/starrocks/pull/67965)
+- NPE in the Iceberg metadata table query due to missing configuration propagation. [#67151](https://github.com/StarRocks/starrocks/pull/67151)
+- Issue with the `f``iles()` schema detection for empty Parquet or ORC files. [#67762](https://github.com/StarRocks/starrocks/pull/67762)
+- Inaccurate value of metrics in Profile caused by UNION ALL on Hive tables. [#67912](https://github.com/StarRocks/starrocks/pull/67912)
+- Lacking support for data retrieval from Arrow Flight proxy for FE queries. [#67794](https://github.com/StarRocks/starrocks/pull/67794)
+
 ## 3.5.11
 
 Release date: January 5, 2026

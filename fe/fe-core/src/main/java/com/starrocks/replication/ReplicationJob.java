@@ -949,6 +949,27 @@ public class ReplicationJob implements GsonPostProcessable {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
         try {
+            OlapTable table = (OlapTable) GlobalStateMgr.getServingState().getLocalMetastore()
+                    .getTable(databaseId, tableId);
+            if (table == null) {
+                throw new StarRocksException("Table " + tableId + " is not found when committing replication");
+            }
+
+            for (PartitionInfo partitionInfo : partitionInfos.values()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionInfo.getPartitionId());
+                if (partition == null) {
+                    continue;
+                }
+                long committedDataVersion = partition.getCommittedDataVersion();
+                long currentDataVersion = partition.getDataVersion();
+                long expectedDataVersion = partitionInfo.getDataVersion();
+                if (committedDataVersion != currentDataVersion || currentDataVersion != expectedDataVersion) {
+                    throw new StarRocksException("Partition " + partitionInfo.getPartitionId() +
+                            " data version mismatch for replication, committed: " + committedDataVersion +
+                            ", current: " + currentDataVersion + ", expected: " + expectedDataVersion);
+                }
+            }
+
             GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
                     transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
         } finally {

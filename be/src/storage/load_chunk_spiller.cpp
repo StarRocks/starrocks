@@ -21,7 +21,11 @@
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet_internal_parallel_merge_task.h"
+#include "storage/lake/tablet_writer.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_context.h"
+#include "storage/load_spill_pipeline_merge_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/union_iterator.h"
 #include "util/starrocks_metrics.h"
@@ -106,8 +110,9 @@ Status LoadSpillOutputDataStream::_preallocate(size_t block_size) {
     return Status::OK();
 }
 
-LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile)
-        : _block_manager(block_manager), _profile(profile) {
+LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
+                                   LoadSpillPipelineMergeContext* pipeline_merge_context)
+        : _block_manager(block_manager), _profile(profile), _pipeline_merge_context(pipeline_merge_context) {
     if (_profile == nullptr) {
         // use dummy profile
         _dummy_profile = std::make_unique<RuntimeProfile>("dummy");
@@ -124,7 +129,12 @@ LoadChunkSpiller::LoadChunkSpiller(LoadSpillBlockManager* block_manager, Runtime
 //                  when multiple memtables flush concurrently, slot_idx preserves their
 //                  original submission order for correct merge sequence.
 StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
-    if (chunk.num_rows() == 0) return 0;
+    if (chunk.num_rows() == 0) {
+        if (_pipeline_merge_context) {
+            _pipeline_merge_context->mark_slot_ready(slot_idx);
+        }
+        return 0;
+    }
     // 1. create new block group tagged with slot_idx
     auto block_group = _block_manager->block_container()->create_block_group(slot_idx);
     auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager, block_group);
@@ -132,6 +142,9 @@ StatusOr<size_t> LoadChunkSpiller::spill(const Chunk& chunk, int64_t slot_idx) {
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
     RETURN_IF_ERROR(output->flush());
+    if (_pipeline_merge_context) {
+        _pipeline_merge_context->mark_slot_ready(slot_idx);
+    }
     return output->append_bytes();
 }
 
@@ -343,6 +356,126 @@ Status LoadChunkSpiller::merge_write(size_t target_size, size_t memory_usage_per
 
 bool LoadChunkSpiller::empty() {
     return _block_manager->block_container()->empty();
+}
+
+/**
+ * Generates a single merge task for pipeline execution by pulling a batch of block groups.
+ *
+ * WHY THIS METHOD EXISTS: Unlike generate_spill_block_input_tasks() which creates ALL tasks
+ * upfront (high memory overhead), this method generates ONE task at a time for lazy, on-demand
+ * task creation. This enables the pipeline execution model where tasks are generated as
+ * resources become available, providing better memory control and load balancing.
+ *
+ * KEY DIFFERENCES FROM BATCH GENERATION:
+ * - Memory: Creates one task at a time vs all tasks upfront
+ * - Ownership: Transfers block_group ownership to task (prevents premature destruction)
+ * - Continuity: Ensures continuous slot_idx ranges (critical for correctness)
+ * - Rounds: Supports both intermediate merges (final_round=false) and final merges (final_round=true)
+ *
+ * @param target_size - Max bytes per task (prevents oversized segment files)
+ * @param memory_usage_per_merge - Memory budget per task (prevents OOM)
+ * @param do_sort - Whether to use merge iterator (true) vs union iterator (false)
+ * @param do_agg - Whether to apply aggregation (for AGG_KEYS/UNIQUE_KEYS tables)
+ * @param final_round - If true, must consume ALL remaining blocks; if false, can stop at gaps
+ * @return Task with merge iterator, or task with nullptr iterator if no blocks available
+ */
+StatusOr<LoadSpillPipelineMergeTaskPtr> LoadChunkSpiller::generate_pipeline_merge_task(size_t target_size,
+                                                                                       size_t memory_usage_per_merge,
+                                                                                       bool do_sort, bool do_agg,
+                                                                                       bool final_round) {
+    LoadSpillPipelineMergeTaskPtr result_task = std::make_unique<LoadSpillPipelineMergeTask>();
+
+    // THREAD SAFETY: Lock held for entire operation because we're both reading and modifying
+    // the block groups vector (sorting + erasing). Must be atomic to prevent race conditions
+    // with concurrent flush operations adding new block groups.
+    std::lock_guard<std::mutex> lg(*_block_manager->block_container()->block_groups_mutex());
+    auto& groups = _block_manager->block_container()->block_groups();
+
+    // Empty result signals iteration complete (iterator checks merge_itr == nullptr)
+    RETURN_IF(groups.empty(), result_task);
+    // Return error if _pipeline_merge_context is null
+    RETURN_IF(_pipeline_merge_context == nullptr,
+              Status::InternalError("LoadChunkSpiller pipeline merge context is null"));
+
+    std::vector<ChunkIteratorPtr> merge_inputs;
+    size_t current_input_bytes = 0;
+
+    // Sort groups by slot_idx to restore original memtable flush order
+    // CORRECTNESS: When parallel flush is enabled, block groups are created out of order.
+    // Sorting by slot_idx ensures we merge blocks in the same order as they were originally
+    // flushed from memtables, which is critical for maintaining data consistency and version order.
+    std::sort(groups.begin(), groups.end(),
+              [](const BlockGroupPtrWithSlot& a, const BlockGroupPtrWithSlot& b) { return a.slot_idx < b.slot_idx; });
+
+    // Tracks the last group index included in this task (used for cleanup at end)
+    int64_t stop_idx = -1;
+
+    // Check previous slot id for continuity
+    // Initialize to one less than the first slot to validate the first group in the continuity check.
+    int64_t last_slot_idx = groups[0].slot_idx - 1;
+
+    // BATCHING LOGIC: Accumulate continuous block groups until hitting size/memory limits
+    for (size_t i = 0; i < groups.size(); i++) {
+        auto& group = groups[i];
+
+        // CONTINUITY CHECK: Ensure we only merge consecutive slot_idx ranges
+        if (!final_round && !_pipeline_merge_context->is_slot_ready(last_slot_idx, group.slot_idx)) {
+            break;
+        }
+        last_slot_idx = group.slot_idx;
+
+        // Create iterator for this block group's data
+        merge_inputs.push_back(
+                std::make_shared<BlockGroupIterator>(*_schema, *_spiller->serde(), group.block_group->blocks()));
+        current_input_bytes += group.block_group->data_size();
+        result_task->total_block_bytes += group.block_group->data_size();
+        result_task->total_block_groups++;
+
+        // STOPPING CRITERIA: Balance between task size and parallelism.
+        // Stop accumulating blocks when either:
+        // 1. Data size limit reached (target_size) - prevents creating oversized segment files
+        //    which can cause memory pressure and slow I/O during tablet writes
+        // 2. Memory limit reached (memory_usage_per_merge) - prevents OOM from holding too
+        //    many chunks in memory simultaneously during merge operation
+        //
+        // This batching strategy enables dynamic load balancing: many small tasks for high
+        // parallelism vs fewer large tasks for better merge efficiency.
+        if (merge_inputs.size() > 0 &&
+            (current_input_bytes >= target_size ||
+             merge_inputs.size() * config::load_spill_max_chunk_bytes >= memory_usage_per_merge)) {
+            // Build the merge iterator chain based on table type requirements
+            auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+            result_task->merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+            RETURN_IF_ERROR(result_task->merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+            merge_inputs.clear();
+            stop_idx = i;
+            break;
+        }
+    }
+
+    // FINAL ROUND SPECIAL HANDLING: In final merge, consume ALL remaining groups even if
+    // they don't reach target_size. This ensures no orphaned blocks are left behind.
+    // Non-final rounds can leave partial batches for next iteration.
+    if (final_round && merge_inputs.size() > 0) {
+        auto tmp_itr = do_sort ? new_heap_merge_iterator(merge_inputs) : new_union_iterator(merge_inputs);
+        result_task->merge_itr = do_agg ? new_aggregate_iterator(tmp_itr) : tmp_itr;
+        RETURN_IF_ERROR(result_task->merge_itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+        merge_inputs.clear();
+        stop_idx = groups.size() - 1;
+    }
+
+    // OWNERSHIP TRANSFER: Move block groups into task to prevent premature destruction.
+    // The merge iterator (created above) needs these blocks to remain valid during async
+    // task execution. By holding shared_ptr in result_task, we ensure blocks outlive iterator.
+    for (int64_t i = 0; i <= stop_idx; i++) {
+        result_task->block_groups.push_back(groups[i].block_group);
+    }
+
+    // CLEANUP: Remove processed groups from container so they won't be included in future
+    // tasks. This is why we need the lock - concurrent access during erase would corrupt vector.
+    groups.erase(groups.begin(), groups.begin() + stop_idx + 1);
+
+    return result_task;
 }
 
 } // namespace starrocks

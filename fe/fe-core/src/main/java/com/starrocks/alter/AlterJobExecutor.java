@@ -846,7 +846,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
@@ -943,7 +944,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(),
                 alterViewClause.getInlineViewDef(),
                 alterViewClause.getColumns(),
-                ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
+                ctx.getSessionVariable().getSqlMode(),
+                alterViewClause.getComment(),
+                alterViewClause.getOriginalViewDefineSql());
 
         GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         return null;

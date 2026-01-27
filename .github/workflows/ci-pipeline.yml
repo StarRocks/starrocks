@@ -540,7 +540,6 @@ jobs:
       pre_commit_job_status_dict: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
       pre_ut_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_ut_conclusion }}
       pre_codestyle_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_codestyle_conclusion }}
-      pre_sonarcloud_conclusion: ${{ steps.check_pre_commit_conclusion.outputs.pre_sonarcloud_conclusion }}
       fe_change: ${{ needs.basic-checker.outputs.FE_CHANGE }}
     steps:
       - uses: dorny/paths-filter@v3
@@ -587,10 +586,8 @@ jobs:
           pre_commit_job_status_dict='${{ env.PRE_COMMIT_JOB_STATUS_DICT }}'
           pre_ut_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE UT"')
           pre_codestyle_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE Code Style Check"')
-          pre_sonarcloud_conclusion=$(echo $pre_commit_job_status_dict | jq -r '."FE Sonarcloud Check"')
           echo "pre_ut_conclusion=${pre_ut_conclusion}" >> $GITHUB_OUTPUT
           echo "pre_codestyle_conclusion=${pre_codestyle_conclusion}" >> $GITHUB_OUTPUT
-          echo "pre_sonarcloud_conclusion=${pre_sonarcloud_conclusion}" >> $GITHUB_OUTPUT
           
   fe-codestyle-check:
     runs-on: ubuntu-latest
@@ -654,105 +651,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
-
-  sonarcloud-fe-checker:
-    runs-on: ubuntu-latest
-    needs: fe-checker
-    if: needs.fe-checker.outputs.src_filter == 'true' && github.repository == 'StarRocks/starrocks'
-    name: FE Sonarcloud Check
-    timeout-minutes: 60
-    env:
-      PR_NUMBER: ${{ github.event.number }}
-      CODE_PATH: ${{ github.workspace }}
-      BRANCH: ${{ github.base_ref }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v6
-        id: checkout_code
-        if: needs.fe-checker.outputs.fe_change == 'true' || needs.fe-checker.outputs.pre_sonarcloud_conclusion != 'success'
-        with:
-          fetch-depth: 0
-
-      - name: BRANCH INFO
-        id: branch
-        if: steps.checkout_code.outcome == 'success'
-        run: |
-          echo ${{github.base_ref}}
-          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
-
-      - name: Checkout PR
-        id: checkout_pr
-        if: steps.branch.outcome == 'success'
-        run: |
-          BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        id: setup_java
-        if: steps.checkout_pr.outcome == 'success'
-        with:
-          java-version: 17
-          distribution: "adopt"
-
-      - name: Cache SonarCloud packages
-        id: cache_sonarcloud_packages
-        if: steps.setup_java.outcome == 'success'
-        uses: actions/cache@v5
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-
-      - name: Cache Maven packages
-        id: cache_maven_packages
-        if: steps.cache_sonarcloud_packages.outcome == 'success'
-        uses: actions/cache@v5
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-maven
-
-      - name: Install Apache Thrift 0.13
-        id: install_thrift_0_13
-        if: steps.cache_maven_packages.outcome == 'success'
-        run: |
-          mkdir -p ./.setup-thrift/oras
-          mkdir -p ./.setup-thrift/thrift
-          curl -sLO  https://github.com/deislabs/oras/releases/download/v0.7.0/oras_0.7.0_linux_amd64.tar.gz
-          tar -xvzf oras_0.7.0_linux_amd64.tar.gz
-          ln -sf $(pwd)/oras /usr/local/bin/oras
-          oras pull ghcr.io/dodopizza/setup-thrift/binaries:v0.13.0 --media-type application/vnd.unknown.layer.v1+tar.gz
-          tar zxf ./thrift.v0.13.0.tar.gz -C .
-          ln -sf $(pwd)/thrift /usr/local/bin/thrift
-
-      - name: Analyze FE
-        id: analyze_fe
-        if: steps.install_thrift_0_13.outcome == 'success'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
-          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
-        run: |
-          thrift --version
-          whereis thrift
-          export STARROCKS_HOME=${{ github.workspace }}
-          source env.sh
-          mkdir -p thirdparty/installed/bin/
-          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
-          cd ${{ github.workspace }}/fe
-          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
-          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
-            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
-            -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
   fe-ut:
     runs-on: [self-hosted, normal]

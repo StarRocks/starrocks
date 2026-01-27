@@ -92,6 +92,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -1488,7 +1489,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long tableId = olapTable.getId();
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
 
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
@@ -2156,6 +2158,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 null, properties, computeResource);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
+            if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
+                tablet.setRange(new TabletRange());
+            }
             index.addTablet(tablet, tabletMeta);
             tabletIdSet.add(tablet.getId());
         }
@@ -2238,6 +2243,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             for (int i = 0; i < distributionInfo.getBucketNum(); ++i) {
                 // create a new tablet with random chosen backends
                 LocalTablet tablet = new LocalTablet(getNextId());
+                if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
+                    tablet.setRange(new TabletRange());
+                }
 
                 // add tablet to inverted index first
                 index.addTablet(tablet, tabletMeta);
@@ -3523,7 +3531,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
         OlapTable olapTable = (OlapTable) table;
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new DdlException("Table[" + olapTable.getName() + "] is under " + olapTable.getState());
         }
 
@@ -3582,7 +3591,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     @Override
     public void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {
         OlapTable olapTable = (OlapTable) table;
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new DdlException("Table[" + olapTable.getName() + "] is under " + olapTable.getState());
         }
 
@@ -3639,7 +3649,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     public void renameRollup(Database db, OlapTable table, RollupRenameClause renameClause) throws DdlException {
-        if (table.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (table.getState() != OlapTable.OlapTableState.NORMAL
+                && table.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new DdlException("Table[" + table.getName() + "] is under " + table.getState());
         }
 
@@ -3703,7 +3714,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
             throw ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_IN_INTERNAL_DB, db.getFullName());
         }
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw ErrorReportException.report(ErrorCode.ERR_CANNOT_RENAME_COLUMN_OF_NOT_NORMAL_TABLE, olapTable.getState());
         }
 
@@ -4535,6 +4547,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             view.setComment(stmt.getComment());
             view.setInlineViewDefWithSqlMode(stmt.getInlineViewDef(),
                     ConnectContext.get().getSessionVariable().getSqlMode());
+            view.setOriginalViewDef(stmt.getOriginalViewDefineSql());
 
             if (stmt.isSecurity()) {
                 view.setSecurity(stmt.isSecurity());
@@ -4580,7 +4593,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Only support truncate OLAP table or LAKE table");
         }
         OlapTable olapTable = (OlapTable) table;
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
         return olapTable;
@@ -5190,7 +5204,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         OlapTable copiedTbl;
         try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), olapTable.getId(), LockType.READ)) {
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
-                    && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
+                    && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE
+                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
                         + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
             }

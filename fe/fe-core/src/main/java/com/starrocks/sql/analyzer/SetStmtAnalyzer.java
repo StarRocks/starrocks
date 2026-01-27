@@ -343,6 +343,16 @@ public class SetStmtAnalyzer {
             PlanMode.fromName(resolvedExpression.getStringValue());
         }
 
+        // check connector_sink_sort_scope
+        if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SORT_SCOPE)) {
+            try {
+                com.starrocks.connector.ConnectorSinkSortScope.fromName(resolvedExpression.getStringValue());
+            } catch (Exception e) {
+                throw new SemanticException(String.format("Unsupported connector_sink_sort_scope: %s, " +
+                        "valid values are: none, file, host", resolvedExpression.getStringValue()));
+            }
+        }
+
         // check populate datacache mode
         if (variable.equalsIgnoreCase(SessionVariable.POPULATE_DATACACHE_MODE)) {
             DataCachePopulateMode.fromName(resolvedExpression.getStringValue());

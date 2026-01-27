@@ -14,21 +14,25 @@
 
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
-import com.google.common.base.Preconditions;
+import com.google.api.client.util.Maps;
+import com.google.api.client.util.Preconditions;
+import com.google.api.client.util.Sets;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.type.IntegerType;
 
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,6 +43,9 @@ public class UnionDictionaryManager {
     private final Map<Integer, ScalarOperator> stringRefToDefineExprMap;
     private final Map<Integer, ColumnDict> globalDicts;
     private final Set<Integer> joinEqColumnGroupIds;
+    private final Map<Integer, ByteBuffer> constantColumns = Maps.newHashMap();
+
+    private static final int CONSTANT_ID = -1;
 
     public UnionDictionaryManager(SessionVariable sessionVariable,
                                   Map<Integer, ScalarOperator> stringRefToDefineExprMap,
@@ -50,8 +57,10 @@ public class UnionDictionaryManager {
         this.joinEqColumnGroupIds = joinEqColumnGroupIds;
     }
 
-    private static ImmutableMap<ByteBuffer, Integer> mergeDictionaryData(List<ImmutableMap<ByteBuffer, Integer>> dicts) {
+    private static ImmutableMap<ByteBuffer, Integer> mergeDictionaryData(List<ImmutableMap<ByteBuffer, Integer>> dicts,
+                                                                         Collection<ByteBuffer> constants) {
         Set<ByteBuffer> uniques = Sets.newHashSet();
+        uniques.addAll(constants);
         dicts.forEach(d -> uniques.addAll(d.keySet()));
         int totalDictSize = uniques.stream().map(b -> b.remaining() + 4).reduce(0, Integer::sum);
         // TODO(farhad-celo): This constant is hardcoded in other places, refactor to a config.
@@ -71,6 +80,9 @@ public class UnionDictionaryManager {
         if (globalDicts.containsKey(cid)) {
             return cid;
         }
+        if (constantColumns.containsKey(cid)) {
+            return CONSTANT_ID;
+        }
         ScalarOperator define = stringRefToDefineExprMap.get(cid);
         if (define == null || !define.isColumnRef()) {
             return null;
@@ -82,38 +94,44 @@ public class UnionDictionaryManager {
         return getSourceDictionaryColumnId(newId);
     }
 
-    boolean mergeDictionaries(List<Integer> columnIds) {
+    Integer mergeDictionaries(List<Integer> columnIds) {
         if (!sessionVariable.isEnableLowCardinalityOptimizeForUnionAll()) {
-            return false;
+            return null;
         }
-        columnIds = columnIds.stream().map(this::getSourceDictionaryColumnId).toList();
-        if (columnIds.contains(null) || !columnIds.stream().allMatch(globalDicts::containsKey)
-                || columnIds.stream().anyMatch(joinEqColumnGroupIds::contains)) {
-            return false;
+        List<ByteBuffer> allConstantData =
+                columnIds.stream().map(constantColumns::get).filter(Objects::nonNull).toList();
+        List<Integer> nonConstantColumnIds = columnIds.stream().map(this::getSourceDictionaryColumnId)
+                .filter(cid -> cid == null || cid != CONSTANT_ID).toList();
+        if (nonConstantColumnIds.isEmpty()
+                || nonConstantColumnIds.contains(null)
+                || !nonConstantColumnIds.stream().allMatch(globalDicts::containsKey)
+                || nonConstantColumnIds.stream().anyMatch(joinEqColumnGroupIds::contains)) {
+            return null;
         }
-        columnIds.forEach(cid -> {
+        nonConstantColumnIds.forEach(cid -> {
             Integer groupId = unionColumnGroups.getGroupIdOrAdd(cid);
             if (!unionDictData.containsKey(groupId)) {
                 Preconditions.checkState(globalDicts.containsKey(cid));
                 unionDictData.put(groupId, globalDicts.get(cid).getDict());
             }
         });
-        List<Integer> columnGroupIds = columnIds.stream().map(
+        List<Integer> columnGroupIds = nonConstantColumnIds.stream().map(
                 cid -> unionColumnGroups.getGroupId(cid).orElseThrow()).distinct().toList();
-        List<ImmutableMap<ByteBuffer, Integer>> allData = columnGroupIds.stream().map(unionDictData::get).toList();
-        ImmutableMap<ByteBuffer, Integer> mergedDictData = mergeDictionaryData(allData);
+        List<ImmutableMap<ByteBuffer, Integer>> allDictData = columnGroupIds.stream().map(unionDictData::get).toList();
+        ImmutableMap<ByteBuffer, Integer> mergedDictData = mergeDictionaryData(allDictData, allConstantData);
         if (mergedDictData == null) {
-            return false;
+            return null;
         }
-        final Integer firstElement = columnIds.get(0);
-        columnIds.forEach(cid -> unionColumnGroups.union(cid, firstElement));
+        final Integer firstElement = nonConstantColumnIds.get(0);
+        nonConstantColumnIds.forEach(cid -> unionColumnGroups.union(cid, firstElement));
         Integer finalGroup = unionColumnGroups.getGroupId(firstElement).orElseThrow();
         unionDictData.put(finalGroup, mergedDictData);
-        return true;
+        return columnIds.stream().filter(cid -> firstElement.equals(getSourceDictionaryColumnId(cid))).findAny()
+                .orElseThrow();
     }
 
     void finalizeColumnDictionaries() {
-        unionColumnGroups.getAllGroups().stream().filter(s -> s.size() > 1).forEach(s -> {
+        unionColumnGroups.getAllGroups().forEach(s -> {
             Integer groupId = unionColumnGroups.getGroupId(s.stream().findAny().orElseThrow()).orElseThrow();
             ImmutableMap<ByteBuffer, Integer> dictData = unionDictData.get(groupId);
             Preconditions.checkNotNull(dictData);
@@ -126,11 +144,63 @@ public class UnionDictionaryManager {
     }
 
     Collection<Set<Integer>> getUnionColumnGroups() {
-        return unionColumnGroups.getAllGroups().stream().filter(s -> s.size() > 1).toList();
+        return unionColumnGroups.getAllGroups().stream().toList();
     }
 
     Set<Integer> getMergedDictColumnIds() {
-        return unionColumnGroups.getAllGroups().stream().filter(s -> s.size() > 1).flatMap(Set::stream)
+        return unionColumnGroups.getAllGroups().stream().flatMap(Set::stream)
                 .collect(Collectors.toSet());
+    }
+
+    void recordIfConstant(ColumnRefOperator key, ScalarOperator value) {
+        if (value.isConstantRef() && (value.getType().isStringType() || value.getType().isNull())) {
+            ConstantOperator constant = value.cast();
+            ByteBuffer buffer = constant.isConstantNull() ? null : ByteBuffer.wrap(constant.getVarchar().getBytes());
+            constantColumns.put(key.getId(), buffer);
+        } else if (value.isColumnRef()) {
+            ColumnRefOperator c = value.cast();
+            if (constantColumns.containsKey(c.getId())) {
+                constantColumns.put(key.getId(), constantColumns.get(c.getId()));
+            }
+        }
+    }
+
+    private ConstantOperator generateConstantOperator(ColumnRefOperator column, Map<ByteBuffer, Integer> dict) {
+        ByteBuffer constantValue = constantColumns.get(column.getId());
+        if (constantValue == null) {
+            return ConstantOperator.createNull(IntegerType.INT);
+        }
+        Integer index = dict.get(constantValue);
+        Preconditions.checkNotNull(index);
+        return ConstantOperator.createInt(index);
+    }
+
+    List<Map<ColumnRefOperator, ConstantOperator>> generateConstantEncodingMap(List<ColumnRefOperator> outputColumns,
+                                                                               List<List<ColumnRefOperator>> childColumns,
+                                                                               Set<Integer> allStringColumns) {
+        List<Map<ColumnRefOperator, ConstantOperator>> result = Lists.newArrayList();
+        childColumns.forEach(c -> result.add(Maps.newHashMap()));
+        for (int i = 0; i < outputColumns.size(); ++i) {
+            if (!allStringColumns.contains(outputColumns.get(i).getId())) {
+                continue;
+            }
+            Integer dictColumnId = getSourceDictionaryColumnId(outputColumns.get(i).getId());
+            Preconditions.checkNotNull(dictColumnId);
+            Map<ByteBuffer, Integer> dictData = unionDictData.get(
+                    unionColumnGroups.getGroupId(dictColumnId).orElseThrow());
+            Preconditions.checkNotNull(dictData);
+            for (int j = 0; j < childColumns.size(); ++j) {
+                ColumnRefOperator c = childColumns.get(j).get(i);
+                if (constantColumns.containsKey(c.getId())) {
+                    result.get(j).put(c, generateConstantOperator(c, dictData));
+                }
+            }
+        }
+        return result;
+
+    }
+
+    boolean isSupportedConstant(ColumnRefOperator c) {
+        return constantColumns.containsKey(c.getId());
     }
 }

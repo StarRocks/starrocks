@@ -232,7 +232,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                                 List<Partition> partitions)
             throws DdlException, AnalysisException, RunningTxnExceedException {
         // check table state
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());
         }
 

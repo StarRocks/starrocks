@@ -1825,7 +1825,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
 
-        return new CreateViewStmt(
+        CreateViewStmt stmt = new CreateViewStmt(
                 context.IF() != null,
                 context.REPLACE() != null,
                 targetTableRef,
@@ -1836,6 +1836,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 createPos(context),
                 getCaseInsensitiveProperties(context.properties())
                 );
+        stmt.setQueryStartIndex(context.queryStatement().start.getStartIndex());
+        stmt.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
+        return stmt;
     }
 
     @Override
@@ -1868,6 +1871,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                     context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
             AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            alterClause.setQueryStartIndex(context.queryStatement().start.getStartIndex());
+            alterClause.setQueryStopIndex(context.queryStatement().stop.getStopIndex() + 1);
             return new AlterViewStmt(targetTableRef, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
@@ -5645,7 +5650,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
     @Override
     public ParseNode visitBeginStatement(com.starrocks.sql.parser.StarRocksParser.BeginStatementContext context) {
-        return new BeginStmt(createPos(context));
+        String label = null;
+        if (context.label != null) {
+            label = ((Identifier) visit(context.label)).getValue();
+        }
+        return new BeginStmt(createPos(context), label);
     }
 
     @Override
@@ -6574,8 +6583,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
-    public ParseNode visitCreateFunctionStatement(
-            com.starrocks.sql.parser.StarRocksParser.CreateFunctionStatementContext context) {
+    public ParseNode visitCreateUdfFunctionStmt(com.starrocks.sql.parser.StarRocksParser.CreateUdfFunctionStmtContext context) {
         String functionType = "SCALAR";
         boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
         boolean isGlobal = context.GLOBAL() != null;
@@ -6585,7 +6593,6 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(TypeParser.getType(context.returnType), createPos(context.returnType));
 
@@ -6611,6 +6618,38 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return new CreateFunctionStmt(functionType, functionRef,
                 getFunctionArgsDef(context.typeList()), returnTypeDef, properties, inlineContent,
                 replaceIfExists, createIfNotExists);
+    }
+
+    @Override
+    public ParseNode visitCreateInternalFunctionStmt(
+            com.starrocks.sql.parser.StarRocksParser.CreateInternalFunctionStmtContext context) {
+        String functionType = "SCALAR";
+        boolean replaceIfExists = context.orReplace() != null && context.orReplace().OR() != null;
+        boolean isGlobal = context.GLOBAL() != null;
+        boolean createIfNotExists = context.ifNotExists() != null && context.ifNotExists().EXISTS() != null;
+
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+
+        if (isGlobal && qualifiedName.getParts().size() > 1) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(qualifiedName.toString()), qualifiedName.getPos());
+        }
+        Expr expr = (Expr) visit(context.expression());
+        FunctionRef functionRef = new FunctionRef(qualifiedName, null, qualifiedName.getPos(), isGlobal);
+        return new CreateFunctionStmt(functionType, functionRef, getFunctionArgsDef(context.functionArgsList()),
+                expr, replaceIfExists, createIfNotExists, createPos(context));
+    }
+
+    public FunctionArgsDef getFunctionArgsDef(com.starrocks.sql.parser.StarRocksParser.FunctionArgsListContext ctx) {
+        List<TypeDef> typeDefList = new ArrayList<>();
+        List<String> argNames = new ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.TypeContext typeContext : ctx.type()) {
+            typeDefList.add(new TypeDef(TypeParser.getType(typeContext)));
+        }
+
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext identifierContext : ctx.identifier()) {
+            argNames.add(((Identifier) visit(identifierContext)).getValue());
+        }
+        return new FunctionArgsDef(typeDefList, argNames);
     }
 
     // ------------------------------------------- Authz Statement -------------------------------------------------

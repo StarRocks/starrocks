@@ -42,6 +42,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/load_spill_pipeline_merge_context.h"
 #include "storage/memtable.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"

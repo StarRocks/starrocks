@@ -112,6 +112,7 @@ class DecodeContext {
     // STRING or ARRAY<STRING> types. Nested structs are not supported.
     Map<ScalarOperator, Map<String, ColumnRefOperator>> structOpToFieldUseStringRefMap =
             Maps.newIdentityHashMap();
+    UnionDictionaryManager unionDictionaryManager;
 
     DecodeContext(ColumnRefFactory factory) {
         this.factory = factory;

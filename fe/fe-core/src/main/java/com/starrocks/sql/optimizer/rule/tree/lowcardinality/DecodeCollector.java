@@ -318,6 +318,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         mergeJoinEqColumnDicts(mergedUnionDictColumns);
         fillDisableStringColumns();
         unionDictionaryManager.finalizeColumnDictionaries();
+        context.unionDictionaryManager = unionDictionaryManager;
 
         // choose the profitable string columns
         for (Integer cid : scanStringColumns) {
@@ -774,18 +775,22 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             result.inputStringColumns.union(context.outputStringColumns);
             for (int i = 0; i < setOp.getOutputColumnRefOp().size(); ++i) {
                 final int finalI = i;
-                List<Integer> childColumns = setOp.getChildOutputColumns().stream()
-                        .map(l -> l.get(finalI).getId()).toList();
-                boolean isCandidate = childColumns.stream().allMatch(context.outputStringColumns::contains);
-                if (isCandidate && unionDictionaryManager.mergeDictionaries(childColumns)) {
-                    int outputColumnId = setOp.getOutputColumnRefOp().get(i).getId();
-                    childColumns.forEach(c -> {
+                List<ColumnRefOperator> childColumns = setOp.getChildOutputColumns().stream()
+                        .map(l -> l.get(finalI)).toList();
+                List<Integer> childColumnIds = childColumns.stream().map(ColumnRefOperator::getId).toList();
+                boolean isCandidate = childColumns.stream().allMatch(
+                        c -> context.outputStringColumns.contains(c) || unionDictionaryManager.isSupportedConstant(c));
+                int outputColumnId = setOp.getOutputColumnRefOp().get(i).getId();
+                Integer useChildId;
+                if (isCandidate && (useChildId = unionDictionaryManager.mergeDictionaries(childColumnIds)) != null) {
+                    childColumnIds.stream().filter(context.outputStringColumns::contains).forEach(c -> {
                         result.usedStringColumns.union(c);
                         expressionStringRefCounter.put(c, expressionStringRefCounter.getOrDefault(c, 0) + 1);
                     });
-                    stringRefToDefineExprMap.put(outputColumnId, setOp.getChildOutputColumns().get(0).get(i));
+                    stringRefToDefineExprMap.put(outputColumnId, childColumns.stream()
+                            .filter(c -> c.getId() == useChildId).findAny().orElseThrow());
                     expressionStringRefCounter.put(outputColumnId, 1);
-                    result.outputStringColumns.union(setOp.getOutputColumnRefOp().get(i));
+                    result.outputStringColumns.union(outputColumnId);
                 } else {
                     childColumns.stream().filter(c -> context.outputStringColumns.contains(c))
                             .forEach(result.decodeStringColumns::union);
@@ -1337,6 +1342,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 setDefineExpr(key, value, 0);
                 info.outputStringColumns.union(key.getId());
             }
+            unionDictionaryManager.recordIfConstant(key, value);
             matchChildren.union(dictExpressionCollector.matchChildren);
         }
     }

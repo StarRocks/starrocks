@@ -150,11 +150,6 @@ order by case_id;
 2	-7	-7	-0.5	0.5	None	None	staging	None
 4	2048	2048	0.0	2.0	None	None	None	None
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_write_test force;
 -- result:
 -- !result
@@ -163,4 +158,9 @@ drop table variant_source force;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_write_0/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result

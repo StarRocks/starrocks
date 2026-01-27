@@ -57,6 +57,7 @@ import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
+import com.starrocks.planner.BenchmarkScanNode;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -163,6 +164,7 @@ import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
@@ -1542,6 +1544,30 @@ public class PlanFragmentBuilder {
             return buildIcebergScanNode(optExpression, context);
         }
 
+        private boolean isIcebergDeleteOperation(PhysicalScanOperator node) {
+            List<ColumnRefOperator> outputColumns = node.getOutputColumns();
+            if (outputColumns == null || outputColumns.isEmpty()) {
+                return false;
+            }
+
+            boolean hasFilePath = false;
+            boolean hasPos = false;
+
+            for (ColumnRefOperator columnRef : outputColumns) {
+                String colName = columnRef.getName();
+
+                // Check file path column
+                if (colName.equals(IcebergTable.FILE_PATH)) {
+                    hasFilePath = true;
+                } else if (colName.equals(IcebergTable.ROW_POSITION)) {
+                    // Check position column
+                    hasPos = true;
+                }
+            }
+
+            return hasFilePath || hasPos;
+        }
+
         public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
             PhysicalScanOperator node = expression.getOp().cast();
             Table referenceTable = node.getTable();
@@ -1598,6 +1624,9 @@ public class PlanFragmentBuilder {
                             icebergScanNode.setBucketProperties(descBP.getBucketProperties());
                         }
                     }
+                }
+                if (isIcebergDeleteOperation(node)) {
+                    icebergScanNode.setUsedForDelete(true);
                 }
                 icebergScanNode.setupScanRangeLocations(
                         context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
@@ -2037,6 +2066,42 @@ public class PlanFragmentBuilder {
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalBenchmarkScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalBenchmarkScanOperator node = (PhysicalBenchmarkScanOperator) optExpression.getOp();
+
+            context.getDescTbl().addReferencedTable(node.getTable());
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(node.getTable());
+
+            prepareContextSlots(node, context, tupleDescriptor);
+            tupleDescriptor.computeMemLayout();
+
+            ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
+            BenchmarkScanNode scanNode =
+                    new BenchmarkScanNode(context.getNextNodeId(), tupleDescriptor, computeResource);
+            currentExecGroup.add(scanNode, true);
+
+            // set predicate
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            for (ScalarOperator predicate : predicates) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            scanNode.setLimit(node.getLimit());
+            scanNode.computeStatistics(optExpression.getStatistics());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            scanNode.setupScanRangeLocations();
+
+            context.getScanNodes().add(scanNode);
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

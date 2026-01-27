@@ -210,11 +210,6 @@ ORDER BY test_id;
 6	korean	안녕하세요	PASS
 7	mixed	🎉 Test 测试 Тест اختبار 🚀	PASS
 -- !result
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/ > /dev/null
--- result:
-0
-
--- !result
 drop table variant_string_unicode_test force;
 -- result:
 -- !result
@@ -226,4 +221,9 @@ set catalog default_catalog;
 -- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_query_4/${uuid0}/ > /dev/null
+-- result:
+0
+
 -- !result
