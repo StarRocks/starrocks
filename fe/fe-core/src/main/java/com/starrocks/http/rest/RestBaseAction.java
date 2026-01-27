@@ -186,8 +186,9 @@ public class RestBaseAction extends BaseAction {
         ctx.setNettyChannel(request.getContext());
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
-        ctx.setThreadLocalInfo();
-        executeWithoutPassword(request, response);
+        try (var scope = ctx.bindScope()) {
+            executeWithoutPassword(request, response);
+        }
     }
 
     // If user password should be checked, the derived class should implement this method, NOT 'execute()',
