@@ -100,6 +100,9 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
+                    if (table.isRangeDistribution()) {
+                        shadowTablet.setRange(originTablet.getRange());
+                    }
                     shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
                     schemaChangeJob
                             .addTabletIdMap(physicalPartitionId, shadowIndexMetaId, shadowTablet.getId(), originTablet.getId());
