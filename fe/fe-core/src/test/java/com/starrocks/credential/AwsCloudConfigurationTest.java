@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.core.exception.SdkClientException;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -159,7 +160,10 @@ public class AwsCloudConfigurationTest {
         {
             AwsCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
             Assertions.assertNotNull(credential);
-            Assertions.assertThrows(NullPointerException.class, credential::generateAWSCredentialsProvider);
+            // After fixing ensureSchemeInEndpoint, the endpoint URI is now properly formatted,
+            // so AWS SDK validates the configuration and throws SdkClientException when region
+            // is missing (instead of NullPointerException from malformed URI)
+            Assertions.assertThrows(SdkClientException.class, credential::generateAWSCredentialsProvider);
         }
 
         hiveConf.set("aws.glue.sts.region", "region");
