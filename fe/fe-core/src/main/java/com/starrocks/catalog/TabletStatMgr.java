@@ -38,7 +38,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.reshard.TabletReshardUtils;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
@@ -199,8 +198,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private static void triggerTabletReshard(Database db, OlapTable table, long maxTabletSize) {
-        if (table.isCloudNativeTableOrMaterializedView()
-                && table.getDefaultDistributionInfo().getType() == DistributionInfoType.RANGE
+        if (table.isCloudNativeTableOrMaterializedView() && table.isRangeDistribution()
                 && TabletReshardUtils.needSplit(maxTabletSize)) {
             try {
                 GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().createTabletReshardJob(

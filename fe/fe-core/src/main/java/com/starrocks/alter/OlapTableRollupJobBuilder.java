@@ -75,6 +75,9 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
                     long mvTabletId = globalStateMgr.getNextId();
 
                     Tablet newTablet = new LocalTablet(mvTabletId);
+                    if (olapTable.isRangeDistribution()) {
+                        newTablet.setRange(baseTablet.getRange());
+                    }
 
                     mvIndex.addTablet(newTablet, mvTabletMeta);
                     addedTablets.add(newTablet);
