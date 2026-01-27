@@ -2313,6 +2313,8 @@ public class StmtExecutor {
             context.getState().setError(e.getMessage());
             return;
         }
+        // Set SERVER_SESSION_STATE_CHANGED flag to notify MySQL clients that session state has changed
+        context.getState().serverStatus |= MysqlServerStatusFlag.SERVER_SESSION_STATE_CHANGED;
         context.getState().setOk();
     }
 
