@@ -822,7 +822,9 @@ public class OlapTableSink extends DataSink {
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
-                tTablet.setRange(tablet.getRange().toThrift());
+                if (tablet.getRange() != null) {
+                    tTablet.setRange(tablet.getRange().toThrift());
+                }
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
@@ -1026,9 +1028,9 @@ public class OlapTableSink extends DataSink {
     }
 
     private static boolean canUseColocateMVIndex(OlapTable table) {
+        // disable colocate mv index for range distribution for now
         return Config.enable_colocate_mv_index && table.isEnableColocateMVIndex() &&
-               // disable colocate mv index for range distribution for now
-               table.getDefaultDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANGE;
+                !table.isRangeDistribution();
     }
 
     public boolean canUsePipeLine() {
