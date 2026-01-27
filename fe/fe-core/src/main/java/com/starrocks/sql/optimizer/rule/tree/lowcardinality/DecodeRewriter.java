@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -53,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -60,6 +62,7 @@ import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -203,20 +206,44 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
     public OptExpression visitPhysicalUnion(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
         PhysicalUnionOperator unionOp = optExpression.getOp().cast();
         DecodeInfo info = context.operatorDecodeInfo.getOrDefault(unionOp, DecodeInfo.EMPTY);
+        List<Map<ColumnRefOperator, ConstantOperator>> constantMappings =
+                context.unionDictionaryManager.generateConstantEncodingMap(
+                        unionOp.getOutputColumnRefOp(), unionOp.getChildOutputColumns(), context.allStringColumns);
+        List<List<ColumnRefOperator>> newChildOutputColumns = Lists.newArrayList();
+        for (int i = 0; i < optExpression.arity(); ++i) {
+            Map<ColumnRefOperator, ConstantOperator> constantMapping = constantMappings.get(i);
+            HashMap<ColumnRefOperator, ColumnRefOperator> columnMapping = Maps.newHashMap();
+            constantMapping.forEach((key, value) ->
+                    columnMapping.put(key, factory.create(value, value.getType(), value.isNullable())));
+            unionOp.getChildOutputColumns().get(i).forEach(c -> columnMapping.putIfAbsent(c,
+                    info.inputStringColumns.contains(c.getId()) ? context.stringRefToDictRefMap.getOrDefault(c, c) : c)
+            );
+            newChildOutputColumns.add(unionOp.getChildOutputColumns().get(i).stream().map(columnMapping::get).toList());
+            if (constantMapping.isEmpty()) {
+                continue;
+            }
+            PhysicalProjectOperator projectOp = new PhysicalProjectOperator(
+                    unionOp.getChildOutputColumns().get(i).stream().distinct().collect(Collectors.toMap(
+                            columnMapping::get,
+                            c -> constantMapping.containsKey(c) ? constantMapping.get(c) : columnMapping.get(c))),
+                    Map.of()
+            );
+            LogicalProperty property = new LogicalProperty(optExpression.getInputs().get(i).getLogicalProperty());
+            property.setOutputColumns(new ColumnRefSet(projectOp.getOutputColumns()));
+            OptExpression newChild = OptExpression.builder().with(optExpression.getInputs().get(i)).setOp(projectOp)
+                    .setLogicalProperty(property).setInputs(List.of(optExpression.getInputs().get(i))).build();
+            optExpression.setChild(i, newChild);
+        }
+        List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
+                c -> context.allStringColumns.contains(c.getId())
+                        ? context.stringRefToDictRefMap.get(c) : c).toList();
+
         ColumnRefSet inputColumns = new ColumnRefSet();
         inputColumns.union(info.inputStringColumns);
         unionOp.getOutputColumnRefOp().stream().map(ColumnRefOperator::getId).filter(context.allStringColumns::contains)
                 .forEach(inputColumns::union);
         ScalarOperator newPredicate = rewritePredicate(unionOp.getPredicate(), inputColumns);
         Projection newProjection = rewriteProjection(unionOp.getProjection(), inputColumns);
-        List<ColumnRefOperator> newColumnRefOp = unionOp.getOutputColumnRefOp().stream().map(
-                c -> context.allStringColumns.contains(c.getId())
-                        ? context.stringRefToDictRefMap.getOrDefault(c, c) : c).toList();
-        List<List<ColumnRefOperator>> newChildOutputColumns = unionOp.getChildOutputColumns().stream()
-                .map(l -> l.stream()
-                        .map(c -> info.inputStringColumns.contains(c) ?
-                                context.stringRefToDictRefMap.getOrDefault(c, c) : c).toList()
-                ).toList();
 
         PhysicalUnionOperator newUnionOp = new PhysicalUnionOperator(newColumnRefOp, newChildOutputColumns,
                 unionOp.isUnionAll(), unionOp.getLimit(), newPredicate, newProjection,
