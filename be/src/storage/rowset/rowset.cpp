@@ -786,6 +786,9 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
         seg_options.version = options.version;
         // Use _kvstore to ensure we access the correct metadata store for this rowset
+        if (_kvstore == nullptr) {
+            return Status::InternalError("KVStore is null when loading rowset metadata");
+        }
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(_kvstore);
     }
     seg_options.rowset_path = _rowset_path;
@@ -894,6 +897,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_schema = tablet_schema;
     // Conditionally load metadata loaders based on the requested mode
     // Both loaders use _kvstore to access the correct metadata store
+    if (meta_load_mode != MetaLoadMode::NONE && _kvstore == nullptr) {
+        return Status::InternalError("KVStore is null when loading rowset metadata");
+    }
     if (meta_load_mode == MetaLoadMode::DELETE_VEC_ONLY || meta_load_mode == MetaLoadMode::ALL) {
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(_kvstore);
     }
