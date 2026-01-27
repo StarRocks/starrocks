@@ -5275,8 +5275,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (context.INTEGER_VALUE() != null) {
             bucketNum = Integer.parseInt(context.INTEGER_VALUE().getText());
         }
-        Map<String, String> properties = getCaseSensitiveProperties(context.properties());
-        return new AddPhysicalPartitionClause(partitionName, bucketNum, properties, createPos(context));
+        return new AddPhysicalPartitionClause(partitionName, bucketNum, createPos(context));
     }
 
     @Override

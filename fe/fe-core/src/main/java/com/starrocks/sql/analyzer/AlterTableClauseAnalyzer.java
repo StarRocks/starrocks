@@ -1457,9 +1457,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException("Cannot drop the last physical partition of partition '" + partition.getName() + "'");
         }
 
-        // Cannot drop default physical partition unless force
-        if (partition.getDefaultPhysicalPartition().getId() == physicalPartitionId && !clause.isForceDrop()) {
-            throw new SemanticException("Cannot drop default physical partition. Use FORCE to drop it.");
+        // Cannot drop default physical partition - this would cause NPE in many places
+        // that call getDefaultPhysicalPartition() without null checks
+        if (partition.getDefaultPhysicalPartition().getId() == physicalPartitionId) {
+            throw new SemanticException("Cannot drop the default physical partition of partition '" + partition.getName() + "'");
         }
 
         return null;

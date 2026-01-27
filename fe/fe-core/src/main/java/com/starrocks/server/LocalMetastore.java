@@ -1857,10 +1857,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Cannot drop the last physical partition of partition '" + partition.getName() + "'");
         }
 
-        // Cannot drop default physical partition unless force
+        // Cannot drop default physical partition - this would cause NPE in many places
+        // that call getDefaultPhysicalPartition() without null checks
         boolean isDefault = partition.getDefaultPhysicalPartition().getId() == physicalPartitionId;
-        if (isDefault && !clause.isForceDrop()) {
-            throw new DdlException("Cannot drop default physical partition. Use FORCE to drop it.");
+        if (isDefault) {
+            throw new DdlException("Cannot drop the default physical partition of partition '" + partition.getName() + "'");
         }
 
         // Remove the physical partition from the logical partition

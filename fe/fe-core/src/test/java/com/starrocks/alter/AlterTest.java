@@ -3168,15 +3168,15 @@ public class AlterTest {
     }
 
     @Test
-    public void testDropPhysicalPartitionWithForce() throws Exception {
+    public void testDropPhysicalPartitionCannotDropDefault() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
-        String dropSQL = "drop table if exists test_drop_physical_partition_force";
+        String dropSQL = "drop table if exists test_drop_physical_partition_default";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
         // Create a random distribution table
-        String createSQL = "CREATE TABLE test.test_drop_physical_partition_force (\n" +
+        String createSQL = "CREATE TABLE test.test_drop_physical_partition_default (\n" +
                 "      k1 INT,\n" +
                 "      k2 VARCHAR(2048)\n" +
                 ")\n" +
@@ -3193,28 +3193,28 @@ public class AlterTest {
         // Get the table and add a physical partition first
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), "test_drop_physical_partition_force");
+                .getTable(db.getFullName(), "test_drop_physical_partition_default");
 
-        // Add a new physical partition
-        String addPhysicalPartitionSQL = "ALTER TABLE test.test_drop_physical_partition_force ADD PHYSICAL PARTITION";
+        // Add a new physical partition so we have more than one
+        String addPhysicalPartitionSQL = "ALTER TABLE test.test_drop_physical_partition_default ADD PHYSICAL PARTITION";
         AlterTableStmt addStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(addPhysicalPartitionSQL, ctx);
         DDLStmtExecutor.execute(addStmt, ctx);
 
-        // Get the default physical partition ID to test FORCE drop
+        // Get the default physical partition ID
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), "test_drop_physical_partition_force");
+                .getTable(db.getFullName(), "test_drop_physical_partition_default");
         Partition partition = table.getPartitions().iterator().next();
         long defaultPhysicalPartitionId = partition.getDefaultPhysicalPartition().getId();
 
-        // Test: DROP PHYSICAL PARTITION with FORCE (using default physical partition ID)
-        String alterSQL = "ALTER TABLE test.test_drop_physical_partition_force DROP PHYSICAL PARTITION " 
+        // Test: DROP PHYSICAL PARTITION on default should fail (even with FORCE)
+        String alterSQL = "ALTER TABLE test.test_drop_physical_partition_default DROP PHYSICAL PARTITION " 
                 + defaultPhysicalPartitionId + " FORCE";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
-        DropPhysicalPartitionClause clause = (DropPhysicalPartitionClause) alterTableStmt.getAlterClauseList().get(0);
-        Assertions.assertEquals(defaultPhysicalPartitionId, clause.getPhysicalPartitionId());
-        Assertions.assertTrue(clause.isForceDrop());
+        AnalysisException e = assertThrows(AnalysisException.class, () -> {
+            UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        });
+        Assertions.assertTrue(e.getMessage().contains("Cannot drop the default physical partition"));
 
-        dropSQL = "drop table test_drop_physical_partition_force";
+        dropSQL = "drop table test_drop_physical_partition_default";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }

@@ -16,15 +16,15 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
-
 /**
  * AddPhysicalPartitionClause is used to add a new physical partition (sub-partition)
  * to an existing logical partition. This is primarily used for random distribution tables
  * with automatic bucketing enabled.
  * 
+ * Physical partitions inherit all properties from the parent logical partition.
+ * 
  * Syntax:
- *   ALTER TABLE table_name ADD PHYSICAL PARTITION [partition_name] [BUCKETS bucket_num] [properties]
+ *   ALTER TABLE table_name ADD PHYSICAL PARTITION [partition_name] [BUCKETS bucket_num]
  * 
  * Example:
  *   ALTER TABLE my_table ADD PHYSICAL PARTITION p1 BUCKETS 16;
@@ -39,19 +39,14 @@ public class AddPhysicalPartitionClause extends AlterTableClause {
     // If 0, the system will infer the bucket number automatically
     private final int bucketNum;
 
-    // Optional properties for the new physical partition
-    private final Map<String, String> properties;
-
-    public AddPhysicalPartitionClause(String partitionName, int bucketNum, Map<String, String> properties) {
-        this(partitionName, bucketNum, properties, NodePosition.ZERO);
+    public AddPhysicalPartitionClause(String partitionName, int bucketNum) {
+        this(partitionName, bucketNum, NodePosition.ZERO);
     }
 
-    public AddPhysicalPartitionClause(String partitionName, int bucketNum, 
-                                       Map<String, String> properties, NodePosition pos) {
+    public AddPhysicalPartitionClause(String partitionName, int bucketNum, NodePosition pos) {
         super(pos);
         this.partitionName = partitionName;
         this.bucketNum = bucketNum;
-        this.properties = properties;
     }
 
     public String getPartitionName() {
@@ -60,10 +55,6 @@ public class AddPhysicalPartitionClause extends AlterTableClause {
 
     public int getBucketNum() {
         return bucketNum;
-    }
-
-    public Map<String, String> getProperties() {
-        return properties;
     }
 
     @Override

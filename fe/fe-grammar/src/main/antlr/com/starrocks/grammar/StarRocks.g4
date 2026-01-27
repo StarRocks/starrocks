@@ -1259,7 +1259,7 @@ addPartitionClause
     ;
 
 addPhysicalPartitionClause
-    : ADD PHYSICAL PARTITION identifier? (BUCKETS INTEGER_VALUE)? properties?
+    : ADD PHYSICAL PARTITION identifier? (BUCKETS INTEGER_VALUE)?
     ;
 
 dropPhysicalPartitionClause
