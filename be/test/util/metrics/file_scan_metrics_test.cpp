@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "exec/file_scanner/file_scanner.h"
+#include "exec/file_scanner.h"
 
 namespace starrocks {
 
