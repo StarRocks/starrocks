@@ -111,7 +111,7 @@ public class MaterializedViewMetricsRegistry {
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
         MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
-        for (Map.Entry<MvId, MaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
+        for (Map.Entry<MvId, IMaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
             IMaterializedViewMetricsEntity mvEntity = entry.getValue();
             if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
                 continue;
