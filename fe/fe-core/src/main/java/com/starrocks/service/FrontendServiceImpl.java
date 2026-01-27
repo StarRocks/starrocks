@@ -2362,6 +2362,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             Partition partition = olapTable.getPartition(partitionName, isTemp);
+            // partition maybe dropped between create and get, e.g. by TTL cleaner.
+            // Skip this partition and let BE handle it as partition not exist, data will be filtered.
+            if (partition == null) {
+                LOG.warn("partition {} is dropped during auto partition creation, skip it", partitionName);
+                continue;
+            }
             tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getDefaultPhysicalPartition().getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
