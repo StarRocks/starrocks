@@ -177,9 +177,6 @@ public class IcebergRewriteDataJob {
         executionId = new TUniqueId(queryId.hi, UUIDUtil.genUUID().getLeastSignificantBits());
         LOG.debug("generate a new execution id {} for query {}", DebugUtil.printId(executionId), DebugUtil.printId(queryId));
         context.setExecutionId(executionId);
-        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
-        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        context.setThreadLocalInfo();
 
         // clone an new session variable
         SessionVariable sessionVariable = (SessionVariable) connectContext.getSessionVariable().clone();
@@ -209,34 +206,36 @@ public class IcebergRewriteDataJob {
                 }
                 futures.add(executorService.submit(() -> {
                     ConnectContext subCtx = buildSubConnectContext(context);
-    
-                    IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
-                    ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
-    
-                    List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
-                            .flatMap(f -> f.collectScanNodes().values().stream())
-                            .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
-                            .map(s -> (IcebergScanNode) s)
-                            .collect(Collectors.toList());
-    
-                    if (localScanNodes.isEmpty()) {
-                        LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                    try (var scope = subCtx.bindScope()) {
+                        IcebergRewriteStmt localStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll);
+                        ExecPlan localPlan = StatementPlanner.plan(parsedStmt, subCtx);
+
+                        List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
+                                .flatMap(f -> f.collectScanNodes().values().stream())
+                                .filter(s -> s instanceof IcebergScanNode &&
+                                        "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .map(s -> (IcebergScanNode) s)
+                                .collect(Collectors.toList());
+
+                        if (localScanNodes.isEmpty()) {
+                            LOG.info("No IcebergScanNode in sub plan. Skip one task group.");
+                            return null;
+                        }
+                        for (IcebergScanNode sn : localScanNodes) {
+                            sn.rebuildScanRange(res);
+                        }
+
+                        StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
+                        if (context.getExecutor() != null) {
+                            context.getExecutor().registerSubStmtExecutor(exec);
+                        }
+                        try {
+                            exec.handleDMLStmt(localPlan, localStmt);
+                        } finally {
+                            exec.addFinishedQueryDetail();
+                        }
                         return null;
                     }
-                    for (IcebergScanNode sn : localScanNodes) {
-                        sn.rebuildScanRange(res);
-                    }
-    
-                    StmtExecutor exec = StmtExecutor.newInternalExecutor(subCtx, localStmt);
-                    if (context.getExecutor() != null) {
-                        context.getExecutor().registerSubStmtExecutor(exec);
-                    }
-                    try {
-                        exec.handleDMLStmt(localPlan, localStmt);
-                    } finally {
-                        exec.addFinishedQueryDetail();
-                    }
-                    return null;
                 }));
             }
             
