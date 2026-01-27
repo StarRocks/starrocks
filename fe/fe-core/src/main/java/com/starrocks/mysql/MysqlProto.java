@@ -239,6 +239,12 @@ public class MysqlProto {
         if (prevOriginalUserIdentity != null) {
             context.getAccessControlContext().setOriginalUserContext(
                     prevOriginalUserIdentity, prevOriginalGroups, prevOriginalRoleIds);
+        } else {
+            // Reset original context to null if previous session had none.
+            // This prevents the new user's original context (set by authenticate() before failure)
+            // from remaining after restore, which would allow the previous user to exploit
+            // the new user's IMPERSONATE privileges.
+            context.getAccessControlContext().resetOriginalUserContext();
         }
     }
 
