@@ -60,6 +60,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
@@ -450,6 +452,26 @@ public class OptExternalPartitionPruner {
             long rowCount = getRowCount(splits);
             if (rowCount > 0) {
                 scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
+
+            //check scan partition num
+            Set<BinaryRow> selectedPartitions = new HashSet<>();
+            for (Split split : splits) {
+                if (split instanceof DataSplit) {
+                    DataSplit dataSplit = (DataSplit) split;
+                    selectedPartitions.add(dataSplit.partition());
+                } else {
+                    // paimon system table, do nothing
+                }
+            }
+            int scanPaimonPartitionNumLimit = context.getSessionVariable().getScanPaimonPartitionNumLimit();
+            if (scanPaimonPartitionNumLimit > 0 && selectedPartitions.size() > scanPaimonPartitionNumLimit) {
+                String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
+                        "Number of partitions allowed: " + scanPaimonPartitionNumLimit +
+                        ", number of partitions to be scanned: " + selectedPartitions.size() +
+                        ". Please adjust the SQL or change the limit by set variable scan_paimon_partition_num_limit.";
+                LOG.warn("{} queryId: {}", msg, DebugUtil.printId(context.getQueryId()));
+                throw new AnalysisException(msg);
             }
         }
     }
