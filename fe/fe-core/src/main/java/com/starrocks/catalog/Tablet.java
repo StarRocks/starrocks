@@ -32,7 +32,7 @@ public abstract class Tablet extends MetaObject implements Writable {
     protected long id;
 
     @SerializedName(value = "range")
-    protected TabletRange range = new TabletRange();
+    protected TabletRange range;
 
     public Tablet() {
     }
