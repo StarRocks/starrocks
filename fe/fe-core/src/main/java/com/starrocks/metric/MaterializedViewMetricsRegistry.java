@@ -54,8 +54,6 @@ public class MaterializedViewMetricsRegistry {
         LOG.info("Removing materialized view metrics for mvId: {}", mvId);
         idToMVMetrics.remove(mvId);
     }
-<<<<<<< HEAD
-=======
     private IMaterializedViewMetricsEntity initMaterializedViewMetricsEntity(MvId mvId) {
         if (!Config.enable_materialized_view_metrics_collect) {
             return BLACK_HOLE_ENTITY;
@@ -67,13 +65,9 @@ public class MaterializedViewMetricsRegistry {
     public synchronized void registerMetricsEntity(MvId mvId) {
         idToMVMetrics.put(mvId, initMaterializedViewMetricsEntity(mvId));
     }
->>>>>>> e404c7ce2b ([BugFix] Add a timeout for mv metric collector (#68473))
 
     public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
-        if (!Config.enable_materialized_view_metrics_collect) {
-            return new MaterializedViewMetricsBlackHoleEntity();
-        }
-        return idToMVMetrics.computeIfAbsent(mvId, k -> new MaterializedViewMetricsEntity(metricRegistry, mvId));
+        return idToMVMetrics.computeIfAbsent(mvId, k -> initMaterializedViewMetricsEntity(k));
     }
 
     private class MetricsCleaner extends TimerTask {
