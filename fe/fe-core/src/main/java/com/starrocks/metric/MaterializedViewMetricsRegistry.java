@@ -33,9 +33,10 @@ public class MaterializedViewMetricsRegistry {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsRegistry.class);
 
     private final MetricRegistry metricRegistry = new MetricRegistry();
-    private final Map<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
+    private final Map<MvId, IMaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
+    private static final IMaterializedViewMetricsEntity BLACK_HOLE_ENTITY = new MaterializedViewMetricsBlackHoleEntity();
 
     private MaterializedViewMetricsRegistry() {
         idToMVMetrics = Maps.newHashMap();
@@ -53,12 +54,20 @@ public class MaterializedViewMetricsRegistry {
         LOG.info("Removing materialized view metrics for mvId: {}", mvId);
         idToMVMetrics.remove(mvId);
     }
+    private IMaterializedViewMetricsEntity initMaterializedViewMetricsEntity(MvId mvId) {
+        if (!Config.enable_materialized_view_metrics_collect) {
+            return BLACK_HOLE_ENTITY;
+        } else {
+            return new MaterializedViewMetricsEntity(metricRegistry, mvId);
+        }
+    }
+
+    public synchronized void registerMetricsEntity(MvId mvId) {
+        idToMVMetrics.put(mvId, initMaterializedViewMetricsEntity(mvId));
+    }
 
     public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
-        if (!Config.enable_materialized_view_metrics_collect) {
-            return new MaterializedViewMetricsBlackHoleEntity();
-        }
-        return idToMVMetrics.computeIfAbsent(mvId, k -> new MaterializedViewMetricsEntity(metricRegistry, mvId));
+        return idToMVMetrics.computeIfAbsent(mvId, k -> initMaterializedViewMetricsEntity(k));
     }
 
     private class MetricsCleaner extends TimerTask {
@@ -102,7 +111,7 @@ public class MaterializedViewMetricsRegistry {
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
         MaterializedViewMetricsRegistry instance = MaterializedViewMetricsRegistry.getInstance();
-        for (Map.Entry<MvId, MaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
+        for (Map.Entry<MvId, IMaterializedViewMetricsEntity> entry : instance.idToMVMetrics.entrySet()) {
             IMaterializedViewMetricsEntity mvEntity = entry.getValue();
             if (mvEntity == null || mvEntity instanceof MaterializedViewMetricsBlackHoleEntity) {
                 continue;
