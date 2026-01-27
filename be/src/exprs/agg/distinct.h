@@ -245,7 +245,7 @@ struct AdaptiveSliceHashSet {
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringOrBinaryGaurd<LT>> {
+struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -376,7 +376,7 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGaurd<LT>>
+struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
         : public DistinctAggregateState<LT, SumLT> {};
 
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
