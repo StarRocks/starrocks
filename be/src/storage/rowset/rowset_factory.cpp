@@ -63,12 +63,10 @@ Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::
         }
         if (data_dir != nullptr) {
             kvstore = data_dir->get_meta();
-        } else {
-#ifndef BE_TEST
-            LOG(ERROR) << "DataDir not found for path: " << rowset_path;
-            return Status::InternalError(fmt::format("DataDir not found for path: {}", rowset_path));
-#endif
         }
+        // If data_dir is not found, continue with kvstore = nullptr.
+        // This is valid for snapshot flows (e.g., SnapshotManager::convert_rowset_ids)
+        // that operate on arbitrary local directories outside configured store paths.
     }
     *rowset = Rowset::create(schema, rowset_path, rowset_meta, kvstore);
     RETURN_IF_ERROR((*rowset)->init());
