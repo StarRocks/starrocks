@@ -7573,21 +7573,35 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
         NodePosition pos = createPos(context);
+        ArithmeticExpr.Operator operator = getArithmeticBinaryOperator(context.operator);
         if (left instanceof IntervalLiteral) {
-            return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), right,
-                    ((IntervalLiteral) left).getValue(),
+            IntervalLiteral interval = (IntervalLiteral) left;
+            if (operator.isMultiplyOrDivide()) {
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, value, right);
+                return new IntervalLiteral(arithmetic, interval.getUnitIdentifier(), pos);
+            }
+            return new TimestampArithmeticExpr(operator, right, ((IntervalLiteral) left).getValue(),
                     ((IntervalLiteral) left).getUnitIdentifier().getDescription(),
                     true, pos);
         }
 
         if (right instanceof IntervalLiteral) {
-            return new TimestampArithmeticExpr(getArithmeticBinaryOperator(context.operator), left,
-                    ((IntervalLiteral) right).getValue(),
+            IntervalLiteral interval = (IntervalLiteral) right;
+            if (operator.isMultiplyOrDivide()) {
+                if (operator == ArithmeticExpr.Operator.DIVIDE) {
+                    throw new ParsingException("Do not support Expr divide IntervalLiteral syntax");
+                }
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, left, value);
+                return new IntervalLiteral(arithmetic, interval.getUnitIdentifier(), pos);
+            }
+            return new TimestampArithmeticExpr(operator, left, ((IntervalLiteral) right).getValue(),
                     ((IntervalLiteral) right).getUnitIdentifier().getDescription(),
                     false, pos);
         }
 
-        return new ArithmeticExpr(getArithmeticBinaryOperator(context.operator), left, right, pos);
+        return new ArithmeticExpr(operator, left, right, pos);
     }
 
     private static ArithmeticExpr.Operator getArithmeticBinaryOperator(Token operator) {
