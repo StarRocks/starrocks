@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <shared_mutex>
 
 #include "runtime/mem_tracker.h"
 #include "work_group_fwd.h"
