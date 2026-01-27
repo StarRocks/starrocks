@@ -84,6 +84,7 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -1040,6 +1041,11 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < tabletNum; ++i) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
+                if (remoteOlapTbl.isRangeDistribution()) {
+                    // In shared-nothing mode, ranges do not support splitting.
+                    // There will only be one default range.
+                    newTablet.setRange(new TabletRange());
+                }
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas
@@ -1079,6 +1085,11 @@ public class RestoreJob extends AbstractJob {
             for (int i = 0; i < tabletNum; i++) {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
+                if (remoteOlapTbl.isRangeDistribution()) {
+                    // In shared-nothing mode, ranges do not support splitting.
+                    // There will only be one default range.
+                    newTablet.setRange(new TabletRange());
+                }
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas

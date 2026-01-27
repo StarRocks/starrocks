@@ -16,7 +16,6 @@ package com.starrocks.alter.reshard;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -72,7 +71,7 @@ public class SplitTabletJobFactory implements TabletReshardJobFactory {
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
 
-        if (table.getDefaultDistributionInfo().getType() != DistributionInfoType.RANGE) {
+        if (!table.isRangeDistribution()) {
             throw new StarRocksException("Unsupported distribution type " + table.getDefaultDistributionInfo().getType()
                     + " in table " + db.getFullName() + '.' + table.getName());
         }
