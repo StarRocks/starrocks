@@ -535,9 +535,9 @@ public class CreateTableAnalyzerTest {
         try {
             String sql = "CREATE TABLE test_create_table_db.force_range_table\n" +
                     "(\n" +
-                    "    k1 date,\n" +
+                    "    k1 int,\n" +
                     "    k2 int,\n" +
-                    "    v1 int sum\n" +
+                    "    v1 int\n" +
                     ")\n" +
                     "DUPLICATE KEY(k1, k2)\n" +
                     "PROPERTIES('replication_num' = '1');";
