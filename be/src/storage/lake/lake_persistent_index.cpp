@@ -48,6 +48,13 @@ LakePersistentIndex::~LakePersistentIndex() {
     if (_memtable) {
         _memtable->clear();
     }
+    // Cancel all flushing memtable tasks
+    for (auto& memtable : _inactive_memtables) {
+        if (memtable) {
+            memtable->cancel();
+        }
+    }
+    _inactive_memtables.clear();
     _sstable_filesets.clear();
 }
 
