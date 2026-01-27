@@ -4696,19 +4696,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
             GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info);
-
-            final OlapTable finalOlapTable = olapTable;
-            GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info, wal -> {
-                // replace
-                truncateTableInternal(db.getId(), finalOlapTable, newPartitions, truncateEntireTable, false);
-                try {
-                    colocateTableIndex.updateLakeTableColocationInfo(finalOlapTable, true /* isJoin */,
-                            null /* expectGroupId */);
-                } catch (DdlException e) {
-                    LOG.info("table {} update colocation info failed when truncate table, {}",
-                            finalOlapTable.getId(), e.getMessage());
-                }
-            });
         } catch (DdlException e) {
             deleteUselessTablets(tabletIdSet);
             throw e;
