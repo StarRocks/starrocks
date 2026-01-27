@@ -810,6 +810,46 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testCanExecuteAsWithNullCurrent() throws Exception {
+        // Test edge case: current == null but original != null
+        // This covers lines 919-921 in AuthorizationMgr.canExecuteAs()
+        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        // Create a user to impersonate
+        CreateUserStmt createTargetUser = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user target_user", ctx);
+        ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createTargetUser);
+        UserIdentity targetUser = UserIdentity.createAnalyzedUserIdentWithIp("target_user", "%");
+
+        // Grant IMPERSONATE to original user (testUser)
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER target_user TO test_user", ctx);
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        manager.grant(grantStmt);
+
+        // Setup: Set original context but leave currentUserIdentity as null
+        ctx.getAccessControlContext().initOriginalUserContext(
+                testUser, Set.of(), Set.of());
+        // Explicitly set currentUserIdentity to null to test the edge case
+        ctx.setCurrentUserIdentity(null);
+
+        // canExecuteAs should use original* when current is null
+        boolean result = manager.canExecuteAs(ctx, targetUser);
+        Assertions.assertTrue(result, "Should use original user's privileges when current is null");
+
+        // Verify it fails when original user doesn't have permission
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE IMPERSONATE ON USER target_user FROM test_user", ctx);
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        manager.revoke(revokeStmt);
+
+        // Still null current, but original no longer has permission
+        ctx.setCurrentUserIdentity(null);
+        result = manager.canExecuteAs(ctx, targetUser);
+        Assertions.assertFalse(result, "Should fail when original user doesn't have permission");
+    }
+
+    @Test
     public void testShowDbsTables() throws Exception {
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
