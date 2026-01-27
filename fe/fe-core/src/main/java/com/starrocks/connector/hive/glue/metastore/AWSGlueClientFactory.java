@@ -25,7 +25,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.GlueClientBuilder;
 
-import java.net.URI;
+import static com.starrocks.connector.share.credential.AwsCredentialUtil.ensureSchemeInEndpoint;
 
 public final class AWSGlueClientFactory implements GlueClientFactory {
 
@@ -50,7 +50,7 @@ public final class AWSGlueClientFactory implements GlueClientFactory {
                 glueClientBuilder.region(glueCloudCredential.tryToResolveRegion());
 
                 if (!glueCloudCredential.getEndpoint().isEmpty()) {
-                    glueClientBuilder.endpointOverride(URI.create(glueCloudCredential.getEndpoint()));
+                    glueClientBuilder.endpointOverride(ensureSchemeInEndpoint(glueCloudCredential.getEndpoint()));
                 }
             }
             return glueClientBuilder.build();
