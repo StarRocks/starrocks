@@ -179,4 +179,50 @@ public class UseDbTest {
         Assertions.assertEquals(QueryState.MysqlStateType.OK, context.getState().getStateType());
         Assertions.assertFalse(context.getState().isError());
     }
+
+    /**
+     * Test case: Use database statement sets SERVER_SESSION_STATE_CHANGED flag
+     * Test point: Verify that SERVER_SESSION_STATE_CHANGED flag is set in serverStatus
+     * after USE database statement for pymysql/mysqlclient compatibility
+     */
+    @Test
+    public void testUseDbSetsSessionStateChangedFlag() throws Exception {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                if (dbName.equals("db1")) {
+                    return new Database(1, "db1");
+                }
+                return null;
+            }
+        };
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        MockedLocalMetaStore localMetastore = new MockedLocalMetaStore(globalStateMgr, globalStateMgr.getRecycleBin(), null);
+        localMetastore.init();
+        globalStateMgr.setLocalMetastore(localMetastore);
+
+        RBACMockedMetadataMgr metadataMgr =
+                new RBACMockedMetadataMgr(localMetastore, globalStateMgr.getConnectorMgr());
+        globalStateMgr.setMetadataMgr(metadataMgr);
+
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(UserIdentity.ROOT);
+        context.setQueryId(UUIDUtil.genUUID());
+        context.setCurrentCatalog("default_catalog");
+
+        String sql = "use db1;";
+        UseDbStmt useDbStmt = (UseDbStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Analyzer.analyze(useDbStmt, context);
+
+        StmtExecutor stmtExecutor = new StmtExecutor(context, useDbStmt);
+        stmtExecutor.execute();
+
+        // Verify that SERVER_SESSION_STATE_CHANGED flag is set
+        // This flag (0x4000) is required for pymysql/mysqlclient to recognize database context change
+        final int SERVER_SESSION_STATE_CHANGED = 0x4000;
+        Assertions.assertTrue((context.getState().serverStatus & SERVER_SESSION_STATE_CHANGED) != 0,
+                "SERVER_SESSION_STATE_CHANGED flag should be set after USE database statement");
+    }
 }

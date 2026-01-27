@@ -106,6 +106,7 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataSink;
@@ -2264,6 +2265,8 @@ public class StmtExecutor {
             context.getState().setError(e.getMessage());
             return;
         }
+        // Set SERVER_SESSION_STATE_CHANGED flag to notify MySQL clients that session state has changed
+        context.getState().serverStatus |= MysqlServerStatusFlag.SERVER_SESSION_STATE_CHANGED;
         context.getState().setOk();
     }
 
@@ -2277,6 +2280,8 @@ public class StmtExecutor {
             context.getState().setError(e.getMessage());
             return;
         }
+        // Set SERVER_SESSION_STATE_CHANGED flag to notify MySQL clients that session state has changed
+        context.getState().serverStatus |= MysqlServerStatusFlag.SERVER_SESSION_STATE_CHANGED;
         context.getState().setOk();
     }
 
@@ -2289,6 +2294,8 @@ public class StmtExecutor {
             context.getState().setError(e.getMessage());
             return;
         }
+        // Set SERVER_SESSION_STATE_CHANGED flag to notify MySQL clients that session state has changed
+        context.getState().serverStatus |= MysqlServerStatusFlag.SERVER_SESSION_STATE_CHANGED;
         context.getState().setOk();
     }
 

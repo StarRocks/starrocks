@@ -158,6 +158,8 @@ public class ConnectProcessor {
             return;
         }
 
+        // Set SERVER_SESSION_STATE_CHANGED flag to notify MySQL clients that session state has changed
+        ctx.getState().serverStatus |= MysqlServerStatusFlag.SERVER_SESSION_STATE_CHANGED;
         ctx.getState().setOk();
     }
 
