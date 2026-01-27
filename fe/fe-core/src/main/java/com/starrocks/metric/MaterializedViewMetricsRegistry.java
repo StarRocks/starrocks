@@ -33,7 +33,7 @@ public class MaterializedViewMetricsRegistry {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMetricsRegistry.class);
 
     private final MetricRegistry metricRegistry = new MetricRegistry();
-    private final Map<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
+    private final Map<MvId, IMaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
     private static final IMaterializedViewMetricsEntity BLACK_HOLE_ENTITY = new MaterializedViewMetricsBlackHoleEntity();
