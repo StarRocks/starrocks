@@ -522,6 +522,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
+    public static final String ENABLE_RANGE_DISTRIBUTION = "enable_range_distribution";
+
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
@@ -1862,6 +1864,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION)
+    private boolean enableRangeDistribution = false;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private boolean singleNodeExecPlan = false;
@@ -4574,6 +4579,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAllowDefaultPartition() {
         return allowDefaultPartition;
+    }
+
+    public boolean isEnableRangeDistribution() {
+        return enableRangeDistribution;
+    }
+
+    public void setEnableRangeDistribution(boolean enableRangeDistribution) {
+        this.enableRangeDistribution = enableRangeDistribution;
     }
 
     public void setAllowDefaultPartition(boolean allowDefaultPartition) {
