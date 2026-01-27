@@ -36,6 +36,7 @@ public class MaterializedViewMetricsRegistry {
     private final Map<MvId, MaterializedViewMetricsEntity> idToMVMetrics;
     private final ScheduledThreadPoolExecutor timer;
     private static final MaterializedViewMetricsRegistry INSTANCE = new MaterializedViewMetricsRegistry();
+    private static final IMaterializedViewMetricsEntity BLACK_HOLE_ENTITY = new MaterializedViewMetricsBlackHoleEntity();
 
     private MaterializedViewMetricsRegistry() {
         idToMVMetrics = Maps.newHashMap();
@@ -53,6 +54,20 @@ public class MaterializedViewMetricsRegistry {
         LOG.info("Removing materialized view metrics for mvId: {}", mvId);
         idToMVMetrics.remove(mvId);
     }
+<<<<<<< HEAD
+=======
+    private IMaterializedViewMetricsEntity initMaterializedViewMetricsEntity(MvId mvId) {
+        if (!Config.enable_materialized_view_metrics_collect) {
+            return BLACK_HOLE_ENTITY;
+        } else {
+            return new MaterializedViewMetricsEntity(metricRegistry, mvId);
+        }
+    }
+
+    public synchronized void registerMetricsEntity(MvId mvId) {
+        idToMVMetrics.put(mvId, initMaterializedViewMetricsEntity(mvId));
+    }
+>>>>>>> e404c7ce2b ([BugFix] Add a timeout for mv metric collector (#68473))
 
     public synchronized IMaterializedViewMetricsEntity getMetricsEntity(MvId mvId) {
         if (!Config.enable_materialized_view_metrics_collect) {
