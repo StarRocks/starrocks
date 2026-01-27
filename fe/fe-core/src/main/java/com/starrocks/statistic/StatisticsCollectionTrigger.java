@@ -221,24 +221,25 @@ public class StatisticsCollectionTrigger {
                 analyzeStatus.setStartTime(LocalDateTime.now());
                 StatisticExecutor statisticExecutor = new StatisticExecutor();
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                // set session id for temporary table
-                if (table.isTemporaryTable()) {
-                    statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
-                }
-                statsConnectCtx.setThreadLocalInfo();
-                StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                        new ArrayList<>(partitionIds), null, null,
-                        analyzeType, StatsConstants.ScheduleType.ONCE,
-                        analyzeStatus.getProperties(), List.of(), List.of(), false);
-                if (!partitionTabletRowCounts.isEmpty()) {
-                    job.setPartitionTabletRowCounts(partitionTabletRowCounts);
-                }
+                try (var scope = statsConnectCtx.bindScope()) {
+                    // set session id for temporary table
+                    if (table.isTemporaryTable()) {
+                        statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
+                    }
+                    StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                            new ArrayList<>(partitionIds), null, null,
+                            analyzeType, StatsConstants.ScheduleType.ONCE,
+                            analyzeStatus.getProperties(), List.of(), List.of(), false);
+                    if (!partitionTabletRowCounts.isEmpty()) {
+                        job.setPartitionTabletRowCounts(partitionTabletRowCounts);
+                    }
 
-                statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
-                        true /* resetWarehouse */);
-                if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
-                    AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
-                    overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                    statisticExecutor.collectStatistics(statsConnectCtx, job, analyzeStatus, false,
+                            true /* resetWarehouse */);
+                    if (dmlType == DmlType.INSERT_OVERWRITE && overwriteJobStats != null) {
+                        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+                        overwriteJobStats.getSourcePartitionIds().forEach(analyzeMgr::recordDropPartition);
+                    }
                 }
             };
 
