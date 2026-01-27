@@ -35,9 +35,6 @@ select regexp_replace('xaxaxax', 'xax', '-');
 
 select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;
 
-
--- name: test_regexp
-
 CREATE TABLE `tsr` (
   `str` varchar(65533) NULL COMMENT "",
   `regex` varchar(65533) NULL COMMENT "",
@@ -61,8 +58,6 @@ SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", pos) from tsr;
 SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3);
 SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
 SELECT regexp_extract_all(str, regex, 3) from tsr;
-
--- name: test_regexp_position
 
 SELECT regexp_position('a.b:c;d', '[.]');
 SELECT regexp_position('a.b:c;d', '[\\.:;]', 2);
@@ -93,6 +88,19 @@ SELECT regexp_position('有朋$%X自9远方9来', '来', 999);
 SELECT regexp_position('行成于思str而毁123于随', '于', 3, 2);
 SELECT regexp_position('行成于思str而毁123于随', '',  3, 1);
 SELECT regexp_position('行成于思str而毁123于随', '',  3, 2);
+
+-- Test VALUES clause inputs to cover expression path
+SELECT regexp_position(column_0, 'T') FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+SELECT regexp_position(column_0, '61') FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+SELECT regexp_position(column_0, '0', 1, 3) FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+-- range: start at end
+SELECT regexp_position(column_0, 'Z', 20) FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+-- range: occurrence beyond match count
+SELECT regexp_position(column_0, '01', 12, 2) FROM (VALUES ('2024-01-01T01:61:00')) AS tmp;
+-- exception: invalid regex expression path
+SELECT regexp_position(column_0, '(unclosed') FROM (VALUES ('oops')) AS tmp;
+-- NULL input through VALUES
+SELECT regexp_position(column_0, 'x') FROM (VALUES (NULL)) AS tmp;
 
 -- Test general path with non-constant patterns 
 CREATE TABLE `tsp_general` (
@@ -149,8 +157,6 @@ SELECT regexp_position('test', '[0-9]', 1, 0);
 SELECT regexp_position('test', '[0-9]', 1, -1);
 
 
--- name: test_regexp_count
-
 CREATE TABLE `tsc` (
   `str` varchar(65533) NULL COMMENT "",
   `regex` varchar(65533) NULL COMMENT ""
@@ -173,8 +179,6 @@ select regexp_count('AbCdExCeF', 'C');
 select regexp_count('1a 2b 14m', '\\d+');
 
 select str, regex, regexp_count(str, regex) from tsc order by str, regex;
-
--- name: test_regexp_count_invalid
 
 CREATE TABLE `tsc_invalid` (
   `str` varchar(65533) NULL COMMENT "",
@@ -199,8 +203,6 @@ select regexp_count('test string', 'a{,}');
 select regexp_count(NULL, '[0-9');
 select regexp_count('', '[0-9');
 select regexp_count('test', NULL);
-
--- name: test_regexp_replace_hyperscan_vec_multiple_rows
 
 -- Test for issue #65936: regexp_replace with enable_hyperscan_vec=true 
 -- produces incorrect output when processing multiple rows
