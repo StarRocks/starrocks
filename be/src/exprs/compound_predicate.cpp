@@ -66,7 +66,9 @@ public:
     }
 
 #ifdef STARROCKS_JIT_ENABLE
-    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::LOGICAL);
+    }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
@@ -146,7 +148,9 @@ public:
 
 #ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::LOGICAL);
+    }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
@@ -207,7 +211,9 @@ public:
     }
 #ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->can_jit_expr(CompilableExprType::LOGICAL);
+    }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};

@@ -28,6 +28,7 @@
 #include "gutil/strings/substitute.h"
 #include "hs/hs_compile.h"
 #include "hs/hs_runtime.h"
+#include "service/backend_options.h"
 #include "util/defer_op.h"
 
 using namespace std;
@@ -38,7 +39,7 @@ DECLARE_bool(cn);
 static std::vector<string> list_log_files_in_dir(const string& log_dir, char level) {
     std::vector<string> files;
     // if level in WARNING, ERROR, FATAL, use logging logs, else use info logs
-    const std::string process = FLAGS_cn ? "cn" : "be";
+    const std::string process = BackendOptions::is_cn() ? "cn" : "be";
     const std::string pattern = process + (string("WEF").find(level) == string::npos ? ".INFO.log." : ".WARNING.log.");
     for (const auto& entry : filesystem::directory_iterator(log_dir)) {
         if (entry.is_regular_file()) {

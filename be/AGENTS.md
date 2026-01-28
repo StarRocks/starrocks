@@ -28,6 +28,10 @@ be/src/
 └── simd/             # SIMD utilities
 ```
 
+### Common Module Dependency Rule
+
+`be/src/common` must only depend on `gen_cpp` and `gutil` (plus standard/system/third-party libs). Avoid adding dependencies on other StarRocks BE modules.
+
 ## Build Commands
 
 ```bash

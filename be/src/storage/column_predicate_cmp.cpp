@@ -525,7 +525,9 @@ public:
 #endif
     }
 
-    bool support_original_bloom_filter() const override { return true; }
+    bool support_original_bloom_filter() const override {
+        return true;
+    }
 
     bool original_bloom_filter(const BloomFilter* bf) const override {
         static_assert(field_type != TYPE_JSON, "TODO");
