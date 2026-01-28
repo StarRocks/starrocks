@@ -1076,7 +1076,11 @@ PARTITION BY (par_col1[, par_col2...])
 :::note
 
 - 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+<<<<<<< HEAD
 - 您可以通过会话变量 [connector_sink_compression_codec](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来指定写入 Hive 表时的压缩算法。
+=======
+- 您可以通过表属性 [`compression_codec`](#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。StarRocks 会优先选择表属性中指定的 `compression_codec` 来使用。
+>>>>>>> d12eb4d129 ([Doc] Fix Anchor in Hive Catalog (#68526))
 
 :::
 
