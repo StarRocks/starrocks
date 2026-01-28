@@ -33,6 +33,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.LazyWorkerProvider;
+import com.starrocks.qe.scheduler.SkipBlacklistWorkerProvider;
 import com.starrocks.qe.scheduler.TFragmentInstanceFactory;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
@@ -85,14 +86,12 @@ public class CoordinatorPreprocessor {
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
     public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
-        workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
         this.connectContext = Preconditions.checkNotNull(context);
         this.jobSpec = jobSpec;
         this.enablePhasedSchedule = enablePhasedSchedule;
         this.executionDAG = ExecutionDAG.build(jobSpec);
-
+        workerProviderFactory = newWorkerProviderFactory();
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
@@ -105,13 +104,12 @@ public class CoordinatorPreprocessor {
 
     @VisibleForTesting
     CoordinatorPreprocessor(List<PlanFragment> fragments, List<ScanNode> scanNodes, ConnectContext context) {
-        workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
-
         this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
         this.enablePhasedSchedule = false;
         this.executionDAG = ExecutionDAG.build(jobSpec);
+        workerProviderFactory = newWorkerProviderFactory();
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.lazyWorkerProvider = LazyWorkerProvider.of(() -> workerProviderFactory.captureAvailableWorkers(
@@ -149,10 +147,21 @@ public class CoordinatorPreprocessor {
     }
 
     private WorkerProvider.Factory newWorkerProviderFactory() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        boolean skipBlackList = sessionVariable.isSkipBlackList();
+        
         if (RunMode.isSharedDataMode()) {
-            return new DefaultSharedDataWorkerProvider.Factory();
+            if (skipBlackList) {
+                return new com.starrocks.lake.qe.scheduler.SkipBlacklistSharedDataWorkerProvider.Factory();
+            } else {
+                return new DefaultSharedDataWorkerProvider.Factory();
+            }
         } else {
-            return new DefaultWorkerProvider.Factory();
+            if (skipBlackList) {
+                return new SkipBlacklistWorkerProvider.Factory();
+            } else {
+                return new DefaultWorkerProvider.Factory();
+            }
         }
     }
 
