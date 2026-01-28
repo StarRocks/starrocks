@@ -48,6 +48,10 @@ under the License.
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
         <async.profiler.arg></async.profiler.arg>
+        
+        <!-- JaCoCo incremental coverage properties -->
+        <jacoco.base.branch>${env.JACOCO_BASE_BRANCH:-HEAD~1}</jacoco.base.branch>
+        <jacoco.includes>${env.JACOCO_INCLUDES:-com/starrocks/**}</jacoco.includes>
     </properties>
 
     <profiles>
@@ -962,6 +966,7 @@ under the License.
                     </execution>
                 </executions>
             </plugin>
+            
             <!-- fe ut coverage-->
             <plugin>
                 <groupId>org.jacoco</groupId>
@@ -981,7 +986,8 @@ under the License.
                         </goals>
                         <configuration>
                             <includes>
-                                <include>com/starrocks/**</include>
+                                <!-- Dynamic includes will be loaded from generated file -->
+                                <include>${jacoco.includes}</include>
                             </includes>
                             <excludes>
                                 <exclude>com/starrocks/proto/**</exclude>
