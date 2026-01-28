@@ -1326,4 +1326,70 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
         starRocksAssert.dropTable("test_base_table1");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
+
+    @Test
+    public void testMVPartitionRefreshRewrite3() throws Exception {
+        sql("CREATE TABLE test_base_table(\n" +
+                "    `id`             bigint(20) NULL,\n" +
+                "    `pt`             date NULL,\n" +
+                "    `gmv`            bigint(20) NULL\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "  PARTITION BY RANGE(pt)(\n" +
+                "  START (\"2022-04-01\") END (\"2022-04-03\") EVERY (INTERVAL 1 day))\n" +
+                "  DISTRIBUTED BY HASH(id)\n" +
+                "  PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        sql("INSERT INTO test_base_table partition('p20220401') VALUES (987654321, '2022-04-01', 1);");
+        sql("CREATE MATERIALIZED VIEW test_base_mv \n" +
+                "partition by (pt)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS\n" +
+                "SELECT pt, id, sum(gmv) FROM test_base_table group by pt,id;");
+
+        sql("refresh materialized view test_base_mv partition start('2022-04-01') end ('2022-04-02') with sync mode;");
+
+        sql("CREATE TABLE test_sub_table(\n" +
+                "    `id`             bigint(20) NULL,\n" +
+                "    `pt`             date NULL,\n" +
+                "    `gmv`            bigint(20) NULL\n" +
+                ") DUPLICATE KEY(id)\n" +
+                "  PARTITION BY RANGE(pt)(\n" +
+                "  START (\"2022-04-01\") END (\"2022-04-03\") EVERY (INTERVAL 1 day))\n" +
+                "  DISTRIBUTED BY HASH(id)\n" +
+                "  PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
+        sql("INSERT INTO test_sub_table partition('p20220401') VALUES (987654321, '2022-04-01', 1);");
+        sql("CREATE MATERIALIZED VIEW test_sub_mv \n" +
+                "partition by (pt)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "AS\n" +
+                "SELECT pt, id, sum(gmv) FROM test_sub_table group by pt,id;");
+
+        sql("refresh materialized view test_sub_mv partition start('2022-04-01') end ('2022-04-02') with sync mode;");
+
+        String query = "SELECT  COUNT(*) AS cnt\n" +
+                "FROM\n" +
+                "(\n" +
+                "SELECT  pt\n" +
+                "       ,id,sum(gmv)\n" +
+                "FROM test_base_table\n" +
+                "WHERE pt ='2022-04-01'\n" +
+                "AND id IN ( SELECT id FROM test_sub_table WHERE pt = '2022-04-01' GROUP BY id)\n" +
+                "GROUP BY  pt\n" +
+                "         ,id\n" +
+                ") T";
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
+        {
+            String plan = getFragmentPlan(query);
+            // mv test_base_mv should be used
+            PlanTestBase.assertContains(plan, "test_base_mv", "test_sub_mv");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(false);
+        starRocksAssert.dropTable("test_base_table");
+        starRocksAssert.dropMaterializedView("test_base_mv");
+        starRocksAssert.dropTable("test_sub_table");
+        starRocksAssert.dropMaterializedView("test_sub_mv");
+    }
 }
