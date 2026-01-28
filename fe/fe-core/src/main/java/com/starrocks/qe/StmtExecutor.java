@@ -1994,9 +1994,15 @@ public class StmtExecutor {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
             if (analyzeTypeDesc.isHistogram()) {
+                List<com.starrocks.type.Type> columnTypes = analyzeStmt.getColumnTypes();
+                if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                    columnTypes = analyzeStmt.getColumnNames().stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                }
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new ExternalHistogramStatisticsCollectJob(analyzeStmt.getCatalogName(),
-                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
+                                db, table, analyzeStmt.getColumnNames(), columnTypes,
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -2017,9 +2023,15 @@ public class StmtExecutor {
             }
         } else {
             if (analyzeTypeDesc.isHistogram()) {
+                List<com.starrocks.type.Type> columnTypes = analyzeStmt.getColumnTypes();
+                if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                    columnTypes = analyzeStmt.getColumnNames().stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                }
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
+                                columnTypes, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
