@@ -98,17 +98,17 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     /**
      * All the compute nodes (including backends), including those that are not alive or in block list.
      */
-    private final ImmutableMap<Long, ComputeNode> id2ComputeNode;
+    protected final ImmutableMap<Long, ComputeNode> id2ComputeNode;
     /**
      * The available compute nodes, which are alive and not in the block list when creating the snapshot. It is still
      * possible that the node becomes unavailable later, it will be checked again in some of the interfaces.
      */
-    private final ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
+    protected final ImmutableMap<Long, ComputeNode> availableID2ComputeNode;
 
     /**
      * List of the compute node ids, used to select buddy node in case some of the nodes are not available.
      */
-    private ImmutableList<Long> allComputeNodeIds;
+    protected ImmutableList<Long> allComputeNodeIds;
 
     private final Set<Long> selectedWorkerIds;
 
@@ -275,7 +275,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
         return out.toString();
     }
 
-    private void createAvailableIdList() {
+    protected void createAvailableIdList() {
         List<Long> ids = new ArrayList<>(id2ComputeNode.keySet());
         Collections.sort(ids);
         this.allComputeNodeIds = ImmutableList.copyOf(ids);
