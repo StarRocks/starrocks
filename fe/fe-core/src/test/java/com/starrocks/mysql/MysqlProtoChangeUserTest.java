@@ -14,25 +14,21 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.MysqlPassword;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.MockedLocalMetaStore;
 import com.starrocks.authorization.RBACMockedMetadataMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
-import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateUserStmt;
-import com.starrocks.sql.ast.ExecuteAsStmt;
-import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -412,38 +408,22 @@ public class MysqlProtoChangeUserTest {
      */
     @Test
     public void testChangeUserFailWithOriginalContext() throws Exception {
-        // Setup: Login as user1, then EXECUTE AS user2 (so original=user1, current=user2)
-        ConnectContext testContext = new ConnectContext();
-        // Mock MysqlChannel for testContext
-        new MockUp<com.starrocks.mysql.MysqlChannel>() {
-            @Mock
-            public String getRemoteIp() {
-                return "127.0.0.1";
-            }
-        };
-        AuthenticationHandler.authenticate(testContext, "user1", "127.0.0.1", MysqlPassword.EMPTY_PASSWORD);
+        // Setup: Simulate a session with original context set (as if after EXECUTE AS)
+        // We don't actually authenticate - just set up the context state directly
         
-        // Verify original context is set after authentication
-        UserIdentity originalUser1 = testContext.getAccessControlContext().getOriginalUserIdentity();
-        Assertions.assertNotNull(originalUser1, "Original context should be set after authentication");
-        Assertions.assertEquals("user1", originalUser1.getUser());
+        UserIdentity user1Identity = UserIdentity.createAnalyzedUserIdentWithIp("user1", "%");
+        UserIdentity user2Identity = UserIdentity.createAnalyzedUserIdentWithIp("user2", "%");
         
-        // EXECUTE AS user2
-        ExecuteAsStmt executeAsStmt = new ExecuteAsStmt(new UserRef("user2", "%"), false);
-        ExecuteAsExecutor.execute(executeAsStmt, testContext);
+        // Setup context as if: login as user1, then EXECUTE AS user2
+        // original = user1, current = user2
+        context.getAccessControlContext().initOriginalUserContext(user1Identity, null, null);
+        context.setCurrentUserIdentity(user2Identity);
+        context.setQualifiedUser("user2");
         
-        // Verify we're now impersonating user2, but original is still user1
-        Assertions.assertEquals("user2", testContext.getCurrentUserIdentity().getUser());
-        Assertions.assertEquals("user1", testContext.getAccessControlContext().getOriginalUserIdentity().getUser(),
-                "Original should remain user1 after EXECUTE AS");
-        
-        // Now setup context for CHANGE USER test (copy the state)
-        context.setCurrentUserIdentity(testContext.getCurrentUserIdentity());
-        context.setQualifiedUser(testContext.getQualifiedUser());
-        context.getAccessControlContext().setOriginalUserContext(
-                testContext.getAccessControlContext().getOriginalUserIdentity(),
-                testContext.getAccessControlContext().getOriginalGroups(),
-                testContext.getAccessControlContext().getOriginalRoleIds());
+        // Verify setup
+        Assertions.assertEquals("user2", context.getCurrentUserIdentity().getUser());
+        Assertions.assertEquals("user1", context.getAccessControlContext().getOriginalUserIdentity().getUser(),
+                "Original should be user1");
         
         // Mock ConnectScheduler to return failure (simulating user limit reached)
         new MockUp<ConnectScheduler>() {

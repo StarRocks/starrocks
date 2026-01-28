@@ -148,6 +148,22 @@ public class AccessControlContext {
         return originalRoleIds == null ? Collections.emptySet() : originalRoleIds;
     }
 
+    /**
+     * Update originalRoleIds to match current session's role IDs if not yet impersonating.
+     * This ensures SET ROLE executed BEFORE the first EXECUTE AS is honored when chaining.
+     * Should be called right before the first EXECUTE AS changes currentUserIdentity.
+     *
+     * @param currentUser the current user identity before EXECUTE AS
+     * @param currentRoleIds the current role IDs (reflecting any SET ROLE changes)
+     */
+    public void snapshotRoleIdsIfNotImpersonating(UserIdentity currentUser, Set<Long> currentRoleIds) {
+        // Only update if we haven't started impersonating yet (current == original)
+        if (this.originalUserIdentity != null && currentUser != null
+                && currentUser.equals(this.originalUserIdentity)) {
+            this.originalRoleIds = currentRoleIds == null ? new HashSet<>() : new HashSet<>(currentRoleIds);
+        }
+    }
+
     public void setDistinguishedName(String distinguishedName) {
         this.distinguishedName = distinguishedName;
     }

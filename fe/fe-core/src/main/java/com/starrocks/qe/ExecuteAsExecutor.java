@@ -55,6 +55,12 @@ public class ExecuteAsExecutor {
         } else {
             userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
         }
+
+        // Snapshot current role IDs into originalRoleIds if this is the first EXECUTE AS.
+        // This ensures SET ROLE executed before EXECUTE AS is honored when chaining.
+        ctx.getAccessControlContext().snapshotRoleIdsIfNotImpersonating(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds());
+
         ctx.setCurrentUserIdentity(userIdentity);
 
         // Refresh groups and roles for all users based on security integration
