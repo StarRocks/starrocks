@@ -4713,10 +4713,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
         }
         auto str_value = str_viewer.value(row);
         Slice value;
-        if (!UrlParser::parse_url(str_value, url_part, &value)) {
+        auto status = UrlParser::parse_url(str_value, url_part, &value);
+        if (status == UrlParser::ParseStatus::INVALID) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
+            result.append_null();
+            continue;
+        }
+        if (status == UrlParser::ParseStatus::NOT_FOUND) {
             result.append_null();
             continue;
         }
@@ -4740,10 +4745,15 @@ StatusOr<ColumnPtr> StringFunctions::parse_const_urlpart(UrlParser::UrlPart* url
 
         auto str_value = str_viewer.value(row);
         Slice value;
-        if (!UrlParser::parse_url(str_value, *url_part, &value)) {
+        auto status = UrlParser::parse_url(str_value, *url_part, &value);
+        if (status == UrlParser::ParseStatus::INVALID) {
             std::stringstream ss;
             ss << "Could not parse URL: " << str_value.to_string();
             context->add_warning(ss.str().c_str());
+            result.append_null();
+            continue;
+        }
+        if (status == UrlParser::ParseStatus::NOT_FOUND) {
             result.append_null();
             continue;
         }
@@ -4804,7 +4814,8 @@ static bool seek_param_key_in_query_params(const Slice& query_params, const Slic
 
 static bool seek_param_key_in_url(const Slice& url, const Slice& param_key, std::string* param_value) {
     Slice query_params;
-    if (!UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params)) {
+    auto status = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
+    if (status != UrlParser::ParseStatus::OK) {
         return false;
     }
     return seek_param_key_in_query_params(query_params, param_key, param_value);
@@ -4927,9 +4938,9 @@ Status StringFunctions::url_extract_parameter_prepare(starrocks::FunctionContext
         auto url_column = context->get_constant_column(0);
         auto url = ColumnHelper::get_const_value<TYPE_VARCHAR>(url_column);
         Slice query_params;
-        auto parse_success = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
+        auto status = UrlParser::parse_url(url, UrlParser::UrlPart::QUERY, &query_params);
         state->opt_const_query_params = query_params.to_string();
-        ill_formed |= !parse_success || query_params.size == 0;
+        ill_formed |= status != UrlParser::ParseStatus::OK || query_params.size == 0;
     }
 
     // result is const null is either url or param_key is ill-formed
