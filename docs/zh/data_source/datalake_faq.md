@@ -97,3 +97,12 @@ displayed_sidebar: docs
 2. 如果结果一致，继续通过禁用 Data Cache 并再次查询来排查问题是否仍然存在。
 
 根本原因：更新 Iceberg 表数据是通过覆盖旧文件来实现的，这会破坏 Iceberg 的历史数据。正确的行为是在写入更新时生成新的文件名。StarRocks Data Cache 使用文件名、文件大小和修改时间来确定缓存数据是否有效。由于 Iceberg 不覆盖文件且修改时间始终为 0，StarRocks 错误地将文件视为未更改并从缓存中读取，导致查询结果过时。
+
+## 查询集成了 JuiceFS 的 External Catalog 中的表后，FE 频繁崩溃。如何解决？
+
+需要在 **fe.conf** 文件中添加以下配置项后重启 FE：
+
+```Properties
+proc_profile_mem_enable=false
+proc_profile_cpu_enable=false
+```
