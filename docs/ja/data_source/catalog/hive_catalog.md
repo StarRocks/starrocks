@@ -1070,7 +1070,7 @@ StarRocks の内部テーブルと同様に、Hive テーブル（管理テー�
 :::note
 
 - [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) および [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) を使用して権限を付与および取り消すことができます。
-- テーブルプロパティ [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md# connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに適用する圧縮アルゴリズムを指定できます。StarRocks はテーブルプロパティで指定された圧縮コーデックを優先的に使用します。
+- テーブルプロパティ [`compression_codec`](#properties) またはシステム変数 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md# connector_sink_compression_codec) を使用して、Hive テーブルへのデータシンクに適用する圧縮アルゴリズムを指定できます。StarRocks はテーブルプロパティで指定された圧縮コーデックを優先的に使用します。
 
 :::
 
