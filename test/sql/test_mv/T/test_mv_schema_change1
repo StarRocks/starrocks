@@ -42,6 +42,13 @@ DESC test_mv1;
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
 SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 order by ALL limit 3;
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- test mv add column with default value
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN cnt_c3 AS count(c3) DEFAULT "0";
+function: wait_alter_table_finish()
+DESC test_mv1;
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, count(c3) as cnt_c3 from t1 group by dt, c0", "test_mv1")
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, count(c3) as cnt_c3 from t1 group by dt, c0 order by ALL limit 3;
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- refresh mv after add column
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0);
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
@@ -159,6 +166,13 @@ DESC test_mv2;
 SELECT dt, c0, c1, c3 FROM test_mv2 ORDER BY ALL LIMIT 3;
 SELECT dt, c0, c1, c3 + 1 from t2 order by ALL limit 3;
 
+-- test mv add column with default value
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3_default AS c3 + 1 DEFAULT "0";
+function: wait_alter_table_finish()
+DESC test_mv2;
+SELECT dt, c0, c1, c3, c3_default FROM test_mv2 ORDER BY ALL LIMIT 3;
+SELECT dt, c0, c1, c3 + 1, c3 + 1 from t2 order by ALL limit 3;
+
 -- base table add column
 ALTER TABLE t2 ADD COLUMN c4 int;
 function: wait_alter_table_finish()
@@ -183,4 +197,3 @@ DESC test_mv2;
 
 DROP MATERIALIZED VIEW test_mv2;
 DROP TABLE t2;
-

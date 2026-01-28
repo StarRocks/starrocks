@@ -39,7 +39,7 @@ SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8ba-cc5f-7e13-9ba5-122518ff2d85
+019c0329-7563-70da-8ab1-65c56fc5281f
 -- !result
 set enable_materialized_view_rewrite = false;
 -- result:
@@ -90,12 +90,43 @@ SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 2026-01-01 00:00:00	1	10	None
 2026-01-01 00:00:00	2	10	None
 -- !result
+ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN cnt_c3 AS count(c3) DEFAULT "0";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv1;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+cnt_c1	bigint	NO	true	None	
+cnt_c2	bigint	YES	false	None	NONE
+cnt_c3	bigint	YES	false	0	NONE
+-- !result
+function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, count(c3) as cnt_c3 from t1 group by dt, c0", "test_mv1")
+-- result:
+True
+-- !result
+SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, count(c3) as cnt_c3 from t1 group by dt, c0 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	10	10
+2026-01-01 00:00:00	1	10	10	10
+2026-01-01 00:00:00	2	10	10	10
+-- !result
+SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
+-- result:
+2026-01-01 00:00:00	0	10	None	0
+2026-01-01 00:00:00	1	10	None	0
+2026-01-01 00:00:00	2	10	None	0
+-- !result
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8ba-e9e7-7589-8afd-9514d8385e63
+019c0329-9465-7eb6-a561-e676411320b5
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0", "test_mv1")
 -- result:
@@ -109,9 +140,9 @@ SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2 from t1 group by dt, c0 
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	11	11
-2026-01-01 00:00:00	1	10	10
-2026-01-01 00:00:00	2	10	10
+2026-01-01 00:00:00	0	11	11	11
+2026-01-01 00:00:00	1	10	10	10
+2026-01-01 00:00:00	2	10	10	10
 -- !result
 ALTER TABLE t1 ADD COLUMN c4 int;
 -- result:
@@ -134,7 +165,7 @@ INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8ba-f7f6-7d5b-a898-0a33bee431dd
+019c0329-9ff6-74e0-ad76-df936c55273b
 -- !result
 ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN sum_c4 AS sum(c4);
 -- result:
@@ -149,6 +180,7 @@ dt	datetime	YES	true	None
 c0	int	YES	true	None	
 cnt_c1	bigint	NO	true	None	
 cnt_c2	bigint	YES	false	None	NONE
+cnt_c3	bigint	YES	false	0	NONE
 sum_c4	bigint	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
@@ -163,16 +195,16 @@ SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from 
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	12	12	None
-2026-01-01 00:00:00	1	10	10	None
-2026-01-01 00:00:00	2	10	10	None
+2026-01-01 00:00:00	0	12	12	12	None
+2026-01-01 00:00:00	1	10	10	10	None
+2026-01-01 00:00:00	2	10	10	10	None
 -- !result
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8bb-0796-759f-9f37-3a2a9297808f
+019c0329-ab55-769e-9516-9e5076d44127
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0", "test_mv1")
 -- result:
@@ -186,9 +218,9 @@ SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from 
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	13	13	0
-2026-01-01 00:00:00	1	10	10	None
-2026-01-01 00:00:00	2	10	10	None
+2026-01-01 00:00:00	0	13	13	13	0
+2026-01-01 00:00:00	1	10	10	10	None
+2026-01-01 00:00:00	2	10	10	10	None
 -- !result
 ALTER MATERIALIZED VIEW test_mv1 ADD COLUMN c4 AS c4;
 -- result:
@@ -203,6 +235,7 @@ dt	datetime	YES	true	None
 c0	int	YES	true	None	
 cnt_c1	bigint	NO	true	None	
 cnt_c2	bigint	YES	false	None	NONE
+cnt_c3	bigint	YES	false	0	NONE
 sum_c4	bigint	YES	false	None	NONE
 c4	int	YES	false	None	NONE
 -- !result
@@ -218,16 +251,16 @@ SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 f
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	13	13	0	None
-2026-01-01 00:00:00	1	10	10	None	None
-2026-01-01 00:00:00	2	10	10	None	None
+2026-01-01 00:00:00	0	13	13	13	0	None
+2026-01-01 00:00:00	1	10	10	10	None	None
+2026-01-01 00:00:00	2	10	10	10	None	None
 -- !result
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8bb-1b17-7d9b-8e72-d6a4bfe1f9ff
+019c0329-bb49-7d9a-abc7-9dcc050a9039
 -- !result
 function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
 -- result:
@@ -241,9 +274,9 @@ SELECT dt, c0, count(c1) as cnt_c1, count(c2) as cnt_c2, sum(c4) as sum_c4, c4 f
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	3	3	0	0
-2026-01-01 00:00:00	0	11	11	None	None
-2026-01-01 00:00:00	1	10	10	None	None
+2026-01-01 00:00:00	0	3	3	3	0	0
+2026-01-01 00:00:00	0	11	11	11	None	None
+2026-01-01 00:00:00	1	10	10	10	None	None
 -- !result
 ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN cnt_c2;
 -- result:
@@ -257,6 +290,7 @@ DESC test_mv1;
 dt	datetime	YES	true	None	
 c0	int	YES	true	None	
 cnt_c1	bigint	NO	true	None	
+cnt_c3	bigint	YES	false	0	NONE
 sum_c4	bigint	YES	false	None	NONE
 c4	int	YES	false	None	NONE
 -- !result
@@ -272,16 +306,16 @@ SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4, c4 from t1 group by dt, c
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	3	0	0
-2026-01-01 00:00:00	0	11	None	None
-2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	0	3	3	0	0
+2026-01-01 00:00:00	0	11	11	None	None
+2026-01-01 00:00:00	1	10	10	None	None
 -- !result
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8bb-2d65-7985-86b0-2652f9075c9e
+019c0329-cae8-75a6-a5e2-afce3dcc32d8
 -- !result
 function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1, sum(c4) as sum_c4 from t1 group by dt, c0, c4", "test_mv1")
 -- result:
@@ -295,9 +329,9 @@ SELECT dt, c0, count(c1) as cnt_c1, sum(c4) as sum_c4, c4 from t1 group by dt, c
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL limit 3;
 -- result:
-2026-01-01 00:00:00	0	4	0	0
-2026-01-01 00:00:00	0	11	None	None
-2026-01-01 00:00:00	1	10	None	None
+2026-01-01 00:00:00	0	4	4	0	0
+2026-01-01 00:00:00	0	11	11	None	None
+2026-01-01 00:00:00	1	10	10	None	None
 -- !result
 ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN sum_c4;
 -- result:
@@ -311,6 +345,7 @@ DESC test_mv1;
 dt	datetime	YES	true	None	
 c0	int	YES	true	None	
 cnt_c1	bigint	NO	true	None	
+cnt_c3	bigint	YES	false	0	NONE
 c4	int	YES	false	None	NONE
 -- !result
 function: print_hit_materialized_view("select dt, c0, c4, count(c1) as cnt_c1 from t1 group by dt, c0, c4", "test_mv1")
@@ -325,16 +360,16 @@ SELECT dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4 order by ALL 
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL LIMIT 3;
 -- result:
-2026-01-01 00:00:00	0	4	0
-2026-01-01 00:00:00	0	11	None
-2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	0	4	4	0
+2026-01-01 00:00:00	0	11	11	None
+2026-01-01 00:00:00	1	10	10	None
 -- !result
 INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8bb-3c53-7cee-b407-d2ff5a5cd2fc
+019c0329-d9dc-795a-bee2-4385a745dc8f
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4", "test_mv1")
 -- result:
@@ -348,9 +383,9 @@ SELECT dt, c0, count(c1) as cnt_c1, c4 from t1 group by dt, c0, c4 order by ALL 
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL limit 3;
 -- result:
-2026-01-01 00:00:00	0	5	0
-2026-01-01 00:00:00	0	11	None
-2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	0	5	5	0
+2026-01-01 00:00:00	0	11	11	None
+2026-01-01 00:00:00	1	10	10	None
 -- !result
 [UC]ALTER MATERIALIZED VIEW test_mv1 DROP COLUMN c4;
 -- result:
@@ -361,7 +396,7 @@ INSERT INTO t1 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- result:
-019bf8bb-43b5-7a49-832d-9bec32727149
+019c0329-e15d-77ae-8d58-fd92f5ece8f5
 -- !result
 function: print_hit_materialized_view("select dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0", "test_mv1")
 -- result:
@@ -375,9 +410,9 @@ SELECT dt, c0, count(c1) as cnt_c1 from t1 group by dt, c0 order by ALL limit 3;
 -- !result
 SELECT * FROM test_mv1 ORDER BY ALL limit 3;
 -- result:
-2026-01-01 00:00:00	0	6	0
-2026-01-01 00:00:00	0	11	None
-2026-01-01 00:00:00	1	10	None
+2026-01-01 00:00:00	0	6	6	0
+2026-01-01 00:00:00	0	11	11	None
+2026-01-01 00:00:00	1	10	10	None
 -- !result
 DROP MATERIALIZED VIEW test_mv1;
 -- result:
@@ -412,7 +447,7 @@ SELECT dt, c0, c1 from t2;
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019bf8bb-4cfd-7de0-80ea-d19568e37479
+019c0329-ea6c-7f68-8efc-8813629b0c13
 -- !result
 function: print_hit_materialized_view("select dt, c0, c1 from t2", "test_mv2")
 -- result:
@@ -453,6 +488,30 @@ SELECT dt, c0, c1, c3 + 1 from t2 order by ALL limit 3;
 2026-01-01 00:00:00	0	10	11
 2026-01-01 00:00:00	0	100	101
 2026-01-01 00:00:00	0	15	16
+-- !result
+ALTER MATERIALIZED VIEW test_mv2 ADD COLUMN c3_default AS c3 + 1 DEFAULT "0";
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot add column 'c3_default' to materialized view 'test_mv2' because we need to refresh  all partitions in the base table 't2'. Please use 1) 'CREATE a new MV and use `SWAP MV` to replace the current', or 2) `ALTER MATERIALIZED VIEW <NAME> SET ('query_rewrite_consistency'='force_mv')` to force query rewrite..")
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DESC test_mv2;
+-- result:
+dt	datetime	YES	true	None	
+c0	int	YES	true	None	
+c1	varchar(1048576)	YES	true	None	
+-- !result
+SELECT dt, c0, c1, c3, c3_default FROM test_mv2 ORDER BY ALL LIMIT 3;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column 'c3' cannot be resolved.")
+-- !result
+SELECT dt, c0, c1, c3 + 1, c3 + 1 from t2 order by ALL limit 3;
+-- result:
+2026-01-01 00:00:00	0	10	11	11
+2026-01-01 00:00:00	0	100	101	101
+2026-01-01 00:00:00	0	15	16	16
 -- !result
 ALTER TABLE t2 ADD COLUMN c4 int;
 -- result:
@@ -505,7 +564,7 @@ INSERT INTO t2 VALUES ('2026-01-01', 0, "c1_0", "c2_0", 0, 0);
 -- !result
 [UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 -- result:
-019bf8bb-6cc0-720c-89f2-a896e37937bf
+019c032a-0c35-70d1-82ac-5865ecf6157f
 -- !result
 function: print_hit_materialized_view("select dt, c0, c1, c4 + 1 from t2", "test_mv2")
 -- result:
