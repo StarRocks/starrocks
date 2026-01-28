@@ -483,6 +483,9 @@ public class ScalarType extends Type implements Cloneable {
         }
 
         if (t1.isStringType() || t2.isStringType()) {
+            if (t1.getLength() <= 0 || t2.getLength() <= 0) {
+                return Type.VARCHAR;
+            }
             return createVarcharType(Math.max(t1.len, t2.len));
         }
 

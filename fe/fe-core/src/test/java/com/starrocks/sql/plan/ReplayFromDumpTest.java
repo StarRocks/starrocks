@@ -668,26 +668,13 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                         sessionVariable, TExplainLevel.VERBOSE);
         String plan = replayPair.second;
 
-<<<<<<< HEAD
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (80: mock_004)"), plan);
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (62: mock_004)"), plan);
-
-        // table: tbl_mock_001, rollup: tbl_mock_001
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (116: mock_004)"), plan);
-        Assertions.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (98: mock_004)\n"), plan);
-=======
         // tbl_mock_015
         Assertions.assertTrue(plan.contains("probe runtime filters:\n"
-                + "     - filter_id = 3, probe_expr = (<slot 64> 64: mock_004)"), plan);
+                + "     - filter_id = 3, probe_expr = (64: mock_004)\n"), plan);
 
         // table: tbl_mock_001, rollup: tbl_mock_001
         Assertions.assertTrue(plan.contains("probe runtime filters:\n"
-                + "     - filter_id = 1, probe_expr = (<slot 112> 112: mock_004)"), plan);
->>>>>>> 664fc9e474 ([BugFix] Fix string type length analyze (#68110))
+                + "     - filter_id = 1, probe_expr = (118: mock_004)"), plan);
     }
 
     @Test
