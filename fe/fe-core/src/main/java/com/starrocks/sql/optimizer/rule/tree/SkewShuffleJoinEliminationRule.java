@@ -17,6 +17,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperato
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -48,14 +50,20 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /* rewrite the tree top down
@@ -76,6 +84,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
     private final AtomicInteger uniqueSplitId;
 
     private SkewShuffleJoinEliminationVisitor handler = null;
+    private SessionVariable sessionVariable;
 
     public SkewShuffleJoinEliminationRule() {
         this.uniqueSplitId = new AtomicInteger();
@@ -83,11 +92,12 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
         handler = new SkewShuffleJoinEliminationVisitor(taskContext.getOptimizerContext().getColumnRefFactory());
         return root.getOp().accept(handler, root, null);
     }
 
-    class SkewColumnAndValues {
+    static class SkewColumnAndValues {
         List<ScalarOperator> skewValues;
         Pair<ScalarOperator, ScalarOperator> skewColumns;
 
@@ -97,7 +107,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
     }
 
-    class SplitProducerAndConsumer {
+    static class SplitProducerAndConsumer {
         OptExpression splitProducer;
         OptExpression splitConsumerOptForShuffleJoin;
         OptExpression splitConsumerOptForBroadcastJoin;
@@ -138,13 +148,29 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return visitChild(opt, context);
             }
 
-            // find skew columns, rewrite skew values if needed
-            SkewColumnAndValues skewColumnAndValues = findSkewColumns(opt);
-            ScalarOperator leftSkewColumn = skewColumnAndValues.skewColumns.first;
-            ScalarOperator rightSkewColumn = skewColumnAndValues.skewColumns.second;
-            List<ScalarOperator> skewValues = skewColumnAndValues.skewValues;
+            ScalarOperator leftSkewColumn;
+            ScalarOperator rightSkewColumn;
+            List<ScalarOperator> skewValues;
+
+            if (isSkew(opt)) {
+                // Hint-based skew join.
+                SkewColumnAndValues skewColumnAndValues = findSkewColumns(opt);
+                leftSkewColumn = skewColumnAndValues.skewColumns.first;
+                rightSkewColumn = skewColumnAndValues.skewColumns.second;
+                skewValues = skewColumnAndValues.skewValues;
+            } else {
+                // v2 auto detection from histogram MCV.
+                Optional<SkewColumnAndValues> detected = detectSkewFromMcv(opt);
+                if (detected.isEmpty()) {
+                    return visitChild(opt, context);
+                }
+                leftSkewColumn = detected.get().skewColumns.first;
+                rightSkewColumn = detected.get().skewColumns.second;
+                skewValues = detected.get().skewValues;
+            }
+
             if (leftSkewColumn == null || rightSkewColumn == null || skewValues == null || skewValues.isEmpty()) {
-                return opt;
+                return visitChild(opt, context);
             }
 
             // rewrite plan
@@ -247,6 +273,61 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             // if hit once, we give up rewriting the following subtree
             return cteAnchorOptExp2;
+        }
+
+        private Optional<SkewColumnAndValues> detectSkewFromMcv(OptExpression joinOpt) {
+            if (sessionVariable == null || !sessionVariable.isEnableStatsToOptimizeSkewJoin()) {
+                return Optional.empty();
+            }
+
+            Statistics leftStats = joinOpt.inputAt(0).getStatistics();
+            if (leftStats == null || leftStats.getOutputRowCount() < sessionVariable.getSkewJoinMcvMinInputRows()) {
+                return Optional.empty();
+            }
+
+            ColumnRefSet leftOutputColumns = joinOpt.inputAt(0).getOutputColumns();
+            ColumnRefSet rightOutputColumns = joinOpt.inputAt(1).getOutputColumns();
+            List<BinaryPredicateOperator> equalConjs =
+                    JoinHelper.getEqualsPredicate(leftOutputColumns, rightOutputColumns,
+                            Utils.extractConjuncts(((PhysicalHashJoinOperator) joinOpt.getOp()).getOnPredicate()));
+            if (equalConjs.size() != 1) {
+                return Optional.empty();
+            }
+
+            BinaryPredicateOperator eq = equalConjs.get(0);
+            if (!eq.getChild(0).isColumnRef() || !eq.getChild(1).isColumnRef()) {
+                return Optional.empty();
+            }
+            ColumnRefOperator c0 = eq.getChild(0).cast();
+            ColumnRefOperator c1 = eq.getChild(1).cast();
+
+            ColumnRefOperator leftKey = leftOutputColumns.contains(c0.getId()) ? c0 :
+                    (leftOutputColumns.contains(c1.getId()) ? c1 : null);
+            ColumnRefOperator rightKey = (leftKey == null) ? null : (leftKey.equals(c0) ? c1 : c0);
+            if (leftKey == null || rightKey == null) {
+                return Optional.empty();
+            }
+
+            ColumnStatistic cs = leftStats.getColumnStatistics().get(leftKey);
+            if (cs == null || cs.isUnknown()) {
+                return Optional.empty();
+            }
+            Histogram hist = cs.getHistogram();
+            if (hist == null || hist.getMCV() == null || hist.getMCV().isEmpty()) {
+                return Optional.empty();
+            }
+
+            List<ScalarOperator> values = selectSkewValuesFromMcv(
+                    hist,
+                    cs.getNullsFraction(),
+                    leftKey.getType(),
+                    sessionVariable.getSkewJoinOptimizeUseMCVCount(),
+                    sessionVariable.getSkewJoinDataSkewThreshold(),
+                    sessionVariable.getSkewJoinMcvSingleThreshold());
+            if (values.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(new SkewColumnAndValues(values, Pair.create(leftKey, rightKey)));
         }
 
         private SplitProducerAndConsumer generateSplitProducerAndConsumer(OptExpression exchangeOptExp,
@@ -421,7 +502,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private boolean canOptimize(PhysicalHashJoinOperator joinOp, OptExpression opt) {
-            return isValidJoinType(joinOp) && isShuffleJoin(opt) && isSkew(opt);
+            return isValidJoinType(joinOp) && isShuffleJoin(opt);
         }
 
         // currently only support inner join and left outer join
@@ -439,8 +520,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             DistributionSpec.DistributionType.SHUFFLE);
         }
 
-        // right now only support join hint with left skew table, since left table is bigger
-        // TODO(jerry): support MCV-based skew detection
+        // Hint-based skew join (manual):
+        // - currently only support join hint with left skew table, since left table is bigger
         private boolean isSkew(OptExpression opt) {
             PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) opt.getOp();
 
@@ -469,4 +550,64 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
     }
 
+    /**
+     * Select skew values only from histogram MCV.
+     *
+     * We compute:
+     * - H = histogram.getTotalRows() (histogram/non-NULL domain)
+     * - nonNullFraction = 1 - nullFraction (used only as scaling factor to total-domain ratio)
+     * - p_single_total(v) = (cnt(v) / H) * nonNullFraction
+     * - p_topk_total      = (sumTopK / H) * nonNullFraction
+     *
+     * Trigger criteria:
+     * - p_topk_total >= topKTotalThreshold
+     * - at least one value satisfies p_single_total(v) >= singleTotalThreshold
+     */
+    static List<ScalarOperator> selectSkewValuesFromMcv(
+            Histogram histogram,
+            double nullFraction,
+            Type targetType,
+            int topK,
+            double topKTotalThreshold,
+            double singleTotalThreshold) {
+        if (histogram == null || histogram.getMCV() == null || histogram.getMCV().isEmpty() || topK <= 0) {
+            return List.of();
+        }
+
+        final double histogramTotalRows = histogram.getTotalRows();
+        if (histogramTotalRows <= 0) {
+            return List.of();
+        }
+        final double nonNullFraction = 1.0 - nullFraction;
+        if (nonNullFraction <= 0) {
+            return List.of();
+        }
+
+        List<Map.Entry<String, Long>> top =
+                histogram.getMCV().entrySet().stream()
+                        .sorted(Map.Entry.comparingByValue(Comparator.reverseOrder()))
+                        .limit(topK)
+                        .toList();
+
+        long sumTopK = top.stream().mapToLong(Map.Entry::getValue).sum();
+        double pTopKTotal = (sumTopK / histogramTotalRows) * nonNullFraction;
+        if (pTopKTotal < topKTotalThreshold) {
+            return List.of();
+        }
+
+        List<ScalarOperator> result = new ArrayList<>();
+        for (Map.Entry<String, Long> e : top) {
+            double pSingleTotal = (e.getValue() / histogramTotalRows) * nonNullFraction;
+            if (pSingleTotal < singleTotalThreshold) {
+                continue;
+            }
+            Optional<ConstantOperator> c = mcvKeyToTypedConstant(e.getKey(), targetType);
+            c.ifPresent(result::add);
+        }
+        return result;
+    }
+
+    private static Optional<ConstantOperator> mcvKeyToTypedConstant(String mcvKey, Type targetType) {
+        return ConstantOperator.createVarchar(mcvKey).castTo(targetType);
+    }
 }

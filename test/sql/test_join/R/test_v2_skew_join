@@ -460,3 +460,89 @@ select sum(t1.c_key), t2.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 
 -- result:
 21	None
 -- !result
+drop table if exists t_mcv_l;
+-- result:
+-- !result
+drop table if exists t_mcv_r;
+-- result:
+-- !result
+create table t_mcv_l (
+    k bigint null,
+    v int null
+)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num"="1");
+-- result:
+-- !result
+create table t_mcv_r (
+    k bigint null,
+    v int null
+)
+duplicate key(k)
+distributed by hash(k) buckets 1
+properties("replication_num"="1");
+-- result:
+-- !result
+set enable_stats_to_optimize_skew_join = true;
+-- result:
+-- !result
+set skew_join_use_mcv_count = 5;
+-- result:
+-- !result
+set skew_join_data_skew_threshold = 0.1;
+-- result:
+-- !result
+set skew_join_mcv_single_threshold = 0.05;
+-- result:
+-- !result
+set skew_join_mcv_min_input_rows = 1000;
+-- result:
+-- !result
+set broadcast_row_limit = 0;
+-- result:
+-- !result
+insert into t_mcv_l select 1, 1 from table(generate_series(1, 5000));
+-- result:
+-- !result
+insert into t_mcv_l select 2, 1 from table(generate_series(1, 2500));
+-- result:
+-- !result
+insert into t_mcv_l select generate_series + 2, 1 from table(generate_series(1, 2500));
+-- result:
+-- !result
+insert into t_mcv_r select (generate_series % 2502) + 1, 1 from table(generate_series(1, 20000));
+-- result:
+-- !result
+[UC] analyze table t_mcv_l;
+-- result:
+test_db_aee826f001664598a30f94e1a2f2709f.t_mcv_l	analyze	status	OK
+-- !result
+[UC] analyze table t_mcv_r;
+-- result:
+test_db_aee826f001664598a30f94e1a2f2709f.t_mcv_r	analyze	status	OK
+-- !result
+[UC] analyze table t_mcv_l update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
+-- result:
+test_db_aee826f001664598a30f94e1a2f2709f.t_mcv_l	histogram	status	OK
+-- !result
+[UC] analyze table t_mcv_r update histogram on k properties('histogram_sample_ratio' = '1.0', 'histogram_mcv_size' = '20');
+-- result:
+test_db_aee826f001664598a30f94e1a2f2709f.t_mcv_r	histogram	status	OK
+-- !result
+select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k;
+-- result:
+74985
+-- !result
+function: assert_explain_contains('select count(*) from t_mcv_l join[shuffle] t_mcv_r on t_mcv_l.k = t_mcv_r.k', 'SplitCastDataSink')
+-- result:
+None
+-- !result
+with l as (select (cast(k as bigint) + 10) as k2 from t_mcv_l), r as (select (cast(k as bigint) + 10) as k2 from t_mcv_r) select count(*) from l join[shuffle] r on l.k2 = r.k2;
+-- result:
+74985
+-- !result
+function: assert_explain_contains('with l as (select (cast(k as bigint) + 10) as k2 from t_mcv_l), r as (select (cast(k as bigint) + 10) as k2 from t_mcv_r) select count(*) from l join[shuffle] r on l.k2 = r.k2', 'SplitCastDataSink')
+-- result:
+None
+-- !result
