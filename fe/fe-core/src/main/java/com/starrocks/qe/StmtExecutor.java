@@ -688,6 +688,8 @@ public class StmtExecutor {
 
     private ExecPlan generateExecPlan() throws Exception {
         ExecPlan execPlan = null;
+        QeProcessorImpl.QueryInfo queryInfo = QeProcessorImpl.QueryInfo.fromPlanningQuery(context, originStmt.originStmt);
+        QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), queryInfo);
         try (Timer ignored = Tracers.watchScope("Total")) {
             if (!isForwardToLeader()) {
                 if (context.shouldDumpQuery()) {
@@ -754,6 +756,9 @@ public class StmtExecutor {
                 LOG.warn("Planner error: " + originStmt.originStmt, e);
                 throw e;
             }
+        } finally {
+            context.setPlanning(false);
+            QeProcessorImpl.INSTANCE.unMonitorQuery(context.getExecutionId());
         }
         return execPlan;
     }

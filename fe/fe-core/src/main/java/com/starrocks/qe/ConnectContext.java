@@ -230,6 +230,7 @@ public class ConnectContext {
 
     protected TWorkGroup resourceGroup;
 
+    protected volatile boolean isPlanning = false;
     protected volatile boolean isPending = false;
     protected volatile boolean isForward = false;
 
@@ -1463,6 +1464,14 @@ public class ConnectContext {
         return getAliveBackendNumber() +
                 (RunMode.isSharedDataMode() ?
                         getGlobalStateMgr().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber() : 0);
+    }
+
+    public void setPlanning(boolean planning) {
+        isPlanning = planning;
+    }
+
+    public boolean isPlanning() {
+        return isPlanning;
     }
 
     public void setPending(boolean pending) {
