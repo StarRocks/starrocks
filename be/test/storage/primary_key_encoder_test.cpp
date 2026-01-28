@@ -104,8 +104,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32V2OrderPreserving) {
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, values.size(), dest.get(), PrimaryKeyEncodingType::V2);
 
     auto dchunk = pchunk->clone_empty_with_schema();
-    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
-                        .ok());
+    ASSERT_TRUE(
+            PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
+                    .ok());
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], dchunk->get_column_by_index(0)->get(i).get_int32());
@@ -137,8 +138,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt64V2OrderPreserving) {
     PrimaryKeyEncoder::encode(*sc, *pchunk, 0, values.size(), dest.get(), PrimaryKeyEncodingType::V2);
 
     auto dchunk = pchunk->clone_empty_with_schema();
-    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
-                        .ok());
+    ASSERT_TRUE(
+            PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
+                    .ok());
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], dchunk->get_column_by_index(0)->get(i).get_int64());
@@ -160,9 +162,15 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128V2OrderPreserving) {
     const uint128_t sign_bit = (static_cast<uint128_t>(1) << 127);
     const int128_t min_v = static_cast<int128_t>(sign_bit);
     const int128_t max_v = static_cast<int128_t>(sign_bit - 1);
-    const std::vector<int128_t> values = {min_v, min_v + 1, static_cast<int128_t>(-1024), static_cast<int128_t>(-1),
-                                          static_cast<int128_t>(0), static_cast<int128_t>(1), static_cast<int128_t>(42),
-                                          max_v - 1, max_v};
+    const std::vector<int128_t> values = {min_v,
+                                          min_v + 1,
+                                          static_cast<int128_t>(-1024),
+                                          static_cast<int128_t>(-1),
+                                          static_cast<int128_t>(0),
+                                          static_cast<int128_t>(1),
+                                          static_cast<int128_t>(42),
+                                          max_v - 1,
+                                          max_v};
 
     auto pchunk = ChunkHelper::new_chunk(*sc, values.size());
     for (const auto& v : values) {
@@ -175,7 +183,8 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128V2OrderPreserving) {
 
     auto dchunk = pchunk->clone_empty_with_schema();
     ASSERT_TRUE(
-            PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2).ok());
+            PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
+                    .ok());
     ASSERT_EQ(pchunk->num_rows(), dchunk->num_rows());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], dchunk->get_column_by_index(0)->get(i).get_int128());
@@ -203,11 +212,13 @@ TEST(PrimaryKeyEncoderTest, testEncodeSelectiveInt32V2) {
     }
 
     const std::vector<uint32_t> idxes = {2, 0};
-    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, idxes.data(), idxes.size(), dest.get(), PrimaryKeyEncodingType::V2);
+    PrimaryKeyEncoder::encode_selective(*sc, *pchunk, idxes.data(), idxes.size(), dest.get(),
+                                        PrimaryKeyEncodingType::V2);
 
     auto dchunk = ChunkHelper::new_chunk(*sc, 0);
-    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, idxes.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
-                        .ok());
+    ASSERT_TRUE(
+            PrimaryKeyEncoder::decode(*sc, *dest, 0, idxes.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
+                    .ok());
     ASSERT_EQ(idxes.size(), dchunk->num_rows());
     ASSERT_EQ(30, dchunk->get_column_by_index(0)->get(0).get_int32());
     ASSERT_EQ(10, dchunk->get_column_by_index(0)->get(1).get_int32());
@@ -241,8 +252,9 @@ TEST(PrimaryKeyEncoderTest, testEncodeVarcharV2RawBytes) {
     }
 
     auto dchunk = pchunk->clone_empty_with_schema();
-    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
-                        .ok());
+    ASSERT_TRUE(
+            PrimaryKeyEncoder::decode(*sc, *dest, 0, values.size(), dchunk.get(), nullptr, PrimaryKeyEncodingType::V2)
+                    .ok());
     ASSERT_EQ(values.size(), dchunk->num_rows());
     ASSERT_EQ(Slice(values[0]), dchunk->get_column_by_index(0)->get(0).get_slice());
     ASSERT_EQ(Slice(values[1].data(), values[1].size()), dchunk->get_column_by_index(0)->get(1).get_slice());
@@ -256,8 +268,10 @@ TEST(PrimaryKeyEncoderTest, testEncodeExceedLimitInt32V2) {
     tmp.set_int32(42);
     pchunk->mutable_columns()[0]->append_datum(tmp);
 
-    EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, /*limit_size=*/3, PrimaryKeyEncodingType::V2));
-    EXPECT_FALSE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, /*limit_size=*/4, PrimaryKeyEncodingType::V2));
+    EXPECT_TRUE(
+            PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, /*limit_size=*/3, PrimaryKeyEncodingType::V2));
+    EXPECT_FALSE(
+            PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, /*limit_size=*/4, PrimaryKeyEncodingType::V2));
 }
 
 TEST(PrimaryKeyEncoderTest, testCreateLargeBinaryColumnV2) {
