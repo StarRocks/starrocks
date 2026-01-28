@@ -14,12 +14,19 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserProperty;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.arrow.util.VisibleForTesting;
@@ -151,6 +158,28 @@ public class BatchWriteMgr extends FrontendDaemon {
         }
     }
 
+    private Optional<String> getUserDefaultWarehouse(String user) {
+        if (Strings.isNullOrEmpty(user)) {
+            return Optional.empty();
+        }
+
+        AuthenticationMgr mgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        try {
+            UserIdentity userIdentity = mgr.getUserIdentityByName(user);
+            if (!userIdentity.isEphemeral()) {
+                UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(user);
+                String userWarehouse = userProperty.getSessionVariables().get(SessionVariable.WAREHOUSE_NAME);
+                if (!Strings.isNullOrEmpty(userWarehouse)) {
+                    return Optional.of(userWarehouse);
+                }
+            }
+        } catch (SemanticException e) {
+            LOG.warn("Failed to get user property. user: {}", user, e);
+        }
+
+        return Optional.empty();
+    }
+
     /**
      * Retrieves or creates an MergeCommitJob instance for the specified table and parameters.
      *
@@ -166,7 +195,19 @@ public class BatchWriteMgr extends FrontendDaemon {
             return new Pair<>(new TStatus(TStatusCode.OK), load);
         }
 
-        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
+        String warehouseName = params.getWarehouse().orElse(null);
+        if (warehouseName == null) {
+            // Try to use `session.warehouse` in user property if warehouse is not specified
+            Optional<String> userWarehouseName = getUserDefaultWarehouse(user);
+            if (userWarehouseName.isPresent() &&
+                    GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName.get())) {
+                warehouseName = userWarehouseName.get();
+            }
+        }
+        if (warehouseName == null) {
+            warehouseName = DEFAULT_WAREHOUSE_NAME;
+        }
+
         StreamLoadInfo streamLoadInfo;
         try {
             streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
@@ -197,10 +238,11 @@ public class BatchWriteMgr extends FrontendDaemon {
         }
 
         try {
+            String finalWarehouseName = warehouseName;
             load = mergeCommitJobs.computeIfAbsent(uniqueId, uid -> {
                 long id = idGenerator.getAndIncrement();
                 MergeCommitJob newLoad = new MergeCommitJob(
-                        id, tableId, warehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
+                        id, tableId, finalWarehouseName, streamLoadInfo, batchWriteIntervalMs, batchWriteParallel,
                         params, coordinatorBackendAssigner, threadPoolExecutor, txnStateDispatcher);
                 coordinatorBackendAssigner.registerBatchWrite(id, newLoad.getComputeResource(), tableId,
                         newLoad.getBatchWriteParallel());
