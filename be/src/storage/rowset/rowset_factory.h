@@ -48,7 +48,7 @@ public:
     // return OK on success and set inited rowset in `*rowset`.
     // return error if failed to create or init rowset.
     static Status create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
-                                const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
+                                const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset, KVStore* kvstore);
 
     // create and init rowset writer.
     // return OK on success and set `*output` to inited rowset writer.
