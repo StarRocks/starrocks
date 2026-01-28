@@ -465,4 +465,143 @@ public class CreateFunctionStmtAnalyzerTest {
         });
     }
 
+    // Varargs UDF test classes
+    private static class VarargsStringEval {
+        public String evaluate(String... args) {
+            if (args == null || args.length == 0) {
+                return "";
+            }
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] != null) {
+                    if (i > 0) {
+                        result.append(" ");
+                    }
+                    result.append(args[i]);
+                }
+            }
+            return result.toString();
+        }
+    }
+
+    private static class VarargsIntEval {
+        public Integer evaluate(Integer... values) {
+            if (values == null || values.length == 0) {
+                return 0;
+            }
+            int sum = 0;
+            for (Integer value : values) {
+                if (value == null) {
+                    return null;
+                }
+                sum += value;
+            }
+            return sum;
+        }
+    }
+
+    private static class NonVarargsEval {
+        public String evaluate(String a, String b) {
+            return a + b;
+        }
+    }
+
+    @Test
+    public void testVarargsScalarUDF() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(VarargsStringEval.class);
+            
+            String createFunctionSql = "CREATE FUNCTION ABC.concat_varargs(string, ...) \n"
+                    + "RETURNS string \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+            Assertions.assertTrue(stmt.getFunction().hasVarArgs());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testVarargsIntScalarUDF() {
+        try {
+            Config.enable_udf = true;
+            mockClazz(VarargsIntEval.class);
+            
+            String createFunctionSql = "CREATE FUNCTION ABC.sum_varargs(int, ...) \n"
+                    + "RETURNS int \n"
+                    + "properties (\n"
+                    + "    \"symbol\" = \"symbol\",\n"
+                    + "    \"type\" = \"StarrocksJar\",\n"
+                    + "    \"file\" = \"http://localhost:8080/\"\n"
+                    + ");";
+            
+            CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                    createFunctionSql, 32).get(0);
+            new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            Assertions.assertEquals("0xff", stmt.getFunction().getChecksum());
+            Assertions.assertTrue(stmt.getFunction().hasVarArgs());
+        } finally {
+            Config.enable_udf = false;
+        }
+    }
+
+    @Test
+    public void testVarargsUDFMismatchNoVarargs() {
+        // Test error when CREATE declares varargs but Java method doesn't use varargs
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(NonVarargsEval.class);
+                
+                String createFunctionSql = "CREATE FUNCTION ABC.bad_varargs(string, ...) \n"
+                        + "RETURNS string \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"symbol\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://localhost:8080/\"\n"
+                        + ");";
+                
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
+    @Test
+    public void testVarargsUDFTypeMismatch() {
+        // Test error when varargs type doesn't match
+        assertThrows(SemanticException.class, () -> {
+            try {
+                Config.enable_udf = true;
+                mockClazz(VarargsStringEval.class);
+                
+                String createFunctionSql = "CREATE FUNCTION ABC.bad_type_varargs(int, ...) \n"
+                        + "RETURNS string \n"
+                        + "properties (\n"
+                        + "    \"symbol\" = \"symbol\",\n"
+                        + "    \"type\" = \"StarrocksJar\",\n"
+                        + "    \"file\" = \"http://localhost:8080/\"\n"
+                        + ");";
+                
+                CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
+                        createFunctionSql, 32).get(0);
+                new CreateFunctionAnalyzer().analyze(stmt, connectContext);
+            } finally {
+                Config.enable_udf = false;
+            }
+        });
+    }
+
 }
