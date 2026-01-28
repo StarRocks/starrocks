@@ -19,7 +19,6 @@ ADD_BE_LIB(Common
   statusor.cpp
   configbase.cpp
   config.cpp
-  s3_uri.cpp
   tracer.cpp
   process_exit.cpp
   prof/heap_prof.cpp

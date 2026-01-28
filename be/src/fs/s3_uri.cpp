@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "common/s3_uri.h"
+#include "fs/s3_uri.h"
 
 #include <aws/core/utils/StringUtils.h>
 #include <aws/crt/io/Uri.h>

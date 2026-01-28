@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-#include "common/s3_uri.h"
+#include "fs/s3_uri.h"
 #include "testutil/parallel_test.h"
 
 namespace starrocks {

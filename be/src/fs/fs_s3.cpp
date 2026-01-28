@@ -34,9 +34,9 @@
 
 #include "common/config.h"
 #include "common/http/content_type.h"
-#include "common/s3_uri.h"
 #include "fs/encrypt_file.h"
 #include "fs/output_stream_adapter.h"
+#include "fs/s3_uri.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
 #include "io/direct_s3_output_stream.h"

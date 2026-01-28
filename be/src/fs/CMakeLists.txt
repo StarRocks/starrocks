@@ -26,6 +26,7 @@ set(EXEC_FILES
     fs_broker.cpp
     fs_memory.cpp
     fs_s3.cpp
+    s3_uri.cpp
     azure/azblob_uri.cpp
     azure/fs_azblob.cpp
     azure/utils.cpp
