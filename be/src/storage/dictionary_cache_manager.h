@@ -374,7 +374,8 @@ public:
                 return nullptr;
             }
             if (chunk->num_rows() > 0) {
-                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get(), PrimaryKeyEncodingType::V1);
+                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get(),
+                                          PrimaryKeyEncodingType::V1);
             }
             return encoded_columns;
         }
@@ -390,7 +391,8 @@ public:
         switch (encoder_type) {
         case PK_ENCODE: {
             // use V1 encoding type to decode the column for simplicity
-            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags, PrimaryKeyEncodingType::V1);
+            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags,
+                                             PrimaryKeyEncodingType::V1);
         }
         default:
             break;

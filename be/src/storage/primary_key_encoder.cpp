@@ -266,8 +266,8 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn, PrimaryKeyEncodingType encoding_type,
-                                        bool large_column) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
+                                        PrimaryKeyEncodingType encoding_type, bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;

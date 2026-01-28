@@ -88,7 +88,8 @@ Status PrimaryKeyRecover::recover() {
                                 return st;
                             } else {
                                 pk_column->reset_column();
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), PrimaryKeyEncodingType::V1);
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                          PrimaryKeyEncodingType::V1);
                                 // upsert and generate new deletes
                                 RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
                                 row_id_start += pk_column->size();

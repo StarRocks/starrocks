@@ -3505,8 +3505,8 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     const Column* pkc = nullptr;
                     if (pk_column != nullptr) {
                         pk_column->reset_column();
-                        TRY_CATCH_BAD_ALLOC(
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), PrimaryKeyEncodingType::V1));
+                        TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
+                                                                      pk_column.get(), PrimaryKeyEncodingType::V1));
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();

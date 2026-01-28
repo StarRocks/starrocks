@@ -111,7 +111,8 @@ StatusOr<MutableColumnPtr> SegmentPKIterator::encoded_pk_column(const Chunk* chu
     TRACE_COUNTER_SCOPE_LATENCY_US("pk_encode_us");
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(_pkey_schema, &pk_column, _encoding_type));
-    TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), _encoding_type));
+    TRY_CATCH_BAD_ALLOC(
+            PrimaryKeyEncoder::encode(_pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(), _encoding_type));
     return std::move(pk_column);
 }
 

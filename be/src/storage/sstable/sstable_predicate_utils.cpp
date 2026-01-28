@@ -56,7 +56,8 @@ StatusOr<ChunkUniquePtr> KeyToChunkConverter::convert_to_chunk(const std::string
     // use V1 encoding type to decode the column for simplicity
     // TODO: Should use V2 encoding type to decode the column for range-distribution table in share data mode.
     // But for now, such table do not use sst predicate at all. Support it if necessary in the future.
-    RETURN_IF_ERROR(PrimaryKeyEncoder::decode(_pkey_schema, *_pk_column, 0, 1, chunk.get(), nullptr, PrimaryKeyEncodingType::V1));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::decode(_pkey_schema, *_pk_column, 0, 1, chunk.get(), nullptr,
+                                              PrimaryKeyEncodingType::V1));
     return chunk;
 }
 

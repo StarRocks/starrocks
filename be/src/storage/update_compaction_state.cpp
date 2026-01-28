@@ -114,7 +114,8 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
             } else if (!st.ok()) {
                 return st;
             } else {
-                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(), PrimaryKeyEncodingType::V1));
+                TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
+                                                              PrimaryKeyEncodingType::V1));
             }
         }
         itr->close();
