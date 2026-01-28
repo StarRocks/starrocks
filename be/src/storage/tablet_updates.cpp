@@ -4402,6 +4402,7 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
@@ -4428,6 +4429,8 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
             if (!status.ok()) {
                 return Status::InternalError("failed to fill generated column");
             }
+            ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(), new_chunk.get());
+
             RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }
     }
@@ -4505,6 +4508,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         cids.push_back(i);
     }
     Schema new_schema = ChunkHelper::convert_schema(tschema, cids);
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
     for (int i = 0; i < src_rowsets.size(); i++) {
         const auto& src_rowset = src_rowsets[i];
 
@@ -4574,6 +4578,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                     RETURN_ERROR_IF_FALSE(chunk_sort_ok, "chunk data sort failed");
                 }
                 chunk_arr.push_back(new_chunk);
+                ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(),
+                                                  new_chunk.get());
             }
         }
 
