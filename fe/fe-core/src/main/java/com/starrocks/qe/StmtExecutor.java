@@ -688,6 +688,14 @@ public class StmtExecutor {
 
     private ExecPlan generateExecPlan() throws Exception {
         ExecPlan execPlan = null;
+
+        // Collect optimizer timing only when explicitly enabled to avoid overhead on normal queries.
+        // When enabled, we only dump the trace to logs on planning failure.
+        if (Config.enable_dump_optimizer_trace_on_error) {
+            Tracers.enableTraceMode(Tracers.Mode.TIMER);
+            Tracers.enableTraceModule(Tracers.Module.BASE);
+            Tracers.enableTraceModule(Tracers.Module.OPTIMIZER);
+        }
         try (Timer ignored = Tracers.watchScope("Total")) {
             if (!isForwardToLeader()) {
                 if (context.shouldDumpQuery()) {
@@ -744,9 +752,11 @@ public class StmtExecutor {
                 }
             }
         } catch (SemanticException e) {
+            logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
             throw new AnalysisException(e.getMessage(), e);
         } catch (StarRocksPlannerException e) {
+            logOptimizerTraceOnGenerateExecPlanFailure(e);
             dumpException(e);
             if (e.getType().equals(ErrorType.USER_ERROR)) {
                 throw e;
@@ -754,8 +764,35 @@ public class StmtExecutor {
                 LOG.warn("Planner error: " + originStmt.originStmt, e);
                 throw e;
             }
+        } catch (Exception e) {
+            logOptimizerTraceOnGenerateExecPlanFailure(e);
+            throw e;
         }
         return execPlan;
+    }
+
+    private void logOptimizerTraceOnGenerateExecPlanFailure(Throwable e) {
+        String qid = DebugUtil.printId(context.getQueryId());
+        String sql = originStmt == null ? "" : SqlCredentialRedactor.redact(originStmt.originStmt);
+        String err = e == null ? "" : (e.getClass().getSimpleName() + ": " + StringUtils.defaultString(e.getMessage()));
+
+        if (Config.enable_dump_optimizer_trace_on_error) {
+            String trace = Tracers.printScopeTimer();
+            if (StringUtils.isNotBlank(trace)) {
+                final int maxLen = 64 * 1024;
+                if (trace.length() > maxLen) {
+                    trace = trace.substring(0, maxLen) + "\n... truncated ...";
+                }
+                LOG.warn("Generate exec plan failed, dump optimizer trace (trace times optimizer)." +
+                                " query_id={}, sql={}, err={}\n{}", qid, sql, err, trace);
+                return;
+            }
+        }
+
+        RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+        Tracers.toRuntimeProfile(plannerProfile);
+        LOG.warn("Generate exec plan failed. Planner profile: query_id={}, sql={}, err={}, profile={}",
+                qid, sql, err, plannerProfile);
     }
 
     // Execute one statement.
