@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -42,6 +43,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
 import com.starrocks.warehouse.WarehouseLoadStatusInfo;
@@ -132,6 +135,18 @@ public class StreamLoadMgr implements MemoryTrackable {
                 task.beginTxnFromFrontend(resp);
                 return;
             }
+
+            // Check if label already exists in transaction history (like basic transaction does)
+            TransactionState existingTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getLabelTransactionState(dbId, label);
+            if (existingTxn != null && existingTxn.getTransactionStatus() != TransactionStatus.ABORTED) {
+                resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+                resp.msg = String.format("Label [%s] has already been used.", label);
+                resp.addResultEntry("ExistingJobStatus", existingTxn.getTransactionStatus().name());
+                resp.addResultEntry("Db", dbName);
+                return;
+            }
+
             task = createMultiStatementLoadTask(db, label, user, clientIp, timeoutMillis, computeResource);
             task.beginTxnFromFrontend(resp);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateMultiStmtStreamLoadJob(
