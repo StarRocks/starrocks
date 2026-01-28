@@ -17,6 +17,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -39,15 +40,78 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
     @SerializedName("baseTableVisibleVersionMap")
     private Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap;
 
-    public AlterMaterializedViewBaseTableInfosLog(
-            long dbId, long mvId, MvId remoteMvId,
-            List<BaseTableInfo> baseTableInfos,
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMa) {
-        this.dbId = dbId;
-        this.mvId = mvId;
-        this.remoteMvId = remoteMvId;
-        this.baseTableInfos = baseTableInfos;
-        this.baseTableVisibleVersionMap = baseTableVisibleVersionMa;
+    // 0: not set, 1: alter MV add column, 2: alter MV drop column
+    @SerializedName("alterType")
+    private int alterType = 0;
+
+    // External base table refreshed meta infos
+    @SerializedName("baseTableInfoVisibleVersionMap")
+    private Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap;
+
+    @SerializedName(value = "viewDefineSql")
+    private String viewDefineSql;
+    @SerializedName(value = "simpleDefineSql")
+    private String simpleDefineSql;
+    @SerializedName(value = "originalViewDefineSql")
+    private String originalViewDefineSql;
+    @SerializedName(value = "queryOutputIndices")
+    protected List<Integer> queryOutputIndices = Lists.newArrayList();
+
+    public static enum AlterType {
+        DEFAULT,
+        ADD_COLUMN,
+        DROP_COLUMN;
+
+        public static AlterType valueOf(int val) {
+            switch (val) {
+                case 1:
+                    return ADD_COLUMN;
+                case 2:
+                    return DROP_COLUMN;
+                default:
+                    return DEFAULT;
+            }
+        }
+    }
+
+    public AlterMaterializedViewBaseTableInfosLog(MvId remoteMvId,
+                                                  MaterializedView mv) {
+        this(remoteMvId, mv, AlterType.DEFAULT);
+    }
+
+    public AlterMaterializedViewBaseTableInfosLog(MvId remoteMvId,
+                                                  MaterializedView mv,
+                                                  AlterType alterType) {
+        this.dbId = mv.getDbId();
+        this.mvId = mv.getId();
+
+        MaterializedView.AsyncRefreshContext mvContext = mv.getRefreshScheme().getAsyncRefreshContext();
+
+        this.alterType = alterType.ordinal();
+        switch (alterType) {
+            case ADD_COLUMN: {
+                this.viewDefineSql = mv.getViewDefineSql();
+                this.simpleDefineSql = mv.getSimpleDefineSql();
+                this.originalViewDefineSql = mv.getOriginalViewDefineSql();
+                this.baseTableVisibleVersionMap = mvContext.getBaseTableVisibleVersionMap();
+                this.baseTableInfoVisibleVersionMap = mvContext.getBaseTableInfoVisibleVersionMap();
+                this.queryOutputIndices = mv.getQueryOutputIndices();
+                break;
+            }
+            case DROP_COLUMN: {
+                this.viewDefineSql = mv.getViewDefineSql();
+                this.simpleDefineSql = mv.getSimpleDefineSql();
+                this.originalViewDefineSql = mv.getOriginalViewDefineSql();
+                this.queryOutputIndices = mv.getQueryOutputIndices();
+                break;
+            }
+            default: {
+                this.remoteMvId = remoteMvId;
+                this.baseTableInfos = mv.getBaseTableInfos();
+                this.baseTableVisibleVersionMap = mvContext.getBaseTableVisibleVersionMap();
+                this.baseTableInfoVisibleVersionMap = mvContext.getBaseTableInfoVisibleVersionMap();
+            }
+        }
     }
 
     public long getDbId() {
@@ -78,4 +142,31 @@ public class AlterMaterializedViewBaseTableInfosLog implements Writable {
         return baseTableVisibleVersionMap;
     }
 
+    public int getAlterType() {
+        return alterType;
+    }
+
+    public Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> getBaseTableInfoVisibleVersionMap() {
+        return baseTableInfoVisibleVersionMap;
+    }
+
+    public String getOriginalViewDefineSql() {
+        return originalViewDefineSql;
+    }
+
+    public MvId getRemoteMvId() {
+        return remoteMvId;
+    }
+
+    public String getSimpleDefineSql() {
+        return simpleDefineSql;
+    }
+
+    public String getViewDefineSql() {
+        return viewDefineSql;
+    }
+
+    public List<Integer> getQueryOutputIndices() {
+        return queryOutputIndices;
+    }
 }

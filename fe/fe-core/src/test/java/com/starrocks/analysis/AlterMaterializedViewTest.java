@@ -36,7 +36,9 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
@@ -176,6 +178,17 @@ public class AlterMaterializedViewTest extends MVTestBase  {
             Assertions.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
     }
+
+        @Test
+        public void testAlterMVAddColumnWithDefaultValue() throws Exception {
+                String alterMvSql = "alter materialized view mv1 add column v1_default as v1 default 10";
+                AlterMaterializedViewStmt stmt =
+                                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+                AddMVColumnClause clause = (AddMVColumnClause) stmt.getAlterTableClause();
+                ColumnDef.DefaultValueDef defaultValueDef = clause.getDefaultValueDef();
+                Assertions.assertTrue(defaultValueDef.isSet);
+                Assertions.assertEquals("10", defaultValueDef.expr.debugString());
+        }
 
     // TODO: consider to support alterjob for mv
     @Test
