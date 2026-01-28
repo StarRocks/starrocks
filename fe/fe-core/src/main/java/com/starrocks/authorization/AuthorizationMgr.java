@@ -927,6 +927,12 @@ public class AuthorizationMgr {
                 checkRoleIds = context.getCurrentRoleIds();
             }
 
+            // Defensive check: if somehow both original and current are null, deny access
+            if (checkUser == null) {
+                LOG.warn("canExecuteAs: checkUser is null, denying access to impersonate {}", impersonateUser);
+                return false;
+            }
+
             PrivilegeCollectionV2 collection = mergePrivilegeCollection(checkUser, checkGroups, checkRoleIds);
             PEntryObject object = provider.generateUserObject(ObjectType.USER, impersonateUser);
             return provider.check(ObjectType.USER, PrivilegeType.IMPERSONATE, object, collection);

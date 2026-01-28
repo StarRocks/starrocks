@@ -16,12 +16,12 @@ package com.starrocks.mysql;
 
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.MysqlPassword;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.MockedLocalMetaStore;
 import com.starrocks.authorization.RBACMockedMetadataMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
