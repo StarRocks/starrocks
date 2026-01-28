@@ -934,7 +934,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
         if (auto s = RowsetFactory::create_rowset(cloned_tablet_meta->tablet_schema_ptr(), tablet->schema_hash_path(),
-                                                  rs_meta_ptr, &rowset_to_remove);
+                                                  rs_meta_ptr, &rowset_to_remove, tablet->data_dir()->get_meta());
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;

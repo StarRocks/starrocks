@@ -34,6 +34,7 @@
 
 #include "storage/rowset/rowset_factory.h"
 
+#include <filesystem>
 #include <memory>
 
 #include "gen_cpp/olap_file.pb.h"
@@ -41,12 +42,33 @@
 #include "runtime/exec_env.h"
 #include "storage/rowset/horizontal_update_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/storage_engine.h"
 
 namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchemaCSPtr& schema, const std::string& rowset_path,
-                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    *rowset = Rowset::create(schema, rowset_path, rowset_meta);
+                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset, KVStore* kvstore) {
+    if (kvstore == nullptr) {
+        DataDir* data_dir = nullptr;
+        std::vector<std::string> store_paths = StorageEngine::instance()->get_store_paths();
+        for (const auto& store_path : store_paths) {
+            if (rowset_path.compare(0, store_path.size(), store_path) == 0) {
+                // Ensure the match occurs at a path boundary to avoid false matches
+                // e.g., /data1 should not match /data10/tablet/...
+                if (rowset_path.size() == store_path.size() || rowset_path[store_path.size()] == '/') {
+                    data_dir = StorageEngine::instance()->get_store(store_path);
+                    break;
+                }
+            }
+        }
+        if (data_dir != nullptr) {
+            kvstore = data_dir->get_meta();
+        }
+        // If data_dir is not found, continue with kvstore = nullptr.
+        // This is valid for snapshot flows (e.g., SnapshotManager::convert_rowset_ids)
+        // that operate on arbitrary local directories outside configured store paths.
+    }
+    *rowset = Rowset::create(schema, rowset_path, rowset_meta, kvstore);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
 }
