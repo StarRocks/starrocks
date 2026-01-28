@@ -15,6 +15,7 @@
 #include "io/compressed_input_stream.h"
 
 #include <gtest/gtest.h>
+#include <lz4/lz4frame.h>
 
 #include <memory>
 
