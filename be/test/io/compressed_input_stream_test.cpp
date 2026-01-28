@@ -72,7 +72,8 @@ protected:
         ASSERT_EQ(t.data, decompressed_data);
     }
 
-    static void read_compressed_file_ctx(CompressionTypePB type, const char* path, std::string& out, const ReadContext& ctx) {
+    static void read_compressed_file_ctx(CompressionTypePB type, const char* path, std::string& out,
+                                         const ReadContext& ctx) {
         auto fs = new_fs_posix();
         auto st = fs->new_random_access_file(path);
         ASSERT_TRUE(st.ok()) << st.status().message();
@@ -80,7 +81,7 @@ protected:
 
         using DecompressorPtr = std::shared_ptr<StreamCompression>;
         std::unique_ptr<StreamCompression> dec;
-        (void) StreamCompression::create_decompressor(type, &dec);
+        (void)StreamCompression::create_decompressor(type, &dec);
 
         auto compressed_input_stream = std::make_shared<io::CompressedInputStream>(
                 file->stream(), DecompressorPtr(dec.release()), ctx.decompressor_buffer_size);
@@ -143,7 +144,7 @@ TEST_F(CompressedInputStreamTest, test_lz4_bug_1268_1) {
     std::string decompressed_str2;
     decompressed_str2.resize(8192);
     Slice decompressed_slice2(decompressed_str2);
-    const BlockCompressionCodec* codec= nullptr;
+    const BlockCompressionCodec* codec = nullptr;
     EXPECT_OK(get_block_compression_codec(LZ4_FRAME, &codec));
     EXPECT_OK(codec->decompress(compressed_slice2, &decompressed_slice2));
 }
@@ -159,7 +160,7 @@ TEST_F(CompressedInputStreamTest, test_lz4_bug_1268_2) {
 
     // read empty frame
     std::string empty_frame = gen_empty_frame();
-    const BlockCompressionCodec* codec= nullptr;
+    const BlockCompressionCodec* codec = nullptr;
     EXPECT_OK(get_block_compression_codec(LZ4_FRAME, &codec));
     Slice compressed_slice(empty_frame);
     std::string decompressed_str;
