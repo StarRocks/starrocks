@@ -1,4 +1,4 @@
--- name: test_iceberg_delete_partitioned
+-- name: test_iceberg_delete_partitioned @sequential
 
 create external catalog iceberg_del_part_${uuid0}
 PROPERTIES ( "type"  =  "iceberg",
