@@ -1579,7 +1579,12 @@ public class MaterializedViewAnalyzer {
 
             }
 
-            if (Config.enable_range_distribution) {
+            boolean enableRangeDistribution = Config.enable_range_distribution;
+            if (connectContext != null && connectContext.getSessionVariable().isEnableRangeDistribution()) {
+                enableRangeDistribution = true;
+            }
+
+            if (enableRangeDistribution) {
                 if (distributionDesc == null) {
                     // If no distribution specified, use range distribution
                     distributionDesc = new RangeDistributionDesc();
