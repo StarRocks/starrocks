@@ -141,6 +141,13 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                 index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
             }
         }
+        if (_sstable_pb.rssid_offset() != 0) {
+            for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                const int64_t rssid =
+                        static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
+                index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));
+            }
+        }
 
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
