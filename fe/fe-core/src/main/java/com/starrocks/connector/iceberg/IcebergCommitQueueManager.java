@@ -21,6 +21,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -210,10 +211,14 @@ public class IcebergCommitQueueManager {
     /**
      * Rejected execution handler that blocks until the queue has capacity.
      * This preserves serialized execution without running tasks in the caller thread.
-     * Has a maximum wait time to prevent indefinite blocking.
+     * The wait time is tied to the commit timeout to avoid premature rejections.
      */
     private static class BlockWhenQueueFullPolicy implements RejectedExecutionHandler {
-        private static final long MAX_WAIT_SECONDS = 60;  // Maximum wait time: 60 seconds
+        private final long maxWaitSeconds;
+
+        BlockWhenQueueFullPolicy(long maxWaitSeconds) {
+            this.maxWaitSeconds = maxWaitSeconds;
+        }
 
         @Override
         public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
@@ -222,10 +227,13 @@ public class IcebergCommitQueueManager {
             }
             try {
                 // Block until queue has capacity, but with a maximum wait time
-                boolean enqueued = executor.getQueue().offer(r, MAX_WAIT_SECONDS, TimeUnit.SECONDS);
+                // The wait time is tied to the commit timeout to ensure we don't reject
+                // commits that would eventually succeed if given enough time.
+                boolean enqueued = executor.getQueue().offer(r, maxWaitSeconds, TimeUnit.SECONDS);
                 if (!enqueued) {
-                    throw new RejectedExecutionException("Commit queue full - waited " + MAX_WAIT_SECONDS +
-                            " seconds but queue still at capacity. Consider increasing iceberg_commit_queue_max_size.");
+                    throw new RejectedExecutionException("Commit queue full - waited " + maxWaitSeconds +
+                            " seconds but queue still at capacity. Consider increasing iceberg_commit_queue_max_size " +
+                            "or iceberg_commit_queue_timeout_seconds.");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -336,28 +344,37 @@ public class IcebergCommitQueueManager {
         long remainingNanos = TimeUnit.SECONDS.toNanos(timeoutSeconds) - (System.nanoTime() - startNanos);
         if (remainingNanos <= 0) {
             future.cancel(true);
-            return CommitResult.failure(new TimeoutException(
-                    "Commit timeout after " + timeoutSeconds + " seconds"));
+            LOG.warn("Commit timeout for {}.{}.{}, but the actual commit may still be in progress. " +
+                    "State unknown - do NOT retry without verification",
+                    catalogName, dbName, tableName);
+            // Use the Throwable-only constructor
+            return CommitResult.failure(new CommitStateUnknownException(
+                    new TimeoutException("Commit timeout after " + timeoutSeconds + " seconds")));
         }
 
         try {
             return future.get(remainingNanos, TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.warn("Interrupted while waiting for commit to complete for {}.{}.{}",
+            LOG.warn("Interrupted while waiting for commit to complete for {}.{}.{}, " +
+                    "but the actual commit may still be in progress. State unknown - do NOT retry without verification",
                     catalogName, dbName, tableName, e);
             future.cancel(true);
-            return CommitResult.failure(new InterruptedException("Commit interrupted: " + e.getMessage()));
+            // Use (String, Throwable) constructor to provide clear message
+            return CommitResult.failure(new CommitStateUnknownException(
+                    "Commit interrupted", e));
         } catch (ExecutionException e) {
             LOG.error("Exception during commit execution for {}.{}.{}",
                     catalogName, dbName, tableName, e.getCause());
             return CommitResult.failure(e.getCause() != null ? e.getCause() : e);
         } catch (TimeoutException e) {
-            LOG.error("Timeout waiting for commit to complete for {}.{}.{} after {} seconds",
+            LOG.warn("Timeout waiting for commit to complete for {}.{}.{} after {} seconds. " +
+                    "The actual commit may still be in progress. State unknown - do NOT retry without verification",
                     catalogName, dbName, tableName, timeoutSeconds, e);
             future.cancel(true);
-            return CommitResult.failure(new TimeoutException(
-                    "Commit timeout after " + timeoutSeconds + " seconds"));
+            // Use the Throwable-only constructor
+            return CommitResult.failure(new CommitStateUnknownException(
+                    new TimeoutException("Commit timeout after " + timeoutSeconds + " seconds")));
         }
     }
 
@@ -397,17 +414,21 @@ public class IcebergCommitQueueManager {
                         .setNameFormat("iceberg-commit-" + escapeForFormat(key.catalogName) + "-" +
                                     escapeForFormat(key.dbName) + "-" + escapeForFormat(key.tableName) + "-%d")
                         .build();
-                // Use bounded ThreadPoolExecutor with CallerRunsPolicy to enforce maxQueueSize
-                // When queue is full, tasks are executed in the caller thread (blocks until capacity available)
+                // Use bounded ThreadPoolExecutor with BlockWhenQueueFullPolicy to enforce maxQueueSize
+                // When queue is full, block until capacity is available.
+                // The wait time is set to half of the commit timeout to leave room for actual execution.
+                long maxQueueWaitSeconds = config.getTimeoutSeconds() / 2;
                 ExecutorService executor = new ThreadPoolExecutor(
                         1,  // corePoolSize
                         1,  // maximumPoolSize
                         0L, TimeUnit.MILLISECONDS,  // idle thread timeout
                         new LinkedBlockingQueue<>(config.getMaxQueueSize()),  // bounded queue
                         threadFactory,
-                        new BlockWhenQueueFullPolicy());  // block until queue has capacity
-                LOG.info("Created commit queue executor for {}.{}.{}, max queue size: {}",
-                        key.catalogName, key.dbName, key.tableName, config.getMaxQueueSize());
+                        new BlockWhenQueueFullPolicy(maxQueueWaitSeconds));
+                LOG.info("Created commit queue executor for {}.{}.{}, max queue size: {}, " +
+                                "max queue wait: {} seconds (commit timeout: {} seconds)",
+                        key.catalogName, key.dbName, key.tableName, config.getMaxQueueSize(),
+                        maxQueueWaitSeconds, config.getTimeoutSeconds());
                 return new TableCommitExecutor(executor);
             });
         } catch (ExecutionException e) {

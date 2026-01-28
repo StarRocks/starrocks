@@ -1403,11 +1403,23 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             commitAction.run();
         } catch (Exception e) {
-            if (!(e instanceof CommitStateUnknownException)) {
+            // Check if this is a "commit state unknown" exception
+            // - Iceberg's CommitStateUnknownException: from the actual Iceberg commit operation
+            // - or from commit queue timeout/interruption where the actual commit may still be in progress
+            boolean isCommitStateUnknown = e instanceof CommitStateUnknownException;
+
+            if (!isCommitStateUnknown) {
+                // Only delete files if we're certain the commit failed
                 List<String> toDeleteFiles = dataFiles.stream()
                         .map(TIcebergDataFile::getPath)
                         .collect(Collectors.toList());
                 icebergCatalog.deleteUncommittedDataFiles(toDeleteFiles);
+            } else {
+                // Commit state is unknown - the commit may have succeeded, failed, or still be in progress
+                // Do NOT delete the data files as they may have been committed
+                LOG.warn("Commit state unknown for {}.{}.{}, data files may have been committed. " +
+                        "Do NOT retry without verification to avoid duplicate data ingestion.",
+                        catalogName, dbName, tableName);
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
             throw new StarRocksConnectorException(e.getMessage());

@@ -14,19 +14,30 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.cache.Cache;
+import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -176,6 +187,308 @@ public class IcebergCommitQueueManagerTest {
         manager.submitCommitAndRethrow("catalog", "db", "table", () -> {
             // Successful commit
         });
+    }
+
+    @Test
+    public void testSubmitCommitInterruptedReturnsCommitStateUnknown() {
+        Thread.currentThread().interrupt();
+        try {
+            IcebergCommitQueueManager.CommitResult result =
+                    manager.submitCommit("catalog", "db", "table", () -> {});
+            assertFalse(result.isSuccess());
+            assertTrue(result.getError() instanceof InterruptedException);
+        } finally {
+            assertTrue(Thread.interrupted());
+        }
+    }
+
+    @Test
+    public void testSubmitCommitTaskFailureWithMessage() {
+        IcebergCommitQueueManager.CommitResult result =
+                manager.submitCommit("catalog", "db", "table", () -> {
+                    throw new IllegalStateException("commit failed");
+                });
+
+        assertFalse(result.isSuccess());
+        assertNotNull(result.getError());
+        assertTrue(result.getError() instanceof IllegalStateException);
+        assertEquals("commit failed", result.getError().getMessage());
+    }
+
+    @Test
+    public void testSubmitCommitImmediateTimeoutReturnsCommitStateUnknown() {
+        IcebergCommitQueueManager.Config immediateTimeoutConfig =
+                new IcebergCommitQueueManager.Config(true, 120, 10) {
+                    @Override
+                    public long getTimeoutSeconds() {
+                        return 0;
+                    }
+                };
+        IcebergCommitQueueManager localManager = new IcebergCommitQueueManager(immediateTimeoutConfig);
+        try {
+            IcebergCommitQueueManager.CommitResult result =
+                    localManager.submitCommit("catalog", "db", "table", () -> {});
+            assertFalse(result.isSuccess());
+            assertTrue(result.getError() instanceof CommitStateUnknownException);
+            assertTrue(result.getError().getMessage().contains("Commit timeout"));
+        } finally {
+            localManager.shutdownAll();
+        }
+    }
+
+    @Test
+    public void testSubmitCommitWaitInterruptedReturnsCommitStateUnknown() throws Exception {
+        IcebergCommitQueueManager.Config cfg = new IcebergCommitQueueManager.Config(true, 120, 10);
+        IcebergCommitQueueManager localManager = new IcebergCommitQueueManager(cfg);
+        CountDownLatch taskStarted = new CountDownLatch(1);
+        CountDownLatch blockTask = new CountDownLatch(1);
+        AtomicReference<IcebergCommitQueueManager.CommitResult> resultRef = new AtomicReference<>();
+
+        Thread caller = new Thread(() -> {
+            resultRef.set(localManager.submitCommit("catalog", "db", "table", () -> {
+                taskStarted.countDown();
+                blockTask.await(5, TimeUnit.SECONDS);
+            }));
+        });
+        caller.start();
+
+        assertTrue(taskStarted.await(5, TimeUnit.SECONDS));
+        caller.interrupt();
+        caller.join(5000);
+        blockTask.countDown();
+
+        assertNotNull(resultRef.get());
+        assertFalse(resultRef.get().isSuccess());
+        assertTrue(resultRef.get().getError() instanceof CommitStateUnknownException);
+        assertTrue(resultRef.get().getError().getMessage().contains("Commit interrupted"));
+        localManager.shutdownAll();
+    }
+
+    @Test
+    public void testDisabledQueueReturnsFailureOnException() {
+        IcebergCommitQueueManager.Config disabledConfig =
+                new IcebergCommitQueueManager.Config(false, 120, 10);
+        IcebergCommitQueueManager disabledManager = new IcebergCommitQueueManager(disabledConfig);
+        try {
+            IcebergCommitQueueManager.CommitResult result =
+                    disabledManager.submitCommit("catalog", "db", "table", () -> {
+                        throw new Exception("disabled");
+                    });
+            assertFalse(result.isSuccess());
+            assertTrue(result.getError() instanceof Exception);
+        } finally {
+            disabledManager.shutdownAll();
+        }
+    }
+
+    @Test
+    public void testSubmitCommitRejectedWhenExecutorShutdown() throws Exception {
+        manager.submitCommit("catalog", "db", "table", () -> {});
+        Object key = newTableCommitKey("catalog", "db", "table");
+        ExecutorService executor = getExecutorForKey(manager, key);
+        executor.shutdown();
+
+        IcebergCommitQueueManager.CommitResult result =
+                manager.submitCommit("catalog", "db", "table", () -> {});
+        assertFalse(result.isSuccess());
+        assertTrue(result.getError() instanceof RejectedExecutionException);
+    }
+
+    @Test
+    public void testBlockWhenQueueFullPolicyRejectsWhenShutdown() throws Exception {
+        RejectedExecutionHandler policy = newBlockWhenQueueFullPolicy(0);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1));
+        executor.shutdown();
+        assertThrows(RejectedExecutionException.class,
+                () -> policy.rejectedExecution(() -> {}, executor));
+    }
+
+    @Test
+    public void testBlockWhenQueueFullPolicyTimesOutWhenQueueFull() throws Exception {
+        RejectedExecutionHandler policy = newBlockWhenQueueFullPolicy(0);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1));
+        executor.getQueue().add(() -> {});
+        assertThrows(RejectedExecutionException.class,
+                () -> policy.rejectedExecution(() -> {}, executor));
+        executor.shutdownNow();
+    }
+
+    @Test
+    public void testBlockWhenQueueFullPolicyWithInterrupted() throws Exception {
+        RejectedExecutionHandler policy = newBlockWhenQueueFullPolicy(1);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(1));
+        executor.getQueue().add(() -> {});
+        Thread.currentThread().interrupt();
+        try {
+            assertThrows(RejectedExecutionException.class,
+                    () -> policy.rejectedExecution(() -> {}, executor));
+        } finally {
+            assertTrue(Thread.interrupted());
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testGetOrCreateTableExecutorFailure() {
+        IcebergCommitQueueManager badManager = new IcebergCommitQueueManager(() -> {
+            throw new RuntimeException("supplier failed");
+        });
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> badManager.submitCommit("catalog", "db", "table", () -> {}));
+        // Config supplier is called before getOrCreateTableExecutor, so we get the original exception
+        assertTrue(exception.getMessage().contains("supplier failed"));
+    }
+
+    @Test
+    public void testShutdownExecutorForceAndInterruptedPaths() throws Exception {
+        FakeExecutor forceExecutor = new FakeExecutor(false);
+        Object key = newTableCommitKey("catalog", "db", "table");
+        invokeShutdownExecutor(manager, forceExecutor, key);
+        assertTrue(forceExecutor.shutdownCalled);
+        assertTrue(forceExecutor.shutdownNowCalled);
+        assertEquals(2, forceExecutor.awaitCalls);
+
+        FakeExecutor interruptedExecutor = new FakeExecutor(true);
+        invokeShutdownExecutor(manager, interruptedExecutor, key);
+        assertTrue(interruptedExecutor.shutdownNowCalled);
+        assertTrue(Thread.currentThread().isInterrupted());
+        Thread.interrupted();
+    }
+
+    @Test
+    public void testShutdownExecutorForcePath() throws Exception {
+        IcebergCommitQueueManager.Config config = new IcebergCommitQueueManager.Config(true, 120, 10);
+        IcebergCommitQueueManager localManager = new IcebergCommitQueueManager(config);
+
+        try {
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch block = new CountDownLatch(1);
+            localManager.submitCommit("catalog", "db", "table", () -> {
+                started.countDown();
+                block.await(5, TimeUnit.SECONDS);
+            });
+
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            localManager.shutdownTableExecutor("catalog", "db", "table");
+            block.countDown();
+        } finally {
+            localManager.shutdownAll();
+        }
+    }
+
+    @Test
+    public void testCommitResultRethrowRuntimeAndChecked() {
+        IcebergCommitQueueManager.CommitResult runtimeFailure =
+                IcebergCommitQueueManager.CommitResult.failure(new IllegalArgumentException("bad"));
+        IllegalArgumentException runtime = assertThrows(IllegalArgumentException.class,
+                runtimeFailure::rethrowIfFailed);
+        assertEquals("bad", runtime.getMessage());
+
+        IcebergCommitQueueManager.CommitResult checkedFailure =
+                IcebergCommitQueueManager.CommitResult.failure(new Exception("checked"));
+        RuntimeException wrapped = assertThrows(RuntimeException.class,
+                checkedFailure::rethrowIfFailed);
+        assertTrue(wrapped.getMessage().contains("checked"));
+    }
+
+    @Test
+    public void testTableCommitKeyEqualityAndToString() throws Exception {
+        var ctor = IcebergCommitQueueManager.TableCommitKey.class
+                .getDeclaredConstructor(String.class, String.class, String.class);
+        ctor.setAccessible(true);
+        Object key1 = ctor.newInstance("catalog", "db", "table");
+        Object key2 = ctor.newInstance("catalog", "db", "table");
+        Object key3 = ctor.newInstance("catalog", "db", "table2");
+
+        assertEquals(key1, key2);
+        assertNotEquals(key1, key3);
+        assertNotEquals(key1, "not-a-key");
+        assertEquals(key1.hashCode(), key2.hashCode());
+        assertTrue(key1.toString().contains("catalog.db.table"));
+    }
+
+    private static RejectedExecutionHandler newBlockWhenQueueFullPolicy(long waitSeconds) throws Exception {
+        Class<?> clazz = Class.forName(
+                "com.starrocks.connector.iceberg.IcebergCommitQueueManager$BlockWhenQueueFullPolicy");
+        Constructor<?> ctor = clazz.getDeclaredConstructor(long.class);
+        ctor.setAccessible(true);
+        return (RejectedExecutionHandler) ctor.newInstance(waitSeconds);
+    }
+
+    private static Object newTableCommitKey(String catalog, String db, String table) throws Exception {
+        Class<?> clazz = Class.forName(
+                "com.starrocks.connector.iceberg.IcebergCommitQueueManager$TableCommitKey");
+        Constructor<?> ctor = clazz.getDeclaredConstructor(String.class, String.class, String.class);
+        ctor.setAccessible(true);
+        return ctor.newInstance(catalog, db, table);
+    }
+
+    private static ExecutorService getExecutorForKey(IcebergCommitQueueManager manager, Object key) throws Exception {
+        Field field = IcebergCommitQueueManager.class.getDeclaredField("tableExecutors");
+        field.setAccessible(true);
+        Cache<?, ?> cache = (Cache<?, ?>) field.get(manager);
+        Object tableExecutor = cache.getIfPresent(key);
+        Field execField = tableExecutor.getClass().getDeclaredField("executor");
+        execField.setAccessible(true);
+        return (ExecutorService) execField.get(tableExecutor);
+    }
+
+    private static void invokeShutdownExecutor(IcebergCommitQueueManager manager,
+                                               ExecutorService executor,
+                                               Object key) throws Exception {
+        Method method = IcebergCommitQueueManager.class
+                .getDeclaredMethod("shutdownExecutor", ExecutorService.class, key.getClass());
+        method.setAccessible(true);
+        method.invoke(manager, executor, key);
+    }
+
+    private static class FakeExecutor extends AbstractExecutorService {
+        private final boolean throwOnAwait;
+        private boolean shutdownCalled;
+        private boolean shutdownNowCalled;
+        private int awaitCalls;
+
+        FakeExecutor(boolean throwOnAwait) {
+            this.throwOnAwait = throwOnAwait;
+        }
+
+        @Override
+        public void shutdown() {
+            shutdownCalled = true;
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdownNowCalled = true;
+            return Collections.emptyList();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdownCalled;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return false;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            awaitCalls++;
+            if (throwOnAwait) {
+                throw new InterruptedException("interrupted");
+            }
+            return false;
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            throw new UnsupportedOperationException("execute not supported");
+        }
     }
 
     @Test
@@ -1249,14 +1562,15 @@ public class IcebergCommitQueueManagerTest {
             // Now interrupt the thread that will try to submit (in a separate thread)
             CountDownLatch submissionStarted = new CountDownLatch(1);
             CountDownLatch submissionComplete = new CountDownLatch(1);
-            AtomicBoolean succeeded = new AtomicBoolean(false);
+            AtomicReference<IcebergCommitQueueManager.CommitResult> resultRef = new AtomicReference<>();
 
             Thread interruptingThread = new Thread(() -> {
                 submissionStarted.countDown();
                 try {
                     // This should block in offer(), then be interrupted
-                    queueManager.submitCommit("catalog", "db", "table", () -> {});
-                    succeeded.set(true);
+                    IcebergCommitQueueManager.CommitResult result =
+                            queueManager.submitCommit("catalog", "db", "table", () -> {});
+                    resultRef.set(result);
                 } finally {
                     submissionComplete.countDown();
                 }
@@ -1270,6 +1584,11 @@ public class IcebergCommitQueueManagerTest {
 
             // The submission should complete (with failure)
             assertTrue(submissionComplete.await(5, TimeUnit.SECONDS));
+
+            // Check that the commit failed (not succeeded)
+            IcebergCommitQueueManager.CommitResult result = resultRef.get();
+            assertNotNull(result);
+            assertFalse(result.isSuccess(), "Commit should fail when interrupted");
 
             proceedWithFirst.countDown();
             executor.shutdown();
