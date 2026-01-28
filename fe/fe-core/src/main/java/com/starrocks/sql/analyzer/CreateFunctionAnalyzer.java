@@ -422,7 +422,7 @@ public class CreateFunctionAnalyzer {
         final List<Type> argList = Arrays.stream(argsDef.getArgTypes()).collect(Collectors.toList());
         TableFunction tableFunction = new TableFunction(functionName,
                 Lists.newArrayList(functionName.getFunction()),
-                argList, Lists.newArrayList(returnType.getType()));
+                argList, Lists.newArrayList(returnType.getType()), argsDef.isVariadic());
         tableFunction.setBinaryType(TFunctionBinaryType.SRJAR);
         tableFunction.setChecksum(checksum);
         tableFunction.setLocation(new HdfsURI(objectFile));
@@ -697,7 +697,8 @@ public class CreateFunctionAnalyzer {
 
         /**
          * Check varargs parameters for UDAFs and UDTFs.
-         * Similar to checkVarargsScalarParameters but uses checkUdfType instead of checkScalarUdfType.
+         * Validates fixed parameters using checkParamUdfType and validates the varargs array
+         * component type using checkUdfType.
          */
         private void checkVarargsParameters(Method method, Type[] declaredArgTypes, int paramOffset) {
             Parameter[] params = method.getParameters();
