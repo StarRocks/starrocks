@@ -684,11 +684,11 @@ public class MetaFunctions {
     public static ConstantOperator lastQueryId() {
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext == null) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         UUID lastQueryId = connectContext.getLastQueryId();
         if (lastQueryId == null) {
-            return ConstantOperator.createNull(Type.VARCHAR);
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
         }
         return ConstantOperator.createVarchar(lastQueryId.toString());
     }

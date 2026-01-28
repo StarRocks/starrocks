@@ -3200,7 +3200,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             StringLiteral stringLiteral = (StringLiteral) visit(context.string());
             queryId = stringLiteral.getStringValue();
         } else {
-            queryId = ConnectContext.get() == null ? "" : ConnectContext.get().getLastQueryId();
+            queryId = ConnectContext.get() == null ? "" : ConnectContext.get().getLastQueryId().toString();
         }
 
         if (context.INTEGER_VALUE() != null) {
