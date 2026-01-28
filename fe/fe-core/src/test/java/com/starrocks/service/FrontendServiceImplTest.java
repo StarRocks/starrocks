@@ -355,6 +355,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testImmutablePartitionException() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "site_access_exception");
@@ -364,38 +371,45 @@ public class FrontendServiceImplTest {
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Table t = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "v");
 
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setDb_id(db.getId());
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setTable_id(t.getId());
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setTable_id(table.getId());
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
 
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
 
         partitionIds.add(1L);
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
 
         partitionIds = table.getPhysicalPartitions().stream()
                     .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
     }
 
     @Test
     public void testImmutablePartitionApi() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), "site_access_auto");
@@ -408,18 +422,18 @@ public class FrontendServiceImplTest {
         request.setPartition_ids(partitionIds);
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
 
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         Assertions.assertEquals(2, table.getPhysicalPartitions().size());
 
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         Assertions.assertEquals(2, table.getPhysicalPartitions().size());
 
         partitionIds = table.getPhysicalPartitions().stream()
                     .map(PhysicalPartition::getId).collect(Collectors.toList());
         request.setPartition_ids(partitionIds);
         partition = impl.updateImmutablePartition(request);
-        Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.OK);
+        Assertions.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
         Assertions.assertEquals(3, table.getPhysicalPartitions().size());
     }
 
