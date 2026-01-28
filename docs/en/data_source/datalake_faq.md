@@ -98,7 +98,7 @@ First check whether the issue is caused by Data Cache being enabled. Follow thes
 
 Root cause: To update the Iceberg table data is to overwrite old files, which corrupts Iceberg’s historical data. The correct behavior is to generate new file names when writing updates. StarRocks Data Cache uses the file name, file size, and modification time to determine whether cached data is valid. Since Iceberg does not overwrite files and the modification time is always 0, StarRocks incorrectly treats the files as unchanged and reads from cache, resulting in outdated query results.
 
-## FE constantly crashes after queries against tables in Hive Catalog integrated with JuiceFS. How can I solve this?
+## FE constantly crashes after queries against tables in external catalog integrated with JuiceFS. How can I solve this?
 
 To solve this, restart FE after adding the following configuration items to **fe.conf**:
 
