@@ -45,8 +45,6 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <boost/utility/binary.hpp>
-
 #include "util/bit_util.h"
 #include "util/debug_util.h"
 #include "util/faststring.h"
@@ -157,10 +155,10 @@ TEST(Rle, SpecificSequences) {
     int num_groups = BitUtil::Ceil(100, 8);
     expected_buffer[0] = (num_groups << 1) | 1;
     for (int i = 0; i < 100 / 8; ++i) {
-        expected_buffer[i + 1] = BOOST_BINARY(1 0 1 0 1 0 1 0); // 0xaa
+        expected_buffer[i + 1] = 0b10101010; // 0xaa
     }
     // Values for the last 4 0 and 1's
-    expected_buffer[1 + 100 / 8] = BOOST_BINARY(0 0 0 0 1 0 1 0); // 0x0a
+    expected_buffer[1 + 100 / 8] = 0b00001010; // 0x0a
 
     // num_groups and expected_buffer only valid for bit width = 1
     ValidateRle(values, 1, expected_buffer, 1 + num_groups);

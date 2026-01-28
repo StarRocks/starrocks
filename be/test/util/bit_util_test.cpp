@@ -36,8 +36,6 @@
 
 #include <gtest/gtest.h>
 
-#include <boost/utility.hpp>
-
 namespace starrocks {
 
 TEST(BitUtil, Ceil) {
@@ -51,12 +49,12 @@ TEST(BitUtil, Ceil) {
 }
 
 TEST(BitUtil, Popcount) {
-    EXPECT_EQ(BitUtil::popcount(BOOST_BINARY(0 1 0 1 0 1 0 1)), 4);
-    EXPECT_EQ(BitUtil::popcount_no_hw(BOOST_BINARY(0 1 0 1 0 1 0 1)), 4);
-    EXPECT_EQ(BitUtil::popcount(BOOST_BINARY(1 1 1 1 0 1 0 1)), 6);
-    EXPECT_EQ(BitUtil::popcount_no_hw(BOOST_BINARY(1 1 1 1 0 1 0 1)), 6);
-    EXPECT_EQ(BitUtil::popcount(BOOST_BINARY(1 1 1 1 1 1 1 1)), 8);
-    EXPECT_EQ(BitUtil::popcount_no_hw(BOOST_BINARY(1 1 1 1 1 1 1 1)), 8);
+    EXPECT_EQ(BitUtil::popcount(0b01010101), 4);
+    EXPECT_EQ(BitUtil::popcount_no_hw(0b01010101), 4);
+    EXPECT_EQ(BitUtil::popcount(0b11110101), 6);
+    EXPECT_EQ(BitUtil::popcount_no_hw(0b11110101), 6);
+    EXPECT_EQ(BitUtil::popcount(0b11111111), 8);
+    EXPECT_EQ(BitUtil::popcount_no_hw(0b11111111), 8);
     EXPECT_EQ(BitUtil::popcount(0), 0);
     EXPECT_EQ(BitUtil::popcount_no_hw(0), 0);
 }
