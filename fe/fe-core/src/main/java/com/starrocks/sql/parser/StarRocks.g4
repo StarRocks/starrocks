@@ -2183,8 +2183,8 @@ alterWarehouseStatement
 // ------------------------------------------- Transaction Statement ---------------------------------------------------
 
 beginStatement
-    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
-    | BEGIN WORK?
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)? (WITH LABEL label=identifier)?
+    | BEGIN WORK? (WITH LABEL label=identifier)?
     ;
 
 commitStatement

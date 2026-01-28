@@ -5326,7 +5326,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitBeginStatement(StarRocksParser.BeginStatementContext context) {
-        return new BeginStmt(createPos(context));
+        String label = null;
+        if (context.label != null) {
+            label = ((Identifier) visit(context.label)).getValue();
+        }
+        return new BeginStmt(createPos(context), label);
     }
 
     @Override
