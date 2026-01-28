@@ -39,14 +39,10 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
 #endif
-    bool is_literal() const override {
-        return true;
-    }
+    bool is_literal() const override { return true; }
     std::string debug_string() const override;
 
-    const ColumnPtr value() const {
-        return _value;
-    }
+    const ColumnPtr value() const { return _value; }
 
 private:
     // @IMPORTANT: BinaryColumnPtr's build_slice will cause multi-thread(OLAP_SCANNER) crash

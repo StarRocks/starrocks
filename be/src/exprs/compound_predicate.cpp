@@ -26,12 +26,10 @@
 
 namespace starrocks {
 
-#define DEFINE_COMPOUND_CONSTRUCT(CLASS)                   \
-    CLASS(const TExprNode& node) : Predicate(node) {}      \
-    virtual ~CLASS() {}                                    \
-    virtual Expr* clone(ObjectPool* pool) const override { \
-        return pool->add(new CLASS(*this));                \
-    }
+#define DEFINE_COMPOUND_CONSTRUCT(CLASS)              \
+    CLASS(const TExprNode& node) : Predicate(node) {} \
+    virtual ~CLASS() {}                               \
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
 /**
  * IS NULL AND IS NULL = IS NULL
@@ -66,9 +64,7 @@ public:
     }
 
 #ifdef STARROCKS_JIT_ENABLE
-    bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(CompilableExprType::LOGICAL);
-    }
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
@@ -148,9 +144,7 @@ public:
 
 #ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(CompilableExprType::LOGICAL);
-    }
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};
@@ -211,9 +205,7 @@ public:
     }
 #ifdef STARROCKS_JIT_ENABLE
 
-    bool is_compilable(RuntimeState* state) const override {
-        return state->can_jit_expr(CompilableExprType::LOGICAL);
-    }
+    bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
         JitScore jit_score = {0, 0};

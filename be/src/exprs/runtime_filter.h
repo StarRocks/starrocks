@@ -166,9 +166,7 @@ public:
     size_t deserialize(const uint8_t* data);
     void merge(const SimdBlockFilter& bf);
     bool check_equal(const SimdBlockFilter& bf) const;
-    uint32_t directory_mask() const {
-        return _directory_mask;
-    }
+    uint32_t directory_mask() const { return _directory_mask; }
 
     void clear();
     // whether this bloom filter can be used
@@ -176,9 +174,7 @@ public:
     // we still send this rf but ignore bloom filter and only keep min/max filter,
     // in this case, we will use clear() to release the memory of bloom filter,
     // we can use can_use() to check if this bloom filter can be used
-    bool can_use() const {
-        return _directory != nullptr;
-    }
+    bool can_use() const { return _directory != nullptr; }
 
     size_t get_alloc_size() const {
         return _log_num_buckets == 0 ? 0 : (1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE));
@@ -365,12 +361,14 @@ protected:
 
 template <typename F>
 concept HashValueForEachFunc = requires(F f, size_t index, uint32_t& hash_value) {
-    { f(index, hash_value) } -> std::same_as<void>;
+    { f(index, hash_value) }
+    ->std::same_as<void>;
 };
 
 template <typename F>
 concept HashValueAndBucketIdForEachFunc = requires(F f, size_t index, uint32_t& hash_value, uint32_t& bucket_id) {
-    { f(index, hash_value, bucket_id) } -> std::same_as<void>;
+    { f(index, hash_value, bucket_id) }
+    ->std::same_as<void>;
 };
 
 struct FullScanIterator {
@@ -950,13 +948,9 @@ public:
         }
     }
 
-    const CppType& min() const {
-        return _min;
-    }
+    const CppType& min() const { return _min; }
 
-    const CppType& max() const {
-        return _max;
-    }
+    const CppType& max() const { return _max; }
 
     // filter zonemap by evaluating
     // [min_value, max_value] overlapped with [min, max]
