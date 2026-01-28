@@ -241,8 +241,8 @@ class ColumnUsageTest extends PlanTestBase {
             List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
             Assertions.assertEquals(1, collectJobs.size());
             StatisticsCollectJob job0 = collectJobs.get(0);
-            Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, job0.getAnalyzeType());
-            Assertions.assertEquals(List.of("v1", "v2", "v3"), job0.getColumnNames());
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, job0.getAnalyzeType());
+            Assertions.assertEquals(List.of("v1"), job0.getColumnNames());
             Config.statistic_auto_collect_small_table_size = defaultSmallTableSize;
             Config.statistic_auto_collect_max_predicate_column_size_on_sample_strategy = defaultPredicateColumnSize;
         }
