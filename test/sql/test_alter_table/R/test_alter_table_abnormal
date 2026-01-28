@@ -317,3 +317,37 @@ insert into test values('2020-01-01', '2024-10-30 11:17:01', 'asfgrgte', 'werger
 alter table test modify PARTITION (*) set ("storage_cooldown_ttl" = "1 year", "storage_medium" = "SSD");
 -- result:
 -- !result
+
+-- name: test_pk_alter_char
+CREATE TABLE test2
+(
+    k1 BIGINT,
+    v1 LARGEINT,
+    v2 CHAR(4)
+)
+ENGINE=olap
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH (k1) BUCKETS 3
+PROPERTIES(
+    "replication_num"="1"
+);
+-- result:
+-- !result
+insert into test2 values (1, 1, '1');
+-- result:
+-- !result
+select * from test2 where v2 = '1';
+-- result:
+1	1	1
+-- !result
+alter table test2 add index test_bitmap(v1);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from test2 where v2 = '1';
+-- result:
+1	1	1
+-- !result
