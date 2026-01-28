@@ -1070,7 +1070,7 @@ Note that sinking data to external tables is disabled by default. To sink data t
 :::note
 
 - You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
-- You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
+- You can use the table property [`compression_codec`](#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables. StarRocks will prioritize using the compression codec specified in the table property.
 
 :::
 
