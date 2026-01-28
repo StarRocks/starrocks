@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -29,16 +30,74 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.type.IntegerType;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RewriteDuplicateAggregateFnRuleTest {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        FeConstants.runningUnitTest = true;
+    }
+
+    private ScalarOperator createGreaterThan(ColumnRefOperator col, int value) {
+        return new BinaryPredicateOperator(BinaryType.GT, col, ConstantOperator.createInt(value));
+    }
+
+    private CallOperator createIfOperator(ScalarOperator condition, ColumnRefOperator value) {
+        return new CallOperator("if", IntegerType.INT,
+                Lists.newArrayList(condition, value, ConstantOperator.createNull(IntegerType.INT)));
+    }
+
+    private CallOperator createDsHllCountDistinct(CallOperator ifExpr) {
+        return new CallOperator("ds_hll_count_distinct", IntegerType.BIGINT,
+                Lists.newArrayList(ifExpr, ConstantOperator.createInt(21)));
+    }
+
+    private CompoundPredicateOperator createAndPredicate(ColumnRefOperator col1, ColumnRefOperator col2) {
+        return new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND,
+                createGreaterThan(col1, 5),
+                createGreaterThan(col2, 5)
+        );
+    }
+
+    private CompoundPredicateOperator createOrPredicate(ColumnRefOperator col1, ColumnRefOperator col2) {
+        return new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR,
+                createGreaterThan(col1, 5),
+                createGreaterThan(col2, 5)
+        );
+    }
+
+    private LogicalAggregationOperator createAggregationOperator(
+            ColumnRefOperator groupByCol,
+            Map<ColumnRefOperator, CallOperator> aggMap) {
+        return new LogicalAggregationOperator(
+                AggType.GLOBAL,
+                Lists.newArrayList(groupByCol),
+                aggMap
+        );
+    }
+
+    private Map<ColumnRefOperator, CallOperator> createAggregationMap(
+            ColumnRefOperator aggCol1, CallOperator agg1,
+            ColumnRefOperator aggCol2, CallOperator agg2) {
+        Map<ColumnRefOperator, CallOperator> aggMap = Maps.newHashMap();
+        aggMap.put(aggCol1, agg1);
+        aggMap.put(aggCol2, agg2);
+        return aggMap;
+    }
 
     /**
      * Test case 1: Semantic equivalence with AND predicates in different order
@@ -56,12 +115,7 @@ public class RewriteDuplicateAggregateFnRuleTest {
         ColumnRefOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "v3", true);
         ColumnRefOperator col4 = new ColumnRefOperator(4, IntegerType.INT, "v4", true);
         
-        CompoundPredicateOperator and1 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND,
-                createGreaterThan(col1, 5),
-                createGreaterThan(col2, 5)
-        );
-        
+        CompoundPredicateOperator and1 = createAndPredicate(col1, col2);
         CompoundPredicateOperator and2 = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.AND,
                 createGreaterThan(col2, 5),
@@ -70,30 +124,16 @@ public class RewriteDuplicateAggregateFnRuleTest {
         
         CallOperator if1 = createIfOperator(and1, col3);
         CallOperator if2 = createIfOperator(and2, col3);
-        
         CallOperator agg1 = createDsHllCountDistinct(if1);
         CallOperator agg2 = createDsHllCountDistinct(if2);
         
-        assertTrue(agg1.equivalent(agg2), 
-                "Aggregations with AND predicates in different order should be semantically equivalent");
-        
         ColumnRefOperator aggCol1 = new ColumnRefOperator(10, IntegerType.BIGINT, "d1", true);
         ColumnRefOperator aggCol2 = new ColumnRefOperator(11, IntegerType.BIGINT, "d2", true);
+        Map<ColumnRefOperator, CallOperator> aggMap = createAggregationMap(aggCol1, agg1, aggCol2, agg2);
+        LogicalAggregationOperator aggOp = createAggregationOperator(col4, aggMap);
         
-        Map<ColumnRefOperator, CallOperator> aggMap = Maps.newHashMap();
-        aggMap.put(aggCol1, agg1);
-        aggMap.put(aggCol2, agg2);
-        
-        LogicalAggregationOperator aggOp = new LogicalAggregationOperator(
-                AggType.GLOBAL,
-                Lists.newArrayList(col4),
-                aggMap
-        );
-        
-        RewriteDuplicateAggregateFnRule rule = new RewriteDuplicateAggregateFnRule();
         OptExpression aggExpr = new OptExpression(aggOp);
-        
-        // Check if the rule detects duplicates
+        RewriteDuplicateAggregateFnRule rule = new RewriteDuplicateAggregateFnRule();
         assertTrue(rule.check(aggExpr, OptimizerFactory.mockContext(new ColumnRefFactory())),
                 "Rule should detect semantic duplicates");
     }
@@ -107,13 +147,8 @@ public class RewriteDuplicateAggregateFnRuleTest {
         ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "v2", true);
         ColumnRefOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "v3", true);
         ColumnRefOperator col4 = new ColumnRefOperator(4, IntegerType.INT, "v4", true);
-        
-        CompoundPredicateOperator or1 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.OR,
-                createGreaterThan(col1, 5),
-                createGreaterThan(col2, 5)
-        );
-        
+
+        CompoundPredicateOperator or1 = createOrPredicate(col1, col2);
         CompoundPredicateOperator or2 = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR,
                 createGreaterThan(col2, 5),
@@ -122,13 +157,18 @@ public class RewriteDuplicateAggregateFnRuleTest {
         
         CallOperator if1 = createIfOperator(or1, col3);
         CallOperator if2 = createIfOperator(or2, col3);
-        
         CallOperator agg1 = createDsHllCountDistinct(if1);
         CallOperator agg2 = createDsHllCountDistinct(if2);
         
-        // Verify they are semantically equivalent
-        assertTrue(agg1.equivalent(agg2),
-                "Aggregations with OR predicates in different order should be semantically equivalent");
+        ColumnRefOperator aggCol1 = new ColumnRefOperator(10, IntegerType.BIGINT, "d1", true);
+        ColumnRefOperator aggCol2 = new ColumnRefOperator(11, IntegerType.BIGINT, "d2", true);
+        Map<ColumnRefOperator, CallOperator> aggMap = createAggregationMap(aggCol1, agg1, aggCol2, agg2);
+        LogicalAggregationOperator aggOp = createAggregationOperator(col4, aggMap);
+
+        OptExpression aggExpr = new OptExpression(aggOp);
+        RewriteDuplicateAggregateFnRule rule = new RewriteDuplicateAggregateFnRule();
+        assertTrue(rule.check(aggExpr, OptimizerFactory.mockContext(new ColumnRefFactory())),
+                "Rule should detect semantic duplicates");
     }
 
     /**
@@ -140,26 +180,24 @@ public class RewriteDuplicateAggregateFnRuleTest {
         ColumnRefOperator col2 = new ColumnRefOperator(2, IntegerType.INT, "v2", true);
         ColumnRefOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "v3", true);
         ColumnRefOperator col4 = new ColumnRefOperator(4, IntegerType.INT, "v4", true);
-        
-        CompoundPredicateOperator and1 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND,
-                createGreaterThan(col1, 5),
-                createGreaterThan(col2, 5)
-        );
-        
-        CompoundPredicateOperator and2 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND,
-                createGreaterThan(col1, 5),
-                createGreaterThan(col2, 5)
-        );
+
+        CompoundPredicateOperator and1 = createAndPredicate(col1, col2);
+        CompoundPredicateOperator and2 = createAndPredicate(col1, col2);
         
         CallOperator if1 = createIfOperator(and1, col3);
         CallOperator if2 = createIfOperator(and2, col3);
-        
         CallOperator agg1 = createDsHllCountDistinct(if1);
         CallOperator agg2 = createDsHllCountDistinct(if2);
-        
-        assertEquals(agg1, agg2, "Exact duplicate aggregations should be equal");
+
+        ColumnRefOperator aggCol1 = new ColumnRefOperator(10, IntegerType.BIGINT, "d1", true);
+        ColumnRefOperator aggCol2 = new ColumnRefOperator(11, IntegerType.BIGINT, "d2", true);
+        Map<ColumnRefOperator, CallOperator> aggMap = createAggregationMap(aggCol1, agg1, aggCol2, agg2);
+        LogicalAggregationOperator aggOp = createAggregationOperator(col4, aggMap);
+
+        OptExpression aggExpr = new OptExpression(aggOp);
+        RewriteDuplicateAggregateFnRule rule = new RewriteDuplicateAggregateFnRule();
+        assertTrue(rule.check(aggExpr, OptimizerFactory.mockContext(new ColumnRefFactory())),
+                "Rule should detect semantic duplicates");
     }
 
     /**
@@ -172,21 +210,23 @@ public class RewriteDuplicateAggregateFnRuleTest {
         ColumnRefOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "v3", true);
         ColumnRefOperator col4 = new ColumnRefOperator(4, IntegerType.INT, "v4", true);
         
-        CompoundPredicateOperator and1 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND,
-                createGreaterThan(col1, 5),
-                createGreaterThan(col2, 5)
-        );
+        CompoundPredicateOperator and1 = createAndPredicate(col1, col2);
         
         CallOperator if1 = createIfOperator(and1, col3);
-        CallOperator if2 = createIfOperator(and1, col4);  // Different input column
+        CallOperator if2 = createIfOperator(and1, col4);
         
         CallOperator agg1 = createDsHllCountDistinct(if1);
         CallOperator agg2 = createDsHllCountDistinct(if2);
-        
-        // Verify they are NOT semantically equivalent
-        assertTrue(!agg1.equivalent(agg2),
-                "Aggregations with different input columns should not be semantically equivalent");
+
+        ColumnRefOperator aggCol1 = new ColumnRefOperator(10, IntegerType.BIGINT, "d1", true);
+        ColumnRefOperator aggCol2 = new ColumnRefOperator(11, IntegerType.BIGINT, "d2", true);
+        Map<ColumnRefOperator, CallOperator> aggMap = createAggregationMap(aggCol1, agg1, aggCol2, agg2);
+        LogicalAggregationOperator aggOp = createAggregationOperator(col4, aggMap);
+
+        OptExpression aggExpr = new OptExpression(aggOp);
+        RewriteDuplicateAggregateFnRule rule = new RewriteDuplicateAggregateFnRule();
+        assertFalse(rule.check(aggExpr, OptimizerFactory.mockContext(new ColumnRefFactory())),
+                "Rule should not detect semantic duplicates");
     }
 
     /**
@@ -199,12 +239,7 @@ public class RewriteDuplicateAggregateFnRuleTest {
         ColumnRefOperator col3 = new ColumnRefOperator(3, IntegerType.INT, "v3", true);
         ColumnRefOperator col4 = new ColumnRefOperator(4, IntegerType.INT, "v4", true);
         
-        CompoundPredicateOperator and1 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND,
-                createGreaterThan(col1, 5),
-                createGreaterThan(col2, 5)
-        );
-        
+        CompoundPredicateOperator and1 = createAndPredicate(col1, col2);
         CompoundPredicateOperator and2 = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.AND,
                 createGreaterThan(col2, 5),
@@ -213,25 +248,15 @@ public class RewriteDuplicateAggregateFnRuleTest {
         
         CallOperator if1 = createIfOperator(and1, col3);
         CallOperator if2 = createIfOperator(and2, col3);
-        
         CallOperator agg1 = createDsHllCountDistinct(if1);
         CallOperator agg2 = createDsHllCountDistinct(if2);
         
         ColumnRefOperator aggCol1 = new ColumnRefOperator(10, IntegerType.BIGINT, "d1", true);
         ColumnRefOperator aggCol2 = new ColumnRefOperator(11, IntegerType.BIGINT, "d2", true);
-        
-        Map<ColumnRefOperator, CallOperator> aggMap = Maps.newHashMap();
-        aggMap.put(aggCol1, agg1);
-        aggMap.put(aggCol2, agg2);
-        
-        LogicalAggregationOperator aggOp = new LogicalAggregationOperator(
-                AggType.GLOBAL,
-                Lists.newArrayList(col4),
-                aggMap
-        );
+        Map<ColumnRefOperator, CallOperator> aggMap = createAggregationMap(aggCol1, agg1, aggCol2, agg2);
+        LogicalAggregationOperator aggOp = createAggregationOperator(col4, aggMap);
         
         OptExpression aggExpr = new OptExpression(aggOp);
-        
         RewriteDuplicateAggregateFnRule rule = new RewriteDuplicateAggregateFnRule();
         List<OptExpression> result = rule.transform(aggExpr, OptimizerFactory.mockContext(new ColumnRefFactory()));
         
@@ -248,19 +273,5 @@ public class RewriteDuplicateAggregateFnRuleTest {
         LogicalAggregationOperator newAggOp = (LogicalAggregationOperator) aggChild.getOp();
         assertEquals(1, newAggOp.getAggregations().size(),
                 "Should have only one aggregation after deduplication");
-    }
-
-    private ScalarOperator createGreaterThan(ColumnRefOperator col, int value) {
-        return new BinaryPredicateOperator(BinaryType.GT, col, ConstantOperator.createInt(value));
-    }
-
-    private CallOperator createIfOperator(ScalarOperator condition, ColumnRefOperator value) {
-        return new CallOperator("if", IntegerType.INT,
-                Lists.newArrayList(condition, value, ConstantOperator.createNull(IntegerType.INT)));
-    }
-
-    private CallOperator createDsHllCountDistinct(CallOperator ifExpr) {
-        return new CallOperator("ds_hll_count_distinct", IntegerType.BIGINT,
-                Lists.newArrayList(ifExpr, ConstantOperator.createInt(21)));
     }
 }
