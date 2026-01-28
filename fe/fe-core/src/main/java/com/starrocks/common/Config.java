@@ -2226,6 +2226,10 @@ public class Config extends ConfigBase {
             "will not be recorded during query optimization")
     public static boolean enable_predicate_columns_collection = true;
 
+    @ConfField(mutable = true, comment = "If enabled, FE will always collect optimizer timer traces during plan " +
+            "generation and dump them to logs when plan generation fails (e.g. CBO timeout) for diagnosis.")
+    public static boolean enable_dump_optimizer_trace_on_error = false;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
