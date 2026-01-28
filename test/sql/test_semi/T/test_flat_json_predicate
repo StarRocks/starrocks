@@ -58,13 +58,13 @@ select
 from (table(generate_series(1, 1000)));
 
 select * from js2 where get_json_int(j1, '$.f1') = -1;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f1') = 1;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = -1;
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1;
 select get_json_int(j1, '$.f1') from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
@@ -95,22 +95,22 @@ select count(get_json_int(j1, '$.f3')) from js2 ;
 select * from profile_access_path;
 
 select * from js2 where get_json_int(j1, '$.f1') = -1;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f1') = 1;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f1') = 1 or get_json_int(j1, '$.f1') = 2;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f1') in (1, 2, 3, 4);
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 
 select * from js2 where get_json_int(j1, '$.f2') = -1;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f2') = 1;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f2') = 1 or get_json_int(j1, '$.f2') = 2;
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 select * from js2 where get_json_int(j1, '$.f2') in (1, 2, 3, 4);
-select * from profile_filter_rows;
+select * from profile_filter_rows order by unnest;
 
 -- different projection and predicate
 select get_json_int(j1, '$.f2') from js2 where get_json_int(j1, '$.f2') = 1;
