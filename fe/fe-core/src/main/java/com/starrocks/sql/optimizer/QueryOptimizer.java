@@ -84,6 +84,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTER
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxByMonotonicFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToLogicalValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteUnnestBitmapRule;
 import com.starrocks.sql.optimizer.rule.transformation.SchemaTableEvaluateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
@@ -710,6 +711,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.META_SCAN_REWRITE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
+        scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN);
         // before MergeProjectWithChildRule, after INLINE_CTE and MergeApplyWithTableFunction
         scheduler.rewriteIterative(tree, rootTaskContext, RewriteUnnestBitmapRule.getInstance());
         // After this rule, we shouldn't generate logical project operator
@@ -732,6 +734,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, JsonPathRewriteRule.createForOlapScan());
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMinMaxByMonotonicFunctionRule());
         scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
+        scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToLogicalValuesRule.PAIMON_SCAN_NO_PROJECT);
         // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
         // select count(distinct c) from t group by a, b
         // if this rule has applied before MV.
