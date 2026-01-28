@@ -24,10 +24,15 @@
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
+#include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(hash_join_append_bad_alloc);
+DEFINE_FAIL_POINT(hash_join_build_bad_alloc);
+
 // if the same hash values are clustered, after the first probe, all related hash buckets are cached, without too many
 // misses. So check time locality of probe keys here.
 void HashTableProbeState::consider_probe_time_locality() {
@@ -564,6 +569,11 @@ int64_t JoinHashTable::mem_usage() const {
 }
 
 Status JoinHashTable::build(RuntimeState* state) {
+    CancelableDefer defer = CancelableDefer([&]() {
+        _table_items->key_columns.clear();
+        _table_items->build_chunk->columns().clear();
+    });
+
     RETURN_IF_ERROR(_table_items->build_chunk->upgrade_if_overflow());
     _table_items->has_large_column = _table_items->build_chunk->has_large_column();
 
@@ -593,6 +603,8 @@ Status JoinHashTable::build(RuntimeState* state) {
     default:
         assert(false);
     }
+
+    defer.cancel();
 
     return Status::OK();
 }
@@ -650,6 +662,11 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
     auto& columns = _table_items->build_chunk->columns();
 
+    CancelableDefer defer = CancelableDefer([&]() {
+        columns.clear();
+        _table_items->key_columns.clear();
+    });
+
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
         ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
@@ -676,6 +693,8 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
     }
 
     _table_items->row_count += chunk->num_rows();
+
+    defer.cancel();
 }
 
 void JoinHashTable::merge_ht(const JoinHashTable& ht) {
@@ -684,6 +703,11 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
     auto& columns = _table_items->build_chunk->columns();
     auto& other_columns = ht._table_items->build_chunk->columns();
 
+    CancelableDefer defer = CancelableDefer([&]() {
+        columns.clear();
+        other_columns.clear();
+    });
+
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         if (!columns[i]->is_nullable() && !columns[i]->is_view() && other_columns[i]->is_nullable()) {
             // upgrade to nullable column
@@ -691,6 +715,8 @@ void JoinHashTable::merge_ht(const JoinHashTable& ht) {
         }
         columns[i]->append(*other_columns[i], 1, other_columns[i]->size() - 1);
     }
+
+    defer.cancel();
 }
 
 ChunkPtr JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
