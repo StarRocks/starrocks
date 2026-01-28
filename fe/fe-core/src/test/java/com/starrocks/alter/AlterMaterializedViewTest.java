@@ -393,7 +393,7 @@ public class AlterMaterializedViewTest extends MVTestBase {
         }
 
         {
-            String stmt = "alter materialized view mv1 add column v3_default as v3 default 10";
+            String stmt = "alter materialized view mv1 add column v3_default as v3 default \"10\"";
             alterMVAddColumn(stmt, false);
             waitSchemaChangeJobDone(false, tbl);
             Column column = mv1.getColumn("v3_default");

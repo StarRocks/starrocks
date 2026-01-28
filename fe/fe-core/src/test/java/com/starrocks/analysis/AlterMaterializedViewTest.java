@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -179,16 +180,18 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         }
     }
 
-        @Test
-        public void testAlterMVAddColumnWithDefaultValue() throws Exception {
-                String alterMvSql = "alter materialized view mv1 add column v1_default as v1 default 10";
-                AlterMaterializedViewStmt stmt =
-                                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-                AddMVColumnClause clause = (AddMVColumnClause) stmt.getAlterTableClause();
-                ColumnDef.DefaultValueDef defaultValueDef = clause.getDefaultValueDef();
-                Assertions.assertTrue(defaultValueDef.isSet);
-                Assertions.assertEquals("10", defaultValueDef.expr.debugString());
-        }
+    @Test
+    public void testAlterMVAddColumnWithDefaultValue() throws Exception {
+        String alterMvSql = "alter materialized view mv1 add column v1_default as v1 default 10";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        AddMVColumnClause clause = (AddMVColumnClause) stmt.getAlterTableClause();
+        ColumnDef.DefaultValueDef defaultValueDef = clause.getDefaultValueDef();
+        Assertions.assertTrue(defaultValueDef.isSet);
+        Assertions.assertTrue(defaultValueDef.expr.isConstant());
+        IntLiteral intLiteral = (IntLiteral) defaultValueDef.expr;
+        Assertions.assertEquals(10, intLiteral.getValue());
+    }
 
     // TODO: consider to support alterjob for mv
     @Test

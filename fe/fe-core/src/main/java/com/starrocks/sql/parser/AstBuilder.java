@@ -1221,30 +1221,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         if (isAutoIncrement != null) {
             isAllowNull = false;
         }
-        ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
         final com.starrocks.sql.parser.StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
-        if (defaultDescContext != null) {
-            if (defaultDescContext.string() != null) {
-                String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
-            } else if (defaultDescContext.NULL() != null) {
-                defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
-            } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
-                List<Expr> expr = Lists.newArrayList();
-                if (defaultDescContext.INTEGER_VALUE() != null) {
-                    expr.add(new IntLiteral(Long.parseLong(defaultDescContext.INTEGER_VALUE().getText()), IntegerType.INT));
-                }
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, (expr.size() == 1),
-                        new FunctionCallExpr("current_timestamp", expr));
-            } else if (defaultDescContext.qualifiedName() != null) {
-                String functionName = defaultDescContext.qualifiedName().getText().toLowerCase();
-                defaultValueDef = new ColumnDef.DefaultValueDef(true,
-                        new FunctionCallExpr(functionName, new ArrayList<>()));
-            } else if (defaultDescContext.expression() != null) {
-                Expr defaultExpr = (Expr) visit(defaultDescContext.expression());
-                defaultValueDef = new ColumnDef.DefaultValueDef(true, defaultExpr);
-            }
-        }
+        final ColumnDef.DefaultValueDef defaultValueDef = getDefaultValueDef(defaultDescContext);
         final com.starrocks.sql.parser.StarRocksParser.GeneratedColumnDescContext generatedColumnDescContext =
                 context.generatedColumnDesc();
         Expr expr = null;
