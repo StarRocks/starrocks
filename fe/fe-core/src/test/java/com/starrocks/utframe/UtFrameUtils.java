@@ -469,9 +469,6 @@ public class UtFrameUtils {
                     continue;
                 }
 
-<<<<<<< HEAD
-                System.out.println("find valid port " + port + new Date());
-=======
                 PortReservation reservation = new PortReservation(accessFile, lock);
                 PortReservation existing = RESERVED_PORTS.putIfAbsent(port, reservation);
                 if (existing != null) {
@@ -481,7 +478,6 @@ public class UtFrameUtils {
 
                 System.out.println("find valid port " + port + " at " + new Date()
                         + ", lock dir: " + portDir.getAbsolutePath());
->>>>>>> 33f03800c3 ([UT] Fix FE UT BDB port conflicts by reserving ports globally (#68495))
                 return port;
             } catch (Exception e) {
                 e.printStackTrace();
