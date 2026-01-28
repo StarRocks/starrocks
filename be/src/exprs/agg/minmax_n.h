@@ -148,48 +148,15 @@ public:
     using InputColumnType = RunTimeColumnType<LT>;
 
     static constexpr int32_t DEFAULT_N = 5;
-    static constexpr int32_t MAX_N = 10000;
     static constexpr const char* FUNC_NAME = IsMin ? "min_n" : "max_n";
 
     int32_t get_n_value(FunctionContext* ctx) const {
         int32_t n = DEFAULT_N;
         if (ctx->get_num_args() > 1) {
             const Column* const_col = ctx->get_constant_column(1);
-            if (const_col != nullptr) {
-                // Get the actual data column from ConstColumn
-                const auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(const_col);
-                const Column* data_column = const_column->data_column().get();
-
-                // Read the value directly from raw data based on type size
-                const uint8_t* raw_data = data_column->raw_data();
-                size_t type_size = data_column->type_size();
-
-                switch (type_size) {
-                case 1: {
-                    n = static_cast<int32_t>(*reinterpret_cast<const int8_t*>(raw_data));
-                    break;
-                }
-                case 2: {
-                    n = static_cast<int32_t>(*reinterpret_cast<const int16_t*>(raw_data));
-                    break;
-                }
-                case 4: {
-                    n = *reinterpret_cast<const int32_t*>(raw_data);
-                    break;
-                }
-                case 8: {
-                    n = static_cast<int32_t>(*reinterpret_cast<const int64_t*>(raw_data));
-                    break;
-                }
-                default: {
-                    n = ColumnHelper::get_const_value<TYPE_INT>(const_col);
-                    break;
-                }
-                }
-            }
+            n = ColumnHelper::get_const_value<TYPE_INT>(const_col);
         }
         DCHECK_GT(n, 0);
-        DCHECK_LE(n, MAX_N);
         return n;
     }
 
@@ -202,17 +169,9 @@ public:
         this->data(state).reset(n);
     }
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
-        int32_t n = get_n_value(ctx);
-        this->data(state).reset(n);
-    }
-
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        if (columns[0]->is_null(row_num)) {
-            return;
-        }
-
+        DCHECK(!columns[0]->is_nullable());
         init_state_if_necessary(ctx, state);
 
         const Column* data_col = ColumnHelper::get_data_column(columns[0]);
@@ -222,51 +181,9 @@ public:
         this->data(state).template process<true>(ctx->mem_pool(), value);
     }
 
-    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                              int64_t frame_end) const override {
-        init_state_if_necessary(ctx, state);
-
-        const Column* input_col = columns[0];
-
-        // Fast path: no nulls
-        if (!input_col->has_null()) {
-            const Column* data_col = ColumnHelper::get_data_column(input_col);
-            const auto* column = down_cast<const InputColumnType*>(data_col);
-
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
-                this->data(state).template process<true>(ctx->mem_pool(), value);
-            }
-            return;
-        }
-
-        // Handle nullable column
-        if (input_col->is_nullable()) {
-            const auto* nullable_column = down_cast<const NullableColumn*>(input_col);
-            const Column* data_col = &nullable_column->data_column_ref();
-            const auto* column = down_cast<const InputColumnType*>(data_col);
-            const uint8_t* null_data = nullable_column->null_column()->raw_data();
-
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                if (null_data[i] == 0) {
-                    const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
-                    this->data(state).template process<true>(ctx->mem_pool(), value);
-                }
-            }
-        } else {
-            // Const column or other non-nullable type
-            const Column* data_col = ColumnHelper::get_data_column(input_col);
-            const auto* column = down_cast<const InputColumnType*>(data_col);
-
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
-                this->data(state).template process<true>(ctx->mem_pool(), value);
-            }
-        }
-    }
-
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        DCHECK(!column->is_nullable());
+
         DCHECK(column->is_binary());
         Slice bytes = column->get(row_num).get_slice();
 
@@ -318,34 +235,19 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(!src[0]->is_nullable());
         int32_t n = get_n_value(ctx);
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
+        auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
-        if (src[0]->is_nullable()) {
-            auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());
-            auto* src_column = down_cast<const InputColumnType*>(src_nullable_column->data_column().get());
-
-            for (size_t i = 0; i < src_nullable_column->size(); ++i) {
-                MinMaxNAggregateState<LT, IsMin> state;
-                state.reset(n);
-                if (!src_nullable_column->is_null(i)) {
-                    const auto& value = AggDataTypeTraits<LT>::get_row_ref(*src_column, i);
-                    state.template process<false>(ctx->mem_pool(), value);
-                }
-                serialize_state(state, dst_column);
-            }
-        } else {
-            auto* src_column = down_cast<const InputColumnType*>(src[0].get());
-
-            for (size_t i = 0; i < src_column->size(); ++i) {
-                MinMaxNAggregateState<LT, IsMin> state;
-                state.reset(n);
-                const auto& value = AggDataTypeTraits<LT>::get_row_ref(*src_column, i);
-                state.template process<false>(ctx->mem_pool(), value);
-                serialize_state(state, dst_column);
-            }
+        for (size_t i = 0; i < src_column->size(); ++i) {
+            MinMaxNAggregateState<LT, IsMin> state;
+            state.reset(n);
+            const auto& value = AggDataTypeTraits<LT>::get_row_ref(*src_column, i);
+            state.template process<false>(ctx->mem_pool(), value);
+            serialize_state(state, dst_column);
         }
     }
 
@@ -412,13 +314,6 @@ public:
         }
     }
 
-    void batch_finalize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
-                        size_t state_offset, Column* to) const override {
-        for (size_t i = 0; i < chunk_size; i++) {
-            finalize_to_column(ctx, agg_states[i] + state_offset, to);
-        }
-    }
-
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         // Like approx_top_k: finalize_to_column outputs to ArrayColumn (final result)
         DCHECK(to->is_array());
@@ -455,48 +350,6 @@ public:
 
         if (UNLIKELY(state_impl.check_overflow(*to, ctx, FUNC_NAME))) {
             return;
-        }
-    }
-
-    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
-                    size_t end) const override {
-        DCHECK_GT(end, start);
-        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-
-        // NullableAggregateFunctionBase will handle unwrapping if needed
-        DCHECK(dst->is_array());
-        auto* array_column = down_cast<ArrayColumn*>(dst);
-
-        // Get sorted values (only once for all rows)
-        std::vector<CppType> values;
-        state_impl.get_sorted_values(values);
-
-        for (size_t i = start; i < end; ++i) {
-            if (UNLIKELY(state_impl.check_overflow(ctx))) {
-                return;
-            }
-
-            // Handle empty result
-            if (values.empty()) {
-                array_column->append_default();
-            } else {
-                // Create a temporary column to hold the array elements
-                auto temp_column = InputColumnType::create();
-                for (const auto& value : values) {
-                    if constexpr (IsSlice<CppType>) {
-                        temp_column->append(value);
-                    } else {
-                        AggDataTypeTraits<LT>::append_value(temp_column.get(), value);
-                    }
-                }
-
-                // Use the safe append_array_element method
-                array_column->append_array_element(*temp_column, 0);
-            }
-
-            if (UNLIKELY(state_impl.check_overflow(*dst, ctx, FUNC_NAME))) {
-                return;
-            }
         }
     }
 

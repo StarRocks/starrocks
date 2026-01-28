@@ -143,10 +143,10 @@ public:
     static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() { return new AnyValueSemiAggregateFunction(); }
 
     template <LogicalType LT>
-    static auto MakeMinNAggregateFunction();
+    static AggregateFunctionPtr MakeMinNAggregateFunction();
 
     template <LogicalType LT>
-    static auto MakeMaxNAggregateFunction();
+    static AggregateFunctionPtr MakeMaxNAggregateFunction();
 
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
               typename NestedFunctionPtr = AggregateFunctionPtr,
@@ -343,13 +343,13 @@ auto AggregateFactory::MakeMinAggregateFunction() {
 }
 
 template <LogicalType LT>
-auto AggregateFactory::MakeMinNAggregateFunction() {
-    return std::make_shared<MinMaxNAggregateFunction<LT, true>>();
+AggregateFunctionPtr AggregateFactory::MakeMinNAggregateFunction() {
+    return new MinMaxNAggregateFunction<LT, true>();
 }
 
 template <LogicalType LT>
-auto AggregateFactory::MakeMaxNAggregateFunction() {
-    return std::make_shared<MinMaxNAggregateFunction<LT, false>>();
+AggregateFunctionPtr AggregateFactory::MakeMaxNAggregateFunction() {
+    return new MinMaxNAggregateFunction<LT, false>();
 }
 
 template <LogicalType LT>

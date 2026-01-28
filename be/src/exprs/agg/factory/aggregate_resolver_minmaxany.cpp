@@ -79,11 +79,10 @@ struct MinNDispatcher {
         if constexpr (lt_is_integer<lt> || lt_is_decimal<lt> || lt_is_float<lt> || lt_is_string<lt> ||
                       lt_is_date_or_datetime<lt> || lt_is_boolean<lt>) {
             // min_n(value, n) returns array(value)
-            auto func = AggregateFactory::MakeMinNAggregateFunction<lt>();
+            AggregateFunctionPtr func = AggregateFactory::MakeMinNAggregateFunction<lt>();
             using MinNState = MinMaxNAggregateState<lt, true>;
             // Use add_aggregate_mapping with IgnoreNull=false to support nullable array elements
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MinNState, AggregateFunctionPtr, false>("min_n", false,
-                                                                                                    func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MinNState>("min_n", false, func);
         }
     }
 };
@@ -94,11 +93,10 @@ struct MaxNDispatcher {
         if constexpr (lt_is_integer<lt> || lt_is_decimal<lt> || lt_is_float<lt> || lt_is_string<lt> ||
                       lt_is_date_or_datetime<lt> || lt_is_boolean<lt>) {
             // max_n(value, n) returns array(value)
-            auto func = AggregateFactory::MakeMaxNAggregateFunction<lt>();
+            AggregateFunctionPtr func = AggregateFactory::MakeMaxNAggregateFunction<lt>();
             using MaxNState = MinMaxNAggregateState<lt, false>;
             // Use add_aggregate_mapping with IgnoreNull=false to support nullable array elements
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MaxNState, AggregateFunctionPtr, false>("max_n", false,
-                                                                                                    func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, MaxNState>("max_n", false, func);
         }
     }
 };

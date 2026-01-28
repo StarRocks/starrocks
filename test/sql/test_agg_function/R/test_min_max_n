@@ -1,4 +1,4 @@
--- name: test_min_n_without_null
+-- name: test_min_max_n
 CREATE TABLE `t_without_null` (
   `c_id` INT(11) NOT NULL,
   `c_int` INT(11) NOT NULL,
@@ -19,7 +19,8 @@ DISTRIBUTED BY HASH(`c_id`) BUCKETS 10
 PROPERTIES (
  "replication_num" = "1"
 );
-
+-- result:
+-- !result
 INSERT INTO `t_without_null` (
   `c_id`, `c_tinyint`, `c_smallint`, `c_int`, `c_bigint`, `c_largeint`, `c_float`, `c_double`, `c_char`, `c_varchar`, `c_date`, `c_datetime`, `c_decimal`) 
 VALUES 
@@ -39,32 +40,113 @@ VALUES
   (31, 4, 44, 444, 4444, 44444, 4.4, 44.44, 'char4', 'varchar4', '2021-01-04', '2021-01-04 00:00:00', 444.44),
 
   (91, 10, 100, 1000, 10000, 100000, 1.01, 100.01, 'char10', 'varchar10', '2021-01-10', '2021-01-10 00:00:00', 1000.01);
-
--- Aggregation
+-- result:
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_tinyint, 3) FROM t_without_null;
+-- result:
+[1,1,1]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N(c_smallint, 3) FROM t_without_null;
+-- result:
+[11,11,11]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_int, 3) FROM t_without_null;
+-- result:
+[111,111,111]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_bigint, 3) FROM t_without_null;
+-- result:
+[1111,1111,1111]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N(c_largeint, 3) FROM t_without_null;
+-- result:
+[11111,11111,11111]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_float, 3) FROM t_without_null;
+-- result:
+[1.01,1.1,1.1]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_double, 3) FROM t_without_null;
+-- result:
+[11.11,11.11,11.11]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N(c_char, 3) FROM t_without_null;
+-- result:
+["char1","char1","char1"]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_varchar, 3) FROM t_without_null;
+-- result:
+["varchar1","varchar1","varchar1"]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_date, 3) FROM t_without_null;
+-- result:
+["2021-01-01","2021-01-01","2021-01-01"]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N(c_datetime, 3) FROM t_without_null;
+-- result:
+["2021-01-01 00:00:00","2021-01-01 00:00:00","2021-01-01 00:00:00"]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_decimal, 3) FROM t_without_null;
-
+-- result:
+[111.110,111.110,111.110]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N(c_tinyint, 1) FROM t_without_null;
+-- result:
+[1]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_smallint, 1) FROM t_without_null;
+-- result:
+[11]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_int, 1) FROM t_without_null;
-
+-- result:
+[111]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ MIN_N(c_tinyint, 5) FROM t_without_null;
+-- result:
+[1,1,1,1,1]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ MIN_N(c_smallint, 5) FROM t_without_null;
+-- result:
+[11,11,11,11,11]
+-- !result
 SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ MIN_N(c_int, 5) FROM t_without_null;
-
-
-
--- name: test_min_n_const
+-- result:
+[111,111,111,111,111]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='auto')*/ c_id % 2 AS g, MIN_N(c_int, 2) FROM t_without_null GROUP BY g ORDER BY g;
+-- result:
+0	[111,111]
+1	[111,111]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_preaggregation')*/ c_id % 3 AS g, MIN_N(c_varchar, 2) FROM t_without_null GROUP BY g ORDER BY g;
+-- result:
+0	["varchar1","varchar2"]
+1	["varchar1","varchar1"]
+2	["varchar1","varchar1"]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_id % 3 AS g, MIN_N(c_varchar, 2) FROM t_without_null GROUP BY g ORDER BY g;
+-- result:
+0	["varchar1","varchar2"]
+1	["varchar1","varchar1"]
+2	["varchar1","varchar1"]
+-- !result
+SELECT /*+ SET_VAR(streaming_preaggregation_mode='force_streaming')*/ c_id % 4 AS g, MIN_N(c_date, 2) FROM t_without_null GROUP BY g ORDER BY g;
+-- result:
+0	["2021-01-01","2021-01-02"]
+1	["2021-01-01","2021-01-01"]
+2	["2021-01-01","2021-01-03"]
+3	["2021-01-01","2021-01-02"]
+-- !result
 SELECT min_n(col1, 3) FROM (VALUES (1)) AS tmp(col1);
+-- result:
+[1]
+-- !result
 SELECT min_n(col1, 3) FROM (VALUES (1),(2),(3),(4),(5),(6)) AS tmp(col1);
+-- result:
+[1,2,3]
+-- !result
 SELECT min_n(1, 3);
+-- result:
+[1]
+-- !result

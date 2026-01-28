@@ -34,6 +34,7 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -543,18 +544,18 @@ public class FunctionAnalyzer {
             }
         }
 
-        if (fnName.getFunction().equals(FunctionSet.MIN_N) || fnName.getFunction().equals(FunctionSet.MAX_N)) {
+        if (fnName.equals(FunctionSet.MIN_N) || fnName.equals(FunctionSet.MAX_N)) {
             if (functionCallExpr.hasChild(1)) {
                 Expr nExpr = functionCallExpr.getChild(1);
                 Optional<Long> n = extractIntegerValue(nExpr);
                 if (!n.isPresent() || n.get() <= 0) {
                     throw new SemanticException(
-                            "The second parameter of " + fnName.getFunction() + " must be a constant positive integer: " +
+                            "The second parameter of " + fnName + " must be a constant positive integer: " +
                                     ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
-                if (n.get() > 10000) {
-                    throw new SemanticException("The second parameter of " + fnName.getFunction() + 
-                            " cannot exceed 10000: " + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
+                if (n.get() > Config.minmax_n_max_size) {
+                    throw new SemanticException("The second parameter of " + fnName + 
+                            " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
             }
         }

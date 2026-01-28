@@ -2133,6 +2133,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
     public static int max_scalar_operator_flat_children = 10000;
 
+    @ConfField(mutable = true)
+    public static int minmax_n_max_size = 10000;
+
     /**
      * statistic collect flag
      */
