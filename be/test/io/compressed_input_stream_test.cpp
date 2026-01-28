@@ -21,10 +21,8 @@
 #include "fs/fs_posix.h"
 #include "io/string_input_stream.h"
 #include "io_test_base.h"
-#include "runtime/mem_pool.h"
 #include "testutil/assert.h"
 #include "util/compression/block_compression.h"
-#include "util/compression/compression_context.h"
 #include "util/compression/stream_compression.h"
 namespace starrocks::io {
 
@@ -110,7 +108,7 @@ protected:
 
 std::string CompressedInputStreamTest::gen_normal_frame() {
     char src[9] = {};
-    size_t compressed_len = LZ4F_compressFrameBound(sizeof(src), nullptr);;
+    size_t compressed_len = LZ4F_compressFrameBound(sizeof(src), nullptr);
     std::unique_ptr<char[]> compressed_buf(new char[compressed_len]);
 
     LZ4F_preferences_t pref = LZ4F_INIT_PREFERENCES;
