@@ -106,8 +106,6 @@ protected:
 
     static std::string gen_normal_frame();
     static std::string gen_empty_frame();
-
-    MemPool _mem_pool;
 };
 
 std::string CompressedInputStreamTest::gen_normal_frame() {
@@ -123,7 +121,7 @@ std::string CompressedInputStreamTest::gen_normal_frame() {
 }
 
 std::string CompressedInputStreamTest::gen_empty_frame() {
-    size_t compressed_len = LZ4F_compressFrameBound(0, nullptr);;
+    size_t compressed_len = LZ4F_compressFrameBound(0, nullptr);
     std::unique_ptr<char[]> compressed_buf(new char[compressed_len]);
 
     size_t compressed_size = LZ4F_compressFrame(compressed_buf.get(), compressed_len, nullptr, 0, nullptr);
