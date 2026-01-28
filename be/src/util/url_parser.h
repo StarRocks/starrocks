@@ -60,10 +60,13 @@ public:
     // Parts of a URL that can be requested.
     enum UrlPart { INVALID, AUTHORITY, FILE, HOST, PATH, PROTOCOL, QUERY, REF, USERINFO };
 
+    enum class ParseStatus { OK, NOT_FOUND, INVALID };
+
     // Tries to parse the part from url. Places the result in result.
-    // Returns false if the URL is malformed or if part is invalid. True otherwise.
-    // If false is returned the contents of results are undefined.
-    static bool parse_url(const Slice& url, UrlPart part, Slice* result);
+    // Returns OK if the part exists, NOT_FOUND if the URL is valid but the part is missing,
+    // and INVALID if the URL is malformed or the part is invalid.
+    // If INVALID is returned the contents of results are undefined.
+    static ParseStatus parse_url(const Slice& url, UrlPart part, Slice* result);
 
     // Compares part against url_authority, url_file, url_host, etc.,
     // and returns the corresponding enum.

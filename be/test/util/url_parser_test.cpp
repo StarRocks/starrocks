@@ -17,12 +17,12 @@
 #include <gtest/gtest.h>
 
 namespace starrocks {
-#define TEST_URL_PARSE(URL, PART, EXPECTED)                                           \
-    {                                                                                 \
-        Slice result;                                                                 \
-        bool res = UrlParser::parse_url(URL, UrlParser::get_url_part(PART), &result); \
-        result = res ? result : "<null>";                                             \
-        EXPECT_EQ(result.to_string(), EXPECTED);                                      \
+#define TEST_URL_PARSE(URL, PART, EXPECTED)                                              \
+    {                                                                                    \
+        Slice result;                                                                    \
+        auto status = UrlParser::parse_url(URL, UrlParser::get_url_part(PART), &result); \
+        result = (status == UrlParser::ParseStatus::OK) ? result : "<null>";             \
+        EXPECT_EQ(result.to_string(), EXPECTED);                                         \
     }
 TEST(UrlParserTest, normal) {
     const char* url = "http://user:pass@example.com:80/docs/books/tutorial/index.html?name=networking#DOWNLOADING";
