@@ -1,4 +1,4 @@
--- name: test_iceberg_delete_unpartitioned
+-- name: test_iceberg_delete_unpartitioned @sequential
 create external catalog iceberg_del_unp_${uuid0}
 PROPERTIES ( "type"  =  "iceberg",
     "iceberg.catalog.type"  =  "hive",
