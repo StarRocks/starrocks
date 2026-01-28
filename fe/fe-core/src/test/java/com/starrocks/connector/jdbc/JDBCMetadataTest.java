@@ -513,4 +513,53 @@ public class JDBCMetadataTest {
             Config.jdbc_network_timeout_ms = originalTimeoutMs;
         }
     }
+
+    @Test
+    public void testGetTableResultSetClosed() throws SQLException {
+        // Test that ResultSet is properly closed after getTable() to prevent cursor leaks
+        // This is a regression test for ORA-01000: maximum open cursors exceeded
+
+        // Create a mock ResultSet that tracks whether close() was called
+        final boolean[] closed = {false};
+        MockResultSet trackableColumnResult = new MockResultSet("columns") {
+            @Override
+            public void close() throws SQLException {
+                closed[0] = true;
+                super.close();
+            }
+        };
+        trackableColumnResult.addColumn("DATA_TYPE",
+                Arrays.asList(Types.INTEGER, Types.VARCHAR));
+        trackableColumnResult.addColumn("TYPE_NAME",
+                Arrays.asList("INTEGER", "VARCHAR"));
+        trackableColumnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 100));
+        trackableColumnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0));
+        trackableColumnResult.addColumn("COLUMN_NAME", Arrays.asList("id", "name"));
+        trackableColumnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "YES"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                connection.getMetaData().getColumns("test", null, "trackable_tbl", "%");
+                result = trackableColumnResult;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+
+        // Call getTable which should properly close the ResultSet
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "trackable_tbl");
+
+        // Verify table was retrieved successfully
+        Assertions.assertNotNull(table, "Table should be retrieved successfully");
+        Assertions.assertTrue(table instanceof JDBCTable, "Table should be JDBCTable");
+
+        // Most importantly: verify ResultSet was closed
+        // This prevents cursor leaks (ORA-01000 in Oracle)
+        Assertions.assertTrue(closed[0], "ResultSet must be closed after getTable() to prevent cursor leaks");
+    }
 }
