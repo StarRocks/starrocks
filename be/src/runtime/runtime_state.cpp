@@ -41,7 +41,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"

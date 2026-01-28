@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_call_stub.h"

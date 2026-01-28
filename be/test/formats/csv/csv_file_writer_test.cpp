@@ -25,7 +25,7 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "compression_test_utils.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/output_stream_file.h"

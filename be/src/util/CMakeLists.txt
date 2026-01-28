@@ -42,11 +42,13 @@ set(UTIL_FILES
   disk_info.cpp
   download_util.cpp
   errno.cpp
+  greplog.cpp
   hash_util.hpp
   json_util.cpp
   json.cpp
   json_flattener.cpp
   json_converter.cpp
+  logconfig.cpp
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp

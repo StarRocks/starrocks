@@ -38,7 +38,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/data_sink.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"

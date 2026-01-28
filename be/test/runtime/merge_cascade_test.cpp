@@ -17,7 +17,7 @@
 #include <algorithm>
 
 #include "column/column_helper.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"

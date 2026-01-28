@@ -17,7 +17,7 @@
 #include <string>
 
 #include "column/chunk.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"

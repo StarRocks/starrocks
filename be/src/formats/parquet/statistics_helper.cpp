@@ -19,7 +19,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/min_max_predicate.h"
 #include "exprs/predicate.h"

@@ -20,7 +20,7 @@
 
 #include "column/column_helper.h"
 #include "common/config.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

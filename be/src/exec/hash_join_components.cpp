@@ -21,7 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/logging.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/hash_joiner.h"
 #include "exec/join/join_hash_table.h"
 #include "exprs/expr_context.h"

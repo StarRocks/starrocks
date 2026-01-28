@@ -22,7 +22,7 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "gutil/casts.h"
 #include "runtime/types.h"
 #include "simd/selector.h"

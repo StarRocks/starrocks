@@ -14,7 +14,7 @@
 
 #include "storage/column_or_predicate.h"
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

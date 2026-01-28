@@ -42,7 +42,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"

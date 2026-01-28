@@ -18,7 +18,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/scan/scan_operator.h"

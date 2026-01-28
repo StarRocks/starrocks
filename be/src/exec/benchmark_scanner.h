@@ -21,7 +21,7 @@
 #include "benchgen/generator_options.h"
 #include "benchgen/record_batch_iterator.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "runtime/descriptors.h"

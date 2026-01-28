@@ -21,7 +21,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/chunks_sorter.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"

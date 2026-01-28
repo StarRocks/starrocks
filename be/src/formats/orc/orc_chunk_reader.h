@@ -18,7 +18,7 @@
 #include <orc/OrcFile.hh>
 
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter_bank.h"

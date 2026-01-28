@@ -18,7 +18,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
 #include "exprs/map_expr.h"

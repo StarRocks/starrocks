@@ -32,7 +32,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sorting/merge.h"

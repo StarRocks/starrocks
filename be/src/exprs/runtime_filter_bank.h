@@ -21,7 +21,7 @@
 
 #include "column/column.h"
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"

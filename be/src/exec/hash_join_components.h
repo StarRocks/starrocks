@@ -18,7 +18,7 @@
 #include <memory>
 
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/join/join_hash_table.h"
 #include "runtime/runtime_state.h"
 

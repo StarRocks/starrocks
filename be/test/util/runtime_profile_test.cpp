@@ -23,7 +23,7 @@
 #include <tuple>
 
 #include "common/logging.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "fmt/format.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 

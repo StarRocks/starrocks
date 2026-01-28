@@ -32,13 +32,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "common/daemon.h"
+#include "service/daemon.h"
 
 #include <gflags/gflags.h>
 
 #include "column/column_helper.h"
 #include "common/config.h"
-#include "common/minidump.h"
+#include "service/minidump.h"
 #include "common/process_exit.h"
 #include "exec/workgroup/work_group.h"
 #include "util/system_metrics.h"

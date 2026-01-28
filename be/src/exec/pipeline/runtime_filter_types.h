@@ -18,7 +18,7 @@
 #include <mutex>
 #include <utility>
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"

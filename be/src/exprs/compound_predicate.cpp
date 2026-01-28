@@ -14,7 +14,7 @@
 
 #include "exprs/compound_predicate.h"
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/binary_function.h"
 #include "exprs/predicate.h"
 #include "exprs/unary_function.h"

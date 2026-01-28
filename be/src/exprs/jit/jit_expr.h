@@ -16,7 +16,7 @@
 
 #include <string>
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"

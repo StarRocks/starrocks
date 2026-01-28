@@ -21,7 +21,7 @@
 #include <unordered_set>
 
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/spill/partition.h"

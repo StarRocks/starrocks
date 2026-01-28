@@ -24,7 +24,7 @@
 #include <thread>
 #include <vector>
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"

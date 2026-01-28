@@ -25,7 +25,7 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_topn.h"
 #include "exec/sorting/merge.h"

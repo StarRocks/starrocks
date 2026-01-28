@@ -21,7 +21,7 @@
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/aggregator.h"
 #include "exprs/agg_in_runtime_filter.h"
 #include "exprs/runtime_filter.h"

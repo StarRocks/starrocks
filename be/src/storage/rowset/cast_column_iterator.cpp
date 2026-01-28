@@ -15,7 +15,7 @@
 #include "storage/rowset/cast_column_iterator.h"
 
 #include "column/column_helper.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 

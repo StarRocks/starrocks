@@ -19,7 +19,7 @@
 #include <memory>
 #include <string>
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "compression_test_utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "fs/fs_memory.h"

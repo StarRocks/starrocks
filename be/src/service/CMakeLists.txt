@@ -22,6 +22,7 @@ add_subdirectory(service_be)
 set(EXEC_FILES
     backend_options.cpp
     backend_base.cpp
+    daemon.cpp
     internal_service.cpp
     staros_worker.cpp
     mem_hook.cpp
@@ -30,6 +31,10 @@ set(EXEC_FILES
 ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    target_sources(Service PRIVATE minidump.cpp)
+endif()
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))

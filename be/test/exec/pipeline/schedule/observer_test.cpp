@@ -23,7 +23,7 @@
 #include <thread>
 
 #include "butil/time.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"

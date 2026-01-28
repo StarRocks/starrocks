@@ -18,7 +18,7 @@
 
 #include <regex>
 
-#include "common/greplog.h"
+#include "util/greplog.h"
 #include "common/logging.h"
 #include "common/prof/heap_prof.h"
 #include "common/vlog_cntl.h"

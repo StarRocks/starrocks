@@ -18,7 +18,7 @@
 #include <mutex>
 
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 
 namespace starrocks {

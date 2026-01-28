@@ -19,7 +19,7 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"

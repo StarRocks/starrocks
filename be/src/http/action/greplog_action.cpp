@@ -14,7 +14,7 @@
 
 #include "http/action/greplog_action.h"
 
-#include "common/greplog.h"
+#include "util/greplog.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"

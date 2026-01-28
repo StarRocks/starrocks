@@ -39,7 +39,7 @@
 
 #include <memory>
 
-#include "common/closure_guard.h"
+#include "runtime/closure_guard.h"
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"

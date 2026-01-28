@@ -34,7 +34,7 @@
 
 #include "internal_service.h"
 
-#include "common/closure_guard.h"
+#include "runtime/closure_guard.h"
 #include "common/config.h"
 #include "common/utils.h"
 #include "exec/pipeline/fragment_context.h"

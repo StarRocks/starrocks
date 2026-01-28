@@ -15,7 +15,7 @@
 #pragma once
 #include "aggregate_blocking_sink_operator.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/spill_process_channel.h"

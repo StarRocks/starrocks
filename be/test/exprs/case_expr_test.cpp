@@ -25,7 +25,7 @@
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"

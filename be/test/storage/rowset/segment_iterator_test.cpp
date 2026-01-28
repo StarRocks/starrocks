@@ -23,7 +23,7 @@
 
 #include "column/column_helper.h"
 #include "common/config.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gtest/gtest.h"

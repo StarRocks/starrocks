@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"

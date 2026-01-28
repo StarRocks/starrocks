@@ -23,7 +23,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"

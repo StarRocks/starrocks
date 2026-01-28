@@ -23,7 +23,7 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"

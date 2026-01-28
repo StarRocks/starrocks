@@ -49,7 +49,7 @@
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
-#include "common/closure_guard.h"
+#include "runtime/closure_guard.h"
 #include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/process_exit.h"

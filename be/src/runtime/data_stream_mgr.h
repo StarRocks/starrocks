@@ -43,7 +43,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h" // for PlanNodeId

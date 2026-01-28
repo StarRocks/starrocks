@@ -21,7 +21,7 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "column/type_traits.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"

@@ -22,7 +22,7 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"

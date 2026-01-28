@@ -16,7 +16,7 @@
 
 #include <unordered_map>
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"

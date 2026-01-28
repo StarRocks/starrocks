@@ -18,7 +18,7 @@
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sort_permute.h"

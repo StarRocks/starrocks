@@ -24,7 +24,7 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/block_cache.h"
 #include "common/config.h"
-#include "common/daemon.h"
+#include "service/daemon.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "fs/s3/poco_common.h"

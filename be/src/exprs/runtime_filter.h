@@ -25,7 +25,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/partition/bucket_aware_partition.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/runtime_filter_layout.h"

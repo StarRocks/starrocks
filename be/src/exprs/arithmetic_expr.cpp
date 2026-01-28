@@ -17,7 +17,7 @@
 #include <optional>
 
 #include "column/type_traits.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/arithmetic_operation.h"

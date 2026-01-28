@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "exec/exec_node.h"

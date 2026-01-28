@@ -17,7 +17,7 @@
 #include <cstdint>
 
 #include "column/schema.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "runtime/global_dict/types.h"
 #include "storage/column_predicate.h"
 #include "storage/conjunctive_predicates.h"

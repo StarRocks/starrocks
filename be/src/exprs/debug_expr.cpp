@@ -5,7 +5,7 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 #include "types/logical_type.h"
 

@@ -48,7 +48,7 @@
 #include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions

@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "column/struct_column.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/is_null_predicate.h"
 #include "formats/orc/memory_stream/MemoryInputStream.hh"
 #include "formats/orc/memory_stream/MemoryOutputStream.hh"

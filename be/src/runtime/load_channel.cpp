@@ -36,7 +36,7 @@
 
 #include <memory>
 
-#include "common/closure_guard.h"
+#include "runtime/closure_guard.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "runtime/diagnose_daemon.h"

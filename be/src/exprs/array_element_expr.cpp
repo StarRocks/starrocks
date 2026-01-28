@@ -19,7 +19,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "util/raw_container.h"
 
 namespace starrocks {

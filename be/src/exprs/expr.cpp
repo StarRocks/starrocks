@@ -41,7 +41,7 @@
 #include <vector>
 
 #include "column/fixed_length_column.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/arithmetic_expr.h"

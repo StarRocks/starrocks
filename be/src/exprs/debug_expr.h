@@ -1,7 +1,7 @@
 #pragma once
 
 #include "column/column.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 
 namespace starrocks {

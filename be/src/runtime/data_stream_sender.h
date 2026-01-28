@@ -39,7 +39,7 @@
 
 #include "column/column.h"
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/internal_service.pb.h"

@@ -42,7 +42,7 @@
 #include <sstream>
 
 #include "agent/master_info.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"

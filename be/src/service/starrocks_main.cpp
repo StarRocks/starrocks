@@ -55,7 +55,7 @@
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "common/config.h"
-#include "common/daemon.h"
+#include "service/daemon.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/status.h"

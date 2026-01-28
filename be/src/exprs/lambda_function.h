@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "common/global_types.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"

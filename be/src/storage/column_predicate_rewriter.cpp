@@ -25,7 +25,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"

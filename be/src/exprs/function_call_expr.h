@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr.h"

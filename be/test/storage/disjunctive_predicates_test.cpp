@@ -21,7 +21,7 @@
 #include "column/chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"

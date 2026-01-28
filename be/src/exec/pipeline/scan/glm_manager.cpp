@@ -14,7 +14,7 @@
 
 #include "exec/pipeline/scan/glm_manager.h"
 
-#include "common/object_pool.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks::pipeline {
 
