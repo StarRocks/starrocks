@@ -63,6 +63,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1844,20 +1845,15 @@ public class StmtExecutor {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
             if (analyzeTypeDesc.isHistogram()) {
-                List<com.starrocks.type.Type> columnTypes = analyzeStmt.getColumnTypes();
+                List<Type> columnTypes = analyzeStmt.getColumnTypes();
                 if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
                     columnTypes = analyzeStmt.getColumnNames().stream()
                             .map(col -> table.getColumn(col).getType())
                             .collect(Collectors.toList());
                 }
                 statisticExecutor.collectStatistics(statsConnectCtx,
-<<<<<<< HEAD
                         new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
-=======
-                        new ExternalHistogramStatisticsCollectJob(analyzeStmt.getCatalogName(),
                                 db, table, analyzeStmt.getColumnNames(), columnTypes,
->>>>>>> af4b591831 ([BugFix] Fix ANALYZE TABLE UPDATE HISTOGRAM ON ALL COLUMNS (#68290))
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -1878,7 +1874,7 @@ public class StmtExecutor {
             }
         } else {
             if (analyzeTypeDesc.isHistogram()) {
-                List<com.starrocks.type.Type> columnTypes = analyzeStmt.getColumnTypes();
+                List<Type> columnTypes = analyzeStmt.getColumnTypes();
                 if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
                     columnTypes = analyzeStmt.getColumnNames().stream()
                             .map(col -> table.getColumn(col).getType())
