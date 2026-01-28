@@ -44,6 +44,10 @@ function: get_running_transaction_count("db_${uuid0}")
 -- result:
 0
 -- !result
+select STATE = 'CANCELLED' from information_schema.loads where LABEL = '${label1}';
+-- result:
+1
+-- !result
 select count(*) from t0;
 -- result:
 0
