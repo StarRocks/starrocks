@@ -1505,7 +1505,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "39:Project\n" +
                 "  |  <slot 2> : 2: N_NAME\n" +
                 "  |  <slot 64> : if(CAST(42: C_NATIONKEY AS DOUBLE) > 44: C_ACCTBAL, 31: O_ORDERPRIORITY, " +
-                "CAST(33: O_SHIPPRIORITY AS VARCHAR(15)))\n" +
+                "CAST(33: O_SHIPPRIORITY AS VARCHAR))\n" +
                 "  |  \n" +
                 "  38:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +

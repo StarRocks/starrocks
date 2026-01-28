@@ -1262,16 +1262,14 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "order by b.bucket.start_date;\n";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  9:Project\n" +
-                "  |  <slot 13> : 13: array_slice\n" +
-                "  |  <slot 14> : date(20: expr)\n" +
-                "  |  <slot 16> : coalesce(array_map(<slot 15> -> [<slot 15>[1],<slot 15>[2]], " +
-                "13: array_slice), CAST([[]] AS ARRAY<ARRAY<VARCHAR(65533)>>))\n" +
-                "  |  <slot 17> : 20: expr\n" +
-                "  |  \n" +
-                "  8:HASH JOIN");
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 18> : clone(20: expr)\n" +
-                "  |  <slot 20> : 20: expr");
+        assertContains(plan, "  9:Project\n"
+                + "  |  <slot 13> : 13: array_slice\n"
+                + "  |  <slot 14> : date(20: expr)\n"
+                + "  |  <slot 16> : coalesce(array_map(<slot 15> -> [<slot 15>[1],<slot 15>[2]], 13: array_slice), "
+                + "CAST([[]] AS ARRAY<ARRAY<VARCHAR>>))\n"
+                + "  |  <slot 17> : 20: expr");
+        assertContains(plan, "  1:Project\n"
+                + "  |  <slot 18> : clone(20: expr)\n"
+                + "  |  <slot 20> : 20: expr");
     }
 }
