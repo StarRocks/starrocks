@@ -140,6 +140,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                     if ((columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) &&
                             !context.hasUnnestColRefMapValue(columnRefOperator)) {
                         context.add(columnRefOperator, columnRefOperator);
+                        context.addScan(columnRefOperator);
                     }
                 }
             }
@@ -207,7 +208,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         private static void pruneForComplexType(ColumnRefOperator columnRefOperator,
                                                 PruneComplexTypeUtil.Context context) {
             ComplexTypeAccessGroup accessGroup = context.getVisitedAccessGroup(columnRefOperator);
-            if (accessGroup == null) {
+            if (accessGroup == null || !context.getScanRefs().contains(columnRefOperator)) {
                 return;
             }
             // Clone a new type for prune
