@@ -2811,6 +2811,7 @@ specialFunctionExpression
     | PASSWORD '(' string ')'
     | FLOOR '(' expression ')'
     | CEIL '(' expression ')'
+    | LAST_QUERY_ID '(' ')'
     ;
 
 windowFunction

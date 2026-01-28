@@ -8148,6 +8148,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             return new FunctionCallExpr("floor", visit(context.expression(), Expr.class), pos);
         } else if (context.CEIL() != null) {
             return new FunctionCallExpr("ceil", visit(context.expression(), Expr.class), pos);
+        } else if (context.LAST_QUERY_ID() != null) {
+            return new FunctionCallExpr("last_query_id", Lists.newArrayList(), pos);
         }
 
         String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";
