@@ -20,36 +20,36 @@ import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 
-public class SplitTabletClause extends AlterTableClause {
+public class MergeTabletClause extends AlterTableClause {
 
     private final PartitionRef partitionNames;
 
-    private final TabletList tabletList;
+    private final TabletGroupList tabletGroupList;
 
     private final Map<String, String> properties;
 
     private long tabletReshardTargetSize;
 
-    public SplitTabletClause() {
+    public MergeTabletClause() {
         this(null, null, null);
         this.tabletReshardTargetSize = Config.tablet_reshard_target_size;
     }
 
-    public SplitTabletClause(
+    public MergeTabletClause(
             PartitionRef partitionNames,
-            TabletList tabletList,
+            TabletGroupList tabletGroupList,
             Map<String, String> properties) {
-        this(partitionNames, tabletList, properties, NodePosition.ZERO);
+        this(partitionNames, tabletGroupList, properties, NodePosition.ZERO);
     }
 
-    public SplitTabletClause(
+    public MergeTabletClause(
             PartitionRef partitionNames,
-            TabletList tabletList,
+            TabletGroupList tabletGroupList,
             Map<String, String> properties,
             NodePosition pos) {
         super(pos);
         this.partitionNames = partitionNames;
-        this.tabletList = tabletList;
+        this.tabletGroupList = tabletGroupList;
         this.properties = properties;
     }
 
@@ -57,8 +57,8 @@ public class SplitTabletClause extends AlterTableClause {
         return partitionNames;
     }
 
-    public TabletList getTabletList() {
-        return tabletList;
+    public TabletGroupList getTabletGroupList() {
+        return tabletGroupList;
     }
 
     public Map<String, String> getProperties() {
@@ -77,15 +77,15 @@ public class SplitTabletClause extends AlterTableClause {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         if (partitionNames != null) {
-            sb.append("SPLIT TABLET ");
+            sb.append("MERGE TABLET ");
             sb.append(partitionNames.toString());
             sb.append('\n');
-        } else if (tabletList != null) {
-            sb.append("SPLIT ");
-            sb.append(tabletList.toString());
+        } else if (tabletGroupList != null) {
+            sb.append("MERGE ");
+            sb.append(tabletGroupList.toString());
             sb.append('\n');
         } else {
-            sb.append("SPLIT TABLET\n");
+            sb.append("MERGE TABLET\n");
         }
         if (properties != null && !properties.isEmpty()) {
             sb.append("PROPERTIES (\n").append(new PrintableMap<>(properties, "=", true, true)).append(")");
@@ -95,6 +95,6 @@ public class SplitTabletClause extends AlterTableClause {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitSplitTabletClause(this, context);
+        return ((AstVisitorExtendInterface<R, C>) visitor).visitMergeTabletClause(this, context);
     }
 }

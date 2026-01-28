@@ -1180,6 +1180,7 @@ alterClause
     | tableOperationClause
     | dropPersistentIndexClause
     | splitTabletClause
+    | mergeTabletClause
     | alterTableAutoIncrementClause
 
     //Apply Policy clause
@@ -1450,6 +1451,16 @@ splitTabletClause
     : SPLIT
       (((TABLET | TABLETS) partitionNames?) | tabletList)
       properties?
+    ;
+
+mergeTabletClause
+    : MERGE
+      (((TABLET | TABLETS) partitionNames?) | tabletGroupList)
+      properties?
+    ;
+
+tabletGroupList
+    : (TABLET | TABLETS) integer_list+
     ;
 
 alterTableAutoIncrementClause
