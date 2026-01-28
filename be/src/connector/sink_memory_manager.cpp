@@ -54,6 +54,7 @@ bool SinkOperatorMemoryManager::kill_victim() {
     const auto filename = victim->out_stream()->filename();
     size_t flush_bytes = victim->get_flushable_bytes();
     const auto result = victim->flush();
+    LOG(INFO) << "kill victim: " << filename << ", result: " << result << ", flushable_bytes: " << flush_bytes;
     return true;
 }
 
