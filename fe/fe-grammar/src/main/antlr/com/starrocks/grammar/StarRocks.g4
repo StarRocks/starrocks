@@ -2764,6 +2764,7 @@ aggregationFunction
     | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | ARRAY_AGG_DISTINCT '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+    | STRING_AGG '(' setQuantifier? expression ',' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable
@@ -3271,7 +3272,7 @@ nonReserved
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SPLIT | SQL | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
+    | STORAGE| STRING | STRING_AGG | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

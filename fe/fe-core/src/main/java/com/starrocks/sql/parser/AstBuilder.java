@@ -7938,6 +7938,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         NodePosition pos = createPos(context);
         String functionName;
         boolean isGroupConcat = false;
+        boolean isStringAgg = false;
         boolean isLegacyGroupConcat = false;
         boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
@@ -7957,6 +7958,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
             isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
+        } else if (context.aggregationFunction().STRING_AGG() != null) {
+            // STRING_AGG is an alias for GROUP_CONCAT with PostgreSQL syntax
+            // STRING_AGG(expr, delimiter) -> GROUP_CONCAT(expr SEPARATOR delimiter)
+            functionName = FunctionSet.GROUP_CONCAT;
+            isGroupConcat = true;
+            isStringAgg = true;
         } else {
             functionName = FunctionSet.MAX;
         }
@@ -7978,7 +7985,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
         }
         List<Expr> exprs = visit(context.aggregationFunction().expression(), Expr.class);
-        if (isGroupConcat && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
+        if (isGroupConcat && !isStringAgg && !exprs.isEmpty() && context.aggregationFunction().SEPARATOR() == null) {
             if (isLegacyGroupConcat) {
                 if (exprs.size() == 1) {
                     Expr sepExpr;
