@@ -664,48 +664,27 @@ public class CreateFunctionAnalyzer {
         }
 
         /**
-         * Check varargs parameters for scalar UDFs.
+         * Functional interface for type checking strategies.
+         */
+        @FunctionalInterface
+        private interface TypeChecker {
+            void check(Method method, Type expectedType, Class<?> actualType, String paramName);
+        }
+
+        /**
+         * Generic helper to check varargs parameters with a custom type checking strategy.
          * For varargs, the last declared type is the element type of the varargs array.
          * All fixed parameters are checked normally, and the varargs parameter is validated
          * to be an array of the expected element type.
          */
-        private void checkVarargsScalarParameters(Method method, Type[] declaredArgTypes) {
+        private void checkVarargsParametersGeneric(Method method, Type[] declaredArgTypes, 
+                                                   int paramOffset, TypeChecker typeChecker) {
             Parameter[] params = method.getParameters();
             
             // All parameters except the last should match the declared types
             for (int i = 0; i < declaredArgTypes.length - 1; i++) {
-                checkScalarUdfType(method, declaredArgTypes[i], params[i].getType(), params[i].getName());
-            }
-            
-            // The last parameter should be a varargs array
-            if (declaredArgTypes.length > 0) {
-                Type varargsElementType = declaredArgTypes[declaredArgTypes.length - 1];
-                Parameter varargsParam = params[params.length - 1];
-                
-                // Java varargs are represented as arrays
-                if (!varargsParam.getType().isArray()) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            String.format("UDF class '%s' method '%s' varargs parameter '%s' must be an array",
-                                    clazz.getCanonicalName(), method.getName(), varargsParam.getName()));
-                }
-                
-                // Check that the array component type matches the declared varargs element type
-                Class<?> arrayComponentType = varargsParam.getType().getComponentType();
-                checkScalarUdfType(method, varargsElementType, arrayComponentType, varargsParam.getName());
-            }
-        }
-
-        /**
-         * Check varargs parameters for UDAFs and UDTFs.
-         * Validates fixed parameters using checkParamUdfType and validates the varargs array
-         * component type using checkUdfType.
-         */
-        private void checkVarargsParameters(Method method, Type[] declaredArgTypes, int paramOffset) {
-            Parameter[] params = method.getParameters();
-            
-            // All parameters except the last should match the declared types
-            for (int i = 0; i < declaredArgTypes.length - 1; i++) {
-                checkParamUdfType(method, declaredArgTypes[i], params[i + paramOffset]);
+                Parameter param = params[i + paramOffset];
+                typeChecker.check(method, declaredArgTypes[i], param.getType(), param.getName());
             }
             
             // The last parameter should be a varargs array
@@ -722,8 +701,24 @@ public class CreateFunctionAnalyzer {
                 
                 // Check that the array component type matches the declared varargs element type
                 Class<?> arrayComponentType = varargsParam.getType().getComponentType();
-                checkUdfType(method, varargsElementType, arrayComponentType, varargsParam.getName());
+                typeChecker.check(method, varargsElementType, arrayComponentType, varargsParam.getName());
             }
+        }
+
+        /**
+         * Check varargs parameters for scalar UDFs.
+         * Uses checkScalarUdfType for type validation.
+         */
+        private void checkVarargsScalarParameters(Method method, Type[] declaredArgTypes) {
+            checkVarargsParametersGeneric(method, declaredArgTypes, 0, this::checkScalarUdfType);
+        }
+
+        /**
+         * Check varargs parameters for UDAFs and UDTFs.
+         * Uses checkUdfType for type validation with an offset for the first parameter.
+         */
+        private void checkVarargsParameters(Method method, Type[] declaredArgTypes, int paramOffset) {
+            checkVarargsParametersGeneric(method, declaredArgTypes, paramOffset, this::checkUdfType);
         }
     }
 
