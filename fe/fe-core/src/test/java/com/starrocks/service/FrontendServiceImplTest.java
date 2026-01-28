@@ -1517,7 +1517,7 @@ public class FrontendServiceImplTest {
 
             @Mock
             public RequestLoadResult requestLoad(
-                    TableId tableId, StreamLoadKvParams params, long backendId, String backendHost) {
+                    TableId tableId, StreamLoadKvParams params, String user, long backendId, String backendHost) {
                 return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
             }
         };
