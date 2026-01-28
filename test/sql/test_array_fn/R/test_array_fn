@@ -3117,7 +3117,7 @@ E: (1064, 'Getting analyzing error from line 1, column 18 to line 1, column 45. 
 -- !result
 select array_sort(array_intersect(aad_1, aas_1)) from array_test order by pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 47. Detail message: No matching function with signature: array_sort(array<array<array<varchar>>).')
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 47. Detail message: No matching function with signature: array_sort(array<array<array<varchar>>>).')
 -- !result
 select array_sort(array_intersect(aad_1, aad_1)) from array_test order by pk;
 -- result:
