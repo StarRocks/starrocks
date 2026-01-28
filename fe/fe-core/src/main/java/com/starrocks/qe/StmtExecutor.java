@@ -63,6 +63,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1881,9 +1882,15 @@ public class StmtExecutor {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
             if (analyzeTypeDesc.isHistogram()) {
+                List<Type> columnTypes = analyzeStmt.getColumnTypes();
+                if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                    columnTypes = analyzeStmt.getColumnNames().stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                }
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
-                                db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
+                                db, table, analyzeStmt.getColumnNames(), columnTypes,
                                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
@@ -1904,9 +1911,15 @@ public class StmtExecutor {
             }
         } else {
             if (analyzeTypeDesc.isHistogram()) {
+                List<Type> columnTypes = analyzeStmt.getColumnTypes();
+                if (CollectionUtils.isEmpty(columnTypes) && CollectionUtils.isNotEmpty(analyzeStmt.getColumnNames())) {
+                    columnTypes = analyzeStmt.getColumnNames().stream()
+                            .map(col -> table.getColumn(col).getType())
+                            .collect(Collectors.toList());
+                }
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                                analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
+                                columnTypes, StatsConstants.ScheduleType.ONCE,
                                 analyzeStmt.getProperties()),
                         analyzeStatus,
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
