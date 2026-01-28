@@ -104,7 +104,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
-    private final Map<String, Partition> partitionInfos = new ConcurrentHashMap<>();
+    private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -137,6 +137,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         Identifier identifier = new Identifier(databaseName, tableName);
         org.apache.paimon.table.Table paimonTable;
         RowType dataTableRowType;
+        if (!this.partitionInfos.containsKey(identifier)) {
+            this.partitionInfos.put(identifier, new ConcurrentHashMap<>());
+        }
         try {
             paimonTable = this.paimonNativeCatalog.getTable(identifier);
             dataTableRowType = paimonTable.rowType();
@@ -164,7 +167,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                         partition.fileSizeInBytes(), partition.fileCount(),
                         partitionColumnNames, partitionColumnTypes, partitionValues,
                         Timestamp.fromEpochMillis(partition.lastFileCreationTime()));
-                this.partitionInfos.put(srPartition.getPartitionName(), srPartition);
+                this.partitionInfos.get(identifier).put(srPartition.getPartitionName(), srPartition);
             }
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
@@ -210,8 +213,12 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+        Identifier identifier = new Identifier(databaseName, tableName);
         updatePartitionInfo(databaseName, tableName);
-        return new ArrayList<>(this.partitionInfos.keySet());
+        if (this.partitionInfos.get(identifier) == null) {
+            return Lists.newArrayList();
+        }
+        return new ArrayList<>(this.partitionInfos.get(identifier).keySet());
     }
 
     @Override
@@ -553,6 +560,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         PaimonTable paimonTable = (PaimonTable) table;
+        Identifier identifier = new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
         List<PartitionInfo> result = new ArrayList<>();
         if (table.isUnPartitioned()) {
 
@@ -561,12 +569,13 @@ public class PaimonMetadata implements ConnectorMetadata {
                     null, null));
             return result;
         }
+        Map<String, Partition> partitionInfo = this.partitionInfos.get(identifier);
         for (String partitionName : partitionNames) {
-            if (this.partitionInfos.get(partitionName) == null) {
+            if (partitionInfo == null || partitionInfo.get(partitionName) == null) {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
             }
-            if (this.partitionInfos.get(partitionName) != null) {
-                result.add(this.partitionInfos.get(partitionName));
+            if (partitionInfo.get(partitionName) != null) {
+                result.add(partitionInfo.get(partitionName));
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
             }
