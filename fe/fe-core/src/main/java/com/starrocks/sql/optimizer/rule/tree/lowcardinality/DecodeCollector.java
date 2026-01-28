@@ -242,6 +242,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             final Integer id = s.stream().findAny().orElseThrow();
             dependencyStringIds.computeIfAbsent(id, x -> Sets.newHashSet()).addAll(s);
         });
+        for (Pair<Integer, Integer> pair : joinEqColumnGroups) {
+            dependencyStringIds.computeIfAbsent(pair.first, x -> Sets.newHashSet()).add(pair.second);
+        }
         // build relation groups. The same closure is built into the same group
         // eg:
         // 1 -> (2, 3)
