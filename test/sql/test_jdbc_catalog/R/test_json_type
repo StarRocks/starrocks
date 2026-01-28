@@ -38,7 +38,7 @@ select * from db_json_${uuid0}.t1;
 -- !result
 show create table db_json_${uuid0}.t1;
 -- result:
-t1	CREATE TABLE `t1` (
+t1	CREATE TABLE `jdbc_catalog_${uuid0}`.`db_json_${uuid0}`.`t1` (
   `c1` int(11) DEFAULT NULL,
   `c2` varchar(1073741824) DEFAULT NULL
 );
