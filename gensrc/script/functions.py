@@ -382,6 +382,8 @@ vectorized_functions = [
      'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30335, 'regexp_count', True, False, 'BIGINT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_count',
      'StringFunctions::regexp_count_prepare', 'StringFunctions::regexp_close'],
+    [30336, 'regexp_position', True, False, 'INT', ['VARCHAR', 'VARCHAR', 'INT', 'INT'], 'StringFunctions::regexp_position',
+     'StringFunctions::regexp_position_prepare', 'StringFunctions::regexp_position_close'],
     [30400, "money_format", True, False, "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", True, False, "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", True, False, "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],

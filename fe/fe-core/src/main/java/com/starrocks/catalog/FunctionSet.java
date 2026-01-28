@@ -236,6 +236,7 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String REGEXP_EXTRACT = "regexp_extract";
     public static final String REGEXP_REPLACE = "regexp_replace";
+    public static final String REGEXP_POSITION = "regexp_position";
     public static final String REPEAT = "repeat";
     public static final String REPLACE = "replace";
     public static final String REVERSE = "reverse";
