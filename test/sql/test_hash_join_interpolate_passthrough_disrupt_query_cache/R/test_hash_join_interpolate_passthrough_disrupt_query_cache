@@ -1,0 +1,169 @@
+-- name: test_hash_join_interpolate_passthrough_disrupt_query_cache
+drop table if exists t0;
+-- result:
+-- !result
+drop table if exists t1;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 10
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 10
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i%100 as c0, i%100 as c1, i%100 as c2 from table(generate_series(1,100000))t(i);
+-- result:
+-- !result
+insert into t1 select i%100 as c0, i%100 as c1, i%100 as c2 from table(generate_series(1,1000))t(i);
+-- result:
+-- !result
+with cte0 as (
+select c0, sum(c2) as sum_c2 from t0 where c2 in (select c2 from t1) group by c0
+),
+cte1 as(
+select c1, sum(c2) as sum_c2 from t0 where c2 in (select c2 from t1) group by c1
+),
+cte2 as(select count(sum_c2) a from cte0
+),
+cte3 as(select count(sum_c2) a from cte1
+)
+select /*+SET_VAR(hash_join_interpolate_passthrough = true,enable_query_cache=true)*/ assert_true(cte2.a= cte3.a) from cte2, cte3;
+-- result:
+1
+-- !result
+drop table if exists t0;
+-- result:
+-- !result
+drop table if exists t1;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 13
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 13
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i%100 as c0, i%100 as c1, i%100 as c2 from table(generate_series(1,100000))t(i);
+-- result:
+-- !result
+insert into t1 select i%100 as c0, i%100 as c1, i%100 as c2 from table(generate_series(1,1000))t(i);
+-- result:
+-- !result
+with cte0 as (
+select c0, sum(c2) as sum_c2 from t0 where c2 in (select c2 from t1) group by c0
+),
+cte1 as(
+select c1, sum(c2) as sum_c2 from t0 where c2 in (select c2 from t1) group by c1
+),
+cte2 as(select count(sum_c2) a from cte0
+),
+cte3 as(select count(sum_c2) a from cte1
+)
+select /*+SET_VAR(hash_join_interpolate_passthrough = true,enable_query_cache=true)*/ assert_true(cte2.a= cte3.a) from cte2, cte3;
+-- result:
+1
+-- !result
+drop table if exists t0;
+-- result:
+-- !result
+drop table if exists t1;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 19
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` int(11) NULL COMMENT "",
+  `c2` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`, `c1`)
+DISTRIBUTED BY HASH(`c0`) BUCKETS 19
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 select i%100 as c0, i%100 as c1, i%100 as c2 from table(generate_series(1,100000))t(i);
+-- result:
+-- !result
+insert into t1 select i%100 as c0, i%100 as c1, i%100 as c2 from table(generate_series(1,1000))t(i);
+-- result:
+-- !result
+with cte0 as (
+select c0, sum(c2) as sum_c2 from t0 where c2 in (select c2 from t1) group by c0
+),
+cte1 as(
+select c1, sum(c2) as sum_c2 from t0 where c2 in (select c2 from t1) group by c1
+),
+cte2 as(select count(sum_c2) a from cte0
+),
+cte3 as(select count(sum_c2) a from cte1
+)
+select /*+SET_VAR(hash_join_interpolate_passthrough = true,enable_query_cache=true)*/ assert_true(cte2.a= cte3.a) from cte2, cte3;
+-- result:
+1
+-- !result

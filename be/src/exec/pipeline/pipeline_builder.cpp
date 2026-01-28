@@ -31,6 +31,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/pipeline/wait_operator.h"
 #include "exec/query_cache/cache_manager.h"
@@ -508,7 +509,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(int32_t plan_node
     if (cache_param.plan_node_id != plan_node_id) {
         return false;
     }
-    return dynamic_cast<pipeline::OperatorFactory*>(source_op.get()) != nullptr;
+    return dynamic_cast<pipeline::ScanOperatorFactory*>(source_op.get()) != nullptr;
 }
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(
