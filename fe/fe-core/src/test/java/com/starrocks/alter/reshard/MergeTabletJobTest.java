@@ -23,10 +23,9 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletRange;
-import com.starrocks.catalog.Tuple;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Range;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTablet;
@@ -42,7 +41,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
+import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -508,6 +509,87 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
     }
 
+    @Test
+    public void testMergeTabletJobFactoryWithTabletGroups() throws Exception {
+        ensureTabletCount(3);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        List<Tablet> orderedTablets = getOrderedTablets(oldIndex);
+        long firstTabletId = orderedTablets.get(0).getId();
+        long secondTabletId = orderedTablets.get(1).getId();
+
+        TabletGroupList tabletGroupList = new TabletGroupList(List.of(List.of(firstTabletId, secondTabletId)));
+        MergeTabletClause clause = new MergeTabletClause(null, tabletGroupList, null);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ReshardingPhysicalPartition reshardingPartition =
+                mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+        Assertions.assertNotNull(reshardingPartition);
+        ReshardingMaterializedIndex reshardingIndex =
+                reshardingPartition.getReshardingIndexes().get(oldIndex.getId());
+        Assertions.assertNotNull(reshardingIndex);
+
+        MergingTablet mergingTablet = null;
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            if (reshardingTablet.getMergingTablet() != null) {
+                mergingTablet = reshardingTablet.getMergingTablet();
+                break;
+            }
+        }
+        Assertions.assertNotNull(mergingTablet);
+        Assertions.assertEquals(List.of(firstTabletId, secondTabletId), mergingTablet.getOldTabletIds());
+
+        int oldTabletCount = oldIndex.getTablets().size();
+        int newTabletCount = reshardingIndex.getMaterializedIndex().getTablets().size();
+        Assertions.assertEquals(oldTabletCount - 1, newTabletCount);
+    }
+
+    @Test
+    public void testMergeTabletJobFactoryAutoMergeBySize() throws Exception {
+        ensureTabletCount(3);
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        List<Tablet> orderedTablets = getOrderedTablets(oldIndex);
+        for (int i = 0; i < orderedTablets.size(); i++) {
+            LakeTablet tablet = (LakeTablet) orderedTablets.get(i);
+            tablet.setDataSize(i < 2 ? 60L : 200L);
+        }
+
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(100L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ReshardingPhysicalPartition reshardingPartition =
+                mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+        Assertions.assertNotNull(reshardingPartition);
+        ReshardingMaterializedIndex reshardingIndex =
+                reshardingPartition.getReshardingIndexes().get(oldIndex.getId());
+        Assertions.assertNotNull(reshardingIndex);
+
+        MergingTablet mergingTablet = null;
+        for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+            if (reshardingTablet.getMergingTablet() != null) {
+                mergingTablet = reshardingTablet.getMergingTablet();
+                break;
+            }
+        }
+        Assertions.assertNotNull(mergingTablet);
+        Assertions.assertEquals(List.of(orderedTablets.get(0).getId(), orderedTablets.get(1).getId()),
+                mergingTablet.getOldTabletIds());
+    }
+
+    @Test
+    public void testMergeTabletJobFactoryRejectNegativeTargetSize() throws Exception {
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(-1L);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, table, clause);
+        Assertions.assertThrows(StarRocksException.class, factory::createTabletReshardJob);
+    }
+
     private TabletReshardJob createSplitTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
@@ -521,6 +603,21 @@ public class MergeTabletJobTest {
 
         TabletReshardJobFactory factory = new SplitTabletJobFactory(db, table, clause);
         return factory.createTabletReshardJob();
+    }
+
+    private void ensureTabletCount(int count) throws Exception {
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
+        int maxTries = 5;
+        while (materializedIndex.getTablets().size() < count && maxTries-- > 0) {
+            TabletReshardJob splitJob = createSplitTabletReshardJob();
+            splitJob.run();
+            splitJob.run();
+            Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+            materializedIndex = physicalPartition.getLatestBaseIndex();
+        }
+        Preconditions.checkState(materializedIndex.getTablets().size() >= count,
+                "Not enough tablets for merge");
     }
 
     private MergeTabletJob createMergeTabletReshardJob() throws Exception {
@@ -546,9 +643,8 @@ public class MergeTabletJobTest {
         MaterializedIndex newIndex = new MaterializedIndex(GlobalStateMgr.getCurrentState().getNextId(),
                 oldIndex.getMetaId(), IndexState.NORMAL, oldIndex.getShardGroupId());
         for (ReshardingTablet reshardingTablet : reshardingTablets) {
-            TabletRange initialRange = getInitialTabletRange(oldIndex, reshardingTablet);
             for (long newTabletId : reshardingTablet.getNewTabletIds()) {
-                newIndex.addTablet(new LakeTablet(newTabletId, initialRange), null, false);
+                newIndex.addTablet(new LakeTablet(newTabletId), null, false);
             }
         }
 
@@ -566,16 +662,7 @@ public class MergeTabletJobTest {
     }
 
     private void ensureSplitTablets() throws Exception {
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
-        MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
-        if (materializedIndex.getTablets().size() >= 2) {
-            return;
-        }
-
-        TabletReshardJob splitJob = createSplitTabletReshardJob();
-        splitJob.run();
-        splitJob.run();
-        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
+        ensureTabletCount(2);
     }
 
     private void createNewShards(PhysicalPartition physicalPartition,
@@ -599,25 +686,7 @@ public class MergeTabletJobTest {
                 properties, WarehouseManager.DEFAULT_RESOURCE);
     }
 
-    private TabletRange getInitialTabletRange(MaterializedIndex oldIndex, ReshardingTablet reshardingTablet) {
-        MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
-        if (mergingTablet == null) {
-            Tablet oldTablet = oldIndex.getTablet(reshardingTablet.getFirstOldTabletId());
-            Preconditions.checkNotNull(oldTablet, "Not found tablet " + reshardingTablet.getFirstOldTabletId());
-            return oldTablet.getRange();
-        }
-
-        List<Long> oldTabletIds = mergingTablet.getOldTabletIds();
-        Tablet firstTablet = oldIndex.getTablet(oldTabletIds.get(0));
-        Tablet lastTablet = oldIndex.getTablet(oldTabletIds.get(oldTabletIds.size() - 1));
-        Preconditions.checkNotNull(firstTablet, "Not found tablet " + oldTabletIds.get(0));
-        Preconditions.checkNotNull(lastTablet, "Not found tablet " + oldTabletIds.get(oldTabletIds.size() - 1));
-
-        Range<Tuple> first = firstTablet.getRange().getRange();
-        Range<Tuple> last = lastTablet.getRange().getRange();
-        return new TabletRange(
-                Range.of(first.getLowerBound(), last.getUpperBound(),
-                        first.isLowerBoundIncluded(), last.isUpperBoundIncluded()));
+    private List<Tablet> getOrderedTablets(MaterializedIndex index) {
+        return new ArrayList<>(index.getTablets());
     }
-
 }
