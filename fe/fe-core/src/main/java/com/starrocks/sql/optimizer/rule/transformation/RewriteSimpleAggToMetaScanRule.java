@@ -174,7 +174,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
                 .setTable(scanOperator.getTable())
                 .setSelectPartitionNames(selectedPartitionNames)
-                .setSelectedIndexId(scanOperator.getSelectedIndexId())
+                .setSelectedIndexId(scanOperator.getSelectedIndexMetaId())
                 .setHintsTabletIds(scanOperator.getHintsTabletIds())
                 .setColRefToColumnMetaMap(newScanColumnRefs)
                 .setAggColumnIdToColumns(aggColumnIdToColumns).build();
@@ -229,7 +229,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             return false;
         }
-        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByIndexId(table.getBaseIndexMetaId());
+        MaterializedIndexMeta currentIndexMeta = table.getIndexMetaByMetaId(table.getBaseIndexMetaId());
         boolean hasSchemaChange = currentIndexMeta.getSchemaVersion() > 0;
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
@@ -357,7 +357,7 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     .workTimeIsMustAfter(lastUpdateTime)) {
                 long count = table.getVisiblePartitions().stream()
                         .flatMap(partition -> partition.getSubPartitions().stream())
-                        .mapToLong(physicalPartition -> physicalPartition.getBaseIndex().getRowCount())
+                        .mapToLong(physicalPartition -> physicalPartition.getLatestBaseIndex().getRowCount())
                         .sum();
                 constantMap.put(entry.getKey(), ConstantOperator.createBigint(count));
             } else {
@@ -375,7 +375,8 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
         if (constantMap.size() == aggregationOperator.getAggregations().size()) {
             // all aggregations can be replaced
             Preconditions.checkState(newAggCalls.isEmpty());
-            LogicalValuesOperator row = new LogicalValuesOperator(scanOperator.getOutputColumns().subList(0, 1),
+            ColumnRefOperator dummy = factory.create("dummy", IntegerType.BIGINT, true);
+            LogicalValuesOperator row = new LogicalValuesOperator(List.of(dummy),
                     List.of(List.of(ConstantOperator.createExampleValueByType(IntegerType.BIGINT))));
             return Optional.of(OptExpression.create(project, OptExpression.create(row)));
         }

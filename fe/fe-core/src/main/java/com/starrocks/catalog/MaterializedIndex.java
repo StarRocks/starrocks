@@ -97,6 +97,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
     @SerializedName(value = "id")
     private long id;
+    @SerializedName(value = "metaId")
+    private long metaId = 0L;
     @SerializedName(value = "state")
     private IndexState state;
     @SerializedName(value = "rowCount")
@@ -133,17 +135,27 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         this(id, state, 0, shardGroupId);
     }
 
+    public MaterializedIndex(long id, long metaId, @Nullable IndexState state, long shardGroupId) {
+        this(id, metaId, state, 0, shardGroupId);
+    }
+
+    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
+        this(id, id, state, visibleTxnId, shardGroupId);
+    }
+
     /**
      * Construct a new instance of {@link MaterializedIndex}.
      * <p>
      * {@code visibleTxnId} will be ignored if {@code state} is not {@code IndexState.SHADOW}
      *
      * @param id           the id of the index
+     * @param metaId       the meta id of the index
      * @param state        the state of the index
      * @param visibleTxnId the minimum transaction id that can see this index.
      */
-    public MaterializedIndex(long id, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
+    public MaterializedIndex(long id, long metaId, @Nullable IndexState state, long visibleTxnId, long shardGroupId) {
         this.id = id;
+        this.metaId = metaId;
         this.state = state == null ? IndexState.NORMAL : state;
         this.idToTablets = new HashMap<>();
         this.tablets = new ArrayList<>();
@@ -219,12 +231,26 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         }
     }
 
-    public void setIdForRestore(long idxId) {
-        this.id = idxId;
+    public Tablet removeTablet(long tabletId) {
+        Tablet tablet = idToTablets.remove(tabletId);
+        if (tablet != null) {
+            tablets.remove(tablet);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
+        }
+        return tablet;
+    }
+
+    public void setIdForRestore(long idxMetaId) {
+        this.id = idxMetaId;
+        this.metaId = idxMetaId;
     }
 
     public long getId() {
         return id;
+    }
+
+    public long getMetaId() {
+        return metaId;
     }
 
     public void setState(IndexState state) {
@@ -331,6 +357,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     public String toString() {
         StringBuilder buffer = new StringBuilder();
         buffer.append("index id: ").append(id).append("; ");
+        buffer.append("index meta id: ").append(metaId).append("; ");
         buffer.append("index state: ").append(state.name()).append("; ");
         buffer.append("shardGroupId: ").append(shardGroupId).append("; ");
         buffer.append("row count: ").append(rowCount).append("; ");
@@ -350,6 +377,9 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         // build "idToTablets" from "tablets"
         for (Tablet tablet : tablets) {
             idToTablets.put(tablet.getId(), tablet);
+        }
+        if (metaId == 0L) {
+            metaId = id;
         }
     }
 }

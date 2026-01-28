@@ -681,7 +681,7 @@ public class SystemInfoService implements GsonPostProcessable {
                                     db.getOriginName(), table.getName(), droppedBackend.getHost(),
                                     droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
 
-                            partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
+                            partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                                     .forEach(rollupIdx -> {
                                         boolean existIntersection = rollupIdx.getTablets().stream()
                                                 .map(Tablet::getId).anyMatch(tabletIds::contains);

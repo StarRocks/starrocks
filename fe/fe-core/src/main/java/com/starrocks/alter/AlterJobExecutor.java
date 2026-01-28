@@ -80,6 +80,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -360,8 +361,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
             // First, we need to check whether the table to be operated on can be renamed
             try {
-                olapNewTbl.checkAndSetName(origTblName, true);
-                origTable.checkAndSetName(newTblName, true);
+                olapNewTbl.checkNameConflict(origTblName);
+                origTable.checkNameConflict(newTblName);
 
                 if (origTable.isMaterializedView() || newTbl.isMaterializedView()) {
                     if (!(origTable.isMaterializedView() && newTbl.isMaterializedView())) {
@@ -464,6 +465,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
@@ -539,8 +541,6 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
                         GlobalStateMgr.getCurrentState().getColocateTableIndex()
                                 .modifyTableColocate(db, olapTable, colocateGroup, false, null);
-                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
                     } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                         if (!olapTable.dynamicPartitionExists()) {
                             try {
@@ -584,6 +584,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else {
                         schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
@@ -701,6 +703,13 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
 
     @Override
     public Void visitSplitTabletClause(SplitTabletClause clause, ConnectContext context) {
+        ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                .createTabletReshardJob(db, (OlapTable) table, clause));
+        return null;
+    }
+
+    @Override
+    public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
         ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
                 .createTabletReshardJob(db, (OlapTable) table, clause));
         return null;
@@ -845,7 +854,8 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
-        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
 
@@ -942,10 +952,11 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), table.getId(),
                 alterViewClause.getInlineViewDef(),
                 alterViewClause.getColumns(),
-                ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
+                ctx.getSessionVariable().getSqlMode(),
+                alterViewClause.getComment(),
+                alterViewClause.getOriginalViewDefineSql());
 
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo, false);
-        GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
         return null;
     }
 

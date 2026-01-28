@@ -21,6 +21,7 @@ ADD_BE_LIB(Formats
         csv/converter.cpp
         csv/csv_reader.cpp
         csv/csv_file_writer.cpp
+        csv/output_stream_file.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp
         csv/decimalv2_converter.cpp
@@ -91,7 +92,9 @@ ADD_BE_LIB(Formats
         parquet/iceberg_row_id_reader.cpp
         parquet/row_source_reader.cpp
         parquet/parquet_pos_reader.cpp
+        column_evaluator.cpp
         disk_range.hpp
+        file_writer.cpp
         )
 
 add_subdirectory(orc/apache-orc)

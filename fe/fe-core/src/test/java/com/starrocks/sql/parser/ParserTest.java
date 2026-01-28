@@ -15,6 +15,7 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -23,10 +24,13 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
@@ -695,6 +699,70 @@ class ParserTest {
 
         SplitTabletClause splitTabletClause = new SplitTabletClause(null, null, null);
         Assertions.assertEquals(null, splitTabletClause.getPartitionNames());
+        Assertions.assertTrue(splitTabletClause.toString().contains("SPLIT TABLET"));
+    }
+
+    @Test
+    public void testMergeTabletClause() {
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "MERGE TABLET PARTITION (partiton_name1, partition_name2)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                MergeTabletClause mergeTabletClause = (MergeTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(Lists.newArrayList("partiton_name1", "partition_name2"),
+                        mergeTabletClause.getPartitionNames().getPartitionNames());
+                Assertions.assertEquals(null, mergeTabletClause.getTabletGroupList());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), mergeTabletClause.getProperties());
+                Assertions.assertNotNull(mergeTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+
+        {
+            String sql = "ALTER TABLE test_db.test_table\n" + //
+                    "MERGE TABLETS (1, 2, 3) (4, 5, 6)\n" + //
+                    "PROPERTIES (\n" + //
+                    "    \"tablet_reshard_target_size\"=\"1024\")";
+
+            SessionVariable sessionVariable = new SessionVariable();
+            try {
+                List<StatementBase> stmts = SqlParser.parse(sql, sessionVariable);
+                Assertions.assertEquals(1, stmts.size());
+
+                AlterTableStmt alterTableStmt = (AlterTableStmt) stmts.get(0);
+                Assertions.assertEquals("test_db", alterTableStmt.getDbName());
+                Assertions.assertEquals("test_table", alterTableStmt.getTableName());
+
+                List<AlterClause> alterClauses = alterTableStmt.getAlterClauseList();
+                Assertions.assertEquals(1, alterClauses.size());
+
+                MergeTabletClause mergeTabletClause = (MergeTabletClause) alterClauses.get(0);
+                Assertions.assertEquals(null, mergeTabletClause.getPartitionNames());
+                Assertions.assertEquals(Lists.newArrayList(
+                        Lists.newArrayList(1L, 2L, 3L),
+                        Lists.newArrayList(4L, 5L, 6L)),
+                        mergeTabletClause.getTabletGroupList().getTabletIdGroups());
+                Assertions.assertEquals(Map.of("tablet_reshard_target_size", "1024"), mergeTabletClause.getProperties());
+                Assertions.assertNotNull(mergeTabletClause.toString());
+            } catch (Exception e) {
+                Assertions.fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
     }
 
     @Test
@@ -711,4 +779,30 @@ class ParserTest {
         }
     }
 
+    @Test
+    void testAlterDatabaseSet() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setThreadLocalInfo();
+        {
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            Assertions.assertInstanceOf(AlterDatabaseSetStmt.class, stmt);
+            Analyzer.analyze(stmt, ctx);
+            com.starrocks.sql.ast.AlterDatabaseSetStmt setStmt = (com.starrocks.sql.ast.AlterDatabaseSetStmt) stmt;
+            Assertions.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, setStmt.getCatalogName());
+            Assertions.assertEquals("db1", setStmt.getDbName());
+            Assertions.assertEquals("sv1", setStmt.getProperties().get("storage_volume"));
+        }
+        {
+            ctx.setCurrentCatalog("external_catalog");
+            String sql = "ALTER DATABASE db1 SET (\"storage_volume\" = \"sv1\");";
+            StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+            SemanticException exception = Assertions.assertThrows(SemanticException.class, () -> {
+                Analyzer.analyze(stmt, ctx);
+            });
+            Assertions.assertTrue(
+                    exception.getMessage().contains("Unsupported operation alter db properties under external catalog"),
+                    exception.getMessage());
+        }
+    }
 }

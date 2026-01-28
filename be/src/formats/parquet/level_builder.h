@@ -37,7 +37,6 @@
 #include <utility>
 #include <vector>
 
-#include "column/chunk.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -166,6 +165,10 @@ private:
     Status _write_json_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                     const CallbackFunction& write_leaf_callback);
+
+    Status _write_variant_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                       const CallbackFunction& write_leaf_callback);
 
     std::shared_ptr<std::vector<uint8_t>> _make_null_bitset(const LevelBuilderContext& ctx, const uint8_t* nulls,
                                                             const size_t col_size) const;

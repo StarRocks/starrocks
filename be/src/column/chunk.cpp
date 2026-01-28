@@ -162,6 +162,14 @@ void Chunk::append_column(ColumnPtr&& column, const FieldPtr& field) {
     check_or_die();
 }
 
+void Chunk::append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id) {
+    DCHECK(is_column_id);
+    DCHECK(!_cid_to_index.contains(column_id));
+    _cid_to_index[column_id] = _columns.size();
+    _append_column_checked(_columns.size(), column);
+    check_or_die();
+}
+
 void Chunk::append_column(const ColumnPtr& column, const FieldPtr& field) {
     DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
@@ -378,6 +386,17 @@ DatumTuple Chunk::get(size_t n) const {
         res.append(column->get(n));
     }
     return res;
+}
+
+VariantTuple Chunk::get(size_t n, const std::vector<uint32_t>& column_indexes) const {
+    DCHECK(_schema != nullptr);
+    VariantTuple tuple;
+    tuple.reserve(column_indexes.size());
+    for (uint32_t i : column_indexes) {
+        DCHECK_LT(i, _columns.size());
+        tuple.emplace(_schema->field(i)->type(), _columns[i]->get(n));
+    }
+    return tuple;
 }
 
 size_t Chunk::memory_usage() const {

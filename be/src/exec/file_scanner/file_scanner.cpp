@@ -47,7 +47,12 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _strict_mode(false),
           _error_counter(0),
           _file_scan_type(TFileScanType::LOAD),
-          _schema_only(schema_only) {}
+          _file_format_str("UNKNOWN"),
+          _schema_only(schema_only) {
+    if (_params.__isset.file_scan_type) {
+        _file_scan_type = _params.file_scan_type;
+    }
+}
 
 FileScanner::~FileScanner() = default;
 
@@ -470,7 +475,12 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
             return Status::InvalidArgument(err_msg);
         }
 
-        RETURN_IF_ERROR_WITH_WARN(p_scanner->open(), "open file scanner failed: ");
+        auto st = p_scanner->open();
+        // Opening a scanner on an empty file may return EOF, but the file schema is still available, such as ORC file
+        if (!st.ok() && !st.is_end_of_file()) {
+            LOG(WARNING) << "open file scanner failed: " << st;
+            return st;
+        }
 
         DeferOp defer([&p_scanner] { p_scanner->close(); });
 

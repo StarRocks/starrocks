@@ -50,6 +50,7 @@ set(UTIL_FILES
   starrocks_metrics.cpp
   mem_info.cpp
   metrics.cpp
+  metrics/file_scan_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp
@@ -116,10 +117,12 @@ set(UTIL_FILES
   lake_service_recoverable_stub.cpp
   byte_buffer.cpp
   variant_converter.cpp
+  variant_encoder.cpp
   jvm_metrics.cpp
   llm_cache.cpp
   llm_query_service.cpp
   variant.cpp
+  uuid_generator.cpp
 )
 
 ADD_BE_LIB(Util

@@ -41,6 +41,7 @@ Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));
 #endif
+    _connector_chunk_sink->set_profile(_unique_metrics.get());
     RETURN_IF_ERROR(_connector_chunk_sink->init());
     return Status::OK();
 }
@@ -84,7 +85,6 @@ bool ConnectorSinkOperator::is_finished() const {
         LOG(WARNING) << "cancel fragment: " << status;
         _fragment_context->cancel(status);
     }
-
     bool ret = finished && _connector_chunk_sink->is_finished();
     return ret;
 }

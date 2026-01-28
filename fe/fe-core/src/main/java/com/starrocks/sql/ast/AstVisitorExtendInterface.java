@@ -520,6 +520,10 @@ public interface AstVisitorExtendInterface<R, C> extends AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitMergeTabletClause(MergeTabletClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     //Alter partition clause
 
 

@@ -73,6 +73,7 @@ public class IcebergScanNode extends ScanNode {
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
+    private boolean usedForDelete = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -162,6 +163,7 @@ public class IcebergScanNode extends ScanNode {
                         .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
+                        .setUsedForDelete(usedForDelete)
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
@@ -186,7 +188,7 @@ public class IcebergScanNode extends ScanNode {
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
-                scanOptimizeOption.getCanUseMinMaxOpt());
+                scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
     }
 
     private void setupCloudCredential() {
@@ -202,8 +204,20 @@ public class IcebergScanNode extends ScanNode {
         this.cloudConfiguration = cloudConfiguration;
     }
 
+    public void setUsedForDelete(boolean usedForDelete) {
+        this.usedForDelete = usedForDelete;
+    }
+
+    public boolean isUsedForDelete() {
+        return usedForDelete;
+    }
+
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
         this.icebergJobPlanningPredicate = predicate;
+    }
+
+    public IcebergTable getIcebergTable() {
+        return icebergTable;
     }
 
     // for unit tests

@@ -14,10 +14,15 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
+#include "runtime/time_types.h"
+#include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/timestamp_value.h"
 #include "util/variant.h"
 
 namespace starrocks {
@@ -27,10 +32,103 @@ namespace starrocks {
                                      VariantUtil::variant_type_to_string(variant_type), \
                                      logical_type_to_string(logical_type)))
 
+inline std::pair<int64_t, int64_t> split_micros_to_seconds(int64_t micros) {
+    int64_t seconds = micros / USECS_PER_SEC;
+    int64_t microseconds = micros % USECS_PER_SEC;
+    if (microseconds < 0) {
+        microseconds += USECS_PER_SEC;
+        --seconds;
+    }
+    return {seconds, microseconds};
+}
+
 Status cast_variant_to_bool(const VariantRowValue& row, ColumnBuilder<TYPE_BOOLEAN>& result);
 
 Status cast_variant_to_string(const VariantRowValue& row, const cctz::time_zone& zone,
                               ColumnBuilder<TYPE_VARCHAR>& result);
+
+inline Status cast_variant_to_date(const VariantRowValue& row, const cctz::time_zone& zone,
+                                   ColumnBuilder<TYPE_DATE>& result) {
+    const VariantValue& variant = row.get_value();
+    switch (const VariantType type = variant.type()) {
+    case VariantType::NULL_TYPE:
+        result.append_null();
+        return Status::OK();
+    case VariantType::DATE: {
+        ASSIGN_OR_RETURN(int32_t days, variant.get_date());
+        result.append(DateValue::from_days_since_unix_epoch(days));
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unixtime(seconds, microseconds, zone);
+        int year, month, day;
+        timestamp::to_date(tsv.timestamp(), &year, &month, &day);
+        result.append(DateValue::create(year, month, day));
+        return Status::OK();
+    }
+    default:
+        return VARIANT_CAST_NOT_SUPPORT(type, TYPE_DATE);
+    }
+}
+
+inline Status cast_variant_to_time(const VariantRowValue& row, const cctz::time_zone& zone,
+                                   ColumnBuilder<TYPE_TIME>& result) {
+    const VariantValue& variant = row.get_value();
+    switch (const VariantType type = variant.type()) {
+    case VariantType::NULL_TYPE:
+        result.append_null();
+        return Status::OK();
+    case VariantType::TIME_NTZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_time_micros_ntz());
+        result.append(static_cast<double>(micros) / USECS_PER_SEC);
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unixtime(seconds, microseconds, zone);
+        int hour, minute, second, microsecond;
+        tsv.to_time(&hour, &minute, &second, &microsecond);
+        int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC + microsecond;
+        result.append(static_cast<double>(total_micros) / USECS_PER_SEC);
+        return Status::OK();
+    }
+    default:
+        return VARIANT_CAST_NOT_SUPPORT(type, TYPE_TIME);
+    }
+}
+
+inline Status cast_variant_to_datetime(const VariantRowValue& row, const cctz::time_zone& zone,
+                                       ColumnBuilder<TYPE_DATETIME>& result) {
+    const VariantValue& variant = row.get_value();
+    switch (const VariantType type = variant.type()) {
+    case VariantType::NULL_TYPE:
+        result.append_null();
+        return Status::OK();
+    case VariantType::TIMESTAMP_NTZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros_ntz());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unix_second(seconds, microseconds);
+        result.append(tsv);
+        return Status::OK();
+    }
+    case VariantType::TIMESTAMP_TZ: {
+        ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
+        auto [seconds, microseconds] = split_micros_to_seconds(micros);
+        TimestampValue tsv{};
+        tsv.from_unixtime(seconds, microseconds, zone);
+        result.append(tsv);
+        return Status::OK();
+    }
+    default:
+        return VARIANT_CAST_NOT_SUPPORT(type, TYPE_DATETIME);
+    }
+}
 
 #define VARIANT_CAST_CASE(VARIANT_TYPE_ENUM, GETTER_METHOD)                    \
     case VariantType::VARIANT_TYPE_ENUM: {                                     \
@@ -76,7 +174,8 @@ static Status cast_variant_value_to(const VariantRowValue& row, const cctz::time
     // VARIANT -> MAP<VARCHAR, ANY>: CastVariantToMap
     // VARIANT -> STRUCT<...>: CastVariantToStruct
     // VARIANT -> Decimal types: DecimalNonDecimalCast
-    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && ResultType != TYPE_VARIANT) {
+    if constexpr (!lt_is_arithmetic<ResultType> && !lt_is_string<ResultType> && !lt_is_time<ResultType> &&
+                  !lt_is_date_or_datetime<ResultType> && ResultType != TYPE_VARIANT) {
         if constexpr (AllowThrowException) {
             return VARIANT_CAST_NOT_SUPPORT(variant_type, ResultType);
         }
@@ -102,6 +201,12 @@ static Status cast_variant_value_to(const VariantRowValue& row, const cctz::time
         status = cast_variant_to_arithmetic<ResultType>(row, result);
     } else if constexpr (lt_is_string<ResultType>) {
         status = cast_variant_to_string(row, zone, result);
+    } else if constexpr (ResultType == TYPE_DATE) {
+        status = cast_variant_to_date(row, zone, result);
+    } else if constexpr (ResultType == TYPE_DATETIME) {
+        status = cast_variant_to_datetime(row, zone, result);
+    } else if constexpr (ResultType == TYPE_TIME) {
+        status = cast_variant_to_time(row, zone, result);
     }
 
     if (!status.ok()) {

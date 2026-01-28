@@ -16,6 +16,18 @@ select date('2023-12-10')-interval '1' day;
 -- result:
 2023-12-09
 -- !result
+select date('2023-12-10') - interval '1' day * 3;
+-- result:
+2023-12-07
+-- !result
+select date('2023-12-10') - 3 * interval '1' day;
+-- result:
+2023-12-07
+-- !result
+select date('2023-12-10') - interval '6' day / 3;
+-- result:
+2023-12-08
+-- !result
 select TIMESTAMP '2023-12-10 01:00:00' - interval '1' day;
 -- result:
 2023-12-09 01:00:00

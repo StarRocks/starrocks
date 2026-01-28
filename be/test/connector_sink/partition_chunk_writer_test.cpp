@@ -328,10 +328,12 @@ TEST_F(PartitionChunkWriterTest, spill_partition_chunk_writer) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
+        // When is_finished() is true, it guarantees both the merge task is done and commited flag is set
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -499,10 +501,11 @@ TEST_F(PartitionChunkWriterTest, spill_writer_for_complex_types) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -640,10 +643,11 @@ TEST_F(PartitionChunkWriterTest, sort_column_asc) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -793,10 +797,11 @@ TEST_F(PartitionChunkWriterTest, sort_column_desc) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -913,10 +918,11 @@ TEST_F(PartitionChunkWriterTest, sort_multiple_columns) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -1039,10 +1045,11 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
         // Merge spill blocks
         auto ret = partition_writer->finish();
         EXPECT_EQ(ret.ok(), true);
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
         Awaitility()
                 .timeout(3 * 1000 * 1000) // 3s
                 .interval(300 * 1000)     // 300ms
-                .until([&commited]() { return commited; });
+                .until([&]() { return partition_writer->is_finished(); });
 
         EXPECT_EQ(commited, true);
         EXPECT_EQ(status.ok(), true);
@@ -1062,6 +1069,197 @@ TEST_F(PartitionChunkWriterTest, sort_column_with_schema_chunk) {
             }
             last_row = cur_row;
         }
+    }
+
+    std::filesystem::remove_all(fs_base_path);
+}
+
+// Test connector sink profile metrics
+TEST_F(PartitionChunkWriterTest, test_connector_sink_profile_metrics) {
+    auto fs_base_path = "./ut_dir_connector_sink_profile";
+    std::filesystem::create_directories(fs_base_path);
+
+    auto writer_helper = WriterHelper::instance();
+    bool commited = false;
+    Status status;
+
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    // Create partition writer with profile
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    // Create sink profile
+    auto profile = _pool.add(new RuntimeProfile("TestProfile"));
+    auto sink_profile = _pool.add(new ConnectorSinkProfile());
+    sink_profile->runtime_profile = profile;
+
+    // Initialize profile counters
+    sink_profile->partition_writer_counter = ADD_COUNTER(profile, "PartitionWriters", TUnit::UNIT);
+    sink_profile->write_file_counter = ADD_COUNTER(profile, "WriteFiles", TUnit::UNIT);
+    sink_profile->write_file_record_counter = ADD_COUNTER(profile, "WriteFileRecords", TUnit::UNIT);
+    sink_profile->write_file_bytes = ADD_COUNTER(profile, "WriteFileBytes", TUnit::BYTES);
+    sink_profile->write_file_timer = ADD_TIMER(profile, "WriteFileTime");
+    sink_profile->commit_file_timer = ADD_TIMER(profile, "CommitFileTime");
+    sink_profile->sort_timer = ADD_TIMER(profile, "SortTime");
+    sink_profile->spill_chunk_timer = ADD_TIMER(profile, "SpillChunkTime");
+    sink_profile->merge_blocks_timer = ADD_TIMER(profile, "MergeBlocksTime");
+    sink_profile->spilling_bytes_usage_peak = ADD_PEAK_COUNTER(profile, "SpillingBytesUsagePeak", TUnit::BYTES);
+
+    auto partition_chunk_writer_ctx = std::make_shared<SpillPartitionChunkWriterContext>(
+            SpillPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false, nullptr,
+                                             _fragment_context.get(), tuple_desc, nullptr, nullptr});
+    auto partition_chunk_writer_factory =
+            std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<SpillPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    partition_writer->set_sink_profile(sink_profile);
+    EXPECT_OK(partition_writer->init());
+
+    // Write and verify profile metrics
+    {
+        writer_helper->reset();
+        commited = false;
+        status = Status::OK();
+
+        // Write some chunks
+        for (size_t i = 0; i < 3; ++i) {
+            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("ccc" + std::to_string(i)));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("bbb" + std::to_string(i)));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("aaa" + std::to_string(i)));
+
+            auto ret = partition_writer->write(chunk);
+            EXPECT_OK(ret);
+        }
+
+        // Flush to trigger file operations
+        auto ret = partition_writer->flush();
+        EXPECT_OK(ret);
+        ret = partition_writer->wait_flush();
+        EXPECT_OK(ret);
+
+        // Wait for async operations to complete
+        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([partition_writer]() {
+            return partition_writer->_spilling_bytes_usage.load(std::memory_order_relaxed) == 0;
+        });
+
+        ret = partition_writer->finish();
+        EXPECT_OK(ret);
+
+        // Wait for is_finished() to ensure all async operations (merge task and callback) are complete
+        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&]() {
+            return partition_writer->is_finished();
+        });
+
+        // Verify profile metrics are recorded
+        EXPECT_GE(sink_profile->write_file_timer->value(), 0) << "WriteFileTime should be non-negative";
+        EXPECT_GE(sink_profile->commit_file_timer->value(), 0) << "CommitFileTime should be non-negative";
+
+        // Sorting metrics should be zero
+        EXPECT_EQ(sink_profile->sort_timer->value(), 0) << "SortTime should be positive when sorting is enabled";
+
+        // Spill operations should have been tracked
+        EXPECT_GE(sink_profile->spill_chunk_timer->value(), 0) << "SpillChunkTime should be non-negative";
+        EXPECT_GE(sink_profile->merge_blocks_timer->value(), 0) << "MergeBlocksTime should be non-negative";
+
+        // Spilling memory peak should be tracked
+        EXPECT_GE(sink_profile->spilling_bytes_usage_peak->value(), 0)
+                << "SpillingBytesUsagePeak should be non-negative";
+    }
+
+    std::filesystem::remove_all(fs_base_path);
+}
+
+// Test buffer partition writer with profile metrics
+TEST_F(PartitionChunkWriterTest, test_buffer_partition_writer_profile_metrics) {
+    auto fs_base_path = "./ut_dir_buffer_writer_profile";
+    std::filesystem::create_directories(fs_base_path);
+
+    auto writer_helper = WriterHelper::instance();
+    bool commited = false;
+    Status status;
+
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC}, {""}};
+    TupleDescriptor* tuple_desc =
+            parquet::Utils::create_tuple_descriptor(_fragment_context->runtime_state(), &_pool, slot_descs);
+
+    auto mock_writer_factory = std::make_shared<MockFileWriterFactory>();
+    auto location_provider = std::make_shared<LocationProvider>(fs_base_path, "ffffff", 0, 0, "parquet");
+    EXPECT_CALL(*mock_writer_factory, create(::testing::_)).WillRepeatedly([](const std::string&) {
+        WriterAndStream ws;
+        ws.writer = std::make_unique<MockWriter>();
+        ws.stream = std::make_unique<Stream>(std::make_unique<MockFile>(), nullptr, nullptr);
+        return ws;
+    });
+
+    // Create sink profile
+    auto profile = _pool.add(new RuntimeProfile("TestProfile"));
+    auto sink_profile = _pool.add(new ConnectorSinkProfile());
+    sink_profile->runtime_profile = profile;
+    sink_profile->write_file_timer = ADD_TIMER(profile, "WriteFileTime");
+    sink_profile->commit_file_timer = ADD_TIMER(profile, "CommitFileTime");
+
+    auto partition_chunk_writer_ctx = std::make_shared<BufferPartitionChunkWriterContext>(
+            BufferPartitionChunkWriterContext{mock_writer_factory, location_provider, 100, false});
+    auto partition_chunk_writer_factory =
+            std::make_unique<BufferPartitionChunkWriterFactory>(partition_chunk_writer_ctx);
+    std::vector<int8_t> partition_field_null_list;
+    auto partition_writer = std::dynamic_pointer_cast<BufferPartitionChunkWriter>(
+            partition_chunk_writer_factory->create("c1", partition_field_null_list));
+    auto commit_callback = [&commited](const CommitResult& r) { commited = true; };
+    auto error_handler = [&status](const Status& s) { status = s; };
+    auto poller = MockPoller();
+    partition_writer->set_io_poller(&poller);
+    partition_writer->set_commit_callback(commit_callback);
+    partition_writer->set_error_handler(error_handler);
+    partition_writer->set_sink_profile(sink_profile);
+    EXPECT_OK(partition_writer->init());
+
+    // Write chunks and verify metrics
+    {
+        writer_helper->reset();
+        commited = false;
+        status = Status::OK();
+
+        // Write some chunks
+        for (size_t i = 0; i < 2; ++i) {
+            ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 3);
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("data" + std::to_string(i)));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("data" + std::to_string(i)));
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Slice("data" + std::to_string(i)));
+
+            auto ret = partition_writer->write(chunk);
+            EXPECT_OK(ret);
+        }
+
+        auto ret = partition_writer->finish();
+        EXPECT_OK(ret);
+
+        // Wait for is_finished() to ensure all async operations are complete
+        // For BufferPartitionChunkWriter, is_finished() always returns true, but we use it for consistency
+        Awaitility().timeout(3 * 1000 * 1000).interval(300 * 1000).until([&]() {
+            return partition_writer->is_finished();
+        });
+
+        // Verify profile metrics are recorded
+        EXPECT_GT(sink_profile->write_file_timer->value(), 0) << "WriteFileTime should be positive";
+        EXPECT_GT(sink_profile->commit_file_timer->value(), 0) << "CommitFileTime should be positive";
     }
 
     std::filesystem::remove_all(fs_base_path);

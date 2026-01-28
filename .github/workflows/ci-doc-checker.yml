@@ -75,7 +75,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -92,9 +92,9 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
 
       - uses: tj-actions/changed-files@v47
         id: changed-files

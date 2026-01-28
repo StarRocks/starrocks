@@ -36,10 +36,16 @@
 
 #include <memory>
 
+#include "column/append_with_mask.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
+#include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "types/logical_type.h"
@@ -215,7 +221,7 @@ Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
 template <LogicalType Type>
 void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
     _dict_decoder = down_cast<BinaryPlainPageDecoder<Type>*>(dict_decoder);
-    _max_value_legth = _dict_decoder->max_value_length();
+    _max_value_length = _dict_decoder->max_value_length();
 }
 
 template <LogicalType Type>
@@ -262,23 +268,165 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
         _dict_decoder->batch_string_at_index(slices, codewords, nread);
     }
 
-    class SliceContainerAdaptor {
-    public:
-        using value_type = Slice;
-        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
-
-        Slice* data() const { return _slices; }
-        size_t size() const { return _size; }
-
-    private:
-        Slice* _slices;
-        size_t _size;
-    };
-
     SliceContainerAdaptor adaptor(slices, nread);
-    bool ok = dst->append_strings_overflow(adaptor, _max_value_legth);
+    bool ok = dst->append_strings_overflow(adaptor, _max_value_length);
     DCHECK(ok) << "append_strings_overflow failed";
     RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch failed"));
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
+        Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
+    DCHECK(Type != TYPE_CHAR);
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->next_batch_with_filter(column, range, compound_and_predicates, null_data, selection,
+                                                          selected_idx);
+    }
+
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    DCHECK(null_data == nullptr || column->is_nullable());
+
+    // caller must make sure SparseRange's ranges are all in the same page
+    size_t num_rows = range.span_size();
+    if (null_data != nullptr) {
+        // Create temporary nullable column for predicate evaluation
+        auto temp_column = column->clone_empty();
+        auto temp_nullable_column = down_cast<NullableColumn*>(temp_column.get());
+        auto temp_data_column = temp_nullable_column->data_column_raw_ptr();
+        auto& temp_null_column = temp_nullable_column->null_column_ref();
+
+        // Read data column and null column
+        ContainerResource container(_page_handle, null_data, num_rows);
+        int n = temp_null_column.append_numbers(container);
+        DCHECK_EQ(n, num_rows);
+        RETURN_IF_ERROR(next_batch(range, temp_data_column));
+        DCHECK(temp_null_column.size() == num_rows);
+        DCHECK(temp_data_column->size() == num_rows);
+        temp_nullable_column->update_has_null();
+
+        // Evaluate predicates on the temporary column
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+        if (selected_count == 0) {
+            return Status::OK();
+        }
+
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        RETURN_IF_ERROR(
+                append_with_mask</*PositiveSelect=*/true>(nullable_column, *temp_nullable_column, selection, num_rows));
+
+        return Status::OK();
+    }
+
+    if (PREDICT_FALSE(_data_page_decoder->current_index() >= _data_page_decoder->count())) {
+        return Status::OK();
+    }
+
+    // Step 1: Evaluate predicates on dictionary once and reuse the selection across pages.
+    uint32_t dict_size = 0;
+    uint32_t dict_selected_count = 0;
+    const uint8_t* dict_selection = nullptr;
+    RETURN_IF_ERROR(_dict_decoder->get_dict_filter_selection(compound_and_predicates, &dict_selection, &dict_size,
+                                                             &dict_selected_count));
+    if (dict_selected_count == 0) {
+        memset(selection, 0, num_rows);
+        return Status::OK();
+    }
+    if (dict_selected_count == dict_size) {
+        memset(selection, 1, num_rows);
+        return next_batch(range, column);
+    }
+
+    // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(num_rows);
+
+    RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
+    size_t nread = _vec_code_buf->size();
+
+    if (nread == 0) {
+        return Status::OK();
+    }
+
+    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+
+    // Step 3: Update selection based on dictionary selection and collect matching slices
+    std::vector<Slice> selected_slices;
+    selected_slices.reserve(nread);
+
+    for (size_t i = 0; i < nread; ++i) {
+        uint32_t code = codewords[i];
+        if (code < dict_size && dict_selection[code]) {
+            selection[i] = 1;
+            Slice element = _dict_decoder->string_at_index(code);
+            selected_slices.emplace_back(element);
+        } else {
+            selection[i] = 0;
+        }
+    }
+
+    // Step 4: Append selected strings to column using append_strings_overflow
+    if (!selected_slices.empty()) {
+        SliceContainerAdaptor adaptor(selected_slices);
+        bool ok = column->append_strings_overflow(adaptor, _max_value_length);
+        RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch_with_filter failed"));
+    }
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                                   size_t* count, Column* column) {
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, count, column);
+    }
+    DCHECK(_parsed);
+    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    if (_vec_code_buf == nullptr) {
+        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+    }
+    _vec_code_buf->resize(0);
+    _vec_code_buf->reserve(*count);
+    size_t read_count = *count;
+    RETURN_IF_ERROR(
+            _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, &read_count, _vec_code_buf.get()));
+    DCHECK_EQ(_vec_code_buf->size(), read_count);
+
+    if (PREDICT_FALSE(read_count == 0)) {
+        *count = 0;
+        return Status::OK();
+    }
+    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
+    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(read_count * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+    if constexpr (Type == TYPE_CHAR) {
+        for (size_t i = 0; i < read_count; i++) {
+            Slice element = _dict_decoder->string_at_index(codewords[i]);
+            element.size = strnlen(element.data, element.size);
+            slices[i] = element;
+        }
+    } else {
+        _dict_decoder->batch_string_at_index(slices, codewords, read_count);
+    }
+
+    SliceContainerAdaptor adaptor(slices, read_count);
+    bool ok = column->append_strings_overflow(adaptor, _max_value_length);
+    RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::read_by_rowids failed"));
+    *count = read_count;
     return Status::OK();
 }
 
@@ -290,10 +438,45 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, Column* dst) {
 }
 
 template <LogicalType Type>
+Status BinaryDictPageDecoder<Type>::read_dict_codes_by_rowids(const ordinal_t first_ordinal_in_page,
+                                                              const rowid_t* rowids, size_t* count, Column* dst) {
+    DCHECK(_encoding_type == DICT_ENCODING);
+    DCHECK(_parsed);
+    return _data_page_decoder->read_by_rowids(first_ordinal_in_page, rowids, count, dst);
+}
+
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);
+}
+
+template <LogicalType Type>
+void BinaryDictPageDecoder<Type>::reserve_col(size_t n, Column* column) {
+    if (_encoding_type == PLAIN_ENCODING) {
+        return _data_page_decoder->reserve_col(n, column);
+    }
+
+    if (_dict_decoder == nullptr) {
+        column->reserve(n);
+        return;
+    }
+
+    size_t estimated_row_size = _dict_decoder->estimate_row_size();
+    Column* data_col;
+    if (column->is_nullable()) {
+        // This is NullableColumn, get its data_column
+        auto* nullable_col = down_cast<NullableColumn*>(column);
+        data_col = nullable_col->data_column_raw_ptr();
+    } else {
+        data_col = column;
+    }
+
+    if (data_col->is_binary()) {
+        BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+        binary_col->reserve(n, estimated_row_size * n);
+    }
 }
 
 template class BinaryDictPageDecoder<TYPE_CHAR>;

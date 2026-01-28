@@ -61,10 +61,7 @@ public:
             const Column* tmp_col = ColumnHelper::get_data_column(col.get());
             DCHECK(tmp_col->is_struct());
             const auto* struct_column = down_cast<const StructColumn*>(tmp_col);
-            col = struct_column->field_column(fieldname);
-            if (col == nullptr) {
-                return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
-            }
+            ASSIGN_OR_RETURN(col, struct_column->field_column(fieldname));
         }
 
         if (col->is_nullable()) {
@@ -87,10 +84,12 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
     int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+        int n = Expr::get_subfields(subfields);
         if (subfields != nullptr) {
             subfields->push_back(_used_subfield_names);
+            n += 1;
         }
-        return 1;
+        return n;
     }
 
 private:

@@ -82,7 +82,7 @@ protected:
                 RETURN_IF_ERROR(writer->finish());
             }
 
-            auto files = writer->files();
+            auto files = writer->segments();
             writer->close();
 
             // Publish version

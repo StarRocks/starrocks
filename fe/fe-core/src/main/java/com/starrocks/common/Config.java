@@ -372,6 +372,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean plugin_enable = true;
 
+    @ConfField
+    public static String ext_dir = System.getenv("STARROCKS_HOME") + "/lib";
+
     /**
      * Labels of finished or cancelled load jobs will be removed
      * 1. after *label_keep_max_second*
@@ -794,7 +797,7 @@ public class Config extends ConfigBase {
      * @see com.starrocks.qe.scheduler.slot.QueryQueueOptions
      */
     @ConfField
-    public static boolean enable_query_queue_v2 = false;
+    public static boolean enable_query_queue_v2 = true;
     /**
      * Used to calculate the total number of slots the system has,
      * which is equal to the configuration value * BE number * BE cores.
@@ -2212,6 +2215,12 @@ public class Config extends ConfigBase {
     public static long statistic_manager_sleep_time_sec = 60; // 60s
 
     /**
+     * The interval of TabletWriteLogHistorySyncer to sync tablet write log history.
+     */
+    @ConfField(mutable = true)
+    public static long tablet_write_log_history_sync_interval_sec = 60;
+
+    /**
      * Analyze status keep time in catalog
      */
     @ConfField(mutable = true)
@@ -2251,6 +2260,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Enable predicate columns collection. If disabled, predicate columns " +
             "will not be recorded during query optimization")
     public static boolean enable_predicate_columns_collection = true;
+
+    @ConfField(mutable = true, comment = "If enabled, FE will always collect optimizer timer traces during plan " +
+            "generation and dump them to logs when plan generation fails (e.g. CBO timeout) for diagnosis.")
+    public static boolean enable_dump_optimizer_trace_on_error = false;
 
     /**
      * Num of thread to handle statistic collect(analyze command)
@@ -3168,11 +3181,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
 
-    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
-    public static int lake_publish_version_max_threads = 512;
+    @ConfField(mutable = true, comment = "the max number of threads for publishing version",
+            aliases = {"lake_publish_version_max_threads"})
+    public static int publish_version_max_threads = 512;
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
+
+    @ConfField(mutable = false, comment = "whether allow using publish thread pool for shared-nothing")
+    public static boolean shared_nothing_publish_use_thread_pool = false;
 
     @ConfField(mutable = true, comment =
             "Consider balancing between workers during tablet migration in shared data mode. Default: true")
@@ -3775,6 +3792,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
 
+    @ConfField(mutable = false, comment = "Timeout in milliseconds for HikariCP to acquire a connection from the pool")
+    public static long jdbc_connection_timeout_ms = 10000L;
+
+    @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC statement query execution")
+    public static long jdbc_query_timeout_ms = 30000L;
+
+    @ConfField(mutable = true, comment = "Timeout in milliseconds for JDBC network operations (socket read)")
+    public static long jdbc_network_timeout_ms = 30000L;
+
     // The longest supported VARCHAR length.
     @ConfField(mutable = true)
     public static int max_varchar_length = 1048576;
@@ -4096,4 +4122,7 @@ public class Config extends ConfigBase {
     public static int compound_predicate_flatten_threshold = 512;
 
     @ConfField public static int ui_queries_sql_statement_max_length = 128;
+
+    @ConfField(mutable = true)
+    public static boolean enable_hudi_lib_internal_metadata_table = true;
 }

@@ -236,7 +236,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         long repoId = globalStateMgr.getNextId();
         Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), stmt.getLocation(), storage);
 
-        Status st = repoMgr.addAndInitRepoIfNotExist(repo, false);
+        Status st = repoMgr.addAndInitRepoIfNotExist(repo);
         if (!st.ok()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                     "Failed to create repository: " + st.getErrMsg());
@@ -260,7 +260,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 }
             }
 
-            Status st = repoMgr.removeRepo(repo.getName(), false /* not replay */);
+            Status st = repoMgr.removeRepo(repo.getName());
             if (!st.ok()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Failed to drop repository: " + st.getErrMsg());
@@ -538,13 +538,17 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         }
         backupJob.setBackupCatalogs(backupCatalogs);
 
-        // write log
-        globalStateMgr.getEditLog().logBackupJob(backupJob);
-
-        // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, backupJob);
+        addBackupJob(backupJob);
 
         LOG.info("finished to submit backup job: {}", backupJob);
+    }
+
+    protected void addBackupJob(BackupJob backupJob) {
+        // write log
+        globalStateMgr.getEditLog().logBackupJob(backupJob, wal -> {
+            // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
+            dbIdToBackupOrRestoreJob.put(backupJob.dbId, backupJob);
+        });
     }
 
     private Catalog getCatalog(String catalogName) throws DdlException {
@@ -582,8 +586,6 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             checkAndFilterRestoreCatalogsInBackupMeta(stmt, backupMeta);
         }
 
-        // Create a restore job
-        RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
@@ -605,15 +607,21 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             replicationNum = Integer.parseInt(replicationNumProp);
         }
 
-        restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+        // Create a restore job
+        RestoreJob  restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 dbId, dbName, jobInfo, stmt.allowLoad(), replicationNum,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
-        globalStateMgr.getEditLog().logRestoreJob(restoreJob);
-
-        // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, restoreJob);
+        addRestoreJob(restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
+    }
+
+    protected void addRestoreJob(RestoreJob restoreJob) {
+        // write log
+        globalStateMgr.getEditLog().logRestoreJob(restoreJob, wal -> {
+            // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
+            dbIdToBackupOrRestoreJob.put(restoreJob.dbId, restoreJob);
+        });
     }
 
     protected BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {

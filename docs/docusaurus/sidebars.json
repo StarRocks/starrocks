@@ -269,6 +269,7 @@
                         "data_source/catalog/hudi_catalog",
                         "data_source/catalog/deltalake_catalog",
                         "data_source/catalog/jdbc_catalog",
+                        "data_source/catalog/benchmark_catalog",
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
@@ -439,6 +440,10 @@
                 {
                     "type": "doc",
                     "id": "integrations/other_integrations/datadog_support"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/airflow"
                 },
                 {
                     "type": "doc",

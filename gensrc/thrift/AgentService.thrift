@@ -138,6 +138,7 @@ struct TCreateTabletReq {
     24: optional i64 gtid = 0;
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
+    27: optional Types.TTabletRange range;
 }
 
 struct TDropTabletReq {
@@ -186,12 +187,24 @@ struct TAlterTabletReqV2 {
     11: optional i64 job_id
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
+    // This field is used for shared-nothing fast schema evolution, and shared-data use base_tablet_read_schema instead.
     14: optional list<Descriptors.TColumn> columns
     // synchronized materialized view parameters
     15: optional TAlterJobType alter_job_type = TAlterJobType.SCHEMA_CHANGE
     16: optional Descriptors.TDescriptorTable desc_tbl
     17: optional Exprs.TExpr where_expr
     18: optional list<string> base_table_column_names 
+    // Schema from FE catalog for reading data from base tablet in shared-data. This may be newer than the schema stored
+    // in tablet metadata in Fast Schema Evolution v2 scenario. Must use this schema to read data, otherwise correctness
+    // issues may occur. Why shared-data doesn't reuse the 'columns' field from shared-nothing:
+    // 1. shared-nothing only sends columns, requiring BE to construct complete schema (complex, not extensible).
+    //    For example, shared-nothing assumes adding key columns won't trigger fast schema evolution,
+    //    so BE won't rebuild sort key when constructing schema. This would cause issues in shared-data,
+    //    where fast schema evolution supports adding key columns, requiring complete schema info.
+    // 2. In shared-data's original fast schema evolution (non-v2), columns were meaningless since FE catalog
+    //    schema matches tablet metadata schema. base_tablet_read_schema can directly replace columns;
+    //    old BE will fall back to tablet metadata schema if columns are missing, with no compatibility impact.
+    19: optional TTabletSchema base_tablet_read_schema
 }
 
 struct TClusterInfo {

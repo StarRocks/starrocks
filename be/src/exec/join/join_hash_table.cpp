@@ -135,7 +135,7 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
     }
 
     const auto& offsets = binary_column->get_offset();
-    const auto& bytes = binary_column->get_bytes();
+    auto bytes = binary_column->get_immutable_bytes();
 
     bool has_tail_zero = false;
     for (size_t i = offsets.size() - 1; i > 0 && offsets[i] > 0; i--) {
@@ -260,7 +260,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         RuntimeState* state, JoinHashTableItems* table_items) {
     bool is_asof_join_type = is_asof_join(table_items->join_type);
 
-    if (!state->enable_hash_join_range_direct_mapping_opt()) {
+    if (!state->enable_hash_join_range_direct_mapping_opt() || table_items->row_count == 0) {
         return _get_fallback_method<LT>(is_asof_join_type);
     }
 

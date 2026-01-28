@@ -295,7 +295,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
+    if (!RowsetFactory::create_rowset(tablet_schema, new_path, rowset_meta, &org_rowset, nullptr).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -444,8 +444,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 
     // 4. Link files to snapshot directory.
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id(),
-                                        0 /*snapshot_version*/);
+        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id(), 0 /*snapshot_version*/);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -509,8 +508,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
 
     for (const auto& snapshot_rowset : snapshot_rowsets) {
-        auto st = snapshot_rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir,
-                                                 snapshot_rowset->rowset_id(), snapshot_version);
+        auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id(), snapshot_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);
@@ -668,8 +666,7 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
 
     // 4. Link files to snapshot directory.
     for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(tablet->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id(),
-                                        full_snapshot_version);
+        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id(), full_snapshot_version);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)fs::remove_all(snapshot_id_path);

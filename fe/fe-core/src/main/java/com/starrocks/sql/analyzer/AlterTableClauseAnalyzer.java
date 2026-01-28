@@ -84,6 +84,7 @@ import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyColumnCommentClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -462,6 +463,29 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2)) {
             PropertyAnalyzer.analyzeCloudNativeFastSchemaEvolutionV2(table.getType(), properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL)) {
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL +
+                                " can only be set for cloud native tables");
+            }
+            String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+            try {
+                int maxParallel = Integer.parseInt(value);
+                if (maxParallel < 0) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Invalid lake_compaction_max_parallel value: " + value + ". Value must be non-negative.");
+                }
+            } catch (NumberFormatException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Invalid lake_compaction_max_parallel value: " + value + ". Value must be an integer.");
+            }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT)) {
+            try {
+                PropertyAnalyzer.analyzeTableQueryTimeout(Maps.newHashMap(properties));
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -1263,6 +1287,55 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         if (clause.getTabletList() != null && clause.getTabletList().getTabletIds().isEmpty()) {
             throw new SemanticException("Empty tablets");
+        }
+
+        Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()
+                : Maps.newHashMap(clause.getProperties());
+        try {
+            long tabletReshardTargetSize = PropertyAnalyzer.analyzeTabletReshardTargetSize(copiedProperties, true);
+            clause.setTabletReshardTargetSize(tabletReshardTargetSize);
+        } catch (Exception e) {
+            throw new SemanticException(e.getMessage(), e);
+        }
+
+        if (!copiedProperties.isEmpty()) {
+            throw new SemanticException("Unknown properties: " + copiedProperties);
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
+        if (!table.isCloudNativeTableOrMaterializedView()) {
+            throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {
+            throw new SemanticException("Partitions and tablets cannot be specified at the same time");
+        }
+
+        if (clause.getPartitionNames() != null) {
+            if (clause.getPartitionNames().isTemp()) {
+                throw new SemanticException("Cannot merge tablet in temp partition");
+            }
+            if (clause.getPartitionNames().getPartitionNames().isEmpty()) {
+                throw new SemanticException("Empty partitions");
+            }
+        }
+
+        if (clause.getTabletGroupList() != null) {
+            if (clause.getTabletGroupList().getTabletIdGroups().isEmpty()) {
+                throw new SemanticException("Empty tablets");
+            }
+            for (List<Long> tabletIds : clause.getTabletGroupList().getTabletIdGroups()) {
+                if (tabletIds.isEmpty()) {
+                    throw new SemanticException("Empty tablets");
+                }
+                if (tabletIds.size() < 2) {
+                    throw new SemanticException("Tablet list must contain at least 2 tablets");
+                }
+            }
         }
 
         Map<String, String> copiedProperties = clause.getProperties() == null ? Maps.newHashMap()

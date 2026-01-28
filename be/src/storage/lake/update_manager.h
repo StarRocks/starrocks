@@ -99,7 +99,8 @@ public:
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePrimaryIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
-                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment);
+                                      const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                      uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
                                 Tablet* tablet, LakePrimaryIndex& index, IndexEntry* index_entry,
@@ -117,8 +118,8 @@ public:
                                    std::vector<uint64_t>* rss_rowids, bool need_lock);
 
     // get column data by rssid and rowids
-    Status get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
-                             bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+    Status get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
+                             bool with_default, const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              MutableColumns* columns, const std::map<string, string>* column_to_expr_value = nullptr,
                              AutoIncrementPartialUpdateState* auto_increment_state = nullptr);
     // get delvec by version
@@ -239,6 +240,26 @@ private:
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
 
+    // Processes a single chunk during parallel condition merge.
+    // Compares condition column values between old and new rows to decide which rows to delete.
+    // This is called concurrently by multiple worker threads, with mutex protecting shared state.
+    Status _process_single_chunk_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
+                                                       int32_t upsert_idx, SegmentPKIterator* segment_pk_iterator,
+                                                       ParallelPublishContext* context,
+                                                       const std::pair<ChunkPtr, size_t>& current,
+                                                       const TabletColumn& tablet_column,
+                                                       const std::vector<uint32_t>& read_column_ids,
+                                                       LakePrimaryIndex& index);
+
+    // Performs condition-based merge update using parallel execution for segments with SST files.
+    // This optimized path leverages pre-materialized condition values in SST files to enable
+    // chunk-level parallelism, providing 3-5x performance improvement over serial merge.
+    // Requires: SST files must exist with condition column values.
+    Status _do_update_with_condition_parallel(const RowsetUpdateStateParams& params, uint32_t rowset_id,
+                                              int32_t upsert_idx, int32_t condition_column,
+                                              const SegmentPKIteratorPtr& upsert, LakePrimaryIndex& index,
+                                              DeletesMap* new_deletes);
+
     struct PkIndexShard {
         mutable std::shared_mutex lock;
     };
@@ -248,7 +269,8 @@ private:
     }
 
     // decide whether use light publish compaction stategy or not
-    bool _use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id);
+    bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,
+                                               int64_t tablet_id, int64_t txn_id);
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:

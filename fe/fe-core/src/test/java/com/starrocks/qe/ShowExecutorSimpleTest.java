@@ -115,7 +115,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -174,7 +173,7 @@ public class ShowExecutorSimpleTest {
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index1;
             }
@@ -226,10 +225,6 @@ public class ShowExecutorSimpleTest {
                 table.getIndexMetaIdByName(anyString);
                 minTimes = 0;
                 result = 0L;
-
-                table.getStorageTypeByIndexMetaId(0L);
-                minTimes = 0;
-                result = TStorageType.COLUMN;
 
                 table.getPartition(anyLong);
                 minTimes = 0;
@@ -1025,7 +1020,8 @@ public class ShowExecutorSimpleTest {
 
     @Test
     public void testShouldMarkIdleCheck() {
-        StmtExecutor stmtExecutor = new StmtExecutor(new ConnectContext(),
+        ConnectContext connectContext = new ConnectContext();
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext,
                 SqlParser.parseSingleStatement("select @@query_timeout", SqlModeHelper.MODE_DEFAULT));
 
         Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
@@ -1046,5 +1042,17 @@ public class ShowExecutorSimpleTest {
         Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
                 SqlParser.parseSingleStatement("admin set frontend config('proc_profile_cpu_enable' = 'true')",
                         SqlModeHelper.MODE_DEFAULT)));
+
+        Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select * from information_schema.tables",
+                        SqlModeHelper.MODE_DEFAULT)));
+
+        connectContext.setDatabase("information_schema");
+        Assertions.assertFalse(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select * from tables", SqlModeHelper.MODE_DEFAULT)));
+
+        connectContext.setDatabase("test");
+        Assertions.assertTrue(stmtExecutor.shouldMarkIdleCheck(
+                SqlParser.parseSingleStatement("select * from tables", SqlModeHelper.MODE_DEFAULT)));
     }
 }

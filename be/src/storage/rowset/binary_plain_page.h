@@ -61,7 +61,7 @@
 
 namespace starrocks {
 class Column;
-}
+} // namespace starrocks
 
 namespace starrocks {
 
@@ -216,6 +216,9 @@ public:
 
         _parsed = true;
 
+        uint32_t total_bytes = _offsets_pos;
+        _estimated_row_size = _num_elems == 0 ? 0 : total_bytes / _num_elems;
+
         return Status::OK();
     }
 
@@ -231,6 +234,13 @@ public:
 
     bool append_range(uint32_t idx, uint32_t end, Column* dst) const;
 
+    Status read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids, size_t* count,
+                          Column* column) override;
+
+    Status next_batch_with_filter(Column* column, const SparseRange<>& range,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) override;
+
     uint32_t count() const override {
         DCHECK(_parsed);
         return _num_elems;
@@ -242,6 +252,8 @@ public:
     }
 
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }
+
+    size_t estimate_row_size() const { return _estimated_row_size; }
 
     Slice string_at_index(uint32_t idx) const {
         const uint32_t start_offset = offset(idx);
@@ -264,6 +276,8 @@ public:
         return -1;
     }
 
+    bool supports_read_by_rowids() const override { return Type == TYPE_VARCHAR; }
+
     uint32_t max_value_length() const {
         uint32_t max_length = 0;
         for (int i = 0; i < _num_elems; ++i) {
@@ -276,6 +290,56 @@ public:
     }
 
     uint32_t dict_size() { return _num_elems; }
+
+    // Zero-copy access methods for dictionary usage
+    const void* get_raw_data() const {
+        const uint32_t start_offset = offset_uncheck(0);
+        return &_data[start_offset];
+    }
+
+    size_t get_data_length() const { return _num_elems > 0 ? offset(_num_elems) - offset_uncheck(0) : 0; }
+
+    // Get offsets for zero-copy construction
+    void get_offsets_for_zero_copy(BinaryColumn::Offsets& offsets) const {
+        offsets.clear();
+        offsets.resize(_num_elems + 1);
+        offsets[0] = 0; // Start from 0
+        if (_num_elems == 0) {
+            return;
+        }
+
+        uint32_t base_offset = offset_uncheck(0); // Get the base offset
+        for (uint32_t i = 0; i < _num_elems - 1; ++i) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+            auto offset = _offsets_ptr[i + 1];
+#else
+            // direct call offset_uncheck() will break auto-vectorized
+            // maybe we can remove this condition compile after we upgrade the toolchain
+            auto offset = offset_uncheck(i + 1);
+#endif
+            // Convert absolute offset to relative offset from base
+            uint32_t current_offset = offset - base_offset;
+            offsets[i + 1] = current_offset;
+        }
+
+        for (uint32_t i = _num_elems - 1; i < _num_elems; i++) {
+            uint32_t current_offset = offset(i + 1) - base_offset;
+            offsets[i + 1] = current_offset;
+        }
+    }
+
+    // Dictionary-page predicate cache (used by BinaryDictPageDecoder):
+    //
+    // For string columns with DICT_ENCODING, there is a single dictionary page (DICTIONARY_PAGE) shared by all
+    // data pages in the column. At runtime, ScalarColumnIterator loads that dictionary page into a
+    // BinaryPlainPageDecoder (this class). When predicate-late-materialization calls into
+    // BinaryDictPageDecoder::next_batch_with_filter(), we can evaluate predicates on the dictionary page once
+    // (dict_id -> selected) and reuse the selection across all subsequent data pages.
+    //
+    // This cache is only meaningful when this decoder instance represents the *dictionary page*.
+    // It should not be used for ordinary string data pages.
+    Status get_dict_filter_selection(const std::vector<const ColumnPredicate*>& predicates, const uint8_t** selection,
+                                     uint32_t* dict_size, uint32_t* selected_count) const;
 
 private:
     // Return the offset within '_data' where the string value with index 'idx' can be found.
@@ -291,6 +355,26 @@ private:
 #endif
     }
 
+    Status next_range_with_filter(uint32_t idx, uint32_t end, Column* dst,
+                                  const std::vector<const ColumnPredicate*>& compound_and_predicates,
+                                  const uint8_t* null, uint8_t* selection, uint16_t* selected_idx);
+
+    void reserve_col(size_t n, Column* column) override {
+        Column* data_col;
+        if (column->is_nullable()) {
+            // This is NullableColumn, get its data_column
+            auto* nullable_col = down_cast<NullableColumn*>(column);
+            data_col = nullable_col->data_column_raw_ptr();
+        } else {
+            data_col = column;
+        }
+
+        if (data_col->is_binary() && data_col->capacity() == 0) {
+            BinaryColumn* binary_col = down_cast<BinaryColumn*>(data_col);
+            binary_col->reserve(n, n * _estimated_row_size);
+        }
+    }
+
     Slice _data;
     bool _parsed;
 
@@ -301,7 +385,14 @@ private:
     // Index of the currently seeked element in the page.
     uint32_t _cur_idx;
 
+    size_t _estimated_row_size;
+
     std::optional<std::vector<Slice>> _parsed_datas;
+
+    // Cached result of predicate evaluation on the dictionary page. See get_dict_filter_selection().
+    mutable bool _dict_filter_cache_valid{false};
+    mutable std::vector<uint8_t> _dict_filter_cache_selection;
+    mutable uint32_t _dict_filter_cache_selected_count{0};
 };
 
 } // namespace starrocks

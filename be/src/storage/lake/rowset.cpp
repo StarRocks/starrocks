@@ -16,12 +16,15 @@
 
 #include <future>
 
+#include "column/datum_convert.h"
 #include "runtime/current_thread.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
@@ -31,6 +34,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/seek_range.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/union_iterator.h"
 #include "types/logical_type.h"
@@ -131,25 +135,33 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
                     metadata().segment_encryption_metas(i));
         }
-        if (metadata().shared_segments_size() > 0) {
+        if (i < metadata().shared_segments_size()) {
             op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
         }
-
+        if (i < metadata().segment_metas_size()) {
+            op_compaction->mutable_output_rowset()->add_segment_metas()->CopyFrom(metadata().segment_metas(i));
+        }
         uncompacted_num_rows += already_compacted_segments[i]->num_rows();
         uncompacted_data_size += file_size;
     }
 
     // 2. add compacted segments in this round
     op_compaction->set_new_segment_offset(op_compaction->output_rowset().segments_size());
-    for (auto& file : writer->files()) {
+    for (const auto& file : writer->segments()) {
         op_compaction->mutable_output_rowset()->add_segments(file.path);
         op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
         op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
         if (metadata().shared_segments_size() > 0) {
             op_compaction->mutable_output_rowset()->add_shared_segments(false);
         }
+        if (metadata().segment_metas_size() > 0) {
+            auto* segment_meta = op_compaction->mutable_output_rowset()->add_segment_metas();
+            file.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
+            file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            segment_meta->set_num_rows(file.num_rows);
+        }
     }
-    op_compaction->set_new_segment_count(writer->files().size());
+    op_compaction->set_new_segment_count(writer->segments().size());
 
     // 3. set next compaction offset
     op_compaction->mutable_output_rowset()->set_next_compaction_offset(op_compaction->output_rowset().segments_size());
@@ -173,8 +185,11 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
             op_compaction->mutable_output_rowset()->add_segment_encryption_metas(
                     metadata().segment_encryption_metas(i));
         }
-        if (metadata().shared_segments_size() > 0) {
+        if (i < metadata().shared_segments_size()) {
             op_compaction->mutable_output_rowset()->add_shared_segments(metadata().shared_segments(i));
+        }
+        if (i < metadata().segment_metas_size()) {
+            op_compaction->mutable_output_rowset()->add_segment_metas()->CopyFrom(metadata().segment_metas(i));
         }
 
         uncompacted_num_rows += uncompacted_segments[idx]->num_rows();
@@ -215,6 +230,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
+    seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
@@ -268,11 +284,24 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         options.stats->segments_read_count += num_segments();
     }
 
+    SeekRange tablet_range;
+    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
+        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
+        // and the data in tablet_metadata->range() has the same lifetime as the rowset
+        ASSIGN_OR_RETURN(tablet_range,
+                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
+    }
+
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr));
-    for (auto& seg_ptr : segments) {
+    for (int i = 0; i < segments.size(); i++) {
+        auto& seg_ptr = segments[i];
         if (seg_ptr->num_rows() == 0) {
             continue;
+        }
+        seg_options.tablet_range = std::nullopt;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
+            seg_options.tablet_range = tablet_range;
         }
 
         if (options.rowid_range_option != nullptr) { // physical split.
@@ -347,7 +376,20 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
         RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
     }
 
-    for (auto& seg_ptr : segments) {
+    SeekRange tablet_range;
+    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
+        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
+        // and the data in tablet_metadata->range() has the same lifetime as the rowset
+        ASSIGN_OR_RETURN(tablet_range,
+                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
+    }
+
+    for (int i = 0; i < segments.size(); i++) {
+        auto& seg_ptr = segments[i];
+        seg_options.tablet_range = std::nullopt;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
+            seg_options.tablet_range = tablet_range;
+        }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
@@ -387,7 +429,20 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         RETURN_IF_ERROR(RecordPredicateHelper::check_valid_schema(*seg_options.record_predicate, schema));
     }
 
-    for (auto& seg_ptr : segments) {
+    SeekRange tablet_range;
+    if (_tablet_metadata != nullptr && _tablet_metadata->has_range()) {
+        // do not use mem_pool here which means SeekRange is the reference of the data in tablet_metadata->range()
+        // and the data in tablet_metadata->range() has the same lifetime as the rowset
+        ASSIGN_OR_RETURN(tablet_range,
+                         TabletRangeHelper::create_seek_range_from(_tablet_metadata->range(), _tablet_schema, nullptr));
+    }
+
+    for (int i = 0; i < segments.size(); i++) {
+        auto& seg_ptr = segments[i];
+        seg_options.tablet_range = std::nullopt;
+        if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i)) {
+            seg_options.tablet_range = tablet_range;
+        }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;

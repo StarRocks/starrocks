@@ -11,6 +11,37 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.22
+
+リリース日：2026 年 1 月 27 日
+
+### バグ修正
+
+以下の問題が修正されました：
+
+- CVE-2025-27818。[#67335](https://github.com/StarRocks/starrocks/pull/67335)
+- ARM64 / Graviton アーキテクチャにおいて、非パーティション Iceberg テーブルに対して DATE/TIME 述語を含むクエリを実行すると CN が SIGSEGV でクラッシュする問題を修正しました。[#66864](https://github.com/StarRocks/starrocks/pull/66864)
+- `LocalTabletsChannel` および `LakeTabletsChannel` のクローズ時に、ロック順序の問題によって発生するデッドロックを修正しました。[#66748](https://github.com/StarRocks/starrocks/pull/66748)
+- フィルタ条件付きの `CACHE SELECT` クエリ実行時に、BE がクラッシュする可能性がある問題を修正しました。[#67375](https://github.com/StarRocks/starrocks/pull/67375)
+- 上流オペレーター（例：LIMIT）が早期に終了した場合、Multicast Sink Operator が `OUTPUT_FULL` 状態のまま停止し、クエリがハングする問題を修正しました。[#67153](https://github.com/StarRocks/starrocks/pull/67153)
+- `ObjectColumn` のリサイズや移動時にキャッシュポインタが正しく無効化されず、セグメンテーションフォルトが発生する可能性がある問題を修正しました。[#66957](https://github.com/StarRocks/starrocks/pull/66957)
+- すべて NULL の Nullable 列を Java UDF が処理する際に、エラーや OOM が発生する可能性がある問題を修正しました。[#67025](https://github.com/StarRocks/starrocks/pull/67025)
+- `PARTITION BY` および `ORDER BY` が指定されていない Ranking ウィンドウ関数において、最適化ロジックが原因で BE がクラッシュする問題を修正しました。[#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- 単一 Bucket テーブルにおいて、`COUNT(DISTINCT)` を非 DISTINCT 集約（SUM など）と同時にクエリした場合に、`multi_distinct_count` へ正しくリライトされず、結果が不正になる問題を修正しました。[#66767](https://github.com/StarRocks/starrocks/pull/66767)
+- `enable_hyperscan_vec` を有効にした状態で `regexp_replace` が複数行を処理する際に、結果が不正になる問題を修正しました。[#67380](https://github.com/StarRocks/starrocks/pull/67380)
+- Shared-data モードにおいて、Sorted Streaming Aggregate が不正な結果を返す可能性がある問題を修正しました。[#67376](https://github.com/StarRocks/starrocks/pull/67376)
+- カラム名変更後も、オプティマイザが古いカラム名を使用してアクセスパスを生成し、クエリが失敗する問題を修正しました。[#67533](https://github.com/StarRocks/starrocks/pull/67533)
+- `bitmap_to_array` から `unnest_bitmap` へのリライトルールにおいて、Bitmap カラム型の伝播が正しく行われない問題を修正しました。[#66855](https://github.com/StarRocks/starrocks/pull/66855)
+- Low Cardinality 最適化ロジックにおける依存関係導出エラーを、Union-Find アルゴリズムの導入により修正しました。[#66724](https://github.com/StarRocks/starrocks/pull/66724)
+- Shared-data クラスターで Short-circuit Read を使用した際に “Compute node not found” エラーが発生する問題を、非 Short-circuit モードへのフォールバック機構を追加することで修正しました。[#67323](https://github.com/StarRocks/starrocks/pull/67323)
+- レプリケーション公開時に、FE レプリカが最小可読バージョンを更新しないことにより発生する “Version not found” エラーを修正しました。[#67538](https://github.com/StarRocks/starrocks/pull/67538)
+- レプリケーション・トランザクション中の物理パーティション比較におけるロジックエラーを修正し、ID 順による決定的な比較を行うようにしました。[#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- Cloud Native Tables において、スキャン行数などのカウンタ統計が不正確になる問題を修正しました。[#67307](https://github.com/StarRocks/starrocks/pull/67307)
+- 期限切れの Tablet がスケジューラからクリーンアップされず、スケジューリングキューが滞留する問題を修正しました。[#66718](https://github.com/StarRocks/starrocks/pull/66718)
+- 複数の SQL 文を同時に送信した場合に、Profile に表示される SQL 文が不正確になる問題を修正しました。[#67097](https://github.com/StarRocks/starrocks/pull/67097)
+- 新しい FE において、`publish_version` ログのトランザクション ID が空になる問題を修正しました。[#66732](https://github.com/StarRocks/starrocks/pull/66732)
+- `set_allocated` 後に不要な Protobuf メッセージコピーが発生し、性能が低下する問題を修正しました。[#67844](https://github.com/StarRocks/starrocks/pull/67844)
+
 ## 3.3.21
 
 リリース日: 2025年12月25日

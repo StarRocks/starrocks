@@ -170,7 +170,7 @@ public class TabletSchedulerTest {
     public void testRemoveAllTabletIdsIfExpired() throws InterruptedException {
         Database db = new Database(1, "db");
         Table table = new Table(3, "table", Table.TableType.OLAP, new ArrayList<>());
-        Partition partition = new Partition(5, 6, "partition", null, null);
+        Partition partition = new Partition(5, 6, "partition", new MaterializedIndex(), null);
 
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         recycleBin.recycleDatabase(db, new HashSet<>(), true);
@@ -229,8 +229,8 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition badPartition = new Partition(5, 55, "mal", null, null);
-        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+        Partition badPartition = new Partition(5, 55, "mal", new MaterializedIndex(), null);
+        Partition goodPartition = new Partition(6, 66, "bueno", new MaterializedIndex(), null);
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
@@ -281,7 +281,7 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
-        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+        Partition goodPartition = new Partition(6, 66, "bueno", new MaterializedIndex(), null);
 
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
@@ -557,7 +557,7 @@ public class TabletSchedulerTest {
         Database db = new Database(dbId, "db");
         OlapTable table = new OlapTable(tblId, "table", null, null, null, null);
         MaterializedIndex index = new MaterializedIndex(indexId);
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
         Partition partition = new Partition(partitionId, physicalPartitionId, "partition", index, null);
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
 
@@ -656,7 +656,7 @@ public class TabletSchedulerTest {
         LocalTablet tablet = new LocalTablet(tabletId, Lists.newArrayList(replica));
         MaterializedIndex index = new MaterializedIndex(indexId);
         index.addTablet(tablet, new TabletMeta(dbId, tblId, physicalPartitionId, indexId, TStorageMedium.HDD));
-        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, "physical_part", partitionId, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, partitionId, index);
 
         new Expectations() {
             {

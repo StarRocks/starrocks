@@ -46,6 +46,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -57,6 +58,7 @@ import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -722,6 +724,14 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitAlterDatabaseSetStatement(AlterDatabaseSetStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getLocalMetastore().alterDatabaseSet(stmt);
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt,
                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
@@ -1006,9 +1016,10 @@ public class DDLStmtExecutor {
                     statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                             context.getSessionVariable().getStatisticCollectParallelism());
                     Thread thread = new Thread(() -> {
-                        statsConnectCtx.setThreadLocalInfo();
-                        StatisticExecutor statisticExecutor = new StatisticExecutor();
-                        analyzeJob.run(statsConnectCtx, statisticExecutor);
+                        try (var scope = statsConnectCtx.bindScope()) {
+                            StatisticExecutor statisticExecutor = new StatisticExecutor();
+                            analyzeJob.run(statsConnectCtx, statisticExecutor);
+                        }
                     });
                     thread.start();
                 }
@@ -1384,6 +1395,15 @@ public class DDLStmtExecutor {
                                                                         ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOff(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt stmt,
+                                                                               ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotInterval(stmt);
             });
             return null;
         }

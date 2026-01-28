@@ -23,8 +23,15 @@
 
 namespace starrocks {
 
-StatusOr<std::string> LocalPrimaryKeyCompactionConflictResolver::filename() const {
-    return local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
+StatusOr<FileInfo> LocalPrimaryKeyCompactionConflictResolver::filename() const {
+    FileInfo info;
+    info.path = local_rows_mapper_filename(_tablet, _rowset->rowset_id_str());
+    // NOTE: For local tables, mapper files are always on local disk (.crm extension),
+    // so we don't need to populate the size field. The file size will be queried
+    // on-demand which is fast for local filesystem (~1-5ms).
+    // WHY FileInfo return type: Changed to match interface signature for consistency
+    // with lake tables, even though local tables don't use remote storage.
+    return info;
 }
 
 Schema LocalPrimaryKeyCompactionConflictResolver::generate_pkey_schema() {
@@ -44,7 +51,8 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     auto pkey_schema = generate_pkey_schema();
     RowsetReleaseGuard guard(_rowset->shared_from_this());
     const auto& schema = _rowset->schema();
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats));
+    ASSIGN_OR_RETURN(auto segment_iters,
+                     _rowset->get_segment_iterators2(pkey_schema, schema, MetaLoadMode::NONE, 0, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments(), "itrs.size != num_segments");
     // init delvec loader
     auto delvec_loader = std::make_unique<LocalDelvecLoader>(_tablet->data_dir()->get_meta());

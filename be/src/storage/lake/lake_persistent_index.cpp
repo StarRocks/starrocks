@@ -27,6 +27,7 @@
 #include "storage/lake/persistent_index_sstable_fileset.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/persistent_index_parallel_publish_context.h"
@@ -47,6 +48,13 @@ LakePersistentIndex::~LakePersistentIndex() {
     if (_memtable) {
         _memtable->clear();
     }
+    // Cancel all flushing memtable tasks
+    for (auto& memtable : _inactive_memtables) {
+        if (memtable) {
+            memtable->cancel();
+        }
+    }
+    _inactive_memtables.clear();
     _sstable_filesets.clear();
 }
 
@@ -227,6 +235,7 @@ Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
 // - If too many pending flushes, switches to synchronous flush to avoid unbounded memory growth
 Status LakePersistentIndex::flush_memtable(bool force) {
     if (!_memtable->empty() && (force || is_memtable_full())) {
+        TRACE_COUNTER_INCREMENT("flush_times", 1);
         TRACE_COUNTER_SCOPE_LATENCY_US("flush_memtable_us");
         // 1. check whether previous flush task finish.
         int finish_point = -1;
@@ -472,7 +481,7 @@ void LakePersistentIndex::pick_sstables_for_merge(const PersistentIndexSstableMe
 Status LakePersistentIndex::prepare_merging_iterator(
         TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log,
         std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level) {
+        std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level, bool* contain_shared_sstables) {
     sstable::ReadOptions read_options;
     // No need to cache input sst's blocks.
     read_options.fill_cache = false;
@@ -514,6 +523,10 @@ Status LakePersistentIndex::prepare_merging_iterator(
         // add input sstable.
         txn_log->mutable_op_compaction()->add_input_sstables()->CopyFrom(merging_sstable->sstable_pb());
         ss_debug << sstable_pb.filename() << " | ";
+
+        if (sstable_pb.shared()) {
+            *contain_shared_sstables = true;
+        }
     }
     sstable::Options options;
     (*merging_iter_ptr).reset(sstable::NewMergingIterator(options.comparator, &iters[0], iters.size()));
@@ -525,10 +538,33 @@ Status LakePersistentIndex::prepare_merging_iterator(
 
 StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> LakePersistentIndex::merge_sstables(
         std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-        int64_t tablet_id) {
+        const TabletMetadataPtr& metadata, bool contain_shared_sstables) {
+    SstSeekRange seek_range;
+    // adjust sst seek range by tablet range
+    if (contain_shared_sstables) {
+        RETURN_IF(!metadata->has_range(), Status::InternalError("Tablet range is not set"));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        ASSIGN_OR_RETURN(seek_range, TabletRangeHelper::create_sst_seek_range_from(metadata->range(), tablet_schema));
+        if (!seek_range.seek_key.empty()) {
+            iter_ptr->Seek(seek_range.seek_key);
+        }
+    }
+
+    if (!iter_ptr->Valid()) {
+        RETURN_IF_ERROR(iter_ptr->status());
+        return std::vector<KeyValueMerger::KeyValueMergerOutput>();
+    }
+
+    sstable::Options options;
     auto merger = std::make_unique<KeyValueMerger>(iter_ptr->key().to_string(), iter_ptr->max_rss_rowid(),
-                                                   base_level_merge, tablet_mgr, tablet_id, false);
+                                                   base_level_merge, tablet_mgr, metadata->id(), false);
     while (iter_ptr->Valid()) {
+        const std::string& cur_key = iter_ptr->key().to_string();
+        if (!seek_range.stop_key.empty() &&
+            options.comparator->Compare(Slice(cur_key), Slice(seek_range.stop_key)) >= 0) {
+            // meet the scan range boundary, quit.
+            break;
+        }
         RETURN_IF_ERROR(merger->merge(iter_ptr.get()));
         iter_ptr->Next();
     }
@@ -566,8 +602,12 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
                                                  .input_sstables(txn_log.op_compaction().input_sstables_size() - 1)
                                                  .max_rss_rowid();
                                  if (result.max_max_rss_rowid != max_rss_rowid) {
-                                     LOG(ERROR) << "early sst compact max_rss_rowid mismatch, expected: "
-                                                << result.max_max_rss_rowid << ", got: " << max_rss_rowid;
+                                     // This should not happen.
+                                     std::string error_msg = fmt::format(
+                                             "early sst compact max_rss_rowid mismatch, expected: {}, got: {}",
+                                             result.max_max_rss_rowid, max_rss_rowid);
+                                     LOG(ERROR) << error_msg;
+                                     return Status::InternalError(error_msg);
                                  }
                                  for (const auto& sstable_pb : sstables) {
                                      auto* output_sstable = txn_log.mutable_op_compaction()->add_output_sstables();
@@ -622,9 +662,10 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
     std::vector<std::shared_ptr<PersistentIndexSstable>> sstable_vec;
     std::unique_ptr<sstable::Iterator> merging_iter_ptr;
     bool merge_base_level = false;
+    bool contain_shared_sstables = false;
     // build merge iterator
     RETURN_IF_ERROR(prepare_merging_iterator(tablet_mgr, metadata, txn_log, &sstable_vec, &merging_iter_ptr,
-                                             &merge_base_level));
+                                             &merge_base_level, &contain_shared_sstables));
     if (merging_iter_ptr == nullptr) {
         // no need to do merge
         return Status::OK();
@@ -633,8 +674,8 @@ Status LakePersistentIndex::major_compact(TabletManager* tablet_mgr, const Table
         return merging_iter_ptr->status();
     }
     // merge sstable files.
-    ASSIGN_OR_RETURN(auto merge_results,
-                     merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr, metadata->id()));
+    ASSIGN_OR_RETURN(auto merge_results, merge_sstables(std::move(merging_iter_ptr), merge_base_level, tablet_mgr,
+                                                        metadata, contain_shared_sstables));
     if (merge_results.empty()) {
         // no output file generated.
         return Status::OK();

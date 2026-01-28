@@ -463,6 +463,8 @@ public class ExternalOlapTable extends OlapTable {
             DistributionDesc distributionDesc = new HashDistributionDesc(hashDist.getBucket_num(),
                     hashDist.getDistribution_columns());
             defaultDistributionInfo = DistributionInfoBuilder.build(distributionDesc, getBaseSchema());
+        } else if (type == DistributionInfoType.RANGE) {
+            defaultDistributionInfo = new RangeDistributionInfo();
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {
@@ -471,9 +473,7 @@ public class ExternalOlapTable extends OlapTable {
                     defaultDistributionInfo);
 
             PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
-                    partitionMeta.getPartition_name(),
-                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
-                    null);
+                    partitionMeta.getPartition_id()); // TODO(wulei): fix it
             physicalPartition.setBucketNum(defaultDistributionInfo.getBucketNum());
 
             logicalPartition.addSubPartition(physicalPartition);
@@ -487,6 +487,11 @@ public class ExternalOlapTable extends OlapTable {
                 index.setRowCount(indexMeta.getRow_count());
                 for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
                     LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());
+                    if (type == DistributionInfoType.RANGE) {
+                        // In shared-nothing mode, ranges do not support splitting.
+                        // There will only be one default range.
+                        tablet.setRange(new TabletRange());
+                    }
                     tablet.setCheckedVersion(tTabletMeta.getChecked_version());
                     tablet.setIsConsistent(tTabletMeta.isConsistent());
                     for (TReplicaMeta replicaMeta : tTabletMeta.getReplicas()) {
@@ -507,7 +512,7 @@ public class ExternalOlapTable extends OlapTable {
                     index.addTablet(tablet, tabletMeta, false);
                 }
                 if (indexMeta.getPartition_id() == physicalPartition.getId()) {
-                    if (index.getId() != baseIndexMetaId) {
+                    if (index.getMetaId() != baseIndexMetaId) {
                         physicalPartition.createRollupIndex(index);
                     } else {
                         physicalPartition.setBaseIndex(index);

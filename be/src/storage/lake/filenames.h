@@ -78,6 +78,14 @@ inline bool is_cols(std::string_view file_name) {
     return HasSuffixString(file_name, ".cols");
 }
 
+// Check if file is a Lake Compaction Rows Mapper file
+// WHY: Need to distinguish between local (.crm) and remote (.lcrm) mapper files
+// for correct cleanup behavior. Remote lcrm files must not be deleted immediately
+// after use since they may be accessed by multiple nodes during parallel pk execution.
+inline bool is_lcrm(std::string_view file_name) {
+    return HasSuffixString(file_name, ".lcrm");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
 }
@@ -88,6 +96,18 @@ inline std::string tablet_initial_metadata_filename() {
 
 inline std::string gen_delvec_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.delvec", txn_id, generate_uuid_string());
+}
+
+// Generate filename for Lake Compaction Rows Mapper file (.lcrm)
+// WHY: lcrm files are stored on remote storage (S3/HDFS) for parallel pk execution
+// FORMAT: {txn_id}_{uuid}.lcrm
+// - txn_id: Transaction ID for tracking and debugging
+// - uuid: Ensures uniqueness to avoid conflicts in distributed environment
+// DISTINCTION from .crm:
+// - .lcrm: Remote storage, multi-node access, managed by metadata GC
+// - .crm: Local disk, single-node access, deleted immediately after use
+inline std::string gen_lcrm_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.lcrm", txn_id, generate_uuid_string());
 }
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {

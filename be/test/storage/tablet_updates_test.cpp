@@ -880,6 +880,8 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
     ASSERT_EQ(4, _tablet->updates()->version_history_count());
     ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(1, _tablet->updates()->min_readable_version());
+    ASSERT_EQ(1, _tablet->min_readable_version());
 
     // Read from the latest version, this can ensure that all versions are applied.
     ASSERT_EQ(N, read_tablet(_tablet, 4));
@@ -902,6 +904,8 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     _tablet->updates()->remove_expired_versions(time(nullptr));
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
     ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(4, _tablet->updates()->min_readable_version());
+    ASSERT_EQ(4, _tablet->min_readable_version());
 
     EXPECT_EQ(N, read_tablet(_tablet, 4));
     EXPECT_EQ(N, read_until_eof(iter_v4));
@@ -1438,7 +1442,8 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     }
     ASSERT_TRUE(output_rs != nullptr);
     RowsMapperIterator iterator;
-    ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
+    ASSERT_OK(
+            iterator.open(FileInfo{.path = local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())}));
     for (uint32_t i = 0; i < 100; i += 20) {
         std::vector<uint64_t> rows_mapper;
         ASSERT_OK(iterator.next_values(20, &rows_mapper));
@@ -1777,7 +1782,8 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     }
     ASSERT_TRUE(output_rs != nullptr);
     RowsMapperIterator iterator;
-    ASSERT_OK(iterator.open(local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())));
+    ASSERT_OK(
+            iterator.open(FileInfo{.path = local_rows_mapper_filename(best_tablet.get(), output_rs->rowset_id_str())}));
     for (uint32_t i = 0; i < 100; i += 20) {
         std::vector<uint64_t> rows_mapper;
         ASSERT_OK(iterator.next_values(20, &rows_mapper));
@@ -2432,7 +2438,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_old(b
 
     // link files first and then build snapshot meta file
     for (const auto& rowset : snapshot_rowsets) {
-        ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+        ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
     }
 
     // apply rowset
@@ -2519,7 +2525,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         // rowset status is committed in meta, rowset file is partial rowset
         // link files directly
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
         break;
     }
@@ -2527,7 +2533,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         // rowset status is committed in meta, rowset file is partial rowset, but rowset is apply success after link file
         // link files first and do apply
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
 
         tablet0->updates()->stop_apply(false);
@@ -2558,7 +2564,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         }
 
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
         break;
     }
@@ -2566,7 +2572,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_with_partial_rowset_new(b
         // rowset status is applied in meta, rowset file is full rowset
         // rowsets applied success, link files directly
         for (const auto& rowset : snapshot_rowsets) {
-            ASSERT_TRUE(rowset->link_files_to(tablet0->data_dir()->get_meta(), snapshot_dir, rowset->rowset_id()).ok());
+            ASSERT_TRUE(rowset->link_files_to(snapshot_dir, rowset->rowset_id()).ok());
         }
         break;
     }
