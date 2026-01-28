@@ -1542,6 +1542,7 @@ public class PaimonMetadataTest {
         assertEquals(3, result1.size() + result2.size());
 
     }
+<<<<<<< HEAD
 
     @Test
     public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
@@ -1591,4 +1592,6 @@ public class PaimonMetadataTest {
         org.junit.jupiter.api.Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.dropTable(connectContext, dropStmt));
     }
+=======
+>>>>>>> 15c86a8 ([BugFix] Fix mv refresh bug in the case of multiple tables (#61763))
 }

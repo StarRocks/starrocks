@@ -283,8 +283,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName,
                                            ConnectorMetadataRequestContext requestContext) {
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+>>>>>>> 15c86a8 ([BugFix] Fix mv refresh bug in the case of multiple tables (#61763))
         Identifier identifier = new Identifier(databaseName, tableName);
         updatePartitionInfo(databaseName, tableName);
         if (this.partitionInfos.get(identifier) == null) {
