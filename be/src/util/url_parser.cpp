@@ -67,7 +67,7 @@ std::string_view trim(std::string_view str) {
     return str;
 }
 
-bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
+UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     result->data = nullptr;
     result->size = 0;
     // Remove leading and trailing spaces.
@@ -90,11 +90,11 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
 
     switch (part) {
     case AUTHORITY: {
-        if (is_relative) return false;
+        if (is_relative) return ParseStatus::NOT_FOUND;
         // Find first '/'.
         int32_t end_pos = _s_slash_search.search(protocol_end);
         *result = protocol_end.substr(0, end_pos);
-        break;
+        return ParseStatus::OK;
     }
 
     case FILE:
@@ -105,7 +105,8 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
 
         if (start_pos < 0) {
             // Return empty string. This is what Hive does.
-            return true;
+            *result = Slice();
+            return ParseStatus::OK;
         }
 
         auto path_start = protocol_end.substr(start_pos);
@@ -125,11 +126,11 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
         }
 
         *result = std::string_view(path_start).substr(0, end_pos);
-        break;
+        return ParseStatus::OK;
     }
 
     case HOST: {
-        if (is_relative) return false;
+        if (is_relative) return ParseStatus::NOT_FOUND;
         // Find '@'.
         int32_t start_pos = _s_at_search.search(protocol_end);
 
@@ -151,13 +152,13 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
         }
 
         *result = host_start.substr(0, end_pos);
-        break;
+        return ParseStatus::OK;
     }
 
     case PROTOCOL: {
-        if (is_relative) return false;
+        if (is_relative) return ParseStatus::NOT_FOUND;
         *result = std::string_view(trimmed_url).substr(0, protocol_pos);
-        break;
+        return ParseStatus::OK;
     }
 
     case QUERY: {
@@ -166,14 +167,14 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
 
         if (start_pos < 0) {
             // Indicate no query was found.
-            return false;
+            return ParseStatus::NOT_FOUND;
         }
 
         auto query_start = protocol_end.substr(start_pos + _s_question.size);
         // End string _s_at next '#'.
         int32_t end_pos = _s_hash_search.search(query_start);
         *result = query_start.substr(0, end_pos);
-        break;
+        return ParseStatus::OK;
     }
 
     case REF: {
@@ -181,33 +182,33 @@ bool UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
         int32_t start_pos = _s_hash_search.search(protocol_end);
 
         if (start_pos < 0) {
-            // Indicate no user and pass were given.
-            return false;
+            // Indicate no ref was given.
+            return ParseStatus::NOT_FOUND;
         }
 
         *result = protocol_end.substr(start_pos + _s_hash.size);
-        break;
+        return ParseStatus::OK;
     }
 
     case USERINFO: {
-        if (is_relative) return false;
+        if (is_relative) return ParseStatus::NOT_FOUND;
         // Find '@'.
         int32_t end_pos = _s_at_search.search(protocol_end);
 
         if (end_pos < 0) {
             // Indicate no user and pass were given.
-            return false;
+            return ParseStatus::NOT_FOUND;
         }
 
         *result = protocol_end.substr(0, end_pos);
-        break;
+        return ParseStatus::OK;
     }
 
     case INVALID:
-        return false;
+        return ParseStatus::INVALID;
     }
 
-    return true;
+    return ParseStatus::INVALID;
 }
 
 UrlParser::UrlPart UrlParser::get_url_part(const Slice& part) {
