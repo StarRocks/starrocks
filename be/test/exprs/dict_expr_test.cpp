@@ -23,7 +23,6 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"
@@ -32,6 +31,7 @@
 #include "runtime/exception.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/mem_pool.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
@@ -42,7 +42,7 @@ namespace starrocks {
 template <class Provider>
 class ProvideExpr final : public Expr {
 public:
-    ProvideExpr(Provider provider) : Expr(TypeDescriptor(TYPE_VARCHAR), false), _provider(provider){};
+    ProvideExpr(Provider provider) : Expr(TypeDescriptor(TYPE_VARCHAR), false), _provider(provider) {};
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ProvideExpr(*this)); }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {

@@ -15,11 +15,11 @@
 #pragma once
 #include "aggregate_blocking_sink_operator.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "exec/aggregator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "util/race_detect.h"
 

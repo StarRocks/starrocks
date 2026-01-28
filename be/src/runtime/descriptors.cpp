@@ -40,13 +40,13 @@
 #include <ios>
 #include <sstream>
 
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/base64.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/descriptors.pb.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "util/compression/block_compression.h"
 #include "util/thrift_util.h"

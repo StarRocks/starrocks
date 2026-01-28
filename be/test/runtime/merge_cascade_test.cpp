@@ -17,12 +17,12 @@
 #include <algorithm>
 
 #include "column/column_helper.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/exprs_test_helper.h"

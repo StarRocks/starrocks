@@ -19,11 +19,11 @@
 #include <memory>
 #include <string>
 
-#include "runtime/object_pool.h"
 #include "compression_test_utils.h"
 #include "exec/pipeline/fragment_context.h"
 #include "fs/fs_memory.h"
 #include "io/async_flush_output_stream.h"
+#include "runtime/object_pool.h"
 #include "testutil/assert.h"
 
 namespace starrocks::csv {

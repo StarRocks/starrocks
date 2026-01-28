@@ -18,8 +18,8 @@
 
 #include "column/column.h" // Column
 #include "column/datum.h"
-#include "runtime/object_pool.h"
 #include "olap_type_infra.h"
+#include "runtime/object_pool.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"

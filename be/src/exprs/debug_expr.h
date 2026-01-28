@@ -1,14 +1,14 @@
 #pragma once
 
 #include "column/column.h"
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 class DebugExpr final : public Expr {
 public:
     using DebugFunctionCall = StatusOr<ColumnPtr> (*)(ExprContext* context, Chunk* columns);
-    DebugExpr(const TExprNode& node) : Expr(node){};
+    DebugExpr(const TExprNode& node) : Expr(node) {};
 
     ~DebugExpr() override = default;
 

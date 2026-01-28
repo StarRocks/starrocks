@@ -23,7 +23,6 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
@@ -34,6 +33,7 @@
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/range.h"
 

@@ -48,9 +48,9 @@
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
-#include "runtime/object_pool.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gutil/casts.h"
+#include "runtime/object_pool.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {

@@ -17,8 +17,8 @@
 #include <memory>
 
 #include "cache/cache_options.h"
-#include "runtime/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/object_pool.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks::pipeline {

@@ -17,7 +17,6 @@
 
 #pragma once
 
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "exec/exec_node.h"
@@ -25,6 +24,7 @@
 #include "gen_cpp/ShortCircuit_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/object_pool.h"
 #include "service/brpc.h"
 #include "storage/table_reader.h"
 #include "util/stopwatch.hpp"

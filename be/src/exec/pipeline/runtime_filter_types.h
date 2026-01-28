@@ -18,13 +18,13 @@
 #include <mutex>
 #include <utility>
 
-#include "runtime/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/object_pool.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {

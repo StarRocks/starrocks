@@ -37,7 +37,6 @@
 #include <memory>
 
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/observer.h"
@@ -45,6 +44,7 @@
 #include "gen_cpp/Types_types.h" // for TUniqueId
 #include "runtime/descriptors.h"
 #include "runtime/local_pass_through_buffer.h"
+#include "runtime/object_pool.h"
 #include "runtime/query_statistics.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"

@@ -17,12 +17,12 @@
 #include <string>
 
 #include "column/chunk.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/object_pool.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {

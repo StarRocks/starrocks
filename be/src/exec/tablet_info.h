@@ -22,11 +22,11 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
+#include "runtime/object_pool.h"
 #include "storage/tablet_schema.h"
 #include "util/random.h"
 

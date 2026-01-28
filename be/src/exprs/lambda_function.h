@@ -20,10 +20,10 @@
 #include <vector>
 
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

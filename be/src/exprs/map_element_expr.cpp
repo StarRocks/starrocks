@@ -23,8 +23,8 @@
 #include "column/map_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "runtime/object_pool.h"
 #include "common/statusor.h"
+#include "runtime/object_pool.h"
 #include "types/logical_type.h"
 #include "util/raw_container.h"
 

@@ -23,7 +23,6 @@
 #include <thread>
 
 #include "butil/time.h"
-#include "runtime/object_pool.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
@@ -33,6 +32,7 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
+#include "runtime/object_pool.h"
 #include "testutil/assert.h"
 #include "util/runtime_profile.h"
 

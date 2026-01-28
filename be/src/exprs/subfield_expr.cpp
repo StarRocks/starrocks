@@ -19,8 +19,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "runtime/object_pool.h"
 #include "exprs/function_helper.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

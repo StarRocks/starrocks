@@ -18,12 +18,12 @@
 #include "exec/short_circuit_hybrid.h"
 
 #include "column/column_helper.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/scan_node.h"
 #include "exprs/expr.h"
 #include "runtime/exec_env.h"
 #include "runtime/memory_scratch_sink.h"
+#include "runtime/object_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"

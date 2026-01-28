@@ -17,12 +17,12 @@
 #include <vector>
 
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::parquet {

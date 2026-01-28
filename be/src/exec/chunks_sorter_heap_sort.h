@@ -21,11 +21,11 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "exec/chunks_sorter.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "glog/logging.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/heap.h"

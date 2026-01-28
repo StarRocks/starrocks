@@ -35,7 +35,6 @@
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/binary_function.h"
@@ -45,6 +44,7 @@
 #include "gutil/casts.h"
 #include "runtime/datetime_value.h"
 #include "runtime/exception.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
@@ -1256,8 +1256,8 @@ public:
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
-                                                                               lt_is_float<ToType>)) {
+            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>) &&
+                          (lt_is_integer<ToType> || lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
                 if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)

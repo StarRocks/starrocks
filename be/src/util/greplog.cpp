@@ -17,12 +17,12 @@
 
 #include "util/greplog.h"
 
+#include <gflags/gflags.h>
+
 #include <algorithm>
 #include <deque>
 #include <filesystem>
 #include <functional>
-
-#include <gflags/gflags.h>
 
 #include "common/config.h"
 #include "gutil/strings/substitute.h"

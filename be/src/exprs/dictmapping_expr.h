@@ -18,11 +18,11 @@
 #include <mutex>
 
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 class RuntimeState;

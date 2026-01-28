@@ -48,7 +48,6 @@
 #include "cache/disk_cache/block_cache.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
@@ -57,6 +56,7 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/object_pool.h"
 #include "util/debug_action.h"
 #include "util/logging.h"
 #include "util/phmap/phmap.h"

@@ -40,9 +40,9 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/object_pool.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_executor.h"

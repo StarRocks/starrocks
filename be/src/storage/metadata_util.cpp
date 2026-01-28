@@ -20,7 +20,6 @@
 
 #include "column/column_helper.h"
 #include "common/config.h"
-#include "runtime/object_pool.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -28,6 +27,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_common.h"

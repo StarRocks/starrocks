@@ -14,11 +14,11 @@
 
 #include "http/action/greplog_action.h"
 
-#include "util/greplog.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "util/greplog.h"
 
 namespace starrocks {
 

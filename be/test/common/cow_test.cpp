@@ -35,7 +35,7 @@ public:
 
         virtual MutablePtr clone() const = 0;
         virtual int get() const { return -1; };
-        virtual void set(int value){};
+        virtual void set(int value) {};
         virtual int get(int i) const { return -1; }
         virtual void set(int i, int val) {}
 
@@ -430,7 +430,9 @@ TEST_F(CowTest, TestConcreteColumn2) {
         auto x = ConcreteColumn::create(1);
         auto y = ConcreteColumn2::create(x->as_mutable_ptr());
     }
-    { auto y = ConcreteColumn2::create(ConcreteColumn::create(1)); }
+    {
+        auto y = ConcreteColumn2::create(ConcreteColumn::create(1));
+    }
     {
         auto x = ConcreteColumn::create(1);
         auto y = ConcreteColumn2::create(x->as_mutable_ptr());

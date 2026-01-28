@@ -14,10 +14,10 @@
 
 #include "exprs/compound_predicate.h"
 
-#include "runtime/object_pool.h"
 #include "exprs/binary_function.h"
 #include "exprs/predicate.h"
 #include "exprs/unary_function.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 
 #ifdef STARROCKS_JIT_ENABLE
@@ -26,10 +26,12 @@
 
 namespace starrocks {
 
-#define DEFINE_COMPOUND_CONSTRUCT(CLASS)              \
-    CLASS(const TExprNode& node) : Predicate(node) {} \
-    virtual ~CLASS() {}                               \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
+#define DEFINE_COMPOUND_CONSTRUCT(CLASS)                   \
+    CLASS(const TExprNode& node) : Predicate(node) {}      \
+    virtual ~CLASS() {}                                    \
+    virtual Expr* clone(ObjectPool* pool) const override { \
+        return pool->add(new CLASS(*this));                \
+    }
 
 /**
  * IS NULL AND IS NULL = IS NULL

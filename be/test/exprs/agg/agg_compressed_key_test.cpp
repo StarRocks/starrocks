@@ -15,9 +15,9 @@
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
-#include "runtime/object_pool.h"
 #include "exec/aggregator.h"
 #include "exprs/literal.h"
+#include "runtime/object_pool.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
 

@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "common/config.h"
-#include "gutil/casts.h"
 #include "common/logging.h"
+#include "gutil/casts.h"
 #include "util/stack_util.h"
 namespace starrocks {
 

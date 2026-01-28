@@ -15,8 +15,8 @@
 #pragma once
 #include <memory>
 
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

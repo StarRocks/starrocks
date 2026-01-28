@@ -18,7 +18,6 @@
 #include <orc/OrcFile.hh>
 
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/runtime_filter_bank.h"
@@ -26,6 +25,7 @@
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/utils.h"
 #include "runtime/descriptors.h"
+#include "runtime/object_pool.h"
 #include "runtime/types.h"
 
 namespace orc::proto {

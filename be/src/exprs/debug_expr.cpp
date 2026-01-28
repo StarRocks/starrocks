@@ -5,8 +5,8 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

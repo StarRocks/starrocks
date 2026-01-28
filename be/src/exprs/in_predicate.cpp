@@ -14,8 +14,8 @@
 
 #include "exprs/in_predicate.h"
 
-#include "runtime/object_pool.h"
 #include "exprs/in_const_predicate.hpp"
+#include "runtime/object_pool.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 

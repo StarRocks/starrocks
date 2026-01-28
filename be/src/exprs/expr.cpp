@@ -41,7 +41,6 @@
 #include <vector>
 
 #include "column/fixed_length_column.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/arithmetic_expr.h"
@@ -75,6 +74,7 @@
 #include "exprs/subfield_expr.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"

@@ -25,7 +25,6 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
-#include "runtime/object_pool.h"
 #include "compression_test_utils.h"
 #include "formats/column_evaluator.h"
 #include "formats/csv/output_stream_file.h"
@@ -33,6 +32,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "util/priority_thread_pool.hpp"
@@ -42,7 +42,7 @@ namespace starrocks::formats {
 class CSVFileWriterTest : public testing::Test {
 public:
     void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); };
-    void TearDown() override{};
+    void TearDown() override {};
 
 protected:
     std::vector<std::string> _make_type_names(const std::vector<TypeDescriptor>& type_descs) {

@@ -18,8 +18,8 @@
 #include <mutex>
 
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

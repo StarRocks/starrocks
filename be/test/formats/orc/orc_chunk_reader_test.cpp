@@ -23,7 +23,6 @@
 #include <vector>
 
 #include "column/struct_column.h"
-#include "runtime/object_pool.h"
 #include "exprs/is_null_predicate.h"
 #include "formats/orc/memory_stream/MemoryInputStream.hh"
 #include "formats/orc/memory_stream/MemoryOutputStream.hh"
@@ -31,6 +30,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

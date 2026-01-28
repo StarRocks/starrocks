@@ -18,7 +18,6 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline/scan/scan_operator.h"
@@ -26,6 +25,7 @@
 #include "jni.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "udf/java/java_udf.h"

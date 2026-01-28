@@ -23,9 +23,9 @@
 #include <tuple>
 
 #include "common/logging.h"
-#include "runtime/object_pool.h"
 #include "fmt/format.h"
 #include "gen_cpp/RuntimeProfile_types.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

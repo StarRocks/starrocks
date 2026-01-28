@@ -19,11 +19,11 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 

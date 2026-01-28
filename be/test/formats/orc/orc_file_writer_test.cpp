@@ -21,7 +21,6 @@
 
 #include "column/array_column.h"
 #include "column/struct_column.h"
-#include "runtime/object_pool.h"
 #include "formats/column_evaluator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs_memory.h"
@@ -31,6 +30,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/column_test_helper.h"

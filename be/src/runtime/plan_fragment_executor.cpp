@@ -38,7 +38,6 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "runtime/object_pool.h"
 #include "exec/data_sink.h"
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
@@ -49,6 +48,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/object_pool.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"

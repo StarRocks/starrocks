@@ -18,7 +18,6 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
 #include "exprs/map_expr.h"
@@ -27,6 +26,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "testutil/assert.h"

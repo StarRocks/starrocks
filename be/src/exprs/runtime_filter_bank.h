@@ -21,7 +21,6 @@
 
 #include "column/column.h"
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exec/pipeline/schedule/observer.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
@@ -33,6 +32,7 @@
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/blocking_queue.hpp"

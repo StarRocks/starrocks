@@ -41,11 +41,11 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+#include "runtime/object_pool.h"
 #include "util/runtime_profile.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"

@@ -15,8 +15,8 @@
 #pragma once
 #include <memory>
 
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/tablet_schema.h"

@@ -39,10 +39,10 @@
 
 #include "column/column.h"
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/object_pool.h"
 #include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"

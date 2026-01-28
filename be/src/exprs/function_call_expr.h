@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "runtime/object_pool.h"
 #include "exprs/agg/combinator/state_combinator.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

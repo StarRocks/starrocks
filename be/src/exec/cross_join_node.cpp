@@ -19,7 +19,6 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
@@ -34,6 +33,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
+#include "runtime/object_pool.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

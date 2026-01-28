@@ -18,8 +18,8 @@
 
 #include "column/nullable_column.h"
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 // array_sort_lambda(array, lambda function)

@@ -41,9 +41,9 @@
 #include <queue>
 #include <utility>
 
-#include "runtime/object_pool.h"
 #include "gutil/map_util.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/object_pool.h"
 #include "util/pretty_printer.h"
 
 namespace starrocks {

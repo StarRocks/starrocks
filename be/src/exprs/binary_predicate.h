@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "runtime/object_pool.h"
 #include "exprs/predicate.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 

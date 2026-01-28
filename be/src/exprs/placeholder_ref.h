@@ -15,9 +15,9 @@
 #pragma once
 
 #include "common/global_types.h"
-#include "runtime/object_pool.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
+#include "runtime/object_pool.h"
 
 namespace starrocks {
 // place holder for function call. representing an input column for function call.
