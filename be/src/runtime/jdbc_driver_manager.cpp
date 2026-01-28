@@ -15,7 +15,6 @@
 #include "runtime/jdbc_driver_manager.h"
 
 #include <atomic>
-#include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <chrono>
 #include <memory>
 #include <utility>
@@ -93,13 +92,13 @@ Status JDBCDriverManager::init(const std::string& driver_dir) {
             continue;
         }
         // remove all temporary files
-        if (boost::algorithm::ends_with(file, TMP_FILE_SUFFIX)) {
+        if (file.ends_with(TMP_FILE_SUFFIX)) {
             LOG(INFO) << fmt::format("try to remove temporary file {}", target_file);
             RETURN_IF_ERROR(FileSystem::Default()->delete_file(target_file));
             continue;
         }
         // try to load drivers from jar file
-        if (boost::algorithm::ends_with(file, JAR_FILE_SUFFIX)) {
+        if (file.ends_with(JAR_FILE_SUFFIX)) {
             std::string name;
             std::string checksum;
             int64_t first_access_ts;
