@@ -1865,7 +1865,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION)
+    @VariableMgr.VarAttr(name = ENABLE_RANGE_DISTRIBUTION, flag = VariableMgr.INVISIBLE)
     private boolean enableRangeDistribution = false;
 
     @VariableMgr.VarAttr(name = SINGLE_NODE_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
