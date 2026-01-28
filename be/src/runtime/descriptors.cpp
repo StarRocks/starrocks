@@ -37,7 +37,6 @@
 #include <protocol/TDebugProtocol.h>
 #include <util/timezone_utils.h>
 
-#include <boost/algorithm/string/join.hpp>
 #include <ios>
 #include <sstream>
 
@@ -53,8 +52,6 @@
 #include "util/thrift_util.h"
 
 namespace starrocks {
-using boost::algorithm::join;
-
 const int RowDescriptor::INVALID_IDX = -1;
 std::string NullIndicatorOffset::debug_string() const {
     std::stringstream out;

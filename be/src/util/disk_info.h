@@ -34,7 +34,7 @@
 
 #pragma once
 
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>

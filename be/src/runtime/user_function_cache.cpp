@@ -36,7 +36,6 @@
 
 #include <any>
 #include <atomic>
-#include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <memory>
 #include <utility>
 #include <vector>
@@ -154,9 +153,9 @@ StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
 }
 
 auto UserFunctionCache::_get_function_type(const std::string& url) -> FuncType {
-    if (boost::algorithm::ends_with(url, JAVA_UDF_SUFFIX)) {
+    if (url.ends_with(JAVA_UDF_SUFFIX)) {
         return UDF_TYPE_JAVA;
-    } else if (boost::algorithm::ends_with(url, PY_UDF_SUFFIX)) {
+    } else if (url.ends_with(PY_UDF_SUFFIX)) {
         return UDF_TYPE_PYTHON;
     }
     return UDF_TYPE_UNKNOWN;
@@ -323,8 +322,7 @@ Status UserFunctionCache::_remove_all_lib_file() {
             if (file == "." || file == "..") {
                 return true;
             }
-            if (!boost::algorithm::ends_with(file, JAVA_UDF_SUFFIX) ||
-                !boost::algorithm::ends_with(file, PY_UDF_SUFFIX)) {
+            if (!file.ends_with(JAVA_UDF_SUFFIX) || !file.ends_with(PY_UDF_SUFFIX)) {
                 return true;
             }
             if (unlink((sub_dir + "/").append(file).c_str()) != 0) {

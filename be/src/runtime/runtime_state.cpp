@@ -34,7 +34,6 @@
 
 #include "runtime/runtime_state.h"
 
-#include <boost/algorithm/string/join.hpp>
 #include <cstring>
 #include <memory>
 #include <sstream>
