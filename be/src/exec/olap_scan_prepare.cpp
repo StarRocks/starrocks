@@ -14,8 +14,8 @@
 
 #include "exec/olap_scan_prepare.h"
 
-#include <variant>
 #include <boost/variant/static_visitor.hpp>
+#include <variant>
 
 #include "column/type_traits.h"
 #include "exprs/binary_predicate.h"
