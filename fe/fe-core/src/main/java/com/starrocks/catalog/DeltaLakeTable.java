@@ -195,6 +195,10 @@ public class DeltaLakeTable extends Table {
         return Joiner.on(":").join(tableName, uuid == null ? "" : uuid);
     }
 
+    public MetastoreTable getMetastoreTable() {
+        return metastoreTable;
+    }
+
     @Override
     public int hashCode() {
         return com.google.common.base.Objects.hashCode(getCatalogName(), dbName, getTableIdentifier());
