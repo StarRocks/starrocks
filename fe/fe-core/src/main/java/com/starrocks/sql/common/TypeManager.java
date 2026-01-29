@@ -164,6 +164,11 @@ public class TypeManager {
             if (types.get(0).isDateType()) {
                 return types.get(0);
             }
+            //date_format(str_to_date('20241209','%Y%m%d'),'%Y-%m-%d 00:00:00') in (str_to_date('20241209','%Y%m%d'),str_to_date('20241208','%Y%m%d'))
+            if (!isBetween && types.size() > 1 && types.get(1).isDateType() &&
+                    types.stream().skip(1).allMatch(e -> e == types.get(1))) {
+                return types.get(1);
+            }
         }
 
         return compatibleType;
