@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -40,14 +41,19 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperato
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.skew.DataSkew;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
@@ -56,6 +62,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /* rewrite the tree top down
@@ -75,7 +82,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
     private final AtomicInteger uniqueSplitId;
 
-    private SkewShuffleJoinEliminationVisitor handler = null;
+    private SessionVariable sessionVariable;
 
     public SkewShuffleJoinEliminationRule() {
         this.uniqueSplitId = new AtomicInteger();
@@ -83,13 +90,17 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        handler = new SkewShuffleJoinEliminationVisitor(taskContext.getOptimizerContext().getColumnRefFactory());
+        sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
+        SkewShuffleJoinEliminationVisitor handler = new SkewShuffleJoinEliminationVisitor(
+                taskContext.getOptimizerContext().getColumnRefFactory());
         return root.getOp().accept(handler, root, null);
     }
 
-    record SkewColumnAndValues(List<ScalarOperator> skewValues,
-                               Pair<ScalarOperator, ScalarOperator> skewColumns,
-                               int skewColumnSide) {
+    record SkewJoinSplitInfo(List<ScalarOperator> nonNullSkewValues,
+                             ScalarOperator skewSideJoinKeyExpr,
+                             ScalarOperator nonSkewSideJoinKeyExpr,
+                             int skewSideChildIndex,
+                             boolean includeNullSkew) {
     }
 
     record SplitProducerAndConsumer(OptExpression splitProducer,
@@ -125,42 +136,59 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return visitChild(opt, context);
             }
 
-            // find skew columns, rewrite skew values if needed
-            // right now skew hint only support skew in left table
-            // originalSkewColumn is column in left table which is skew, and skew values have same type with originalSkewColumn
-            ScalarOperator originalSkewColumn = originalShuffleJoinOperator.getSkewColumn();
-            if (originalSkewColumn == null || !(originalSkewColumn instanceof ColumnRefOperator)) {
+            SkewJoinSplitInfo splitInfo;
+            if (isSkew(opt)) {
+                // Hint-based skew join (manual).
+                ScalarOperator originalSkewColumn = originalShuffleJoinOperator.getSkewColumn();
+                if (!(originalSkewColumn instanceof ColumnRefOperator skewColumnRef)) {
+                    return visitChild(opt, context);
+                }
+
+                List<ScalarOperator> hintSkewValues = originalShuffleJoinOperator.getSkewValues();
+                if (hintSkewValues == null || hintSkewValues.isEmpty()) {
+                    return visitChild(opt, context);
+                }
+                boolean includeNullSkew = hintSkewValues.stream().anyMatch(ScalarOperator::isConstantNull);
+                List<ScalarOperator> nonNullSkewValues = hintSkewValues.stream()
+                        .filter(v -> !v.isConstantNull())
+                        .toList();
+
+                splitInfo = findSkewJoinSplitInfo(opt, skewColumnRef, nonNullSkewValues, includeNullSkew);
+            } else {
+                // Auto-detect skew from statistics (MCV/NULL skew).
+                Optional<SkewJoinSplitInfo> detected = detectSkewFromStats(opt);
+                if (detected.isEmpty()) {
+                    return visitChild(opt, context);
+                }
+                splitInfo = detected.get();
+            }
+
+            ScalarOperator skewSideJoinKeyExpr = splitInfo.skewSideJoinKeyExpr;
+            ScalarOperator nonSkewSideJoinKeyExpr = splitInfo.nonSkewSideJoinKeyExpr;
+            List<ScalarOperator> nonNullSkewValues = splitInfo.nonNullSkewValues;
+            boolean includeNullSkew = splitInfo.includeNullSkew;
+            if (skewSideJoinKeyExpr == null || nonSkewSideJoinKeyExpr == null || nonNullSkewValues == null ||
+                    (nonNullSkewValues.isEmpty() && !includeNullSkew)) {
                 return visitChild(opt, context);
             }
-            ColumnRefOperator skewColumnRef  = (ColumnRefOperator) originalSkewColumn;
-            // find left and right skew column according to on predicate
-            SkewColumnAndValues skewColumnAndValues = findSkewColumns(opt, skewColumnRef);
-            if (skewColumnAndValues == null) {
-                return visitChild(opt, context);
-            }
-            ScalarOperator leftSkewColumn = skewColumnAndValues.skewColumns.first;
-            ScalarOperator rightSkewColumn = skewColumnAndValues.skewColumns.second;
-            List<ScalarOperator> skewValues = skewColumnAndValues.skewValues;
-            if (leftSkewColumn == null || rightSkewColumn == null || skewValues == null || skewValues.isEmpty()) {
-                return opt;
-            }
-            int skewColumnSide = skewColumnAndValues.skewColumnSide;
+            int skewSideChildIndex = splitInfo.skewSideChildIndex;
 
             // if this is a left join, and the right side is skew side, we cannot do optimization because
             // the right side's broadcast will cause result incorrect.
-            if (originalShuffleJoinOperator.getJoinType().isAnyLeftOuterJoin() && skewColumnSide == 1) {
+            if (originalShuffleJoinOperator.getJoinType().isAnyLeftOuterJoin() && skewSideChildIndex == 1) {
                 return visitChild(opt, context);
             }
 
             // rewrite plan
-            OptExpression skewOptInput = opt.inputAt(skewColumnSide);
-            OptExpression nonSkewOptInput = opt.inputAt(1 - skewColumnSide);
+            OptExpression skewSideChild = opt.inputAt(skewSideChildIndex);
+            OptExpression nonSkewSideChild = opt.inputAt(1 - skewSideChildIndex);
 
-            SplitProducerAndConsumer leftSplitProducerAndConsumer =
-                    generateSplitProducerAndConsumer(skewOptInput, leftSkewColumn, skewValues, true);
+            SplitProducerAndConsumer skewSideSplit = generateSplitProducerAndConsumer(skewSideChild, skewSideJoinKeyExpr,
+                    nonNullSkewValues, includeNullSkew, true);
 
-            SplitProducerAndConsumer rightSplitProducerAndConsumer =
-                    generateSplitProducerAndConsumer(nonSkewOptInput, rightSkewColumn, skewValues, false);
+            SplitProducerAndConsumer nonSkewSideSplit =
+                    generateSplitProducerAndConsumer(nonSkewSideChild, nonSkewSideJoinKeyExpr,
+                            nonNullSkewValues, includeNullSkew, false);
 
             // keep projection for new join opt
             Projection projectionOnJoin = originalShuffleJoinOperator.getProjection();
@@ -169,13 +197,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
                             originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
-                            projectionOnJoin, leftSkewColumn, skewValues);
+                            projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
             PhysicalHashJoinOperator newBroadcastJoinOpt =
                     new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
                             originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
-                            projectionOnJoin, leftSkewColumn, skewValues);
+                            projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
             // we have to let them know each other for runtime filter
             newBroadcastJoinOpt.setSkewJoinFriend(newShuffleJoinOpt);
@@ -193,12 +221,12 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     }
                 }
             }
-            PhysicalConcatenateOperator concatenateOperator = buildConcatenateOperator(outputColumns, 2,
-                            localExchangerType, originalShuffleJoinOperator.getLimit());
+            PhysicalConcatenateOperator concatenateOperator = buildConcatenateOperator(outputColumns,
+                    localExchangerType, originalShuffleJoinOperator.getLimit());
 
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
-                            List.of(leftSplitProducerAndConsumer.splitConsumerOptForShuffleJoin,
-                                    rightSplitProducerAndConsumer.splitConsumerOptForShuffleJoin))
+                            List.of(skewSideSplit.splitConsumerOptForShuffleJoin,
+                                    nonSkewSideSplit.splitConsumerOptForShuffleJoin))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
 
@@ -207,35 +235,33 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             List<PhysicalPropertySet> requiredPropertiesForBroadcastJoin =
                     Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty);
             OptExpression newBroadcastJoin = OptExpression.builder().setOp(newBroadcastJoinOpt).setInputs(
-                            List.of(leftSplitProducerAndConsumer.splitConsumerOptForBroadcastJoin,
-                                    rightSplitProducerAndConsumer.splitConsumerOptForBroadcastJoin))
+                            List.of(skewSideSplit.splitConsumerOptForBroadcastJoin,
+                                    nonSkewSideSplit.splitConsumerOptForBroadcastJoin))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(requiredPropertiesForBroadcastJoin).setCost(opt.getCost()).build();
 
             OptExpression rightChildOfConcatenate = newBroadcastJoin;
             if (opt.isExistRequiredDistribution()) {
                 PhysicalDistributionOperator rightExchangeOpOfOriginalShuffleJoin =
-                        (PhysicalDistributionOperator) nonSkewOptInput.getOp();
+                        (PhysicalDistributionOperator) nonSkewSideChild.getOp();
 
                 PhysicalDistributionOperator newExchangeForBroadcastJoin =
                         new PhysicalDistributionOperator(rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec());
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
-                OptExpression exchangeOptExpForBroadcastJoin =
-                        OptExpression.builder().setOp(newExchangeForBroadcastJoin)
-                                .setInputs(Collections.singletonList(newBroadcastJoin))
-                                .setLogicalProperty(newBroadcastJoin.getLogicalProperty())
-                                .setStatistics(newBroadcastJoin.getStatistics()).setCost(newBroadcastJoin.getCost())
-                                .build();
-                rightChildOfConcatenate = exchangeOptExpForBroadcastJoin;
+                rightChildOfConcatenate = OptExpression.builder().setOp(newExchangeForBroadcastJoin)
+                        .setInputs(Collections.singletonList(newBroadcastJoin))
+                        .setLogicalProperty(newBroadcastJoin.getLogicalProperty())
+                        .setStatistics(newBroadcastJoin.getStatistics()).setCost(newBroadcastJoin.getCost())
+                        .build();
                 if (projectionOnJoin != null) {
                     // broadcast join's projection should keep the columns used in exchange
                     Projection projectionForBroadcast = projectionOnJoin.deepClone();
 
                     ColumnRefSet usedColumnsOfRightExchangeOp =
-                            rightExchangeOpOfOriginalShuffleJoin.getRowOutputInfo(nonSkewOptInput.getInputs())
+                            rightExchangeOpOfOriginalShuffleJoin.getRowOutputInfo(nonSkewSideChild.getInputs())
                                     .getUsedColumnRefSet();
                     usedColumnsOfRightExchangeOp.except(projectionOnJoin.getOutputColumns());
-                    usedColumnsOfRightExchangeOp.getColumnRefOperators(columnRefFactory).stream()
+                    usedColumnsOfRightExchangeOp.getColumnRefOperators(columnRefFactory)
                             .forEach(columnRefOperator -> {
                                 projectionForBroadcast.getColumnRefMap()
                                         .putIfAbsent(columnRefOperator, columnRefOperator);
@@ -251,23 +277,21 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             OptExpression cteAnchorOptExp1 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(List.of(rightSplitProducerAndConsumer.splitProducer, concatenateOptExp))
-                            .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
-                            .setCost(opt.getCost()).build();
-
-            OptExpression cteAnchorOptExp2 =
-                    OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(List.of(leftSplitProducerAndConsumer.splitProducer, cteAnchorOptExp1))
+                            .setInputs(List.of(nonSkewSideSplit.splitProducer, concatenateOptExp))
                             .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
             // if hit once, we give up rewriting the following subtree
-            return cteAnchorOptExp2;
+            return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
+                    .setInputs(List.of(skewSideSplit.splitProducer, cteAnchorOptExp1))
+                    .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                    .setCost(opt.getCost()).build();
         }
 
         private SplitProducerAndConsumer generateSplitProducerAndConsumer(OptExpression exchangeOptExp,
                                                                           ScalarOperator skewColumn,
                                                                           List<ScalarOperator> skewValues,
+                                                                          boolean includeNullSkew,
                                                                           boolean isLeft) {
             PhysicalDistributionOperator exchangeOpOfOriginalShuffleJoin =
                     (PhysicalDistributionOperator) exchangeOptExp.getOp();
@@ -279,7 +303,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                             .setLogicalProperty(exchangeOptExp.getLogicalProperty())
                             .setStatistics(exchangeOptExp.getStatistics()).setCost(exchangeOptExp.getCost()).build();
 
-            Pair<ScalarOperator, ScalarOperator> tablePredicates = generateInAndNotInPredicate(skewColumn, skewValues);
+            Pair<ScalarOperator, ScalarOperator> tablePredicates =
+                    generateSkewAndNonSkewPredicate(skewColumn, skewValues, includeNullSkew);
 
             List<ColumnRefOperator> splitOutputColumns =
                     exchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory);
@@ -319,122 +344,193 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     splitConsumerOptExpForBroadcastJoin);
         }
 
-        private Pair<ScalarOperator, ScalarOperator> generateInAndNotInPredicate(ScalarOperator skewColumn,
-                                                                                 List<ScalarOperator> skewValues) {
-            List<ScalarOperator> inPredicateParams = new ArrayList<>();
-            inPredicateParams.add(skewColumn);
-            inPredicateParams.addAll(skewValues);
+        /**
+         * Build split predicates for skew/non-skew branches.
+         * <p>
+         * - Skew branch (broadcast join): {@code IN (nonNullSkewValues)} and/or {@code IS NULL} (if includeNullSkew)
+         * - Non-skew branch (shuffle join): the complement of skew branch
+         * <p>
+         * NOTE: Do not put NULL into IN-list due to SQL three-valued logic. Use explicit IS NULL/IS NOT NULL instead.
+         * <p>
+         * Examples (let join key be {@code k}):
+         * <ul>
+         *   <li>Only non-NULL skew values (S={1,2,3}, includeNullSkew=false):
+         *     <ul>
+         *       <li>Skew branch: {@code k IN (1,2,3)}</li>
+         *       <li>Non-skew branch: {@code k NOT IN (1,2,3) OR k IS NULL}</li>
+         *     </ul>
+         *   </li>
+         *   <li>Only NULL skew (S={}, includeNullSkew=true):
+         *     <ul>
+         *       <li>Skew branch: {@code k IS NULL}</li>
+         *       <li>Non-skew branch: {@code k IS NOT NULL}</li>
+         *     </ul>
+         *   </li>
+         *   <li>Both non-NULL and NULL skew (S={1,2,3}, includeNullSkew=true):
+         *     <ul>
+         *       <li>Skew branch: {@code k IN (1,2,3) OR k IS NULL}</li>
+         *       <li>Non-skew branch: {@code k NOT IN (1,2,3) AND k IS NOT NULL}</li>
+         *     </ul>
+         *   </li>
+         * </ul>
+         */
+        private Pair<ScalarOperator, ScalarOperator> generateSkewAndNonSkewPredicate(ScalarOperator skewColumn,
+                                                                                     List<ScalarOperator> skewValues,
+                                                                                     boolean includeNullSkew) {
+            ScalarOperator inSkewPredicate = null;
+            if (skewValues != null && !skewValues.isEmpty()) {
+                List<ScalarOperator> inPredicateParams = new ArrayList<>();
+                inPredicateParams.add(skewColumn);
+                inPredicateParams.addAll(skewValues);
+                inSkewPredicate = new InPredicateOperator(false, inPredicateParams);
+                ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+                inSkewPredicate = rewriter.rewrite(inSkewPredicate,
+                        ImmutableList.of(new ImplicitCastRule(), new ReduceCastRule(), new FoldConstantsRule()));
+            }
 
-            ScalarOperator inSkewPredicate = new InPredicateOperator(false, inPredicateParams);
-            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-            inSkewPredicate =
-                    rewriter.rewrite(inSkewPredicate, ImmutableList.of(new ImplicitCastRule(), new ReduceCastRule()));
-            ScalarOperator notInSkewPredicate = new InPredicateOperator(true, inSkewPredicate.getChildren());
-            ScalarOperator notInSkewOrNullPredicate =
-                    CompoundPredicateOperator.or(notInSkewPredicate, new IsNullPredicateOperator(skewColumn));
+            ScalarOperator isNullPredicate = new IsNullPredicateOperator(skewColumn);
 
-            return Pair.create(inSkewPredicate, notInSkewOrNullPredicate);
+            // Skew predicate (broadcast-join branch)
+            ScalarOperator skewPredicate;
+            if (includeNullSkew) {
+                skewPredicate = (inSkewPredicate == null) ? isNullPredicate
+                        : CompoundPredicateOperator.or(inSkewPredicate, isNullPredicate);
+            } else {
+                if (inSkewPredicate == null) {
+                    throw new IllegalStateException("skewValues is empty while includeNullSkew is false");
+                }
+                skewPredicate = inSkewPredicate;
+            }
 
+            // Non-skew predicate (shuffle-join branch)
+            ScalarOperator nonSkewPredicate;
+            if (includeNullSkew) {
+                ScalarOperator isNotNullPredicate = new IsNullPredicateOperator(true, skewColumn);
+                if (inSkewPredicate == null) {
+                    nonSkewPredicate = isNotNullPredicate;
+                } else {
+                    ScalarOperator notInSkewPredicate = new InPredicateOperator(true, inSkewPredicate.getChildren());
+                    nonSkewPredicate = CompoundPredicateOperator.and(notInSkewPredicate, isNotNullPredicate);
+                }
+            } else {
+                ScalarOperator notInSkewPredicate = new InPredicateOperator(true, inSkewPredicate.getChildren());
+                nonSkewPredicate = CompoundPredicateOperator.or(notInSkewPredicate, isNullPredicate);
+            }
+
+            return Pair.create(skewPredicate, nonSkewPredicate);
         }
 
-        private boolean isExchangeWithDistributionType(Operator child, DistributionSpec.DistributionType expectedType) {
+        private boolean isExchangeWithDistributionType(Operator child) {
             if (!(child.getOpType() == OperatorType.PHYSICAL_DISTRIBUTION)) {
                 return false;
             }
-            PhysicalDistributionOperator operator = (PhysicalDistributionOperator) child;
-            return Objects.equals(operator.getDistributionSpec().getType(), expectedType);
+            PhysicalDistributionOperator operator = child.cast();
+            return Objects.equals(operator.getDistributionSpec().getType(), DistributionSpec.DistributionType.SHUFFLE);
         }
 
         private PhysicalConcatenateOperator buildConcatenateOperator(List<ColumnRefOperator> outputColumns,
-                                                                     int childNum, LocalExchangerType localExchangeType,
+                                                                     LocalExchangerType localExchangeType,
                                                                      long limit) {
             List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
-            for (int i = 0; i < childNum; i++) {
+            for (int i = 0; i < 2; i++) {
                 childOutputColumns.add(outputColumns);
             }
             return new PhysicalConcatenateOperator(outputColumns, childOutputColumns, localExchangeType, limit);
         }
 
-        private SkewColumnAndValues findSkewColumns(OptExpression input,
-                                                    ColumnRefOperator skewColumnRef) {
+        private SkewJoinSplitInfo findSkewJoinSplitInfo(OptExpression input,
+                                                        ColumnRefOperator skewColumnRef,
+                                                        List<ScalarOperator> nonNullSkewValues,
+                                                        boolean includeNullSkew) {
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
             if (leftOutputColumns.contains(skewColumnRef)) {
-                return findSkewColumns(input, skewColumnRef, 0);
+                return findSkewJoinSplitInfo(input, skewColumnRef, 0, nonNullSkewValues, includeNullSkew);
             } else if (rightOutputColumns.contains(skewColumnRef)) {
-                return findSkewColumns(input, skewColumnRef, 1);
+                return findSkewJoinSplitInfo(input, skewColumnRef, 1, nonNullSkewValues, includeNullSkew);
             } else {
                 // for join's on predicates contain expressions with skew column, try left and right sides both.
                 // try left side first
-                SkewColumnAndValues result = findSkewColumns(input, skewColumnRef, 0);
-                if (result != null && result.skewColumns != null &&
-                        result.skewColumns.first != null && result.skewColumns.second != null) {
+                SkewJoinSplitInfo result = findSkewJoinSplitInfo(input, skewColumnRef, 0, nonNullSkewValues, includeNullSkew);
+                if (result.skewSideJoinKeyExpr != null && result.nonSkewSideJoinKeyExpr != null) {
                     return result;
                 }
                 // then try right side
-                return findSkewColumns(input, skewColumnRef, 1);
+                return findSkewJoinSplitInfo(input, skewColumnRef, 1, nonNullSkewValues, includeNullSkew);
             }
         }
 
-        private SkewColumnAndValues findSkewColumns(OptExpression input,
-                                                    ColumnRefOperator skewColumnRef,
-                                                    int skewColumnSide) {
-            PhysicalHashJoinOperator oldJoinOperator = (PhysicalHashJoinOperator) input.getOp();
+        private SkewJoinSplitInfo findSkewJoinSplitInfo(OptExpression input,
+                                                        ColumnRefOperator skewColumnRef,
+                                                        int skewSideChildIndex,
+                                                        List<ScalarOperator> nonNullSkewValues,
+                                                        boolean includeNullSkew) {
+            PhysicalHashJoinOperator joinOperator = input.getOp().cast();
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
-            ScalarOperator leftSkewColumn = null;
-            ScalarOperator rightSkewColumn = null;
-            List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
+            ScalarOperator skewSideJoinKeyExpr = null;
+            ScalarOperator nonSkewSideJoinKeyExpr = null;
+            List<ScalarOperator> rewrittenNonNullSkewValues = nonNullSkewValues;
 
-            OptExpression skewInputOpt = input.inputAt(skewColumnSide);
+            OptExpression skewSideChild = input.inputAt(skewSideChildIndex);
             // get equal conjuncts from on predicate, every eq predicate's child can't be constant
             List<BinaryPredicateOperator> equalConjs =
                     JoinHelper.getEqualsPredicate(leftOutputColumns, rightOutputColumns,
-                            Utils.extractConjuncts(oldJoinOperator.getOnPredicate()));
-            Projection skewInputProject = skewInputOpt.getInputs().isEmpty() ? null :
-                    skewInputOpt.inputAt(0).getOp().getProjection();
+                            Utils.extractConjuncts(joinOperator.getOnPredicate()));
+            Projection skewSideProject = skewSideChild.getInputs().isEmpty() ? null :
+                    skewSideChild.inputAt(0).getOp().getProjection();
             for (BinaryPredicateOperator equalConj : equalConjs) {
                 ScalarOperator child0 = equalConj.getChild(0);
                 ScalarOperator child1 = equalConj.getChild(1);
 
-                // firstly,we need to find rightSkewColumn in equalConj. if one side of equalConj using originalSkewColumn
-                // then another side of equalConj is rightSkewColumn
-                // Besides, we want to know whether originalSkewColumn is equalConj's child or it is part of some expr
-                // for example: select xx from t1 join[skew|t1.c_tinyint(1,2,3)] t2 on t1.c_tinyint = t2.int
-                // then on predicate will be: cast(t1.c_tinyint as int) = t2.int, in this case we have to rewrite skew values with this expr
+                // Find the join key expressions on skew side / non-skew side.
+                // If one side of the equality uses the skew column (or an expression derived from it),
+                // the other side is the corresponding join key expression on the opposite child.
+                //
+                // Example:
+                //   SELECT ... FROM t1 JOIN[skew|t1.c_tinyint(1,2,3)] t2 ON t1.c_tinyint = t2.c_int
+                // After type coercion, on predicate may become:
+                //   cast(t1.c_tinyint as int) = t2.c_int
+                // In this case we need to rewrite non-null skew values as:
+                //   cast(1 as int), cast(2 as int), cast(3 as int)
                 if (child0.equals(skewColumnRef)) {
-                    leftSkewColumn = skewColumnRef;
-                    rightSkewColumn = child1;
+                    skewSideJoinKeyExpr = skewColumnRef;
+                    nonSkewSideJoinKeyExpr = child1;
                 } else if (child1.equals(skewColumnRef)) {
-                    leftSkewColumn = skewColumnRef;
-                    rightSkewColumn = child0;
+                    skewSideJoinKeyExpr = skewColumnRef;
+                    nonSkewSideJoinKeyExpr = child0;
                 } else {
                     // originalSkewColumn is part of some expr
-                    if (skewInputProject != null) {
-                        ScalarOperator rewriteChild0 = replaceColumnRef(child0, skewInputProject);
-                        ScalarOperator rewriteChild1 = replaceColumnRef(child1, skewInputProject);
+                    if (skewSideProject != null) {
+                        ScalarOperator rewriteChild0 = replaceColumnRef(child0, skewSideProject);
+                        ScalarOperator rewriteChild1 = replaceColumnRef(child1, skewSideProject);
                         if (rewriteChild0.getUsedColumns().contains(skewColumnRef)) {
-                            leftSkewColumn = child0;
-                            rightSkewColumn = child1;
+                            skewSideJoinKeyExpr = child0;
+                            nonSkewSideJoinKeyExpr = child1;
                         } else if (rewriteChild1.getUsedColumns().contains(skewColumnRef)) {
-                            rightSkewColumn = child0;
-                            leftSkewColumn = child1;
+                            nonSkewSideJoinKeyExpr = child0;
+                            skewSideJoinKeyExpr = child1;
                         } else {
                             continue;
                         }
 
-                        Map<ColumnRefOperator, ScalarOperator> leftColumnRefMap = skewInputProject.getAllMaps();
-                        if (leftColumnRefMap.containsKey(leftSkewColumn)) {
-                            // this means leftSkewColumn is not a simple columnRef operator, so we need to rewrite skew values
-                            // for example: if leftSkewColumn is  cast(t1.c_tinyint as int), and skew values are (1,2,3)
-                            // then we need to rewrite skew values as (cast(1 as int), cast(2 as int), cast(3 as int))
-                            skewValues = rewriteSkewValues(skewValues, leftSkewColumn);
+                        if (skewSideJoinKeyExpr instanceof ColumnRefOperator skewSideJoinKeyRef) {
+                            Map<ColumnRefOperator, ScalarOperator> skewSideProjectMap = skewSideProject.getAllMaps();
+                            ScalarOperator definingExpr = skewSideProjectMap.get(skewSideJoinKeyRef);
+                            if (definingExpr != null && definingExpr.getUsedColumns().contains(skewColumnRef)) {
+                                rewrittenNonNullSkewValues =
+                                        rewriteSkewValues(rewrittenNonNullSkewValues, definingExpr, skewColumnRef);
+                            }
                         }
                     }
                 }
             }
 
-            return new SkewColumnAndValues(skewValues, Pair.create(leftSkewColumn, rightSkewColumn), skewColumnSide);
+            return new SkewJoinSplitInfo(rewrittenNonNullSkewValues,
+                    skewSideJoinKeyExpr,
+                    nonSkewSideJoinKeyExpr,
+                    skewSideChildIndex,
+                    includeNullSkew);
         }
 
         private ScalarOperator replaceColumnRef(ScalarOperator scalarOperator, Projection projection) {
@@ -447,11 +543,12 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private List<ScalarOperator> rewriteSkewValues(List<ScalarOperator> originalSkewValues,
-                                                       ScalarOperator predicate) {
+                                                       ScalarOperator predicate,
+                                                       ColumnRefOperator targetColumnRef) {
             List<ScalarOperator> result = new LinkedList<>();
-            // for each skew value, we replace the columnRef in left  with skew value
+            // For each skew value, replace only the target column ref with that constant value.
             originalSkewValues.forEach(value -> {
-                ColumnRefReplacer refReplacer = new ColumnRefReplacer(value);
+                ColumnRefReplacer refReplacer = new ColumnRefReplacer(targetColumnRef, value);
                 ScalarOperator newSkewValue = predicate.accept(refReplacer, null);
                 result.add(newSkewValue);
             });
@@ -459,7 +556,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private boolean canOptimize(PhysicalHashJoinOperator joinOp, OptExpression opt) {
-            return isValidJoinType(joinOp) && isShuffleJoin(opt) && isSkew(opt);
+            return isValidJoinType(joinOp) && isShuffleJoin(opt);
         }
 
         // currently only support inner join and left outer join
@@ -471,14 +568,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
                 return false;
             }
-            return isExchangeWithDistributionType(opt.getInputs().get(0).getOp(),
-                    DistributionSpec.DistributionType.SHUFFLE) &&
-                    isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
-                            DistributionSpec.DistributionType.SHUFFLE);
+            return isExchangeWithDistributionType(opt.getInputs().get(0).getOp()) &&
+                    isExchangeWithDistributionType(opt.getInputs().get(1).getOp());
         }
 
-        // right now only support join hint with left skew table, since left table is bigger
-        // TODO(jerry): support MCV-based skew detection
+        // Hint-based skew join (manual).
         private boolean isSkew(OptExpression opt) {
             PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) opt.getOp();
 
@@ -491,17 +585,105 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return joinOperator.getJoinHint().equals(HintNode.HINT_JOIN_SKEW);
         }
 
-        private class ColumnRefReplacer extends BaseScalarOperatorShuttle {
+        private Optional<SkewJoinSplitInfo> detectSkewFromStats(OptExpression joinOpt) {
+            if (sessionVariable == null || !sessionVariable.isEnableStatsToOptimizeSkewJoin()) {
+                return Optional.empty();
+            }
+            PhysicalHashJoinOperator joinOperator = joinOpt.getOp().cast();
 
+            ColumnRefSet leftOutputColumns = joinOpt.inputAt(0).getOutputColumns();
+            ColumnRefSet rightOutputColumns = joinOpt.inputAt(1).getOutputColumns();
+            List<BinaryPredicateOperator> equalConjs =
+                    JoinHelper.getEqualsPredicate(leftOutputColumns, rightOutputColumns,
+                            Utils.extractConjuncts(joinOperator.getOnPredicate()));
+            if (equalConjs.size() != 1) {
+                return Optional.empty();
+            }
+
+            BinaryPredicateOperator eq = equalConjs.get(0);
+            if (!eq.getChild(0).isColumnRef() || !eq.getChild(1).isColumnRef()) {
+                return Optional.empty();
+            }
+
+            ColumnRefOperator c0 = eq.getChild(0).cast();
+            ColumnRefOperator c1 = eq.getChild(1).cast();
+            ColumnRefOperator leftKey = leftOutputColumns.contains(c0) ? c0 :
+                    (leftOutputColumns.contains(c1) ? c1 : null);
+            ColumnRefOperator rightKey = (leftKey == null) ? null : (leftKey.equals(c0) ? c1 : c0);
+            if (leftKey == null || rightKey == null) {
+                return Optional.empty();
+            }
+
+            double bestScore = -1.0;
+            SkewJoinSplitInfo best = null;
+            for (int side = 0; side < 2; side++) {
+                if (joinOperator.getJoinType().isAnyLeftOuterJoin() && side == 1) {
+                    continue;
+                }
+                ColumnRefOperator skewSideKeyColumn = (side == 0) ? leftKey : rightKey;
+                Statistics stats = joinOpt.inputAt(side).getStatistics();
+                if (stats == null || stats.getOutputRowCount() < sessionVariable.getSkewJoinMcvMinInputRows()) {
+                    continue;
+                }
+
+                if (!stats.getColumnStatistics().containsKey(skewSideKeyColumn)) {
+                    continue;
+                }
+                ColumnStatistic cs = stats.getColumnStatistic(skewSideKeyColumn);
+                if (cs.isUnknown() || cs.getHistogram() == null) {
+                    continue;
+                }
+
+                DataSkew.Thresholds thresholds = new DataSkew.Thresholds(
+                        sessionVariable.getSkewJoinOptimizeUseMCVCount(),
+                        sessionVariable.getSkewJoinDataSkewThreshold());
+                DataSkew.SkewCandidates candidates =
+                        DataSkew.getSkewCandidates(stats, cs, thresholds, sessionVariable.getSkewJoinMcvSingleThreshold());
+                if (!candidates.isSkewed()) {
+                    continue;
+                }
+
+                // Pick the side with larger skew factor.
+                double score = Math.max(candidates.nullSkewFactor().orElse(0.0),
+                        candidates.mcvSkewFactor().orElse(0.0));
+                if (score <= bestScore) {
+                    continue;
+                }
+
+                List<ScalarOperator> nonNullValues = new ArrayList<>();
+                for (Pair<String, Long> p : candidates.mcvs()) {
+                    ConstantOperator keyConst = ConstantOperator.createVarchar(p.first);
+                    keyConst.castTo(skewSideKeyColumn.getType()).ifPresent(nonNullValues::add);
+                }
+                boolean includeNullSkew = candidates.includeNull();
+                if (nonNullValues.isEmpty() && !includeNullSkew) {
+                    continue;
+                }
+
+                SkewJoinSplitInfo mapped = findSkewJoinSplitInfo(joinOpt, skewSideKeyColumn, nonNullValues, includeNullSkew);
+                bestScore = score;
+                best = mapped;
+            }
+
+            return Optional.ofNullable(best);
+        }
+
+        private static class ColumnRefReplacer extends BaseScalarOperatorShuttle {
+
+            private final ColumnRefOperator targetColumnRef;
             private final ScalarOperator scalarOperator;
 
-            public ColumnRefReplacer(ScalarOperator scalarOperator) {
+            public ColumnRefReplacer(ColumnRefOperator targetColumnRef, ScalarOperator scalarOperator) {
+                this.targetColumnRef = targetColumnRef;
                 this.scalarOperator = scalarOperator;
             }
 
             @Override
             public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                return scalarOperator;
+                if (targetColumnRef != null && targetColumnRef.equals(variable)) {
+                    return scalarOperator;
+                }
+                return variable;
             }
         }
     }

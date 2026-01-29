@@ -324,7 +324,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         inPredicateArgs.add(skewColumn);
         // build a defensive copy and remove NULL from it
         List<ScalarOperator> nonNullSkewValues = Lists.newArrayList(skewValues);
-        nonNullSkewValues.removeIf(value -> value instanceof ConstantOperator && ((ConstantOperator) value).isNull());
+        nonNullSkewValues.removeIf(ScalarOperator::isConstantNull);
         inPredicateArgs.addAll(nonNullSkewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
