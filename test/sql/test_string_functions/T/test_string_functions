@@ -237,6 +237,64 @@ select sum(c0) > 500 from (select ngram_search(nation, 'china', 4) as c0 from le
 
 select count(1) from left_table where ngram_search(nation, 'china', 4) > 0;
 
+-- name: test_ngram_search_utf8
+-- Enable UTF-8 support for ngram_search
+set ngram_search_support_utf8 = true;
+
+-- Test with Cyrillic characters (Russian/Tajik names transliteration comparison)
+-- Same name should have high similarity
+select ngram_search('Расулов Сунатулло', 'Расулов Сунатулло', 4);
+select ngram_search('Бабоев Мухаммаджон', 'Бабоев Мухаммаджон', 4);
+
+-- Similar names with minor differences
+select ngram_search('Назаров Назарали', 'Назаров Назар', 4);
+select ngram_search('Акрамов Хусейн', 'Акрамов Хусейн Махмадалиевич', 4);
+
+-- Different names should have low similarity
+select ngram_search('Иванов Иван', 'Петров Петр', 4);
+
+-- Case insensitive UTF-8 test
+select ngram_search_case_insensitive('РАСУЛОВ СУНАТУЛЛО', 'расулов сунатулло', 4);
+select ngram_search_case_insensitive('Акрамов Хусейн', 'АКРАМОВ ХУСЕЙН', 4);
+
+-- Test with Chinese characters
+select ngram_search('北京大学', '北京大学', 4);
+select ngram_search('北京大学', '北京师范大学', 4);
+
+-- Mixed ASCII and UTF-8
+select ngram_search('Hello Мир', 'Hello Мир', 4);
+select ngram_search('Привет World', 'Привет World', 4);
+
+-- Short strings (less than gram_num characters)
+select ngram_search('Ми', 'Мир', 4);
+select ngram_search('北京', '北京大学', 4);
+
+-- Test with column
+CREATE TABLE utf8_names (
+  id INT,
+  name_cyrillic VARCHAR(100),
+  name_latin VARCHAR(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ('replication_num'='1');
+
+INSERT INTO utf8_names VALUES
+(1, 'Расулов Сунатулло Ашуралиевич', 'Rasulov Sunatullo Ashuralevich'),
+(2, 'Бабоев Мухаммаджон Алиджонович', 'Baboev Mukhammadjon Alidjonovich'),
+(3, 'Акрамов Хусейн Махмадалиевич', 'Akramov Khusein Makhmadalievich'),
+(4, 'Назаров Назарали Захирджонович', 'Nazarov Nazarali Zakhirdjonovich');
+
+-- Search within Cyrillic names
+select id, ngram_search(name_cyrillic, 'Расулов Сунатулло', 4) as similarity
+from utf8_names
+order by similarity desc;
+
+-- Case insensitive search
+select id, ngram_search_case_insensitive(name_cyrillic, 'РАСУЛОВ СУНАТУЛЛО', 4) as similarity
+from utf8_names
+order by similarity desc;
+
 -- name: test_lower_upper_utf8
 create table t (
   id int,
