@@ -173,6 +173,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     protected TableType type;
     @SerializedName(value = "createTime")
     protected long createTime;
+    @SerializedName(value = "creator")
+    protected String creator;
 
     /**
      * For OlapTable:
@@ -517,6 +519,14 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public long getCreateTime() {
         return createTime;
+    }
+
+    public void setCreator(String creator) {
+        this.creator = creator;
+    }
+
+    public String getCreator() {
+        return creator;
     }
 
     public String getTableLocation() {
