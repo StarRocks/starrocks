@@ -326,8 +326,219 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
+<<<<<<< HEAD
 <!--
 ##### big_query_log_dir
+=======
+##### internal_log_modules
+
+- Default: `{"base", "statistic"}`
+- Type: String[]
+- Unit: -
+- Is mutable: No
+- Description: A list of module identifiers that will receive dedicated internal logging. For each entry X, Log4j creates a logger named `internal.&lt;X&gt;` with level INFO and additivity="false". Those loggers are routed to the internal appender (written to `fe.internal.log`) or to console when `sys_log_to_console` is enabled. Use short names or package fragments as needed — the exact logger name becomes `internal.` + the configured string. Internal log file rotation and retention follow `internal_log_dir`, `internal_log_roll_num`, `internal_log_delete_age`, `internal_log_roll_interval`, and `log_roll_size_mb`. Adding a module causes its runtime messages to be separated into the internal logger stream for easier debugging and audit.
+- Introduced in: v3.2.4
+
+##### internal_log_roll_interval
+
+- Default: DAY
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Controls the time-based roll interval for the FE internal log appender. Accepted values (case-insensitive) are `HOUR` and `DAY`. `HOUR` produces an hourly file pattern (`"%d{yyyyMMddHH}"`) and `DAY` produces a daily file pattern (`"%d{yyyyMMdd}"`), which are used by the RollingFile TimeBasedTriggeringPolicy to name rotated `fe.internal.log` files. An invalid value causes initialization to fail (an IOException is thrown when building the active Log4j configuration). Roll behavior also depends on related settings such as `internal_log_dir`, `internal_roll_maxsize`, `internal_log_roll_num`, and `internal_log_delete_age`.
+- Introduced in: v3.2.4
+
+##### internal_log_roll_num
+
+- Default: 90
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Maximum number of rolled internal FE log files to retain for the internal appender (`fe.internal.log`). This value is used as the Log4j DefaultRolloverStrategy `max` attribute; when rollovers occur, StarRocks keeps up to `internal_log_roll_num` archived files and removes older ones (also governed by `internal_log_delete_age`). A lower value reduces disk usage but shortens log history; a higher value preserves more historical internal logs. This item works together with `internal_log_dir`, `internal_log_roll_interval`, and `internal_roll_maxsize`.
+- Introduced in: v3.2.4
+
+##### log_cleaner_audit_log_min_retention_days
+
+- Default: 3
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Minimum retention days for audit log files. Audit log files newer than this will not be deleted even if disk usage is high. This ensures that audit logs are preserved for compliance and troubleshooting purposes.
+- Introduced in: -
+
+##### log_cleaner_check_interval_second
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Interval in seconds to check disk usage and clean logs. The cleaner periodically checks each log directory's disk usage and triggers cleaning when necessary. Default is 300 seconds (5 minutes).
+- Introduced in: -
+
+##### log_cleaner_disk_usage_target
+
+- Default: 60
+- Type: Int
+- Unit: Percentage
+- Is mutable: Yes
+- Description: Target disk usage (percentage) after log cleaning. Log cleaning will continue until disk usage drops below this threshold. The cleaner deletes the oldest log files one by one until the target is reached.
+- Introduced in: -
+
+##### log_cleaner_disk_usage_threshold
+
+- Default: 80
+- Type: Int
+- Unit: Percentage
+- Is mutable: Yes
+- Description: Disk usage threshold (percentage) to trigger log cleaning. When disk usage exceeds this threshold, log cleaning will start. The cleaner checks each configured log directory independently and processes directories that exceed this threshold.
+- Introduced in: -
+
+##### log_cleaner_disk_util_based_enable
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enable automatic log cleaning based on disk usage. When enabled, logs will be cleaned when disk usage exceeds the threshold. The log cleaner runs as a background daemon on the FE node and helps prevent disk space exhaustion from log file accumulation.
+- Introduced in: -
+
+##### log_plan_cancelled_by_crash_be
+
+- Default: true
+- Type: boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the query execution plan logging when a query is cancelled due to BE crash or an RPC exception. When this feature is enabled, StarRocks logs the query execution plan (at `TExplainLevel.COSTS`) as a WARN entry when a query is cancelled due to BE crash or an `RpcException`. The log entry includes QueryId, SQL and the COSTS plan; in the ExecuteExceptionHandler path, the exception stacktrace is also logged. The logging is skipped when `enable_collect_query_detail_info` is enabled (the plan is then stored in the query detail) — in code paths, the check is performed by verifying the query detail is null. Note that, in ExecuteExceptionHandler, the plan is logged only on the first retry (`retryTime == 0`). Enabling this may increase log volume because full COSTS plans can be large.
+- Introduced in: v3.2.0
+
+##### log_register_and_unregister_query_id
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow FE to log query registration and deregistration messages (e.g., `"register query id = {}"` and `"deregister query id = {}"`) from QeProcessorImpl. The log is emitted only when the query has a non-null ConnectContext and either the command is not `COM_STMT_EXECUTE` or the session variable `isAuditExecuteStmt()` is true. Because these messages are written for every query lifecycle event, enabling this feature can produce high log volume and become a throughput bottleneck in high concurrency environments. Enable it for debugging or auditing; and disable it to reduce logging overhead and improve performance.
+- Introduced in: v3.3.0, v3.4.0, v3.5.0
+
+##### log_roll_size_mb
+
+- Default: 1024
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description: The maximum size of a system log file or an audit log file.
+- Introduced in: -
+
+##### proc_profile_file_retained_days
+
+- Default: 1
+- Type: Int
+- Unit: Days
+- Is mutable: Yes
+- Description: Number of days to retain process profiling files (CPU and memory) generated under `sys_log_dir/proc_profile`. The ProcProfileCollector computes a cutoff by subtracting `proc_profile_file_retained_days` days from the current time (formatted as yyyyMMdd-HHmmss) and deletes profile files whose timestamp portion is lexicographically earlier than that cutoff (that is, timePart.compareTo(timeToDelete) &lt; 0). File deletion also respects the size-based cutoff controlled by `proc_profile_file_retained_size_bytes`. Profile files use the prefixes `cpu-profile-` and `mem-profile-` and are compressed after collection.
+- Introduced in: v3.2.12
+
+##### proc_profile_file_retained_size_bytes
+
+- Default: 2L * 1024 * 1024 * 1024 (2147483648)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum total bytes of collected CPU and memory profile files (files named with prefixes `cpu-profile-` and `mem-profile-`) to keep under the profile directory. When the sum of valid profile files exceeds `proc_profile_file_retained_size_bytes`, the collector deletes the oldest profile files until the remaining total size is less than or equal to `proc_profile_file_retained_size_bytes`. Files older than `proc_profile_file_retained_days` are also removed regardless of size. This setting controls disk usage for profile archives and interacts with `proc_profile_file_retained_days` to determine deletion order and retention.
+- Introduced in: v3.2.12
+
+##### profile_log_delete_age
+
+- Default: 1d
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Controls how long FE profile log files are retained before they are eligible for deletion. The value is injected into Log4j's `&lt;IfLastModified age="..."/&gt;` policy (via `Log4jConfig`) and is applied together with rotation settings such as `profile_log_roll_interval` and `profile_log_roll_num`. Supported suffixes: `d` (day), `h` (hour), `m` (minute), `s` (second). For example: `7d` (7 days), `10h` (10 hours), `60m` (60 minutes), `120s` (120 seconds).
+- Introduced in: v3.2.5
+
+##### profile_log_dir
+
+- Default: `Config.STARROCKS_HOME_DIR + "/log"`
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Directory where FE profile logs are written. Log4jConfig uses this value to place profile-related appenders (creates files like `fe.profile.log` and `fe.features.log` under this directory). Rotation and retention for these files are governed by `profile_log_roll_size_mb`, `profile_log_roll_num` and `profile_log_delete_age`; the timestamp suffix format is controlled by `profile_log_roll_interval` (supports DAY or HOUR). Because the default directory is under `STARROCKS_HOME_DIR`, ensure the FE process has write and rotation/delete permissions on this directory.
+- Introduced in: v3.2.5
+
+##### profile_log_roll_interval
+
+- Default: DAY
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Controls the time granularity used to generate the date part of profile log filenames. Valid values (case-insensitive) are `HOUR` and `DAY`. `HOUR` produces a pattern of `"%d{yyyyMMddHH}"` (hourly time bucket) and `DAY` produces `"%d{yyyyMMdd}"` (daily time bucket). This value is used when computing `profile_file_pattern` in the Log4j configuration and only affects the time-based component of rollover file names; size-based rollover is still controlled by `profile_log_roll_size_mb` and retention by `profile_log_roll_num` / `profile_log_delete_age`. Invalid values cause an IOException during logging initialization (error message: `"profile_log_roll_interval config error: <value>"`). Choose `HOUR` for high-volume profiling to limit per-file size per hour, or `DAY` for daily aggregation.
+- Introduced in: v3.2.5
+
+##### profile_log_roll_num
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Specifies the maximum number of rotated profile log files retained by Log4j's DefaultRolloverStrategy for the profile logger. This value is injected into the logging XML as `${profile_log_roll_num}` (e.g. `&lt;DefaultRolloverStrategy max="${profile_log_roll_num}" fileIndex="min"&gt;`). Rotations are triggered by `profile_log_roll_size_mb` or `profile_log_roll_interval`; when rotation occurs, Log4j keeps at most these indexed files and older index files become eligible for removal. Actual retention on disk is also affected by `profile_log_delete_age` and the `profile_log_dir` location. Lower values reduce disk usage but limit retained history; higher values preserve more historical profile logs.
+- Introduced in: v3.2.5
+
+##### profile_log_roll_size_mb
+
+- Default: 1024
+- Type: Int
+- Unit: MB
+- Is mutable: No
+- Description: Sets the size threshold (in megabytes) that triggers a size-based rollover of the FE profile log file. This value is used by the Log4j RollingFile SizeBasedTriggeringPolicy for the `ProfileFile` appender; when a profile log exceeds `profile_log_roll_size_mb` it will be rotated. Rotation can also occur by time when `profile_log_roll_interval` is reached — either condition will trigger rollover. Combined with `profile_log_roll_num` and `profile_log_delete_age`, this item controls how many historical profile files are retained and when old files are deleted. Compression of rotated files is controlled by `enable_profile_log_compress`.
+- Introduced in: v3.2.5
+
+##### qe_slow_log_ms
+
+- Default: 5000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in **fe.audit.log**.
+- Introduced in: -
+
+##### slow_lock_log_every_ms
+
+- Default: 3000L
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval (in ms) to wait before emitting another "slow lock" warning for the same SlowLockLogStats instance. LockUtils checks this value after a lock wait exceeds slow_lock_threshold_ms and will suppress additional warnings until slow_lock_log_every_ms milliseconds have passed since the last logged slow-lock event. Use a larger value to reduce log volume during prolonged contention or a smaller value to get more frequent diagnostics. Changes take effect at runtime for subsequent checks.
+- Introduced in: v3.2.0
+
+##### slow_lock_print_stack
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to allow LockManager to include the owning thread's full stack trace in the JSON payload of slow-lock warnings emitted by `logSlowLockTrace` (the "stack" array is populated via `LogUtil.getStackTraceToJsonArray` with `start=0` and `max=Short.MAX_VALUE`). This configuration controls only the extra stack information for lock owners shown when a lock acquisition exceeds the threshold configured by `slow_lock_threshold_ms`. Enabling this feature helps debugging by giving precise thread stacks that hold the lock; disabling it reduces log volume and CPU/memory overhead caused by capturing and serializing stack traces in high concurrency environments.
+- Introduced in: v3.3.16, v3.4.5, v3.5.1
+
+##### slow_lock_threshold_ms
+
+- Default: 3000L
+- Type: long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Threshold (in ms) used to classify a lock operation or a held lock as "slow". When the elapsed wait or hold time for a lock exceeds this value, StarRocks will (depending on context) emit diagnostic logs, include stack traces or waiter/owner info, and—in LockManager—start deadlock detection after this delay. It's used by LockUtils (slow-lock logging), QueryableReentrantReadWriteLock (filtering slow readers), LockManager (deadlock-detection delay and slow-lock trace), LockChecker (periodic slow-lock detection), and other callers (e.g., DiskAndTabletLoadReBalancer logging). Lowering the value increases sensitivity and logging/diagnostic overhead; setting it to 0 or negative disables the initial wait-based deadlock-detection delay behavior. Tune together with slow_lock_log_every_ms, slow_lock_print_stack, and slow_lock_stack_trace_reserve_levels.
+- Introduced in: 3.2.0
+
+##### sys_log_delete_age
+
+- Default: 7d
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
+- Introduced in: -
+
+##### sys_log_dir
+>>>>>>> f435e61da6 ([Doc] remove hyphen (#68462))
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
 - Type: String
@@ -550,7 +761,157 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
 - Introduced in: -
 
+<<<<<<< HEAD
 ##### thrift_client_timeout_ms
+=======
+### Metadata and cluster management
+
+##### alter_max_worker_queue_size
+
+- Default: 4096
+- Type: Int
+- Unit: Tasks
+- Is mutable: No
+- Description: Controls the capacity of the internal worker thread pool queue used by the alter subsystem. It is passed to `ThreadPoolManager.newDaemonCacheThreadPool` in `AlterHandler` together with `alter_max_worker_threads`. When the number of pending alter tasks exceeds `alter_max_worker_queue_size`, new submissions will be rejected and a `RejectedExecutionException` can be thrown (see `AlterHandler.handleFinishAlterTask`). Tune this value to balance memory usage and the amount of backlog you permit for concurrent alter tasks.
+- Introduced in: v3.2.0
+
+##### alter_max_worker_threads
+
+- Default: 4
+- Type: Int
+- Unit: Threads
+- Is mutable: No
+- Description: Sets the maximum number of worker threads in the AlterHandler's thread pool. The AlterHandler constructs the executor with this value to run and finalize alter-related tasks (e.g., submitting `AlterReplicaTask` via handleFinishAlterTask). This value bounds concurrent execution of alter operations; raising it increases parallelism and resource usage, lowering it limits concurrent alters and may become a bottleneck. The executor is created together with `alter_max_worker_queue_size`, and the handler scheduling uses `alter_scheduler_interval_millisecond`.
+- Introduced in: v3.2.0
+
+##### automated_cluster_snapshot_interval_seconds
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the Automated Cluster Snapshot tasks are triggered.
+- Introduced in: v3.4.2
+
+##### background_refresh_metadata_interval_millis
+
+- Default: 600000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval between two consecutive Hive metadata cache refreshes.
+- Introduced in: v2.5.5
+
+##### background_refresh_metadata_time_secs_since_last_access_secs
+
+- Default: 3600 * 24
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata.
+- Introduced in: v2.5.5
+
+##### bdbje_cleaner_threads
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: Number of background cleaner threads for the Berkeley DB Java Edition (JE) environment used by StarRocks journal. This value is read during environment initialization in `BDBEnvironment.initConfigs` and applied to `EnvironmentConfig.CLEANER_THREADS` using `Config.bdbje_cleaner_threads`. It controls parallelism for JE log cleaning and space reclamation; increasing it can speed up cleaning at the cost of additional CPU and I/O interference with foreground operations. Changes take effect only when the BDB environment is (re)initialized, so a frontend restart is required to apply a new value.
+- Introduced in: v3.2.0
+
+##### bdbje_heartbeat_timeout_second
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The amount of time after which the heartbeats among the leader, follower, and observer FEs in the StarRocks cluster time out.
+- Introduced in: -
+
+##### bdbje_lock_timeout_second
+
+- Default: 1
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The amount of time after which a lock in the BDB JE-based FE times out.
+- Introduced in: -
+
+##### bdbje_replay_cost_percent
+
+- Default: 150
+- Type: Int
+- Unit: Percent
+- Is mutable: No
+- Description: Sets the relative cost (as a percentage) of replaying transactions from a BDB JE log versus obtaining the same data via a network restore. The value is supplied to the underlying JE replication parameter REPLAY_COST_PERCENT and is typically >100 to indicate that replay is usually more expensive than a network restore. When deciding whether to retain cleaned log files for potential replay, the system compares replay cost multiplied by log size against the cost of a network restore; files will be removed if network restore is judged more efficient. A value of 0 disables retention based on this cost comparison. Log files required for replicas within `REP_STREAM_TIMEOUT` or for any active replication are always retained.
+- Introduced in: v3.2.0
+
+##### bdbje_replica_ack_timeout_second
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: The maximum amount of time for which the leader FE can wait for ACK messages from a specified number of follower FEs when metadata is written from the leader FE to the follower FEs. Unit: second. If a large amount of metadata is being written, the follower FEs require a long time before they can return ACK messages to the leader FE, causing ACK timeout. In this situation, metadata writes fail, and the FE process exits. We recommend that you increase the value of this parameter to prevent this situation.
+- Introduced in: -
+
+##### bdbje_reserved_disk_size
+
+- Default: 512 * 1024 * 1024 (536870912)
+- Type: Long
+- Unit: Bytes
+- Is mutable: No
+- Description: Limits the number of bytes Berkeley DB JE will reserve as "unprotected" (deletable) log/data files. StarRocks passes this value to JE via `EnvironmentConfig.RESERVED_DISK` in BDBEnvironment; JE's built-in default is 0 (unlimited). The StarRocks default (512 MiB) prevents JE from reserving excessive disk space for unprotected files while allowing safe cleanup of obsolete files. Tune this value on disk-constrained systems: decreasing it lets JE free more files sooner, increasing it lets JE retain more reserved space. Changes require restarting the process to take effect.
+- Introduced in: v3.2.0
+
+##### bdbje_reset_election_group
+
+- Default: false
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
+- Introduced in: -
+
+##### black_host_connect_failures_within_time
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### black_host_history_sec
+
+- Default: 2 * 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### brpc_connection_pool_size
+
+- Default: 16
+- Type: Int
+- Unit: Connections
+- Is mutable: No
+- Description: The maximum number of pooled BRPC connections per endpoint used by the FE's BrpcProxy. This value is applied to RpcClientOptions via `setMaxTotoal` and `setMaxIdleSize`, so it directly limits concurrent outgoing BRPC requests because each request must borrow a connection from the pool. In high concurrency scenarios increase this to avoid request queuing; increasing it raises socket and memory usage and may increase remote server load. When tuning, consider related settings such as `brpc_idle_wait_max_time`, `brpc_short_connection`, `brpc_inner_reuse_pool`, `brpc_reuse_addr`, and `brpc_min_evictable_idle_time_ms`. Changing this value is not hot-reloadable and requires a restart.
+- Introduced in: v3.2.0
+
+##### brpc_short_connection
+
+- Default: false
+- Type: boolean
+- Unit: -
+- Is mutable: No
+- Description: Controls whether the underlying brpc RpcClient uses short-lived connections. When enabled (`true`), RpcClientOptions.setShortConnection is set and connections are closed after a request completes, reducing the number of long-lived sockets at the cost of higher connection setup overhead and increased latency. When disabled (`false`, the default) persistent connections and connection pooling are used. Enabling this option affects connection-pool behavior and should be considered together with `brpc_connection_pool_size`, `brpc_idle_wait_max_time`, `brpc_min_evictable_idle_time_ms`, `brpc_reuse_addr`, and `brpc_inner_reuse_pool`. Keep it disabled for typical high-throughput deployments; enable only to limit socket lifetime or when short connections are required by network policy.
+- Introduced in: v3.3.11, v3.4.1, v3.5.0
+
+##### catalog_try_lock_timeout_ms
+>>>>>>> f435e61da6 ([Doc] remove hyphen (#68462))
 
 - Default: 5000
 - Type: Int
