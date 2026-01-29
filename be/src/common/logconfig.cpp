@@ -227,7 +227,7 @@ static void failure_function() {
 std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms);
 static std::mutex gcore_mutex;
 static bool gcore_done = false;
-void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds) {
+void hook_on_query_timeout(const TUniqueId& query_id, size_t timeout_seconds) {
     if (config::pipeline_gcore_timeout_threshold_sec > 0 &&
         timeout_seconds > static_cast<size_t>(config::pipeline_gcore_timeout_threshold_sec)) {
         std::unique_lock<std::mutex> lock(gcore_mutex);
