@@ -31,7 +31,10 @@ StatusOr<KeyToChunkConverterUPtr> KeyToChunkConverter::create(const TabletSchema
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
     auto pk_chunk = ChunkHelper::new_chunk(pkey_schema, 1);
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    // use V1 encoding type to decode the column for simplicity
+    // TODO: Should use V2 encoding type to decode the column for range-distribution table in share data mode.
+    // But for now, such table do not use sst predicate at all. Support it if necessary in the future.
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V1));
 
     auto converter = std::make_unique<KeyToChunkConverter>(pkey_schema, pk_chunk, pk_column);
     return converter;
@@ -50,7 +53,11 @@ StatusOr<ChunkUniquePtr> KeyToChunkConverter::convert_to_chunk(const std::string
     } else {
         _pk_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(key.data()));
     }
-    RETURN_IF_ERROR(PrimaryKeyEncoder::decode(_pkey_schema, *_pk_column, 0, 1, chunk.get(), nullptr));
+    // use V1 encoding type to decode the column for simplicity
+    // TODO: Should use V2 encoding type to decode the column for range-distribution table in share data mode.
+    // But for now, such table do not use sst predicate at all. Support it if necessary in the future.
+    RETURN_IF_ERROR(PrimaryKeyEncoder::decode(_pkey_schema, *_pk_column, 0, 1, chunk.get(), nullptr,
+                                              PrimaryKeyEncodingType::V1));
     return chunk;
 }
 

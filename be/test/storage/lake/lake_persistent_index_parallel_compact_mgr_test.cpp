@@ -135,8 +135,10 @@ protected:
             chunk->append_column(std::move(col), (SlotId)0);
 
             MutableColumnPtr pk_column;
-            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+            const auto encoding_type =
+                    _tablet_metadata->has_range() ? PrimaryKeyEncodingType::V2 : PrimaryKeyEncodingType::V1;
+            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type));
+            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), encoding_type);
             std::string key;
             if (pk_column->is_binary()) {
                 key = ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
@@ -1080,8 +1082,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
         col->append_datum(Datum(v));
         chunk->append_column(std::move(col), (SlotId)0);
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), PrimaryKeyEncodingType::V2);
         if (pk_column->is_binary()) {
             return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
         } else {
@@ -1167,8 +1169,8 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
         chunk->append_column(std::move(col2), (SlotId)1);
 
         MutableColumnPtr pk_column;
-        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get());
+        EXPECT_OK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), PrimaryKeyEncodingType::V2);
         return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
     };
 

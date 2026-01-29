@@ -367,14 +367,15 @@ public:
         switch (encoder_type) {
         case PK_ENCODE: {
             MutableColumnPtr encoded_columns;
-            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns, PrimaryKeyEncodingType::V1).ok()) {
                 std::stringstream ss;
                 ss << "create column for primary key encoder failed";
                 LOG(WARNING) << ss.str();
                 return nullptr;
             }
             if (chunk->num_rows() > 0) {
-                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get());
+                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get(),
+                                          PrimaryKeyEncodingType::V1);
             }
             return encoded_columns;
         }
@@ -389,7 +390,9 @@ public:
                                  const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
-            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags);
+            // use V1 encoding type to decode the column for simplicity
+            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk, value_encode_flags,
+                                             PrimaryKeyEncodingType::V1);
         }
         default:
             break;
@@ -443,7 +446,7 @@ public:
             for (uint32_t i = 0; i < schema.fields().size(); i++) {
                 idxes.push_back((uint32_t)i);
             }
-            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes);
+            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes, PrimaryKeyEncodingType::V1);
         }
         default:
             break;

@@ -29,7 +29,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
     Schema pkey_schema = generate_pkey_schema();
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::V1, true));
 
     // init rows mapper iter
     ASSIGN_OR_RETURN(auto filename, filename());
@@ -99,7 +99,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                                 // 6. replace pk index
                                 TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
                                 TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(),
-                                                                              col.get()));
+                                                                              col.get(), PrimaryKeyEncodingType::V1));
                                 RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, current_rowid,
                                                                       replace_indexes, *col));
                                 current_rowid += chunk->num_rows();
