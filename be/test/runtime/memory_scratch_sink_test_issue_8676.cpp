@@ -262,10 +262,9 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
         t_slot_desc.__set_slotType(gen_type_desc(TPrimitiveType::DOUBLE));
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
-        t_slot_desc.__set_nullIndicatorByte(0);
-        t_slot_desc.__set_nullIndicatorBit(-1);
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
+        t_slot_desc.__set_isNullable(false);
         t_slot_desc.__set_colName("first_column");
         t_slot_desc.__set_parent(0);
 
@@ -281,10 +280,9 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
         t_slot_desc.__set_slotType(gen_type_desc(TPrimitiveType::INT));
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
-        t_slot_desc.__set_nullIndicatorByte(0);
-        t_slot_desc.__set_nullIndicatorBit(-1);
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
+        t_slot_desc.__set_isNullable(false);
         t_slot_desc.__set_colName("second_column");
         t_slot_desc.__set_parent(0);
 
