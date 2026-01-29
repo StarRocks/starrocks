@@ -251,14 +251,20 @@ class StarRocksTranslator:
             # CHANGED: Report output_file (target) instead of input_file
             self.failures.append({"file": rel_output_file, "error": validation_msg})
             self.has_errors = True
+
+            # Save invalid output with a distinct suffix so it is not mistaken for a valid file
+            invalid_output_file = output_file + ".invalid"
+            with open(invalid_output_file, 'w', encoding='utf-8') as f:
+                f.write(translated_text)
+            print(f"⚠️ Saved invalid translation for inspection: {invalid_output_file}")
         else:
             # CHANGED: Report output_file (target) on success too
             self.successes.append(rel_output_file)
 
-        # Always save file so user can inspect
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(translated_text)
-        print(f"✅ Saved: {output_file}")
+            # Only save to the final output path when validation passes
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(translated_text)
+            print(f"✅ Saved: {output_file}")
 
 def main():
     parser = argparse.ArgumentParser()
