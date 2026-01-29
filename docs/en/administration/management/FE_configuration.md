@@ -326,6 +326,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
 - Introduced in: -
 
+<!--
 ##### big_query_log_dir
 
 - Default: StarRocksFE.STARROCKS_HOME_DIR + "/log"
