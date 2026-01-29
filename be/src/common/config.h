@@ -1253,6 +1253,11 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+// the maximum lifetime of a connection in the pool. An in-use connection will never be retired,
+// only when it is closed will it then be removed. The minimum allowed value is 30000(30 seconds).
+CONF_Int64(jdbc_connection_max_lifetime_ms, "300000");
+// the frequency at which the pool will attempt to keep a connection alive. The value must be less than maxLifetime.
+CONF_Int64(jdbc_connection_keepalive_time_ms, "30000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");

@@ -194,10 +194,24 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setUsername(properties.get(JDBCResource.USER));
         config.setPassword(properties.get(JDBCResource.PASSWORD));
         config.setDriverClassName(getDriverName());
+
+        // Pool sizing
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
+
+        // Connection lifecycle management
+        config.setMaxLifetime(Config.jdbc_connection_max_lifetime_ms);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
         config.setConnectionTimeout(Config.jdbc_connection_timeout_ms);
+
+        // Proactive connection health checking
+        config.setKeepaliveTime(Config.jdbc_connection_keepalive_time_ms);
+
+        // Connection leak detection (for debugging)
+        if (Config.jdbc_connection_leak_detection_threshold_ms > 0) {
+            config.setLeakDetectionThreshold(Config.jdbc_connection_leak_detection_threshold_ms);
+        }
+
         return new HikariDataSource(config);
     }
 

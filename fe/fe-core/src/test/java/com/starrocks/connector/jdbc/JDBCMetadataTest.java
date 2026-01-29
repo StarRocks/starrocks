@@ -557,4 +557,71 @@ public class JDBCMetadataTest {
         // This prevents cursor leaks (ORA-01000 in Oracle)
         Assertions.assertTrue(closed[0], "ResultSet must be closed after getTable() to prevent cursor leaks");
     }
+
+    @Test
+    public void testHikariLifecycleConfigDefaults() {
+        // Verify default values for new HikariCP lifecycle configuration parameters
+        Assertions.assertEquals(300000L, Config.jdbc_connection_max_lifetime_ms,
+                "Default max lifetime should be 5 minutes");
+        Assertions.assertEquals(30000L, Config.jdbc_connection_keepalive_time_ms,
+                "Default keepalive time should be 30 seconds");
+        Assertions.assertEquals(60000L, Config.jdbc_connection_leak_detection_threshold_ms,
+                "Default leak detection threshold should be 60 seconds");
+    }
+
+    @Test
+    public void testHikariLifecycleConfigApplied() {
+        // Verify that creating JDBCMetadata with lifecycle configs doesn't throw exceptions
+        // This tests that HikariCP accepts all the new configuration parameters
+        long originalMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long originalKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long originalLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+
+        try {
+            // Test with custom values
+            Config.jdbc_connection_max_lifetime_ms = 120000L;  // 2 minutes
+            Config.jdbc_connection_keepalive_time_ms = 15000L;  // 15 seconds
+            Config.jdbc_connection_leak_detection_threshold_ms = 30000L;  // 30 seconds
+
+            properties = new HashMap<>();
+            properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+            properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+            properties.put(JDBCResource.USER, "root");
+            properties.put(JDBCResource.PASSWORD, "123456");
+            properties.put(JDBCResource.CHECK_SUM, "xxxx");
+            properties.put(JDBCResource.DRIVER_URL, "xxxx");
+
+            // Should not throw any exceptions
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Assertions.assertNotNull(jdbcMetadata, "JDBCMetadata should be created with lifecycle configs");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = originalMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = originalKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = originalLeakDetection;
+        }
+    }
+
+    @Test
+    public void testHikariLeakDetectionDisabled() {
+        // Verify that leak detection can be disabled by setting threshold to 0
+        long originalLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+
+        try {
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;  // Disable leak detection
+
+            properties = new HashMap<>();
+            properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+            properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+            properties.put(JDBCResource.USER, "root");
+            properties.put(JDBCResource.PASSWORD, "123456");
+            properties.put(JDBCResource.CHECK_SUM, "xxxx");
+            properties.put(JDBCResource.DRIVER_URL, "xxxx");
+
+            // Should not throw any exceptions with leak detection disabled
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Assertions.assertNotNull(jdbcMetadata, "JDBCMetadata should work with leak detection disabled");
+        } finally {
+            Config.jdbc_connection_leak_detection_threshold_ms = originalLeakDetection;
+        }
+    }
 }

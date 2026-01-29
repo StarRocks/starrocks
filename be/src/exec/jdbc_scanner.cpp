@@ -112,7 +112,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 
     jmethodID constructor = env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIII)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIIIJJ)V");
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -143,9 +143,22 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // some driver (like sqlserver) needs connection timeout less than 65536
     connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
     connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
+
+    // maximum lifetime of a connection in the pool - minimum 30 seconds
+    long max_lifetime_ms = config::jdbc_connection_max_lifetime_ms;
+    if (UNLIKELY(max_lifetime_ms < 30000)) {
+        max_lifetime_ms = 300000; // default 5 minutes
+    }
+
+    // keepalive frequency for idle connections - must be less than maxLifetime
+    long keepalive_time_ms = config::jdbc_connection_keepalive_time_ms;
+    if (UNLIKELY(keepalive_time_ms < 0 || keepalive_time_ms > max_lifetime_ms)) {
+        keepalive_time_ms = 30000; // default 30 seconds
+    }
+
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
                                    statement_fetch_size, connection_pool_size, minimum_idle_connections,
-                                   idle_timeout_ms, connection_timeout_ms);
+                                   idle_timeout_ms, connection_timeout_ms, max_lifetime_ms, keepalive_time_ms);
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
