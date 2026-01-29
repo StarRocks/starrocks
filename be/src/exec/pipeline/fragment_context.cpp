@@ -21,6 +21,7 @@
 #include <mutex>
 #include <thread>
 
+#include "common/logconfig.h"
 #include "common/logging.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"

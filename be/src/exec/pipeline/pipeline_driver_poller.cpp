@@ -16,6 +16,7 @@
 
 #include <chrono>
 
+#include "common/logconfig.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "runtime/exec_env.h"
