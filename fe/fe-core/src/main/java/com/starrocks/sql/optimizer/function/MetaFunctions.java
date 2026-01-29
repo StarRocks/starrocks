@@ -83,6 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.type.PrimitiveType.BOOLEAN;
@@ -674,6 +675,22 @@ public class MetaFunctions {
         } else {
             return ConstantOperator.createVarchar(dict.get().toJson());
         }
+    }
+
+    /**
+     * Return the query ID of the last executed query in the current session.
+     */
+    @ConstantFunction(name = "last_query_id", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator lastQueryId() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        UUID lastQueryId = connectContext.getLastQueryId();
+        if (lastQueryId == null) {
+            return ConstantOperator.createNull(VarcharType.VARCHAR);
+        }
+        return ConstantOperator.createVarchar(lastQueryId.toString());
     }
 
 }
