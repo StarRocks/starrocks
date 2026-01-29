@@ -1698,6 +1698,7 @@ public class QueryAnalyzer {
 
             TableFunction tableFunction = (TableFunction) fn;
             tableFunction.setIsLeftJoin(node.getIsLeftJoin());
+            tableFunction.setIsArrayJoin(node.getIsArrayJoin());
             node.setTableFunction(tableFunction);
             node.setChildExpressions(childExpressions);
 
