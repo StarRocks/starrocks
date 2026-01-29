@@ -1209,7 +1209,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
-        super.dropPartition(dbId, partitionName, isForceDrop);
+        if (isForceDrop) {
+            super.dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
+        } else {
+            super.dropPartition(dbId, partitionName, isForceDrop);
+        }
 
         // if mv's partition is dropped, we need to update mv's timeliness.
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
