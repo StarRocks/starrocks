@@ -91,6 +91,7 @@ under the License.
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+        <google-cloud-storage.version>2.61.0</google-cloud-storage.version>
     </properties>
 
     <profiles>
@@ -1438,6 +1439,19 @@ under the License.
                 <groupId>org.apache.iceberg</groupId>
                 <artifactId>iceberg-aws</artifactId>
                 <version>${iceberg.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-gcp</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+
+            <!-- Google Cloud Storage for iceberg-gcp GCSFileIO -->
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>google-cloud-storage</artifactId>
+                <version>${google-cloud-storage.version}</version>
             </dependency>
 
             <dependency>

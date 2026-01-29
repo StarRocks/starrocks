@@ -277,7 +277,7 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 
 - `iceberg.catalog.security`
   - Required: No
-  - Description: The type of authorization protocol to use. Default: `NONE`. Valid values: `OAUTH2` and `JWT`. When this item is set to `OAUTH2`, either `token` or `credential` is required. When this item is set to `JWT`, the user is required to log in to the StarRocks cluster using the `JWT` method. You can omit `token` or `credential` and StarRocks will use the logged in user's JWT to access the catalog.
+  - Description: The type of authorization protocol to use. Default: `NONE`. Valid values: `OAUTH2`, `JWT`, and `GOOGLE`. When this item is set to `OAUTH2`, either `token` or `credential` is required. When this item is set to `JWT`, the user is required to log in to the StarRocks cluster using the `JWT` method. You can omit `token` or `credential` and StarRocks will use the logged in user's JWT to access the catalog. When this item is set to `GOOGLE`, Iceberg's Google AuthManager (Iceberg 1.10+) is used to authenticate using standard Google credentials (Application Default Credentials or a service account key file).
 
 - `iceberg.catalog.oauth2.token`
   - Required: No
@@ -310,6 +310,22 @@ If you use REST as metastore, you must specify the metastore type as REST (`"ice
 - `iceberg.catalog.rest.view-endpoints-enabled`
   - Required: No
   - Description: Whether to enable view endpoints for view-related operations. If set to `false`, view operations like `getView` will be disabled. Default: `true`.
+
+- `iceberg.catalog.gcp.auth.credentials-path`
+  - Required: No
+  - Description: The path to the Google Cloud service account JSON key file. If not provided, Application Default Credentials (ADC) will be used. Only applicable when `iceberg.catalog.security` is set to `GOOGLE`.
+
+- `iceberg.catalog.gcp.auth.scopes`
+  - Required: No
+  - Description: The OAuth scopes to request for Google authentication. Default: `https://www.googleapis.com/auth/cloud-platform`. Only applicable when `iceberg.catalog.security` is set to `GOOGLE`.
+
+- `iceberg.catalog.io-impl`
+  - Required: No
+  - Description: The FileIO implementation class to use. Use `org.apache.iceberg.gcp.gcs.GCSFileIO` for Google Cloud Storage. If not specified, StarRocks uses its internal caching FileIO implementation by default.
+
+- `iceberg.catalog.rest.metrics.reporting-enabled`
+  - Required: No
+  - Description: Whether to enable metrics reporting for the Iceberg REST catalog. Default: `true`.
 
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
@@ -383,6 +399,27 @@ SHOW DATABASES FROM r2;
 ```
 
 The `<r2_warehouse_name>`,`<r2_api_token>`, and `<r2_catalog_uri>` values are obtained from the [Cloudflare Dashboard as detailed here](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites).
+
+The following example creates an Iceberg catalog named `biglake` that connects to Google BigLake REST Catalog using Google authentication:
+
+```SQL
+CREATE EXTERNAL CATALOG biglake
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://biglake.googleapis.com/iceberg/v1/restcatalog",
+    "iceberg.catalog.warehouse" = "bq://projects/project/locations/us-central1",
+    "iceberg.catalog.nested-namespace-enabled" = "true",
+    "iceberg.catalog.header.x-goog-user-project" = "project",
+    "iceberg.catalog.security" = "google",
+    "iceberg.catalog.rest-metrics-reporting-enabled" = "false",
+    "iceberg.catalog.io-impl" = "org.apache.iceberg.gcp.gcs.GCSFileIO",
+    "iceberg.catalog.vended-credentials-enabled" = "true",
+    "gcp.gcs.use_compute_engine_service_account" = "true"
+);
+```
+
+This configuration uses Google's Application Default Credentials (ADC). If running on GKE or Dataproc, credentials are automatically obtained from the environment. Alternatively, you can specify a service account key file using `iceberg.catalog.gcp.auth.credentials-path`.
 
 </TabItem>
 
