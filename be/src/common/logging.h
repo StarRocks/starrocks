@@ -13,15 +13,9 @@
 // limitations under the License.
 
 #pragma once
-// GLOG defines this based on the system but doesn't check if it's already
-// been defined.  undef it first to avoid warnings.
-// glog MUST be included before gflags.  Instead of including them,
+// glog MUST be included before gflags. Instead of including them,
 // our files should include this file instead.
-#undef _XOPEN_SOURCE
-// This is including a glog internal file.  We want this to expose the
-// function to get the stack trace.
 #include <glog/logging.h>
-#undef MutexLock
 
 // Define VLOG levels.  We want display per-row info less than per-file which
 // is less than per-query.  For now per-connection is the same as per-query.
