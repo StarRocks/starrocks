@@ -8,6 +8,8 @@ displayed_sidebar: docs
 
 このステートメントは、指定されたテーブルまたはパーティションの修復を高優先度でキャンセルするために使用されます。
 
+注意：このステートメントは存算一体テーブル（shared-nothing tables）のみをサポートします。
+
 :::tip
 
 この操作には、SYSTEM レベルの OPERATE 権限が必要です。この権限を付与するには、[GRANT](../../account-management/GRANT.md) の指示に従ってください。
