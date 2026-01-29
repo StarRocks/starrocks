@@ -14,10 +14,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.thrift.TVariant;
-import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.Type;
-import com.starrocks.type.TypeSerializer;
 
 import java.util.Objects;
 
@@ -34,14 +31,6 @@ public class NullVariant extends Variant {
     @Override
     public long getLongValue() {
         throw new IllegalStateException("NullVariant has no numeric value");
-    }
-
-    @Override
-    public TVariant toThrift() {
-        TVariant variant = new TVariant();
-        variant.setType(TypeSerializer.toThrift(type));
-        variant.setVariant_type(TVariantType.NULL_VALUE);
-        return variant;
     }
 
     @Override
