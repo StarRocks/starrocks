@@ -1054,7 +1054,7 @@ When accessing StarRocks with Spark, in addition to the traditional JDBC or Java
 - **Support for read, write, and streaming write** The component supports Spark as a Flight SQL client for efficient read and write operations, including `insert`, `merge`, `update`, and `delete` DML statements, and even supports streaming write, making it suitable for real-time data processing scenarios.
 - **Support for predicate pushdown and column pruning** When reading data, Spark-Flight-Connector supports predicate pushdown and column pruning, enabling data filtering and column selection on the StarRocks side, significantly reducing the amount of data transferred and improving query performance.
 - **Support for aggregation pushdown and parallel read** Aggregation operations (such as `sum`, `count`, `max`, `min`, etc.) can be pushed down to StarRocks for execution, reducing the computational load on Spark. Parallel reading based on partitioning is also supported, improving read efficiency in large data scenarios.
-- **Better for big data scenarios** Compared to traditional JDBC methods, the Flight SQL protocol is better suited for large-scale, high-concurrency access scenarios, enabling StarRocks to fully leverage its high-performance analytical capabilities.
+- **Better for big data scenarios** Compared to traditional JDBC methods, the Flight SQL protocol is better suited for large-scale, high concurrency access scenarios, enabling StarRocks to fully leverage its high-performance analytical capabilities.
 
 ## Appendix
 

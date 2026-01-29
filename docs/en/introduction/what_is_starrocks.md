@@ -16,7 +16,7 @@ Compatible with MySQL protocols and standard SQL, StarRocks has out-of-the-box s
 
 ## Scenarios
 
-StarRocks meets varied enterprise analytics requirements, including OLAP (Online Analytical Processing) multi-dimensional analytics, real-time analytics, high-concurrency analytics, customized reporting, ad-hoc queries, and unified analytics.
+StarRocks meets varied enterprise analytics requirements, including OLAP (Online Analytical Processing) multi-dimensional analytics, real-time analytics, high concurrency analytics, customized reporting, ad-hoc queries, and unified analytics.
 
 ### OLAP multi-dimensional analytics
 
@@ -58,7 +58,7 @@ Scenarios:
 
 - Application Performance Management (APM)
 
-### High-concurrency analytics
+### High concurrency analytics
 
 StarRocks leverages performant data distribution, flexible indexing, and intelligent materialized views to facilitate user-facing analytics at high concurrency:
 
