@@ -965,7 +965,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                                                        Expression icebergPredicate,
                                                        TvrVersionRange tvrVersionRange,
                                                        GetRemoteFilesParams params) {
-        Iterator<FileScanTask> iterator =
+        CloseableIterator<FileScanTask> iterator =
                 buildFileScanTaskIterator(table, icebergPredicate, tvrVersionRange, ConnectContext.get(),
                         params.isEnableColumnStats());
         return new RemoteFileInfoSource() {
@@ -977,6 +977,14 @@ public class IcebergMetadata implements ConnectorMetadata {
             @Override
             public boolean hasMoreOutput() {
                 return iterator.hasNext();
+            }
+
+            @Override
+            public void close() {
+                try {
+                    iterator.close();
+                } catch (Exception ignore) {
+                }
             }
         };
     }
@@ -996,7 +1004,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         };
     }
 
-    private Iterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
+    private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
                                                              Expression icebergPredicate,
                                                              TvrVersionRange tvrVersionRange,
                                                              ConnectContext connectContext,
@@ -1049,8 +1057,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = (Scan) scan.filter(icebergPredicate);
         }
 
-        Scan tableScan = scan;
-        return new Iterator<>() {
+        TableScan tableScan = scan;
+        return new CloseableIterator<>() {
             CloseableIterable<FileScanTask> fileScanTaskIterable;
             CloseableIterator<FileScanTask> fileScanTaskIterator;
             boolean hasMore = true;
@@ -1092,8 +1100,28 @@ public class IcebergMetadata implements ConnectorMetadata {
                                 Tracers.record(Tracers.Module.EXTERNAL, name, value);
                             }
                         }
+                        System.out.println("Iceberg TableScan stop iter");
                     }
                     hasMore = false;
+                }
+            }
+
+            @Override
+            public void close() {
+                try {
+                    if (fileScanTaskIterator != null) {
+                        fileScanTaskIterator.close();
+                    }
+                } catch (Exception ignore) {
+                }
+                try {
+                    if (fileScanTaskIterable != null) {
+                        fileScanTaskIterable.close();
+                    }
+                } catch (Exception ignore) {
+                } finally {
+                    fileScanTaskIterator = null;
+                    fileScanTaskIterable = null;
                 }
             }
         };

@@ -1109,6 +1109,9 @@ public class StmtExecutor {
                 clearQueryScopeHintContext();
             }
 
+            // release parsed statement references (may hold external tables/metadata)
+            parsedStmt = null;
+
             // restore session variable in connect context
             if (!skipRestore) {
                 context.setSessionVariable(sessionVariableBackup);
