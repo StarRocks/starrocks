@@ -42,8 +42,8 @@ public:
     void cancel(DriverRawPtr driver) override {}
     void close() override { _tp->shutdown(); }
 
-    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
-                           bool attach_profile) override {}
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                           bool done) override {}
 
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
 
