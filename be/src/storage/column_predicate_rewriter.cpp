@@ -421,9 +421,18 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         ObjectPool* pool, const ColumnPtr& raw_dict_column, const ColumnPtr& raw_code_column, bool field_nullable,
         const ColumnPredicate* src_pred, ColumnPredicate** dest_pred) {
     *dest_pred = nullptr;
+    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
+
+    const auto& inverted_index_fallback = pred->get_inverted_index_fallback();
+    if (inverted_index_fallback.has_value()) {
+        if (inverted_index_fallback->isEmpty()) {
+            return pred->is_negated_expr() ? RewriteStatus::ALWAYS_TRUE : RewriteStatus::ALWAYS_FALSE;
+        }
+        return RewriteStatus::UNCHANGED;
+    }
+
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
-    const auto* pred = down_cast<const ColumnExprPredicate*>(src_pred);
     size_t chunk_size = std::min<size_t>(pred->runtime_state()->chunk_size(), std::numeric_limits<uint16_t>::max());
 
     if (value_size <= chunk_size) {

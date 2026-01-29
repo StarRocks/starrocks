@@ -1,7 +1,9 @@
+#include <optional>
 #include <utility>
 
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "roaring/roaring.hh"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
@@ -42,6 +44,8 @@ public:
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
 
+    bool is_match_expr() const;
+    bool is_negated_expr() const;
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_original_bloom_filter() const override { return false; }
     bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
@@ -61,10 +65,17 @@ public:
     // otherwise, it will contain one or more predicates which form the conjunction normal form
     Status try_to_rewrite_for_zone_map_filter(starrocks::ObjectPool* pool,
                                               std::vector<const ColumnExprPredicate*>* output) const;
+    StatusOr<std::optional<roaring::Roaring>> read_inverted_index(const std::string& column_name,
+                                                                  InvertedIndexIterator* iterator) const;
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override;
 
     const std::vector<ExprContext*>& get_expr_ctxs() const { return _expr_ctxs; }
+
+    // Inverted index fallback evaluation for MATCH predicates in OR queries
+    Status init_inverted_index_fallback(InvertedIndexIterator* iterator) const;
+    const std::optional<roaring::Roaring>& get_inverted_index_fallback() const { return _inverted_index_bitmap; }
+    void set_evaluate_rowids(const std::vector<rowid_t>* rowids) const { _evaluate_rowids = rowids; }
 
 private:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
@@ -84,6 +95,10 @@ private:
     const SlotDescriptor* _slot_desc;
     bool _monotonic;
     mutable std::vector<uint8_t> _tmp_select;
+
+    // For inverted index fallback: stores the bitmap result and current rowids
+    mutable std::optional<roaring::Roaring> _inverted_index_bitmap;
+    mutable const std::vector<rowid_t>* _evaluate_rowids = nullptr;
 };
 
 class ColumnTruePredicate final : public ColumnPredicate {
