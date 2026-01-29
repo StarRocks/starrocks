@@ -14,16 +14,16 @@
 
 package com.starrocks.sql.parser.rewriter;
 
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.BoolLiteral;
-import com.starrocks.sql.ast.expression.CompoundPredicate;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.sql.ast.expression.TableName;
 import com.starrocks.utframe.StarRocksTestBase;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
