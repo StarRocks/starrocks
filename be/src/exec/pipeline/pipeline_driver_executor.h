@@ -53,7 +53,7 @@ public:
     // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
     // to objects owned by FragmentContext.
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
-                                   bool done, bool attach_profile) = 0;
+                                   bool done) = 0;
 
     virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
 
@@ -82,8 +82,8 @@ public:
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
     void close() override;
-    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
-                           bool attach_profile) override;
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
+                           bool done) override;
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
 
     void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override;
