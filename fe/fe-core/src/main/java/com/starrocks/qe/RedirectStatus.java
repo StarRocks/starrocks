@@ -115,6 +115,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -535,6 +536,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitDropTaskStmt(DropTaskStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
+        public RedirectStatus visitAlterTaskStatement(AlterTaskStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
 

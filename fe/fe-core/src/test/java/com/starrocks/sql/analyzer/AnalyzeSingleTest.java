@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -627,6 +628,24 @@ public class AnalyzeSingleTest {
         Assertions.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
     }
+
+        @Test
+        public void testAlterTask() {
+                StatementBase statementBase = analyzeSuccess("alter task if exists t1 resume");
+                Assertions.assertTrue(statementBase instanceof AlterTaskStmt);
+                AlterTaskStmt alterTaskStmt = (AlterTaskStmt) statementBase;
+                Assertions.assertTrue(alterTaskStmt.isIfExists());
+                Assertions.assertEquals(AlterTaskStmt.AlterAction.RESUME, alterTaskStmt.getAction());
+
+                statementBase = analyzeSuccess("alter task t1 suspend");
+                alterTaskStmt = (AlterTaskStmt) statementBase;
+                Assertions.assertEquals(AlterTaskStmt.AlterAction.SUSPEND, alterTaskStmt.getAction());
+
+                statementBase = analyzeSuccess("alter task t1 set ('session.query_timeout'='5000')");
+                alterTaskStmt = (AlterTaskStmt) statementBase;
+                Assertions.assertEquals(AlterTaskStmt.AlterAction.SET, alterTaskStmt.getAction());
+                Assertions.assertEquals("5000", alterTaskStmt.getProperties().get("session.query_timeout"));
+        }
 
     @Test
     public void testLowCard() {

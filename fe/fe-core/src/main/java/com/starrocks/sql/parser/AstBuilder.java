@@ -201,6 +201,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTagClause;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -2115,6 +2116,25 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         res.getProperties().putAll(extractVarHintValues(hintMap.get(context)));
         parseTaskClause(context.taskClause(), res);
         return res;
+    }
+
+    @Override
+    public ParseNode visitAlterTaskStatement(com.starrocks.sql.parser.StarRocksParser.AlterTaskStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TaskName taskName = qualifiedNameToTaskName(qualifiedName);
+        boolean ifExists = context.IF() != null;
+
+        AlterTaskStmt.AlterAction action;
+        Map<String, String> properties = null;
+        if (context.RESUME() != null) {
+            action = AlterTaskStmt.AlterAction.RESUME;
+        } else if (context.SUSPEND() != null) {
+            action = AlterTaskStmt.AlterAction.SUSPEND;
+        } else {
+            action = AlterTaskStmt.AlterAction.SET;
+            properties = getCaseInsensitiveProperties(context.propertyList());
+        }
+        return new AlterTaskStmt(taskName, ifExists, action, properties, createPos(context));
     }
 
     @Override
