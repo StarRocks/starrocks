@@ -80,7 +80,7 @@ public:
         uint64_t hash = 0;
 
         // find the correct bucket for the current value.
-        if constexpr (lt_is_string<LT>) {
+        if constexpr (lt_is_string_or_binary<LT>) {
             Slice s = column->get_slice(row_num);
             bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s,
                                          [](auto& s, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(s); });
