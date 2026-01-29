@@ -2498,8 +2498,12 @@ sampleClause
     ;
 
 argumentList
-    : namedArgumentList
-    | expressionList
+    : argumentItem (',' argumentItem)*
+    ;
+
+argumentItem
+    : namedArgument
+    | expression
     ;
 
 namedArgumentList
@@ -2751,6 +2755,7 @@ functionCall
     | aggregationFunction filter? over?                                                   #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
     | TRANSLATE '(' (expression (',' expression)*)? ')'                                   #translateFunctionCall
+    | qualifiedName '(' namedArgumentList ')'                                             #namedArgsFunctionCall
     | qualifiedName '(' (expression (',' expression)*)? ')'  over?                        #simpleFunctionCall
     ;
 
