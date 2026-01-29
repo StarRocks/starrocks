@@ -140,10 +140,10 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                     if ((columnRefOperator.getType().isMapType() || columnRefOperator.getType().isStructType()) &&
                             !context.hasUnnestColRefMapValue(columnRefOperator)) {
                         context.add(columnRefOperator, columnRefOperator);
-                        context.addScan(columnRefOperator);
                     }
                 }
             }
+            physicalScanOperator.getColRefToColumnMetaMap().keySet().forEach(context::addScan);
             return visit(optExpression, context);
         }
     }
