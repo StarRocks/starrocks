@@ -15,6 +15,10 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.Range;
+import com.starrocks.proto.TabletRangePB;
+import com.starrocks.proto.TuplePB;
+import com.starrocks.proto.VariantPB;
+import com.starrocks.proto.VariantTypePB;
 import com.starrocks.thrift.TTabletRange;
 import com.starrocks.thrift.TTuple;
 import com.starrocks.thrift.TVariant;
@@ -41,6 +45,18 @@ public class TabletRangeTest {
         // Inclusiveness flags should reflect the underlying Range semantics.
         Assertions.assertFalse(tRange.isLower_bound_included());
         Assertions.assertFalse(tRange.isUpper_bound_included());
+    }
+
+    @Test
+    public void testAllRangeToProto() {
+        Range<Tuple> all = Range.all();
+        TabletRange tabletRange = new TabletRange(all);
+
+        TabletRangePB rangePB = tabletRange.toProto();
+        Assertions.assertNull(rangePB.lowerBound);
+        Assertions.assertNull(rangePB.upperBound);
+        Assertions.assertFalse(rangePB.lowerBoundIncluded);
+        Assertions.assertFalse(rangePB.upperBoundIncluded);
     }
 
     @Test
@@ -82,6 +98,45 @@ public class TabletRangeTest {
         Assertions.assertEquals("5", upperInt.getValue());
         Assertions.assertTrue(upperStr.isSetValue());
         Assertions.assertEquals("z", upperStr.getValue());
+    }
+
+    @Test
+    public void testClosedRangeToProto() {
+        Tuple lower = new Tuple(Arrays.asList(
+                new IntVariant(IntegerType.INT, 1),
+                new StringVariant(VarcharType.VARCHAR, "a")));
+        Tuple upper = new Tuple(Arrays.asList(
+                new IntVariant(IntegerType.INT, 5),
+                new StringVariant(VarcharType.VARCHAR, "z")));
+
+        Range<Tuple> range = Range.gele(lower, upper);
+        TabletRange tabletRange = new TabletRange(range);
+
+        TabletRangePB rangePB = tabletRange.toProto();
+        Assertions.assertNotNull(rangePB.lowerBound);
+        Assertions.assertNotNull(rangePB.upperBound);
+        Assertions.assertTrue(rangePB.lowerBoundIncluded);
+        Assertions.assertTrue(rangePB.upperBoundIncluded);
+
+        TuplePB lowerPB = rangePB.lowerBound;
+        TuplePB upperPB = rangePB.upperBound;
+        Assertions.assertEquals(2, lowerPB.values.size());
+        Assertions.assertEquals(2, upperPB.values.size());
+
+        VariantPB lowerInt = lowerPB.values.get(0);
+        VariantPB lowerStr = lowerPB.values.get(1);
+        VariantPB upperInt = upperPB.values.get(0);
+        VariantPB upperStr = upperPB.values.get(1);
+
+        Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, lowerInt.variantType);
+        Assertions.assertEquals("1", lowerInt.value);
+        Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, lowerStr.variantType);
+        Assertions.assertEquals("a", lowerStr.value);
+
+        Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, upperInt.variantType);
+        Assertions.assertEquals("5", upperInt.value);
+        Assertions.assertEquals(VariantTypePB.NORMAL_VALUE, upperStr.variantType);
+        Assertions.assertEquals("z", upperStr.value);
     }
 
     @Test
@@ -198,5 +253,4 @@ public class TabletRangeTest {
         Assertions.assertFalse(upperDate.getValue().isEmpty());
     }
 }
-
 
