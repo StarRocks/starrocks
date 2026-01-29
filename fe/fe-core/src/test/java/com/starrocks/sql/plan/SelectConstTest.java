@@ -192,6 +192,7 @@ public class SelectConstTest extends PlanTestBase {
         assertFeExecuteResult("select cast(1.23456000 as decimalv2)", "1.23456");
         assertFeExecuteResult("select cast(1.23456000 as DECIMAL(10, 2))", "1.23");
         assertFeExecuteResult("select cast(1.234560 as DECIMAL(12, 10))", "1.2345600000");
+        assertFeExecuteResult("select cast ('123.4' as INT);", "123");
         assertFeExecuteResult("select '\\'abc'", "'abc");
         assertFeExecuteResult("select '\"abc'", "\"abc");
         assertFeExecuteResult("select '\\\\\\'abc'", "\\'abc");

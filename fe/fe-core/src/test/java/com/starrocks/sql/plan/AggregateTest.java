@@ -2049,8 +2049,8 @@ public class AggregateTest extends PlanTestBase {
         sql = "select count(distinct v1, v2) from t0;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                        "  |  STREAMING\n" +
-                        "  |  group by: 1: v1, 2: v2");
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1, 2: v2");
         connectContext.getSessionVariable().setCountDistinctImplementation("default");
     }
 
@@ -2259,9 +2259,12 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select sum(cast(t1b as int) + cast('1.1' as int)) from test_all_type";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  aggregate: sum[(cast([2: t1b, SMALLINT, true] as BIGINT) + cast(cast('1.1' as INT) as BIGINT)); " +
-                "args: BIGINT; result: BIGINT; args nullable: true; result nullable: true]");
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: sum[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT; args nullable: true;" +
+                " result nullable: true], count[([2: t1b, SMALLINT, true]); args: SMALLINT; result: BIGINT;" +
+                " args nullable: true; result nullable: true]"
+        );
+
     }
 
     @Test
@@ -3362,7 +3365,7 @@ public class AggregateTest extends PlanTestBase {
 
             // distinct avg cannot merge two phase agg to one phase agg.
             sql = "select avg(distinct v2) from t0 group by v1";
-            plan  = getFragmentPlan(sql);
+            plan = getFragmentPlan(sql);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: avg(2: v2)\n" +
                     "  |  group by: 1: v1\n" +
