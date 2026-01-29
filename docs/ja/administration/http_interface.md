@@ -36,7 +36,7 @@ StarRocks クラスターのメンテナンスを容易にするために、Star
 | POST                | `/api/colocate/update_group`                                    |
 | POST                | `/api/global_dict/table/enable`                                 |
 | GET                 | `/api/profile?query_id={}`                                      | 指定されたクエリ ID のプロファイル情報を取得します。                                                                |
-| GET                 | `/api/query_detail`                                             | クエリ詳細を取得します。レスポンスには `user` と `impersonatedUser`（execute as 未使用時は null）が含まれます。       |
+| GET                 | `/api/query_detail`                                             | クエリ詳細を取得します。詳細は [Query detail API](./http_interface/query_detail.md) を参照してください。              |
 | GET                 | `/api/connection`                                               |
 | GET                 | `/api/show_data?db={}`                                          | 指定されたデータベースのサイズをクエリします。                                                                       |
 | POST                | `/api/query_dump`                                               | クエリダンプ情報を取得します。詳細は [Query Dump](../faq/Dump_query.md) を参照してください。                         |

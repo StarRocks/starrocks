@@ -36,7 +36,7 @@ displayed_sidebar: docs
 | POST             | `/api/colocate/update_group`
 | POST             | `/api/global_dict/table/enable`
 | GET              | `/api/profile?query_id={}`                                        | 获取指定 query ID 的 profile 信息。                                                                                       |
-| GET              | `/api/query_detail`                                              | 获取 query detail 信息。响应包含 `user` 和 `impersonatedUser`（未执行 execute as 时为 null）。                         |
+| GET              | `/api/query_detail`                                              | 获取 query detail 信息，详见 [Query detail API](./http_interface/query_detail.md)。                                     |
 | GET              | `/api/connection`
 | GET              | `/api/show_data?db={}`                                            | 查询指定数据库的大小。                                                                                                    |
 | POST             | `/api/query_dump`                                                 | 获取 query dump 信息，详见 [Query dump](../faq/Dump_query.md) 。                       |

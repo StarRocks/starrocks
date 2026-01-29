@@ -36,7 +36,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | POST                | `/api/colocate/update_group`                                    |
 | POST                | `/api/global_dict/table/enable`                                 |
 | GET                 | `/api/profile?query_id={}`                                      | Get profile information for the specified query ID.                                                                  |
-| GET                 | `/api/query_detail`                                             | Get query details. Response includes `user` and `impersonatedUser` (null if not executing as another user).          |
+| GET                 | `/api/query_detail`                                             | Get query details. See [Query detail API](./http_interface/query_detail.md).                                         |
 | GET                 | `/api/connection`                                               |
 | GET                 | `/api/show_data?db={}`                                          | Query the size of the specified database.                                                                            |
 | POST                | `/api/query_dump`                                               | Get query dump information, see [Query Dump](../faq/Dump_query.md) for details.                                      |
