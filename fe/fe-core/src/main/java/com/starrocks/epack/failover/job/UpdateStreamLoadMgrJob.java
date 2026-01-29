@@ -23,7 +23,9 @@ public class UpdateStreamLoadMgrJob extends FailoverGroupJob {
     public void execute() {
         for (AbstractStreamLoadTask task : failoverGroup.getObjectMeta().getStreamLoadMgr().getIdToStreamLoadTask()
                 .values()) {
-            StreamLoadTask streamLoadTask = (StreamLoadTask) task;
+            if (!(task instanceof StreamLoadTask streamLoadTask)) {
+                continue;
+            }
             if (streamLoadTask.getState() != StreamLoadTask.State.FINISHED) {
                 continue;
             }
