@@ -99,7 +99,8 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, String user) {
                 return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
             }
         };
@@ -119,7 +120,8 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, String user) {
                 TStatus status = new TStatus();
                 status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                 status.addToError_msgs("artificial failure");
