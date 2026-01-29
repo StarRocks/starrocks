@@ -51,6 +51,7 @@ import com.starrocks.connector.RemoteMetaSplit;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.connector.iceberg.procedure.IcebergProcedureRegistry;
 import com.starrocks.connector.iceberg.procedure.RemoveOrphanFilesProcedure;
 import com.starrocks.connector.metadata.MetadataCollectJob;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -162,7 +163,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
@@ -178,7 +183,9 @@ import static com.starrocks.type.IntegerType.INT;
 import static com.starrocks.type.StringType.STRING;
 import static com.starrocks.type.VarcharType.VARCHAR;
 import static org.apache.iceberg.types.Types.NestedField.required;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "iceberg_catalog";
@@ -939,9 +946,10 @@ public class IcebergMetadataTest extends TableTestBase {
         tSinkCommitInfo.setIs_overwrite(false);
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
-        ExceptionChecker.expectThrowsWithMsg(InternalError.class,
-                "Invalid partition and fingerprint size",
+        // Error types are preserved and rethrown directly (not wrapped) by commit queue
+        Error error = Assertions.assertThrows(InternalError.class,
                 () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null));
+        Assertions.assertTrue(error.getMessage().contains("Invalid partition and fingerprint size"));
 
     }
 
@@ -2383,4 +2391,217 @@ public class IcebergMetadataTest extends TableTestBase {
         List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         Assertions.assertFalse(fileScanTasks.isEmpty());
     }
+
+    @Test
+    public void testConcurrentFinishSinkWithCommitQueue() throws Exception {
+        // Test that concurrent commits to the same table are serialized by the commit queue
+        // This test verifies that the commit queue integration in IcebergMetadata is working correctly
+
+        // Create a commit queue manager for testing
+        IcebergCommitQueueManager.Config config = new IcebergCommitQueueManager.Config(true, 30, 100);
+        IcebergCommitQueueManager manager = new IcebergCommitQueueManager(config);
+
+        try {
+            IcebergHiveCatalog icebergHiveCatalog =
+                    new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+            // Use 9-argument constructor to pass the commit queue manager
+            IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                    Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null,
+                    new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(), manager);
+            IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                    "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+            new Expectations(metadata) {
+                {
+                    metadata.getTable((ConnectContext) any, anyString, anyString);
+                    result = icebergTable;
+                    minTimes = 0;
+                }
+            };
+
+            // Prepare test data - append file to table
+            mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+            mockedNativeTableA.refresh();
+
+            int numThreads = 5;
+            CountDownLatch startLatch = new CountDownLatch(1);
+            CountDownLatch endLatch = new CountDownLatch(numThreads);
+            AtomicInteger successCount = new AtomicInteger(0);
+            List<Exception> exceptions = new ArrayList<>();
+
+            ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+
+            // Submit multiple concurrent commits to the same table
+            for (int i = 0; i < numThreads; i++) {
+                final int threadId = i;
+                executor.submit(() -> {
+                    try {
+                        startLatch.await();
+
+                        // Create commit info for this thread
+                        TIcebergDataFile dataFile = new TIcebergDataFile();
+                        dataFile.setPath(FILE_A.path().toString() + "_thread_" + threadId);
+                        dataFile.setFormat("parquet");
+                        dataFile.setRecord_count(10);
+                        dataFile.setFile_size_in_bytes(1024);
+                        dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+
+                        TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+                        commitInfo.setIceberg_data_file(dataFile);
+
+                        // This should be serialized by the commit queue
+                        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
+
+                        successCount.incrementAndGet();
+                    } catch (Exception e) {
+                        exceptions.add(e);
+                    } finally {
+                        endLatch.countDown();
+                    }
+                });
+            }
+
+            // Start all threads
+            startLatch.countDown();
+
+            // Wait for all commits to complete
+            assertTrue(endLatch.await(60, TimeUnit.SECONDS),
+                    "All commits should complete within timeout");
+            executor.shutdown();
+
+            // Verify all commits succeeded
+            assertEquals(numThreads, successCount.get(),
+                    "All commits should succeed when using commit queue");
+            assertTrue(exceptions.isEmpty(),
+                    "There should be no exceptions: " + exceptions);
+
+            // Verify that the commit queue manager was used
+            assertEquals(1, manager.getActiveTableCount(),
+                    "Commit queue should have one active table");
+
+        } finally {
+            manager.shutdownAll();
+        }
+    }
+
+    @Test
+    public void testFinishSinkWithCommitQueueDisabled() throws Exception {
+        // Test that commits work when commit queue is disabled
+
+        // Save original config values
+        boolean originalEnableQueue = Config.enable_iceberg_commit_queue;
+
+        try {
+            // Disable commit queue
+            Config.enable_iceberg_commit_queue = false;
+
+            IcebergHiveCatalog icebergHiveCatalog =
+                    new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+            IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                    Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+            IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                    "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+            new Expectations(metadata) {
+                {
+                    metadata.getTable((ConnectContext) any, anyString, anyString);
+                    result = icebergTable;
+                    minTimes = 0;
+                }
+            };
+
+            // Prepare test data
+            mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+
+            // Create commit info
+            TIcebergDataFile dataFile = new TIcebergDataFile();
+            dataFile.setPath(FILE_A.path().toString());
+            dataFile.setFormat("parquet");
+            dataFile.setRecord_count(10);
+            dataFile.setFile_size_in_bytes(1024);
+            dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+
+            TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+            commitInfo.setIceberg_data_file(dataFile);
+
+            // Commit should succeed even when queue is disabled
+            metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
+
+            // Verify commit succeeded
+            mockedNativeTableA.refresh();
+            List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
+            Assertions.assertFalse(fileScanTasks.isEmpty());
+
+        } finally {
+            // Restore original config values
+            Config.enable_iceberg_commit_queue = originalEnableQueue;
+        }
+    }
+
+    @Test
+    public void testFinishSinkNormalizesCaseForHiveCatalogCommitQueue() throws Exception {
+        IcebergCommitQueueManager.Config config = new IcebergCommitQueueManager.Config(true, 30, 100);
+        IcebergCommitQueueManager manager = new IcebergCommitQueueManager(config);
+        try {
+            IcebergHiveCatalog icebergHiveCatalog =
+                    new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+            IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                    Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null,
+                    new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(), manager);
+            IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                    "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+            new Expectations(metadata) {
+                {
+                    metadata.getTable((ConnectContext) any, anyString, anyString);
+                    result = icebergTable;
+                    minTimes = 0;
+                }
+            };
+
+            // Prepare test data
+            mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+
+            TIcebergDataFile dataFile = new TIcebergDataFile();
+            dataFile.setPath(FILE_A.path().toString());
+            dataFile.setFormat("parquet");
+            dataFile.setRecord_count(10);
+            dataFile.setFile_size_in_bytes(1024);
+            dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+
+            TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+            commitInfo.setIceberg_data_file(dataFile);
+
+            metadata.finishSink("Iceberg_DB", "Iceberg_Table", Lists.newArrayList(commitInfo), null);
+            metadata.finishSink("ICEBERG_DB", "ICEBERG_TABLE", Lists.newArrayList(commitInfo), null);
+
+            assertEquals(1, manager.getActiveTableCount(),
+                    "Commit queue key should be normalized for Hive catalog");
+        } finally {
+            manager.shutdownAll();
+        }
+    }
+
+    @Test
+    public void testFinishSinkDirectExecutionWrapsCheckedException() throws Exception {
+        IcebergCommitQueueManager disabledManager = new IcebergCommitQueueManager(
+                new IcebergCommitQueueManager.Config(false, 120, 10));
+        IcebergHiveCatalog icebergHiveCatalog =
+                new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(
+                CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(),
+                DEFAULT_CATALOG_PROPERTIES, new ConnectorProperties(ConnectorType.ICEBERG),
+                new IcebergProcedureRegistry(), disabledManager) {
+            @Override
+            public Table getTable(ConnectContext context, String dbName, String tblName) {
+                throw new StarRocksConnectorException("checked failure");
+            }
+        };
+
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null));
+        Assertions.assertTrue(exception.getMessage().contains("checked failure"));
+    }
+
 }

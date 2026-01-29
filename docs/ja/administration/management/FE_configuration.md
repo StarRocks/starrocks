@@ -3204,6 +3204,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: 有効にすると、Lake テーブルは関連するトランザクションで combined transaction log パスを使用することを許可します。このフラグはクラスタが shared-data モード（RunMode.isSharedDataMode()）で動作している場合にのみ考慮されます。`lake_use_combined_txn_log = true` のとき、BACKEND_STREAMING、ROUTINE_LOAD_TASK、INSERT_STREAMING、BATCH_LOAD_JOB タイプのロードトランザクションは combined txn log を使用する対象になります（詳細は LakeTableHelper.supportCombinedTxnLog を参照）。compaction を含むコードパスは isTransactionSupportCombinedTxnLog を通じて combined-log のサポートを確認します。無効化されているか shared-data モードでない場合は、combined transaction log の動作は使用されません。
 - 導入バージョン: v3.3.7, v3.4.0, v3.5.0
 
+##### enable_iceberg_commit_queue
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Iceberg テーブルで同時実行コミット競合を回避するためにコミットキューを有効にするかどうか。Iceberg はメタデータコミットに楽観的同時実行制御（OCC）を使用します。複数のスレッドが同じテーブルに同時にコミットすると、"Cannot commit: Base metadata location is not same as the current table metadata location" のようなエラーが発生する可能性があります。有効にすると、各 Iceberg テーブルはコミット操作のための独自のシングルスレッド実行エグゼキューターを持ち、同じテーブルへのコミットが直列化され、OCC 競合を防止します。異なるテーブルは同時にコミットでき、全体的なスループットを維持します。これは信頼性を向上させるためのシステムレベルの最適化であり、デフォルトで有効にする必要があります。無効にすると、楽観的ロック競合により同時コミットが失敗する可能性があります。
+- 導入バージョン: v4.1.0
+
+##### iceberg_commit_queue_timeout_seconds
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: Iceberg コミット操作が完了するまで待機するタイムアウト時間（秒）。コミットキュー（`enable_iceberg_commit_queue=true`）を使用する場合、各コミット操作はこのタイムアウト时间内に完了する必要があります。コミットがこのタイムアウト時間よりも長くかかる場合、キャンセルされ、エラーが発生します。コミット時間に影響を与える要素には以下があります：コミットされるデータファイルの数、テーブルのメタデータサイズ、 underlying ストレージのパフォーマンス（S3、HDFS など）。
+- 導入バージョン: v4.1.0
+
+##### iceberg_commit_queue_max_size
+
+- デフォルト: 1000
+- タイプ: Int
+- 単位: 個
+- 変更可能: いいえ
+- 説明: 各 Iceberg テーブルの最大保留コミット操作数。コミットキュー（`enable_iceberg_commit_queue=true`）を使用する場合、これは単一のテーブルにキューに入れられるコミット操作の数を制限します。制限に達すると、追加のコミット操作は呼び出し元スレッドで実行されます（容量が利用可能になるまでブロック）。この設定は FE 起動時に読み取られ、新しく作成されたテーブルエグゼキューターに適用されます。有効にするには FE の再起動が必要です。同じテーブルに対して多数の同時コミットを予想する場合、この値を増やします。この値が低すぎると、高同時実行時にコミットが呼び出し元スレッドでブロックされる可能性があります。
+- 導入バージョン: v4.1.0
+
 ### その他
 
 ##### agent_task_resend_wait_time_ms
