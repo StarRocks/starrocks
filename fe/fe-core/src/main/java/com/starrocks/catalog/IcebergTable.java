@@ -249,6 +249,13 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
 
+<<<<<<< HEAD
+=======
+    public int getFormatVersion() {
+        return ((BaseTable) getNativeTable()).operations().current().formatVersion();
+    }
+
+>>>>>>> 5ef48e7267 ([Enhancement] prevent mv holding large external tables (#68171))
     /**
      * <p>
      *     In the Iceberg Partition Evolution scenario, 'org.apache.iceberg.PartitionField#name' only represents the
@@ -313,6 +320,10 @@ public class IcebergTable extends Table {
 
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+    }
+
+    public Map<String, String> getIcebergProperties() {
+        return icebergProperties;
     }
 
     public String getTableLocation() {
