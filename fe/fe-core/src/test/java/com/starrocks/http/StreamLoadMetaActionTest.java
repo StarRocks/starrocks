@@ -107,7 +107,8 @@ public class StreamLoadMetaActionTest extends StarRocksHttpTestCase {
 
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, String user) {
                 return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
             }
         };
@@ -131,7 +132,8 @@ public class StreamLoadMetaActionTest extends StarRocksHttpTestCase {
         Request request = buildRequest(headers, HashMultimap.create());
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, String user) {
                 ComputeNode node = new ComputeNode(1, "192.0.0.1", 9050);
                 node.setHttpPort(8040);
                 node.setBrpcPort(8060);
@@ -163,7 +165,8 @@ public class StreamLoadMetaActionTest extends StarRocksHttpTestCase {
 
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, String user) {
                 TStatus status = new TStatus();
                 status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                 status.addToError_msgs("artificial failure");
