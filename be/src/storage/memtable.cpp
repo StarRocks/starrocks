@@ -227,7 +227,11 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     // if memtable is full, push it to the flush executor,
     // and create a new memtable for incoming data
     bool suggest_flush = false;
-    if (is_full()) {
+    // When parallel memtable finalize is enabled, skip the early merge optimization here.
+    // The merge will be done during finalize() in the flush thread instead.
+    // This avoids redundant merge operations and allows the write thread to return
+    // earlier, improving overall throughput by parallelizing write and finalize operations.
+    if (is_full() && !config::enable_parallel_memtable_finalize) {
         size_t orig_bytes = write_buffer_size();
         RETURN_IF_ERROR(_merge());
         size_t new_bytes = write_buffer_size();
@@ -318,6 +322,11 @@ Status MemTable::finalize() {
             RETURN_IF_ERROR(_sort(true));
         }
     }
+    // Release the input chunk after finalize to free memory earlier.
+    // The finalized data is now in _result_chunk which will be used for flush.
+    // This is especially important when parallel finalize is enabled, as it allows
+    // the memory to be reclaimed before the flush I/O completes.
+    _chunk.reset();
 
     ADD_COUNTER_RELAXED(_stats.finalize_time_ns, duration_ns);
     StarRocksMetrics::instance()->memtable_finalize_task_total.increment(1);
