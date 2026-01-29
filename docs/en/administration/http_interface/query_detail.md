@@ -25,6 +25,11 @@ collected only when the FE configuration `enable_collect_query_detail_info` is e
 - v1 returns a JSON array of QueryDetail objects.
 - v2 returns `{ "code": "0", "message": "OK", "result": [ ... ] }` where `result` is the QueryDetail list.
 
+## Authentication and authorization
+
+This API requires HTTP Basic authentication. There is no additional privilege check beyond a successful login. Any
+authenticated user can access the endpoint and can view all cached query details unless a `user` filter is applied.
+
 ### QueryDetail fields
 
 | Field | Type | Description |

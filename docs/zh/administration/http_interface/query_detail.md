@@ -25,6 +25,11 @@ displayed_sidebar: docs
 - v1 返回 QueryDetail 数组。
 - v2 返回 `{ "code": "0", "message": "OK", "result": [ ... ] }`，其中 `result` 为 QueryDetail 列表。
 
+## 认证与权限
+
+该接口需要 HTTP Basic 认证。除登录认证外没有额外权限校验。任何已认证用户都可以访问该接口，并可查看所有缓存的
+query detail（除非通过 `user` 参数进行过滤）。
+
 ### QueryDetail 字段说明
 
 | 字段 | 类型 | 说明 |

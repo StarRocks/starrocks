@@ -25,6 +25,11 @@ displayed_sidebar: docs
 - v1 は QueryDetail 配列を返します。
 - v2 は `{ "code": "0", "message": "OK", "result": [ ... ] }` を返し、`result` が QueryDetail 配列です。
 
+## 認証と権限
+
+この API は HTTP Basic 認証が必要です。ログイン認証以外の追加権限チェックはありません。認証済みユーザーであれば
+誰でもアクセスでき、`user` パラメータでフィルタしない限りキャッシュされた query detail をすべて参照できます。
+
 ### QueryDetail フィールド
 
 | フィールド | 型 | 説明 |
