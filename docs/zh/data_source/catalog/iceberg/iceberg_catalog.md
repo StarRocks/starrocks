@@ -168,9 +168,6 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 
-<<<<<<< HEAD
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
-=======
 必需：是
 描述：您用于 Iceberg 集群的元存储类型。将值设置为 `glue`。
 
@@ -205,10 +202,6 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 描述：要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。
 
 有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
-
-</TabItem>
-<TabItem value="REST" label="REST">
->>>>>>> 7f84e547b0 ([Doc] add aws glue catalog id (#68661))
 
 ##### REST
 
