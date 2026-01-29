@@ -34,6 +34,7 @@ import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.catalog.combinator.StateFunctionCombinator;
 import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -543,6 +544,22 @@ public class FunctionAnalyzer {
                     throw new SemanticException(
                             "The second parameter of DICT_MERGE must be a constant positive integer: " +
                                     ExprToSql.toSql(functionCallExpr), kExpr.getPos());
+                }
+            }
+        }
+
+        if (fnName.equals(FunctionSet.MIN_N) || fnName.equals(FunctionSet.MAX_N)) {
+            if (functionCallExpr.hasChild(1)) {
+                Expr nExpr = functionCallExpr.getChild(1);
+                Optional<Long> n = extractIntegerValue(nExpr);
+                if (!n.isPresent() || n.get() <= 0) {
+                    throw new SemanticException(
+                            "The second parameter of " + fnName + " must be a constant positive integer: " +
+                                    ExprToSql.toSql(functionCallExpr), nExpr.getPos());
+                }
+                if (n.get() > Config.minmax_n_max_size) {
+                    throw new SemanticException("The second parameter of " + fnName + 
+                            " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
             }
         }
@@ -1305,6 +1322,20 @@ public class FunctionAnalyzer {
             }
             // need to distinct output columns in finalize phase
             ((AggregateFunction) fn).setIsDistinct(isDistinct && (!isAscOrder.isEmpty() || outputConst));
+        } else if (FunctionSet.MIN_N.equalsIgnoreCase(fnName) || FunctionSet.MAX_N.equalsIgnoreCase(fnName)) {
+            // min_n/max_n(value, n) returns array<value_type>
+            // Normalize second argument to INT (handles TINYINT/SMALLINT from literals like '3')
+            if (argumentTypes.length > 1) {
+                argumentTypes[1] = IntegerType.INT;
+            }
+
+            // use IS_IDENTICAL to preserve exact value type (especially FLOAT to avoid promotion to DOUBLE)
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            if (fn != null) {
+                fn = fn.copy();
+                // Explicitly set return type to preserve element type (e.g. array<date> not array<int>)
+                fn.setRetType(new ArrayType(argumentTypes[0]));
+            }
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);

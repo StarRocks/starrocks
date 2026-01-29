@@ -45,6 +45,7 @@
 #include "exprs/agg/map_agg.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/maxmin_by.h"
+#include "exprs/agg/minmax_n.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
 #include "exprs/agg/percentile_cont.h"
@@ -140,6 +141,12 @@ public:
     static AggregateFunctionPtr MakeAnyValueAggregateFunction();
 
     static AggregateFunctionPtr MakeAnyValueSemiAggregateFunction() { return new AnyValueSemiAggregateFunction(); }
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeMinNAggregateFunction();
+
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeMaxNAggregateFunction();
 
     template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
               typename NestedFunctionPtr = AggregateFunctionPtr,
@@ -333,6 +340,16 @@ auto AggregateFactory::MakeMinByAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeMinAggregateFunction() {
     return new MaxMinAggregateFunction<LT, MinAggregateData<LT>, MinElement<LT, MinAggregateData<LT>>>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeMinNAggregateFunction() {
+    return new MinMaxNAggregateFunction<LT, true>();
+}
+
+template <LogicalType LT>
+AggregateFunctionPtr AggregateFactory::MakeMaxNAggregateFunction() {
+    return new MinMaxNAggregateFunction<LT, false>();
 }
 
 template <LogicalType LT>
