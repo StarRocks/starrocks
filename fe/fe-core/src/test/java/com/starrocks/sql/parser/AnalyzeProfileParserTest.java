@@ -64,7 +64,7 @@ public class AnalyzeProfileParserTest {
 
         Assertions.assertTrue(stmt instanceof AnalyzeProfileStmt);
         AnalyzeProfileStmt analyzeStmt = (AnalyzeProfileStmt) stmt;
-        Assertions.assertEquals("lastQueryId", analyzeStmt.getQueryId());
+        Assertions.assertEquals(lastQueryId, analyzeStmt.getQueryId());
         Assertions.assertEquals(Collections.emptyList(), analyzeStmt.getPlanNodeIds());
     }
 
