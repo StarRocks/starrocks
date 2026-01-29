@@ -248,6 +248,11 @@ AWS Glue 的 `MetastoreParams`：
 必需：否
 描述：您的 AWS IAM 用户的秘密密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，则必须指定此参数。
 
+###### aws.glue.catalog_id
+
+必需：否
+描述：要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。
+
 有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 </TabItem>
