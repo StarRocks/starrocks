@@ -57,8 +57,8 @@ struct TSlotDescriptor {
   3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
-  6: optional i32 nullIndicatorByte // Deprecated
-  7: optional i32 nullIndicatorBit // Deprecated
+  6: optional i32 nullIndicatorByte = 0 // Deprecated
+  7: optional i32 nullIndicatorBit = -1 // Deprecated
   8: optional string colName;
   9: optional i32 slotIdx // Deprecated
   10: optional bool isMaterialized // Deprecated
