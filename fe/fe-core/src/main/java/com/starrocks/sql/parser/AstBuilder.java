@@ -36,6 +36,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.Util;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
@@ -6970,7 +6971,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 .map(user -> (UserRef) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
-        return new GrantPrivilegeStmt(privList, "USER", clause, objects,
+        String objectType = "USER";
+        return new GrantPrivilegeStmt(privList, objectType, clause,
+                Util.normalizeNames(objectType, objects),
                 context.WITH() != null, createPos(context));
     }
 
@@ -6982,17 +6985,19 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 .map(user -> (UserRef) visit(user)).collect(toList());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
-        return new RevokePrivilegeStmt(privList, "USER", clause, objects, createPos(context));
+        String objectType = "USER";
+        return new RevokePrivilegeStmt(privList, objectType, clause,
+                Util.normalizeNames(objectType, objects), createPos(context));
     }
 
     @Override
     public ParseNode visitGrantOnTableBrief(com.starrocks.sql.parser.StarRocksParser.GrantOnTableBriefContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        return new GrantPrivilegeStmt(privilegeList, "TABLE",
+        String objectType = "TABLE";
+        return new GrantPrivilegeStmt(privilegeList, objectType,
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
-                parsePrivilegeObjectNameList(context.privObjectNameList()),
+                Util.normalizeNames(objectType, parsePrivilegeObjectNameList(context.privObjectNameList())),
                 context.WITH() != null,
                 createPos(context));
     }
@@ -7001,10 +7006,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitRevokeOnTableBrief(com.starrocks.sql.parser.StarRocksParser.RevokeOnTableBriefContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        return new RevokePrivilegeStmt(privilegeList, "TABLE",
+        String objectType = "TABLE";
+        return new RevokePrivilegeStmt(privilegeList, objectType,
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
-                parsePrivilegeObjectNameList(context.privObjectNameList()),
+                Util.normalizeNames(objectType, parsePrivilegeObjectNameList(context.privObjectNameList())),
                 createPos(context));
     }
 
@@ -7012,9 +7017,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitGrantOnSystem(com.starrocks.sql.parser.StarRocksParser.GrantOnSystemContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        return new GrantPrivilegeStmt(privilegeList, "SYSTEM",
-                (GrantRevokeClause) visit(context.grantRevokeClause()), null, context.WITH() != null,
+        String objectType = "SYSTEM";
+        return new GrantPrivilegeStmt(privilegeList, objectType,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                Util.normalizeNames(objectType, null), context.WITH() != null,
                 createPos(context));
     }
 
@@ -7022,9 +7028,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitRevokeOnSystem(com.starrocks.sql.parser.StarRocksParser.RevokeOnSystemContext context) {
         List<String> privilegeList = context.privilegeTypeList().privilegeType().stream().map(
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
-
-        return new RevokePrivilegeStmt(privilegeList, "SYSTEM",
-                (GrantRevokeClause) visit(context.grantRevokeClause()), null, createPos(context));
+        String objectType = "SYSTEM";
+        return new RevokePrivilegeStmt(privilegeList, objectType,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                Util.normalizeNames(objectType, null), createPos(context));
     }
 
     @Override
@@ -7035,7 +7042,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         return new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
-                parsePrivilegeObjectNameList(context.privObjectNameList()),
+                Util.normalizeNames(objectTypeUnResolved,
+                        parsePrivilegeObjectNameList(context.privObjectNameList())),
                 context.WITH() != null,
                 createPos(context));
     }
@@ -7048,7 +7056,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         return new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
-                parsePrivilegeObjectNameList(context.privObjectNameList()),
+                Util.normalizeNames(objectTypeUnResolved,
+                        parsePrivilegeObjectNameList(context.privObjectNameList())),
                 createPos(context));
     }
 
@@ -7058,8 +7067,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
         GrantRevokePrivilegeObjects objects = buildGrantRevokePrivWithFunction(context.privFunctionObjectNameList(),
                 context.GLOBAL() != null);
-        return new GrantPrivilegeStmt(privilegeList, extendPrivilegeType(context.GLOBAL() != null, "FUNCTION"),
-                (GrantRevokeClause) visit(context.grantRevokeClause()), objects, context.WITH() != null,
+        String objectType = extendPrivilegeType(context.GLOBAL() != null, "FUNCTION");
+        return new GrantPrivilegeStmt(privilegeList, objectType,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                Util.normalizeNames(objectType, objects), context.WITH() != null,
                 createPos(context));
     }
 
@@ -7069,8 +7080,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 c -> ((Identifier) visit(c)).getValue().toUpperCase()).collect(toList());
         GrantRevokePrivilegeObjects objects = buildGrantRevokePrivWithFunction(context.privFunctionObjectNameList(),
                 context.GLOBAL() != null);
-        return new RevokePrivilegeStmt(privilegeList, extendPrivilegeType(context.GLOBAL() != null, "FUNCTION"),
-                (GrantRevokeClause) visit(context.grantRevokeClause()), objects,
+        String objectType = extendPrivilegeType(context.GLOBAL() != null, "FUNCTION");
+        return new RevokePrivilegeStmt(privilegeList, objectType,
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                Util.normalizeNames(objectType, objects),
                 createPos(context));
     }
 
@@ -7125,7 +7138,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
 
         GrantPrivilegeStmt grantPrivilegeStmt = new GrantPrivilegeStmt(privilegeList, objectTypeUnResolved,
                 (GrantRevokeClause) visit(context.grantRevokeClause()),
-                objects, context.WITH() != null, createPos(context));
+                Util.normalizeNames(objectTypeUnResolved, objects), context.WITH() != null, createPos(context));
         grantPrivilegeStmt.setGrantOnAll();
         return grantPrivilegeStmt;
     }
@@ -7149,7 +7162,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         objects.setPrivilegeObjectNameTokensList(Collections.singletonList(tokenList));
 
         RevokePrivilegeStmt revokePrivilegeStmt = new RevokePrivilegeStmt(privilegeList, objectTypeUnResolved,
-                (GrantRevokeClause) visit(context.grantRevokeClause()), objects, createPos(context));
+                (GrantRevokeClause) visit(context.grantRevokeClause()),
+                Util.normalizeNames(objectTypeUnResolved, objects), createPos(context));
         revokePrivilegeStmt.setGrantOnAll();
         return revokePrivilegeStmt;
     }
