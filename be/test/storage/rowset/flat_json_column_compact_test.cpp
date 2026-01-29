@@ -197,7 +197,7 @@ protected:
             auto st = iter->seek_to_first();
             ASSERT_TRUE(st.ok()) << st.to_string();
 
-            size_t rows_read;
+            size_t rows_read = 0;
             std::for_each(jsons.begin(), jsons.end(), [&](MutableColumnPtr& json) { rows_read += json->size(); });
             st = iter->next_batch(&rows_read, read_col.get());
             ASSERT_TRUE(st.ok());
