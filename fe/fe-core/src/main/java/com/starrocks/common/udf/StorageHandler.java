@@ -12,24 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+package com.starrocks.common.udf;
 
-#include <string>
-#include <fs/fs.h>
+public interface StorageHandler extends AutoCloseable {
 
-#include "common/status.h"
+    void getObject(String remotePath, String localPath) throws Exception;
 
-namespace starrocks
-{
-    class DownloadUtil
-    {
-    public:
-        static Status download(const std::string& url, const std::string& target_file,
-                               const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration);
-
-    private:
-        static Status get_real_url(const std::string& url, std::string* real_url, const FSOptions& options);
-
-        static Status get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options);
-    };
-} // namespace starrocks
+    @Override
+    void close();
+}

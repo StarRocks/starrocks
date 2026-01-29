@@ -19,14 +19,14 @@
 #include "fmt/format.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
+#include "udf/udf_downloder.h"
 #include "util/defer_op.h"
 #include "util/md5.h"
 #include "util/uuid_generator.h"
 
 namespace starrocks {
-
 Status DownloadUtil::download(const std::string& url, const std::string& target_file,
-                              const std::string& expected_checksum) {
+                              const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration) {
     auto success = false;
     auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
     auto fp = fopen(tmp_file.c_str(), "w");
@@ -46,10 +46,11 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
         return Status::InternalError(
                 fmt::format("fail to open tmp file when downloading file from {}. error = {}", url, errmsg));
     }
-
+    std::string real_url;
+    RETURN_IF_ERROR(get_real_url(url, &real_url, FSOptions(&cloud_configuration)));
     Md5Digest digest;
     HttpClient client;
-    RETURN_IF_ERROR(client.init(url));
+    RETURN_IF_ERROR(client.init(real_url));
     Status status;
 
     auto download_cb = [&status, &tmp_file, fp, &digest, &url](const void* data, size_t length) {
@@ -82,5 +83,57 @@ Status DownloadUtil::download(const std::string& url, const std::string& target_
 
     success = true;
     return Status::OK();
+}
+
+
+static std::string get_scheme(const std::string& url) {
+    auto pos = url.find("://");
+    if (pos == std::string::npos) {
+        return "";
+    }
+    return url.substr(0, pos);
+}
+
+Status DownloadUtil::get_real_url(const std::string& url,
+                                  std::string* real_url,
+                                  const FSOptions& options) {
+    std::string scheme = get_scheme(url);
+
+    if (scheme.empty() || scheme == "http" || scheme == "https" || scheme == "file") {
+        *real_url = url;
+        return Status::OK();
+    }
+
+    if (scheme == "s3" || scheme == "s3a") {
+        return get_java_udf_url(url, real_url, options);
+    }
+
+    return Status::NotSupported(
+            strings::Substitute("Unsupported UDF URL scheme: $0", scheme));
+}
+
+
+Status DownloadUtil::get_java_udf_url(const std::string& url, std::string* real_url, const FSOptions& options) {
+    std::string object_path;
+    std::size_t scheme_pos = url.find("://");
+    object_path = url.substr(scheme_pos + 3);
+
+    const char* starrocks_home = std::getenv("STARROCKS_HOME");
+    if (starrocks_home == nullptr) {
+        return Status::RuntimeError(
+                "STARROCKS_HOME is not set, cannot download Java UDF");
+    }
+    std::string uniq_id = std::to_string(std::hash<std::string>{}(url));
+    std::string target_path =
+            fmt::format("{}/plugins/java_udf/{}_{}", starrocks_home, uniq_id, object_path);
+    std::string target_url = std::string("file://") + target_path;
+    udf_downloder downloader;
+    Status status = downloader.download_remote_file_2_local(url, target_path, options);
+    if (status.ok()) {
+        *real_url = target_url;
+        return Status::OK();
+    }
+    LOG(ERROR) << "Failed to download remote file " << status.to_string();
+    return Status::RuntimeError(" Failed to download remote file on " + url);
 }
 } // namespace starrocks
