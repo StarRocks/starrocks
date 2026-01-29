@@ -232,17 +232,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         this.tableFunctionDependencies.forEach((k, v) -> {
             dependencyStringIds.computeIfAbsent(v, x -> Sets.newHashSet()).add(k);
         });
-<<<<<<< HEAD
-=======
 
-        this.unionDictionaryManager.getUnionColumnGroups().forEach(s -> {
-            final Integer id = s.stream().findAny().orElseThrow();
-            dependencyStringIds.computeIfAbsent(id, x -> Sets.newHashSet()).addAll(s);
-        });
         for (Pair<Integer, Integer> pair : joinEqColumnGroups) {
             dependencyStringIds.computeIfAbsent(pair.first, x -> Sets.newHashSet()).add(pair.second);
         }
->>>>>>> ab867b6551 ([BugFix] Fix low-cardinality join predicate type mismatch (#68568))
         // build relation groups. The same closure is built into the same group
         // eg:
         // 1 -> (2, 3)
