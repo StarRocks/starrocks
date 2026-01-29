@@ -95,19 +95,31 @@ struct CompileAssert {};
 // semantically, one should either use disallow both or neither. Try to
 // avoid these in new code.
 #undef DISALLOW_COPY
-#define DISALLOW_COPY(TypeName)         \
-    TypeName(const TypeName&) = delete; \
-    void operator=(const TypeName&) = delete
+#define DISALLOW_COPY(TypeName) TypeName(const TypeName&) = delete;
 
 #undef DISALLOW_MOVE
-#define DISALLOW_MOVE(TypeName)    \
-    TypeName(TypeName&&) = delete; \
-    void operator=(TypeName&&) = delete
+#define DISALLOW_MOVE(TypeName) TypeName(TypeName&&) = delete;
+
+#undef DISALLOW_ASSIGN
+#define DISALLOW_ASSIGN(TypeName) void operator=(const TypeName&) = delete
+
+#undef DISALLOW_MOVE_ASSIGN
+#define DISALLOW_MOVE_ASSIGN(TypeName) void operator=(TypeName&&) = delete
+
+#undef DISALLOW_COPY_AND_ASSIGN
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+    DISALLOW_COPY(TypeName);               \
+    DISALLOW_ASSIGN(TypeName)
+
+#undef DISALLOW_MOVE_AND_ASSIGN
+#define DISALLOW_MOVE_AND_ASSIGN(TypeName) \
+    DISALLOW_MOVE(TypeName);               \
+    DISALLOW_MOVE_ASSIGN(TypeName)
 
 #undef DISALLOW_COPY_AND_MOVE
 #define DISALLOW_COPY_AND_MOVE(TypeName) \
-    DISALLOW_COPY(TypeName);             \
-    DISALLOW_MOVE(TypeName)
+    DISALLOW_COPY_AND_ASSIGN(TypeName);  \
+    DISALLOW_MOVE_AND_ASSIGN(TypeName)
 
 // A macro to disallow all the implicit constructors, namely the
 // default constructor, copy constructor and operator= functions.
