@@ -216,6 +216,7 @@ public class IcebergScanNode extends ScanNode {
                 BiMap<Integer, PartitionField> indexToField = getIdentityPartitions(task.spec());
                 if (!indexToField.isEmpty()) {
                     List<Integer> partitionSlotIds = task.spec().fields().stream()
+                            .filter(x -> indexToField.inverse().get(x) != null)
                             .map(x -> desc.getColumnSlot(x.name()))
                             .filter(Objects::nonNull)
                             .map(SlotDescriptor::getId)
@@ -224,6 +225,7 @@ public class IcebergScanNode extends ScanNode {
                     List<Integer> indexes = task.spec().fields().stream()
                             .filter(x -> desc.getColumnSlot(x.name()) != null)
                             .map(x -> indexToField.inverse().get(x))
+                            .filter(Objects::nonNull)
                             .collect(Collectors.toList());
                     PartitionKey partitionKey = getPartitionKey(partition, task.spec(), indexes, indexToField);
 
