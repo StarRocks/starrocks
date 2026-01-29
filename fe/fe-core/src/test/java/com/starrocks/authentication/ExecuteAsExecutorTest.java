@@ -26,6 +26,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
+import com.starrocks.qe.SetRoleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -36,6 +37,7 @@ import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
@@ -128,6 +130,42 @@ public class ExecuteAsExecutorTest {
         ExecuteAsExecutor.execute(executeAsStmt2, context);
         Assertions.assertEquals(Set.of("group2"), context.getGroups());
         Assertions.assertEquals(Set.of(roleId2), context.getCurrentRoleIds());
+    }
+
+    @Test
+    void testExecuteAsChainUsesOriginalLoginUserForImpersonateCheck() throws Exception {
+        // Create users
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("admin_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("u2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Grant admin_user IMPERSONATE on u1 and u2 (but u1 does NOT have IMPERSONATE on u2)
+        GrantPrivilegeStmt grantU1 = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER u1 TO admin_user", new ConnectContext());
+        authorizationMgr.grant(grantU1);
+        GrantPrivilegeStmt grantU2 = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER u2 TO admin_user", new ConnectContext());
+        authorizationMgr.grant(grantU2);
+
+        // Login as admin_user
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context, "admin_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        // Switch to u1
+        ExecuteAsStmt executeAsU1 = new ExecuteAsStmt(new UserRef("u1", "%"), false);
+        ExecuteAsExecutor.execute(executeAsU1, context);
+        Assertions.assertEquals("u1", context.getAccessControlContext().getCurrentUserIdentity().getUser());
+
+        // Now attempt to switch to u2 on the same session:
+        // permission check should be based on the original login user (admin_user), not current (u1).
+        ExecuteAsStmt executeAsU2 = new ExecuteAsStmt(new UserRef("u2", "%"), false);
+        Assertions.assertDoesNotThrow(() -> Authorizer.check(executeAsU2, context));
+
+        ExecuteAsExecutor.execute(executeAsU2, context);
+        Assertions.assertEquals("u2", context.getAccessControlContext().getCurrentUserIdentity().getUser());
     }
 
     @Test
@@ -295,5 +333,71 @@ public class ExecuteAsExecutorTest {
 
         // Execute as target user should fail
         Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(executeAsStmt, context));
+    }
+
+    @Test
+    void testSetRoleBeforeExecuteAsIsHonoredWhenChaining() throws Exception {
+        // Test that SET ROLE before EXECUTE AS is honored when chaining.
+        // This prevents privilege escalation where a user could drop roles via SET ROLE,
+        // then chain EXECUTE AS using privileges from the dropped roles.
+
+        // Create roles and users
+        authorizationMgr.createRole(new CreateRoleStmt(List.of("impersonate_role"), true, ""));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("login_user", "%"), true, null, List.of("impersonate_role"),
+                        Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("target_user1", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("target_user2", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Grant IMPERSONATE on both target users to impersonate_role
+        GrantPrivilegeStmt grant1 = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER target_user1 TO ROLE impersonate_role", new ConnectContext());
+        authorizationMgr.grant(grant1);
+        GrantPrivilegeStmt grant2 = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER target_user2 TO ROLE impersonate_role", new ConnectContext());
+        authorizationMgr.grant(grant2);
+
+        // Login as login_user (has impersonate_role by default)
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticate(context, "login_user", "%", MysqlPassword.EMPTY_PASSWORD);
+
+        long roleId = authorizationMgr.getRoleIdByNameAllowNull("impersonate_role");
+        Assertions.assertEquals(Set.of(roleId), context.getCurrentRoleIds());
+        Assertions.assertEquals(Set.of(roleId), context.getAccessControlContext().getOriginalRoleIds());
+
+        // SET ROLE NONE - drop all roles
+        SetRoleStmt setRoleNone = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser("SET ROLE NONE", context);
+        SetRoleExecutor.execute(setRoleNone, context);
+        Assertions.assertEquals(Set.of(), context.getCurrentRoleIds());
+        // originalRoleIds is still the login snapshot at this point
+        Assertions.assertEquals(Set.of(roleId), context.getAccessControlContext().getOriginalRoleIds());
+
+        // EXECUTE AS target_user1 should fail because we dropped the role with IMPERSONATE privilege
+        UserIdentity targetUser1 = new UserIdentity("target_user1", "%");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkUserAction(context, targetUser1, PrivilegeType.IMPERSONATE));
+
+        // Re-activate the role
+        SetRoleStmt setRoleAll = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser("SET ROLE ALL", context);
+        SetRoleExecutor.execute(setRoleAll, context);
+        Assertions.assertEquals(Set.of(roleId), context.getCurrentRoleIds());
+
+        // Now EXECUTE AS target_user1 should succeed
+        ExecuteAsStmt executeAs1 = new ExecuteAsStmt(new UserRef("target_user1", "%"), false);
+        Authorizer.check(executeAs1, context);
+        ExecuteAsExecutor.execute(executeAs1, context);
+        Assertions.assertEquals("target_user1", context.getCurrentUserIdentity().getUser());
+
+        // After first EXECUTE AS, originalRoleIds should be snapshotted with the roles active at that time
+        Assertions.assertEquals(Set.of(roleId), context.getAccessControlContext().getOriginalRoleIds());
+
+        // Chain EXECUTE AS to target_user2 should succeed (using snapshotted originalRoleIds)
+        UserIdentity targetUser2 = new UserIdentity("target_user2", "%");
+        Authorizer.checkUserAction(context, targetUser2, PrivilegeType.IMPERSONATE);
+        ExecuteAsStmt executeAs2 = new ExecuteAsStmt(new UserRef("target_user2", "%"), false);
+        ExecuteAsExecutor.execute(executeAs2, context);
+        Assertions.assertEquals("target_user2", context.getCurrentUserIdentity().getUser());
     }
 }

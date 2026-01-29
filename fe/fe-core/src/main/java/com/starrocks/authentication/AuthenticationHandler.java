@@ -208,6 +208,11 @@ public class AuthenticationHandler {
         // Set current role IDs based on the authenticated user and groups
         context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
 
+        // Snapshot original(login) user context once for later authorization checks (e.g. EXECUTE AS chain).
+        // It should remain unchanged even if currentUserIdentity is modified by EXECUTE AS.
+        context.getAccessControlContext().initOriginalUserContext(
+                authenticationResult.authenticatedUser, groups, context.getCurrentRoleIds());
+
         // Step 5: Validate group access permissions
         // If authentication result specifies allowed groups, verify user belongs to at least one
         // This ensures users can only access groups they are authorized for
