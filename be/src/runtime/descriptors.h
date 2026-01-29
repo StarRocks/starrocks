@@ -66,30 +66,6 @@ class PTupleDescriptor;
 class PSlotDescriptor;
 class RowPositionDescriptor;
 
-// Location information for null indicator bit for particular slot.
-// For non-nullable slots, the byte_offset will be 0 and the bit_mask will be 0.
-// This allows us to do the NullIndicatorOffset operations (tuple + byte_offset &/|
-// bit_mask) regardless of whether the slot is nullable or not.
-// This is more efficient than branching to check if the slot is non-nullable.
-struct NullIndicatorOffset {
-    int byte_offset;
-    uint8_t bit_mask;   // to extract null indicator
-    uint8_t bit_offset; // only used to serialize, from 1 to 8
-
-    NullIndicatorOffset(int byte_offset, int bit_offset_)
-            : byte_offset(byte_offset),
-              bit_mask(bit_offset_ == -1 ? 0 : 1 << (7 - bit_offset_)),
-              bit_offset(bit_offset_) {}
-
-    bool equals(const NullIndicatorOffset& o) const {
-        return this->byte_offset == o.byte_offset && this->bit_mask == o.bit_mask;
-    }
-
-    std::string debug_string() const;
-};
-
-std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indicator);
-
 class SlotDescriptor {
 public:
     SlotDescriptor(SlotId id, std::string name, TypeDescriptor type);
@@ -100,7 +76,7 @@ public:
     TupleId parent() const { return _parent; }
     bool is_materialized() const { return _is_materialized; }
     bool is_output_column() const { return _is_output_column; }
-    bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
+    bool is_nullable() const { return _is_nullable; }
 
     int slot_size() const { return _slot_size; }
 
@@ -125,7 +101,6 @@ private:
     const SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
-    const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
     const int32_t _col_unique_id;
     const std::string _col_physical_name;
@@ -140,7 +115,6 @@ private:
     const bool _is_materialized;
     const bool _is_output_column;
 
-    // @todo: replace _null_indicator_offset when remove _null_indicator_offset
     const bool _is_nullable;
 
     SlotDescriptor(const PSlotDescriptor& pdesc);

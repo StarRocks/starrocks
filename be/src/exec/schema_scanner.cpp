@@ -264,9 +264,6 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     }
 
     int offset = (null_column + 7) / 8;
-    int null_byte = 0;
-    int null_bit = 0;
-
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         const TypeDescriptor& type_desc = _columns[i].type;
@@ -276,18 +273,7 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
 
-        if (_columns[i].is_null) {
-            t_slot_desc.__set_nullIndicatorByte(null_byte);
-            t_slot_desc.__set_nullIndicatorBit(null_bit);
-            null_bit = (null_bit + 1) % 8;
-
-            if (0 == null_bit) {
-                null_byte++;
-            }
-        } else {
-            t_slot_desc.__set_nullIndicatorByte(0);
-            t_slot_desc.__set_nullIndicatorBit(-1);
-        }
+        t_slot_desc.__set_isNullable(_columns[i].is_null);
 
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);

@@ -200,12 +200,6 @@ public class SlotDescriptor {
 
     public void setIsNullable(boolean value) {
         isNullable = value;
-        // NullIndicatorBit is deprecated in BE, we mock bit to avoid BE crash
-        if (isNullable) {
-            nullIndicatorBit = 0;
-        } else {
-            nullIndicatorBit = -1;
-        }
     }
 
     public String getLabel() {
@@ -239,11 +233,6 @@ public class SlotDescriptor {
 
     // TODO
     public TSlotDescriptor toThrift() {
-        if (isNullable) {
-            nullIndicatorBit = 1;
-        } else {
-            nullIndicatorBit = -1;
-        }
         Preconditions.checkState(isMaterialized, "isMaterialized must be true");
         TSlotDescriptor tSlotDescriptor = new TSlotDescriptor();
         tSlotDescriptor.setId(id.asInt());
@@ -270,8 +259,6 @@ public class SlotDescriptor {
         }
         tSlotDescriptor.setColumnPos(-1);
         tSlotDescriptor.setByteOffset(-1);
-        tSlotDescriptor.setNullIndicatorByte(-1);
-        tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
         String colName = "";
         if (column != null) {
             colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
