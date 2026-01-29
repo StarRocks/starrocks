@@ -33,6 +33,7 @@ import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -689,34 +690,15 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .build();
     }
 
-    private <K, V> Pair<List<Object>, Long> sampleFromCache(AsyncLoadingCache<K, V> cache) {
-        Map<K, CompletableFuture<V>> map = cache.asMap();
-        if (map.isEmpty()) {
-            return Pair.create(List.of(), 0L);
-        }
-        Map.Entry<K, CompletableFuture<V>> next = map.entrySet().iterator().next();
-        V value = null;
-        try {
-            value = next.getValue().getNow(null);
-        } catch (Exception e) {
-            LOG.warn("sample load statistic cache failed", e);
-        }
-        if (value == null) {
-            return Pair.create(List.of(next.getKey()), cache.synchronous().estimatedSize());
-        }
-        return Pair.create(List.of(next.getKey(), value), cache.synchronous().estimatedSize());
-    }
-
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return List.of(
-                sampleFromCache(tableStatsCache),
-                sampleFromCache(columnStatistics),
-                sampleFromCache(partitionStatistics),
-                sampleFromCache(histogramCache),
-                sampleFromCache(connectorHistogramCache),
-                sampleFromCache(connectorTableCachedStatistics)
-        );
+    public long estimateSize() {
+        return Estimator.estimate(tableStatsCache.asMap()) +
+                Estimator.estimate(columnStatistics.asMap(), 6) +
+                Estimator.estimate(partitionStatistics.asMap()) +
+                Estimator.estimate(histogramCache.asMap()) +
+                Estimator.estimate(connectorTableCachedStatistics.asMap(), 7) +
+                Estimator.estimate(connectorHistogramCache.asMap()) +
+                Estimator.estimate(multiColumnStats.asMap());
     }
 
     private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
@@ -732,5 +714,4 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         
         return cacheBuilder.buildAsync(cacheLoader);
     }
-
 }

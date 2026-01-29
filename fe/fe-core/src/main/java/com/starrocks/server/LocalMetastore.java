@@ -5442,33 +5442,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        long totalCount = idToDb.values()
-                .stream()
-                .mapToInt(database -> {
-                    Locker locker = new Locker();
-                    locker.lockDatabase(database.getId(), LockType.READ);
-                    try {
-                        return database.getOlapPartitionsCount();
-                    } finally {
-                        locker.unLockDatabase(database.getId(), LockType.READ);
-                    }
-                }).sum();
-        List<Object> samples = new ArrayList<>();
-        // get every olap table's first partition
-        for (Database database : idToDb.values()) {
-            Locker locker = new Locker();
-            locker.lockDatabase(database.getId(), LockType.READ);
-            try {
-                samples.addAll(database.getPartitionSamples());
-            } finally {
-                locker.unLockDatabase(database.getId(), LockType.READ);
-            }
-        }
-        return Lists.newArrayList(Pair.create(samples, totalCount));
-    }
-
-    @Override
     public Map<String, Long> estimateCount() {
         long totalCount = idToDb.values()
                 .stream()

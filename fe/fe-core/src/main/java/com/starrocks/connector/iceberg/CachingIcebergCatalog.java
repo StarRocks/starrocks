@@ -22,12 +22,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -67,8 +67,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
-    private static final int MEMORY_META_SAMPLES = 10;
-    private static final int MEMORY_FILE_SAMPLES = 100;
     private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
     private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
@@ -173,11 +171,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.dataFileCache = enableCache ? Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
-                .weigher((Weigher<String, Set<DataFile>>) (String key, Set<DataFile> files) -> {
-                    long size = SizeEstimator.estimate(key);
-                    if (!files.isEmpty()) {
-                        size += 1L * SizeEstimator.estimate(files.iterator().next()) * files.size();
-                    }
+                .weigher((String key, Set<DataFile> files) -> {
+                    long size = Estimator.estimate(key) + Estimator.estimate(files, 15, 100);
                     return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
                 })
                 .maximumWeight(dataFileCacheSize)
@@ -191,11 +186,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.deleteFileCache = enableCache ? Caffeine.newBuilder()
                 .executor(executorService)
                 .expireAfterWrite(icebergProperties.getIcebergMetaCacheTtlSec(), SECONDS)
-                .weigher((Weigher<String, Set<DeleteFile>>) (String key, Set<DeleteFile> files) -> {
-                    long size = SizeEstimator.estimate(key);
-                    if (!files.isEmpty()) {
-                        size += 1L * SizeEstimator.estimate(files.iterator().next()) * files.size();
-                    }
+                .weigher((String key, Set<DeleteFile> files) -> {
+                    long size = Estimator.estimate(key) + Estimator.estimate(files, 15, 100);
                     return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
                 })
                 .maximumWeight(deleteFileCacheSize)
@@ -599,46 +591,33 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
-                        .stream()
-                        .limit(MEMORY_META_SAMPLES)
-                        .collect(Collectors.toList()),
-                databases.estimatedSize());
-
-        List<List<String>> partitionNames = getAllCachedPartitionNames();
-        List<Object> partitions = partitionNames
-                .stream()
-                .flatMap(List::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long partitionTotal = partitionNames
-                .stream()
-                .mapToLong(List::size)
-                .sum();
-        Pair<List<Object>, Long> partitionSamples = Pair.create(partitions, partitionTotal);
-
-        List<Object> dataFiles = dataFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long dataFilesTotal = dataFileCache.asMap().values()
+    public long estimateSize() {
+        List<DataFile> samples = new ArrayList<>();
+        long maxSamples = 100;
+        OUTER:
+        for (Set<DataFile> files : dataFileCache.asMap().values()) {
+            for (DataFile file : files) {
+                samples.add(file);
+                if (samples.size() >= maxSamples) {
+                    break OUTER;
+                }
+            }
+        }
+        double avgDataFileSize = samples.isEmpty() ? 0.0 :
+                (double) Estimator.estimate(samples, 15, samples.size()) / samples.size();
+        long totalDataFiles = dataFileCache.asMap().values()
                 .stream()
                 .mapToLong(Set::size)
                 .sum();
-        Pair<List<Object>, Long> dataFileSamples = Pair.create(dataFiles, dataFilesTotal);
-
-        List<Object> deleteFiles = deleteFileCache.asMap().values()
-                .stream().flatMap(Set::stream)
-                .limit(MEMORY_FILE_SAMPLES)
-                .collect(Collectors.toList());
-        long deleteFilesTotal = deleteFileCache.asMap().values()
-                .stream()
-                .mapToLong(Set::size)
-                .sum();
-        Pair<List<Object>, Long> deleteFileSamples = Pair.create(deleteFiles, deleteFilesTotal);
-
-        return Lists.newArrayList(dbSamples, partitionSamples, dataFileSamples, deleteFileSamples);
+        return Estimator.estimate(tables.asMap()) +
+                Estimator.estimate(databases.asMap()) +
+                Estimator.estimate(icebergProperties) +
+                (long) (avgDataFileSize * totalDataFiles) +
+                Estimator.estimate(deleteFileCache.asMap()) +
+                Estimator.estimate(metaFileCacheMap) +
+                Estimator.estimate(tableLatestAccessTime) +
+                Estimator.estimate(tableLatestRefreshTime) +
+                Estimator.estimate(partitionCache.asMap());
     }
 
     @Override

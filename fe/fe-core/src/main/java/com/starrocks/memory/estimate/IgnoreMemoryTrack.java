@@ -12,21 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.memory;
+package com.starrocks.memory.estimate;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.qe.QueryDetailQueue;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import java.util.Map;
-
-public class QueryTracker implements MemoryTrackable {
-    @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryDetail", QueryDetailQueue.getTotalQueriesCount());
-    }
-
-    @Override
-    public long estimateSize() {
-        return QueryDetailQueue.estimateSize();
-    }
+/**
+ * Annotation to mark fields or classes that should be excluded from memory tracking.
+ * - Fields annotated with @IgnoreMemoryTrack will be skipped during memory size estimation.
+ * - Classes annotated with @IgnoreMemoryTrack will return 0 for memory estimation.
+ */
+@Target({ElementType.FIELD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface IgnoreMemoryTrack {
 }
