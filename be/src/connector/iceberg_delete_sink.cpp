@@ -23,6 +23,7 @@
 #include "column/datum.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/partition_chunk_writer.h"
+#include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
@@ -343,6 +344,7 @@ Status IcebergDeleteSink::write_file_level_chunk(const std::string& partition,
     RETURN_IF_ERROR(writer->init());
 
     _file_writers[key] = writer;
+    _writers.push_back(writer);
     return writer->write(chunk);
 }
 

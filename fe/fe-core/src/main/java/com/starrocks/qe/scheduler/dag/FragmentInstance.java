@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
+import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -354,7 +355,9 @@ public class FragmentInstance {
 
         DataSink dataSink = fragment.getSink();
         int dop = fragment.getPipelineDop();
-        if (!(dataSink instanceof IcebergTableSink || dataSink instanceof HiveTableSink
+        if (!(dataSink instanceof IcebergTableSink 
+                || dataSink instanceof IcebergDeleteSink
+                || dataSink instanceof HiveTableSink
                 || dataSink instanceof TableFunctionTableSink)) {
             return dop;
         } else {
