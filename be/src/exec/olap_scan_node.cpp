@@ -48,6 +48,9 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 
+// Print log with query id.
+#define QUERY_LOG_IF(level, cond) LOG_IF(level, cond) << "[" << tls_thread_status.query_id() << "] "
+
 namespace starrocks {
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
