@@ -107,10 +107,11 @@ enum TDebugAction {
 }
 
 struct TKeyRange {
-  1: required i64 begin_key
-  2: required i64 end_key
+  1: optional i64 begin_key
+  2: optional i64 end_key
   3: required Types.TPrimitiveType column_type
   4: required string column_name
+  5: optional list<Exprs.TExpr> list_values
 }
 
 // The information contained in subclasses of ScanNode captured in two separate
@@ -657,6 +658,8 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+
+  55: optional list<Exprs.TExpr> partition_conjuncts
 }
 
 struct TJDBCScanNode {

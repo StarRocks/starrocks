@@ -22,10 +22,12 @@
 
 #include "column/chunk.h"
 #include "column/column_access_path.h"
+#include "common/status.h"
 #include "exec/olap_common.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
+#include "exprs/expr_context.h"
 #include "runtime/global_dict/parser.h"
 
 namespace starrocks {
@@ -168,6 +170,9 @@ private:
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 
+    Status _prune_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges,
+                              std::vector<TScanRangeParams>* pruned_scan_ranges);
+
 private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
@@ -210,6 +215,8 @@ private:
     std::optional<bool> _partition_order_hint;
 
     std::vector<ExprContext*> _bucket_exprs;
+
+    std::vector<ExprContext*> _partition_exprs;
 
     // profile
     RuntimeProfile* _scan_profile = nullptr;
