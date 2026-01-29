@@ -84,8 +84,6 @@ public class SlotDescriptor {
     // physical layout parameters
     private int byteSize;
     private int byteOffset;  // within tuple
-    private int nullIndicatorByte;  // index into byte array
-    private int nullIndicatorBit; // index within byte
     private int slotIdx;          // index within tuple struct
 
     // used for load to get more information of varchar and decimal
@@ -113,8 +111,6 @@ public class SlotDescriptor {
         this.id = id;
         this.parent = parent;
         this.byteOffset = src.byteOffset;
-        this.nullIndicatorBit = src.nullIndicatorBit;
-        this.nullIndicatorByte = src.nullIndicatorByte;
         this.slotIdx = src.slotIdx;
         this.isMaterialized = src.isMaterialized;
         this.isOutputColumn = src.isOutputColumn;
@@ -277,10 +273,8 @@ public class SlotDescriptor {
         String parentTupleId = (parent == null) ? "null" : parent.getId().toString();
         return MoreObjects.toStringHelper(this).add("id", id.asInt()).add("parent", parentTupleId)
                 .add("col", colStr).add("type", typeStr).add("materialized", isMaterialized)
-                .add("isOutputColumns", isOutputColumn)
+                .add("isOutputColumns", isOutputColumn).add("isNullable", isNullable)
                 .add("byteSize", byteSize).add("byteOffset", byteOffset)
-                .add("nullIndicatorByte", nullIndicatorByte)
-                .add("nullIndicatorBit", nullIndicatorBit)
                 .add("slotIdx", slotIdx).toString();
     }
 
