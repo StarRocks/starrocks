@@ -15,10 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.thrift.TVariant;
-import com.starrocks.thrift.TVariantType;
 import com.starrocks.type.BooleanType;
-import com.starrocks.type.TypeSerializer;
 
 import java.util.Objects;
 
@@ -54,15 +51,6 @@ public class BoolVariant extends Variant {
     @Override
     public String getStringValue() {
         return value ? "TRUE" : "FALSE";
-    }
-
-    @Override
-    public TVariant toThrift() {
-        TVariant variant = new TVariant();
-        variant.setType(TypeSerializer.toThrift(type));
-        variant.setValue(getStringValue());
-        variant.setVariant_type(TVariantType.NORMAL_VALUE);
-        return variant;
     }
 
     @Override
