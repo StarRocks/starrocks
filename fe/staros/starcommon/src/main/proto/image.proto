@@ -1,0 +1,108 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "manager_common.proto";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+message StarManagerImageMetaHeader {
+    uint64 generate_time = 1;
+    uint64 replay_journal_id = 2;
+    uint64 next_global_id = 3;
+    string digest_algorithm = 4;
+    LeaderInfo leader_info = 5;
+    bytes checksum = 10; // the checksum of the header without this field
+}
+
+message StarManagerImageMetaFooter {
+    bytes checksum = 1;
+}
+
+message WorkerManagerImageMetaHeader {
+    string digest_algorithm = 1;
+    uint32 batch_size = 2; // worker batch size
+    uint32 num_worker = 3; // workers written in batches
+    uint32 num_service_worker_group = 4;
+}
+
+message WorkerManagerImageMetaFooter {
+    bytes checksum = 1;
+}
+
+message WorkerManagerServiceWorkerGroup {
+    string service_id = 1;
+    uint32 num_worker_group = 2; // number of worker groups in the service worker group
+    repeated bytes worker_group_details = 3; // serialized bytes of worker group
+}
+
+message WorkerManagerWorkers {
+    repeated bytes worker = 1; // serialized bytes of worker
+}
+
+message ServiceManagerImageMetaHeader {
+    string digest_algorithm = 1;
+    uint32 num_service_template = 2;
+    uint32 num_service = 3;
+}
+
+message ServiceManagerImageMetaFooter {
+    bytes checksum = 1;
+}
+
+message ShardManagerImageMetaHeader {
+    string digest_algorithm = 1;
+    uint32 num_shard = 2;
+    uint32 num_shard_group = 3;
+    uint32 num_meta_group = 4;
+}
+
+message ShardManagerImageMetaFooter {
+    bytes checksum = 1;
+}
+
+message FileStoreMgrImageMetaHeader {
+    string digest_algorithm = 1;
+    uint32 num_file_store = 2;
+}
+
+message FileStoreMgrImageMetaFooter {
+    bytes checksum = 1;
+}
+
+message ServiceManageImageMetaHeader {
+    string digest_algorithm = 1;
+    uint32 num_service_template = 2;
+    uint32 num_service = 3;
+}
+
+message ServiceManagerImageData {
+    // raw data, serialized from service templates or services
+    repeated bytes data = 1;
+}
+
+message ServiceManagerShardManagerHeader {
+    string service_id = 1;
+}
+
+message ServiceManageImageMetaFooter {
+    bytes checksum = 1;
+}
+
+message ServiceManagerFileStoreMgrHeader {
+    string service_id = 1;
+}

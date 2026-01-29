@@ -1,0 +1,377 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "file_store.proto";
+import "star_status.proto";
+import "worker.proto";
+
+package staros;
+option java_package = "com.staros.proto";
+option java_multiple_files = true;
+
+enum ShardState {
+    NORMAL = 0;
+}
+
+enum ReplicaRole {
+    PRIMARY   = 0;
+    SECONDARY = 1;
+}
+
+enum ReplicaState {
+    REPLICA_OK = 0;
+    // the replica is scaling-out in progress
+    REPLICA_SCALE_OUT = 1;
+    // the replica is scaling-in in progress
+    REPLICA_SCALE_IN = 2;
+}
+
+message ReplicaInfo {
+    WorkerInfo worker_info = 1;
+    ReplicaRole replica_role = 2;
+    ReplicaState replica_state = 3;
+    // the initial timestamp when enters the replica_state, used for replica state transition based on timestamp
+    int64 replica_state_timestamp = 4;
+    // Mark the replica as temporary
+    bool is_temp = 5;
+}
+
+// reduced replica info, attached in AddShardInfo sending to the starlet side.
+message ReplicaInfoLite {
+    uint64 worker_id = 1;
+    ReplicaState replica_state = 2;
+}
+
+// Value of the enum is the precedence order of the PlacementPolicy, higher number takes higher priority.
+enum PlacementPolicy {
+    NONE = 0;
+    RANDOM = 10;
+    SPREAD = 50;
+    PACK = 100;
+    EXCLUDE = 150;
+}
+
+enum PlacementRelationship {
+    WITH_NONE = 0;
+    WITH_SHARD = 1;
+}
+
+message PlacementPreference {
+    PlacementPolicy placement_policy = 1;
+    PlacementRelationship placement_relationship = 2;
+    uint64 relationship_target_id = 3;
+}
+
+message ShardInfo {
+    string service_id = 1;
+    repeated uint64 group_ids = 2;
+    uint64 shard_id = 3;
+    ShardState shard_state = 4;
+    FilePathInfo file_path = 5;
+    FileCacheInfo file_cache = 6;
+    repeated ReplicaInfo replica_info = 7;
+    map<string, string> shard_properties = 8;
+    uint32 expected_replica_num = 9;
+    int32 hash_code = 10;
+}
+
+message CreateShardInfo {
+    repeated uint64 group_ids = 1;
+    uint64 shard_id = 2;
+    uint32 replica_count = 3;
+    map<string, string> shard_properties = 4;
+    FilePathInfo path_info = 5;
+    FileCacheInfo cache_info = 6;
+    repeated PlacementPreference placement_preferences = 7;
+    // optional, schedule to specific worker group immediately after creation.
+    uint64 schedule_to_worker_group = 8;
+}
+
+message CreateShardRequest {
+    string service_id = 1;
+    repeated CreateShardInfo create_shard_infos = 2;
+}
+
+message CreateShardResponse {
+    StarStatus status = 1;
+    repeated ShardInfo shard_info = 2;
+}
+
+message DeleteShardRequest {
+    string service_id = 1;
+    repeated uint64 shard_id = 2;
+}
+
+message DeleteShardResponse {
+    StarStatus status = 1;
+}
+
+enum CacheEnableState {
+    NOT_SET = 0;
+    ENABLED = 1;
+    DISABLED = 2;
+}
+
+message UpdateShardInfo {
+    uint64 shard_id = 1;
+    CacheEnableState enable_cache = 2;
+}
+
+message UpdateShardRequest {
+    string service_id = 1;
+    repeated UpdateShardInfo update_shard_infos = 2;
+}
+
+message UpdateShardResponse {
+    StarStatus status = 1;
+}
+
+message GetShardRequest {
+    string service_id = 1;
+    repeated uint64 shard_id = 2;
+    // optional, only list shard replica info in specific worker group
+    uint64 worker_group_id = 3;
+}
+
+message GetShardResponse {
+    StarStatus status = 1;
+    repeated ShardInfo shard_info = 2;
+}
+
+message ListShardRequest {
+    string service_id = 1;
+    repeated uint64 group_ids = 2;
+    // optional, only list shard replica info in specific worker group
+    uint64 worker_group_id = 3;
+    bool without_replica_info = 4;
+}
+
+message ShardInfoList {
+    repeated ShardInfo shard_infos = 1;
+};
+
+message ListShardResponse {
+    StarStatus status = 1;
+    repeated ShardInfoList shard_info_lists = 2;
+}
+
+message CreateShardJournalInfo {
+    repeated ShardInfo shard_infos = 1;
+    repeated ShardGroupInfo shard_group_infos = 2;
+}
+
+message ShardGroupInfo {
+    string service_id = 1;
+    uint64 group_id = 2;
+    repeated uint64 shard_ids = 3;
+    PlacementPolicy policy = 4;
+    bool anonymous = 5;
+    uint64 meta_group_id = 6;
+    map<string, string> labels = 7;
+    map<string, string> properties = 8;
+}
+
+message CreateShardGroupInfo {
+    PlacementPolicy policy = 1;
+    map<string, string> labels = 2;
+    map<string, string> properties = 3;
+}
+
+message CreateShardGroupRequest {
+    string service_id = 1;
+    repeated CreateShardGroupInfo create_shard_group_infos = 2;
+}
+
+message CreateShardGroupResponse {
+    StarStatus status = 1;
+    repeated ShardGroupInfo shard_group_infos = 2;
+}
+
+message DeleteShardGroupInfo {
+    repeated uint64 group_ids = 1;
+    bool cascade_delete_shard = 2; // whether delete shard as well, default is false
+}
+message DeleteShardGroupRequest {
+    string service_id = 1;
+    DeleteShardGroupInfo delete_info = 2;
+}
+
+message DeleteShardGroupResponse {
+    StarStatus status = 1;
+}
+
+message UpdateShardGroupInfo {
+    uint64 group_id = 1;
+    CacheEnableState enable_cache = 2;
+}
+
+message UpdateShardGroupRequest {
+    string service_id = 1;
+    repeated UpdateShardGroupInfo update_shard_group_infos = 2;
+}
+
+message UpdateShardGroupResponse {
+    StarStatus status = 1;
+}
+
+message ListShardGroupRequest {
+    string service_id = 1;
+    bool include_anonymous_group = 2;
+    uint64 start_group_id = 3;
+}
+
+message ListShardGroupResponse {
+    StarStatus status = 1;
+    repeated ShardGroupInfo shard_group_infos = 2;
+    uint64 next_group_id = 3; // if 0, it means reaches end
+}
+
+message GetShardGroupRequest {
+    string service_id = 1;
+    repeated uint64 shard_group_id = 2;
+}
+
+message GetShardGroupResponse {
+    StarStatus status = 1;
+    repeated ShardGroupInfo shard_group_info = 2;
+}
+
+message CreateMetaGroupInfo {
+    uint64 meta_group_id = 1;
+    repeated uint64 shard_group_ids = 2;
+    PlacementPolicy placement_policy = 3;
+}
+
+message CreateMetaGroupRequest {
+    string service_id = 1;
+    CreateMetaGroupInfo create_meta_group_info = 2;
+}
+
+message CreateMetaGroupResponse {
+    StarStatus status = 1;
+    MetaGroupInfo meta_group_info = 2;
+}
+
+message DeleteMetaGroupInfo {
+    uint64 meta_group_id = 1;
+}
+
+message DeleteMetaGroupRequest {
+    string service_id = 1;
+    DeleteMetaGroupInfo delete_meta_group_info = 2;
+}
+
+message DeleteMetaGroupResponse {
+    StarStatus status = 1;
+}
+
+message JoinMetaGroupInfo {
+    uint64 meta_group_id = 1;
+}
+
+message QuitMetaGroupInfo {
+    uint64 meta_group_id = 1;
+    bool delete_meta_group_if_empty = 2;
+}
+
+/* id info to help move shard groups from src meta group to dst meta group */
+message TransferMetaGroupInfo {
+    uint64 src_meta_group_id = 1;
+    uint64 dst_meta_group_id = 2;
+    bool delete_src_meta_group_if_empty = 3;
+}
+
+message UpdateMetaGroupInfo {
+    repeated uint64 shard_group_ids = 1;
+    oneof info {
+        JoinMetaGroupInfo join_info = 2;
+        QuitMetaGroupInfo quit_info = 3;
+        TransferMetaGroupInfo transfer_info = 4;
+    }
+}
+
+message UpdateMetaGroupRequest {
+    string service_id = 1;
+    UpdateMetaGroupInfo update_meta_group_info = 2;
+}
+
+message UpdateMetaGroupResponse {
+    StarStatus status = 1;
+}
+
+message QueryMetaGroupStableRequest {
+    // required
+    string service_id = 1;
+    // required
+    uint64 meta_group_id = 2;
+    // optional, if not given, will query the default worker group
+    uint64 worker_group_Id = 3;
+}
+
+message QueryMetaGroupStableResponse {
+    StarStatus status = 1;
+    bool is_stable = 2;
+}
+
+message MetaGroupInfo {
+    string service_id = 1;
+    uint64 meta_group_id = 2;
+    repeated uint64 shard_group_ids = 3;
+    PlacementPolicy placement_policy = 4;
+}
+
+message GetMetaGroupRequest {
+    string service_id = 1;
+    uint64 meta_group_id = 2;
+}
+
+message GetMetaGroupResponse {
+    StarStatus status = 1;
+    MetaGroupInfo meta_group_info = 2;
+}
+
+message ListMetaGroupRequest {
+    string service_id = 1;
+}
+
+message ListMetaGroupResponse {
+    StarStatus status = 1;
+    repeated MetaGroupInfo meta_group_infos = 2;
+}
+
+message MetaGroupJournalInfo {
+    MetaGroupInfo meta_group_info = 1;
+    oneof info {
+        CreateMetaGroupInfo create_info = 2;
+        DeleteMetaGroupInfo delete_info = 3;
+        UpdateMetaGroupInfo update_info = 4;
+    }
+}
+
+message ReplicaUpdateInfo {
+    uint64 shard_id = 1;
+    ReplicaState replica_state = 2;
+}
+
+message UpdateShardReplicaRequest {
+    string service_id = 1;
+    uint64 worker_id = 2;
+    repeated ReplicaUpdateInfo replica_update_infos = 3;
+}
+
+message UpdateShardReplicaResponse {
+    StarStatus status = 1;
+}

@@ -114,8 +114,8 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp")
     implementation("com.squareup.okio:okio")
     implementation("com.starrocks:spark-dpp")
-    implementation("com.starrocks:starclient")
-    implementation("com.starrocks:starmanager")
+    implementation(project(":staros:starclient"))
+    implementation(project(":staros:starmanager"))
     implementation("com.starrocks:starrocks-bdb-je") {
         exclude(group = "org.checkerframework", module = "checker-qual")
     }
