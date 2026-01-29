@@ -37,6 +37,7 @@ public class ColumnType {
         STRING,
         BINARY,
         DATE,
+        TIME,
         // INT96 timestamp type, hive compatible (hive version < 4.x)
         DATETIME,
         // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MICROS)
@@ -79,8 +80,13 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("double", TypeValue.DOUBLE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
+        // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
+        // so it won't trouble hudi reader to map hudi type to hive type
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("time", TypeValue.TIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
@@ -97,11 +103,6 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
 
-        // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
-        // so it won't trouble hudi reader to map hudi type to hive type
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
-
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.SHORT, 2);
@@ -114,10 +115,11 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
-        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATE, 16);
-        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME, 16);
-        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MICROS, 16);
-        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MILLIS, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATE, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.TIME, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MICROS, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MILLIS, 8);
     }
 
     @Override
