@@ -77,6 +77,7 @@ public class JDBCScanner {
             config.setConnectionTimeout(scanContext.getConnectionTimeoutMs());
             config.setMaxLifetime(scanContext.getConnectionMaxLifetimeMs());
             config.setKeepaliveTime(scanContext.getConnectionKeepaliveTimeMs());
+
             HikariDataSource hikariDataSource = new HikariDataSource(config);
             // hikari doesn't support user-provided class loader, we should save them ourselves to ensure that
             // the classes of result data are loaded by the same class loader, otherwise we may encounter

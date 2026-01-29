@@ -67,7 +67,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     private static final ExecutorService NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("jdbc-network-timeout-%d").build());
     private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
-            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse", "vertica");
+            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse", "vertica", "gooddata");
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -130,6 +130,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             return new OracleSchemaResolver();
         } else if (driverClass.contains("sqlserver")) {
             return new SqlServerSchemaResolver();
+        } else if (driverClass.contains("gooddata")) {
+            return new GoodDataSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -155,6 +157,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return new ClickhouseSchemaResolver(properties);
             case "vertica":
                 return new VerticaSchemaResolver();
+            case "gooddata":
+                return new GoodDataSchemaResolver();
             default:
                 throw new StarRocksConnectorException(
                         "Unknown schema_resolver: " + resolverType +
