@@ -163,6 +163,22 @@ public class Tracers {
         tracers.moduleMask |= 1 << module.ordinal();
     }
 
+    public static void enableTraceModule(Module m) {
+        if (m == null || m == Module.NONE) {
+            return;
+        }
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.moduleMask |= 1 << m.ordinal();
+    }
+
+    public static void enableTraceMode(Mode m) {
+        if (m == null || m == Mode.NONE) {
+            return;
+        }
+        Tracers tracers = THREAD_LOCAL.get();
+        tracers.modeMask |= 1 << m.ordinal();
+    }
+
     public static void close() {
         THREAD_LOCAL.remove();
     }
