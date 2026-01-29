@@ -148,6 +148,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -2316,6 +2317,13 @@ public class ShowExecutor {
                 throw new SemanticException(e.getMessage());
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), results);
+        }
+
+        @Override
+        public ShowResultSet visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                      ConnectContext context) {
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement),
+                    GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotShowResult());
         }
 
         @Override
