@@ -517,6 +517,7 @@ Status LakePersistentIndex::prepare_merging_iterator(
         }
         read_options.shared_rssid = sstable_pb.shared_rssid();
         read_options.shared_version = sstable_pb.shared_version();
+        read_options.rssid_offset = sstable_pb.rssid_offset();
         read_options.delvec = merging_sstable->delvec();
         sstable::Iterator* iter = merging_sstable->new_iterator(read_options);
         iters.emplace_back(iter);
