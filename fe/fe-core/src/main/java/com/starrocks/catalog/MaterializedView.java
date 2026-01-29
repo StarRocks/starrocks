@@ -29,6 +29,8 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
+import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
@@ -74,8 +76,10 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
+import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -2615,6 +2619,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
                     connectContext.setDatabase(currentDBName);
                     this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+                    clearHeavyObjectFromParseNode(this.defineQueryParseNode);
                 } catch (Exception e) {
                     // ignore
                     LOG.warn("parse original view define sql failed:", e);
@@ -2625,6 +2630,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     try {
                         connectContext.setDatabase(db.getOriginName());
                         this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                        clearHeavyObjectFromParseNode(this.defineQueryParseNode);
                     } catch (Exception e) {
                         // ignore
                         LOG.warn("parse view define sql failed:", e);
@@ -2633,6 +2639,27 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         return this.defineQueryParseNode;
+    }
+
+    //To avoid mv hold the heavy object.
+    private void clearHeavyObjectFromParseNode(ParseNode parseNode) {
+        if (parseNode == null) {
+            return;
+        }
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitTable(TableRelation node, Void context) {
+                Table table = node.getTable();
+                if (table instanceof IcebergTable) {
+                    Table light = new LightWeightIcebergTable((IcebergTable) table);
+                    node.setTable(light);
+                } else if (table instanceof DeltaLakeTable) {
+                    Table light = new LightWeightDeltaLakeTable((DeltaLakeTable) table);
+                    node.setTable(light);
+                }
+                return super.visitTable(node, context);
+            }
+        }.visit(parseNode, null);
     }
 
     /**
