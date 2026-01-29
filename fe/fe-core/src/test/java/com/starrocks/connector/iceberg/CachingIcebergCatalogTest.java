@@ -209,13 +209,15 @@ public class CachingIcebergCatalogTest {
             tables.put(key, heavyTable);
             OptionalInt weightHeavy = eviction.weightOf(key);
 
-            int snapshotSize = getStaticIntField("MEMORY_SNAPSHOT_SIZE");
-            int manifestSize = getStaticIntField("MEMORY_MANIFEST_SIZE");
-            int expectedDiff = (3 - 1) * snapshotSize + (5 - 2) * manifestSize;
+            long approxBytesPerSnapshot = getStaticLongField("APPROX_BYTES_PER_SNAPSHOT");
+            // Current weigher accounts primarily for snapshot count. It also adds a small per-snapshot overhead
+            // (currently 128 bytes) and other metadata collections (schemas/specs/etc). In this test those other
+            // collections are empty for both tables, so the delta should be driven only by snapshots.
+            long expectedDiff = (3L - 1L) * (approxBytesPerSnapshot + 128L);
 
             Assertions.assertTrue(weightLight.isPresent() && weightHeavy.isPresent());
             Assertions.assertTrue(weightHeavy.getAsInt() > weightLight.getAsInt());
-            Assertions.assertEquals(expectedDiff, weightHeavy.getAsInt() - weightLight.getAsInt());
+            Assertions.assertEquals(expectedDiff, (long) weightHeavy.getAsInt() - (long) weightLight.getAsInt());
         } finally {
             executorService.shutdownNow();
         }
@@ -226,6 +228,16 @@ public class CachingIcebergCatalogTest {
             java.lang.reflect.Field f = CachingIcebergCatalog.class.getDeclaredField(fieldName);
             f.setAccessible(true);
             return f.getInt(null);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private long getStaticLongField(String fieldName) {
+        try {
+            java.lang.reflect.Field f = CachingIcebergCatalog.class.getDeclaredField(fieldName);
+            f.setAccessible(true);
+            return f.getLong(null);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -254,6 +266,12 @@ public class CachingIcebergCatalogTest {
         Mockito.when(meta.currentSnapshot()).thenReturn(currentSnapshot);
         Mockito.when(meta.metadataFileLocation()).thenReturn("metadata-" + uuid);
         Mockito.when(meta.uuid()).thenReturn(uuid);
+        // Mock all methods used by estimateTableWeightBytes to avoid NullPointerException
+        Mockito.when(meta.schemas()).thenReturn(new ArrayList<>());
+        Mockito.when(meta.specs()).thenReturn(new ArrayList<>());
+        Mockito.when(meta.sortOrders()).thenReturn(new ArrayList<>());
+        Mockito.when(meta.properties()).thenReturn(new HashMap<>());
+        Mockito.when(meta.refs()).thenReturn(new HashMap<>());
         if (spec != null) {
             Mockito.when(meta.spec()).thenReturn(spec);
         }
