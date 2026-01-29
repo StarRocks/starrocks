@@ -2744,6 +2744,58 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
+     * Whether to enable commit queue for Iceberg tables to avoid concurrent commit conflicts.
+     * <p>
+     * Iceberg uses optimistic concurrency control (OCC) for metadata commits. When multiple threads
+     * concurrently commit to the same table, conflicts can occur with errors like:
+     * "Cannot commit: Base metadata location is not same as the current table metadata location".
+     * <p>
+     * When enabled, each Iceberg table has its own single-threaded executor for commit operations,
+     * ensuring that commits to the same table are serialized and preventing OCC conflicts.
+     * Different tables can commit concurrently, maintaining overall throughput.
+     * <p>
+     * This is a system-level optimization to improve reliability and should be enabled by default.
+     * If disabled, concurrent commits may fail due to optimistic locking conflicts.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_iceberg_commit_queue = true;
+
+    /**
+     * The timeout in seconds for waiting for an Iceberg commit operation to complete.
+     * <p>
+     * When using the commit queue (enable_iceberg_commit_queue=true), each commit operation
+     * must complete within this timeout. If a commit takes longer than this timeout,
+     * it will be cancelled and an error will be raised.
+     * <p>
+     * Factors that affect commit time include:
+     * - Number of data files being committed
+     * - Metadata size of the table
+     * - Performance of the underlying storage (e.g., S3, HDFS)
+     * <p>
+     * Default: 300 seconds (5 minutes)
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_commit_queue_timeout_seconds = 300;
+
+    /**
+     * The maximum number of pending commit operations per Iceberg table.
+     * <p>
+     * When using the commit queue (enable_iceberg_commit_queue=true), this limits the number
+     * of commit operations that can be queued for a single table. When the limit is reached,
+     * additional commit operations will execute in the caller thread (blocking until capacity available).
+     * <p>
+     * This configuration is read at FE startup and applies to newly created table executors.
+     * Requires FE restart to take effect.
+     * <p>
+     * Increase this value if you expect many concurrent commits to the same table.
+     * If this value is too low, commits may block in the caller thread during high concurrency.
+     * <p>
+     * Default: 1000
+     */
+    @ConfField(mutable = false)
+    public static int iceberg_commit_queue_max_size = 1000;
+
+    /**
      * paimon metadata cache preheat, default false
      */
     @ConfField(mutable = true)
