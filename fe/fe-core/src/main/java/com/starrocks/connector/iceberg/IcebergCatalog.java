@@ -44,6 +44,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.view.SQLViewRepresentation;
 import org.apache.iceberg.view.View;
@@ -401,6 +402,93 @@ public interface IcebergCatalog extends MemoryTrackable {
         return snapshot.timestampMillis();
     }
 
+    /**
+     * Estimate the partition count without loading all partitions into memory.
+     * Uses FileScanTask.estimatedRowsCount() for efficient estimation without iterating rows.
+     *
+     * @param icebergTable The Iceberg table
+     * @param snapshotId The snapshot ID to use, or -1 for current snapshot
+     * @return Estimated partition count, or -1 if estimation fails
+     */
+    default long estimatePartitionCount(IcebergTable icebergTable, long snapshotId) {
+        Table nativeTable = icebergTable.getNativeTable();
+        if (nativeTable.spec().isUnpartitioned()) {
+            return 1;
+        }
+
+        PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils
+                .createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
+        TableScan tableScan = partitionsTable.newScan();
+        if (snapshotId != -1) {
+            tableScan = tableScan.useSnapshot(snapshotId);
+        }
+
+        long count = 0;
+        try (CloseableIterable<FileScanTask> tasks = tableScan.planFiles()) {
+            for (FileScanTask task : tasks) {
+                // Use estimatedRowsCount() for efficient estimation without iterating all rows
+                count += task.estimatedRowsCount();
+            }
+        } catch (IOException e) {
+            getLogger().warn("Failed to estimate partition count for table: " + nativeTable.name(), e);
+            return -1;
+        }
+        return count;
+    }
+
+    /**
+     * Returns a streaming iterator that yields partitions one-by-one without loading
+     * all partitions into memory. This is essential for tables with millions of partitions.
+     *
+     * @param icebergTable The Iceberg table
+     * @param snapshotId The snapshot ID to use, or -1 for current snapshot
+     * @param executorService Optional executor service for parallel planning
+     * @return A closeable iterator of partition entries (name -> Partition)
+     */
+    default CloseableIterator<Map.Entry<String, Partition>> getPartitionIterator(
+            IcebergTable icebergTable, long snapshotId, ExecutorService executorService) {
+        Table nativeTable = icebergTable.getNativeTable();
+
+        if (nativeTable.spec().isUnpartitioned()) {
+            // For unpartitioned tables, return a single entry
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
+            Partition partition = partitionMap.get(EMPTY_PARTITION_NAME);
+            Map.Entry<String, Partition> entry =
+                    new java.util.AbstractMap.SimpleEntry<>(EMPTY_PARTITION_NAME, partition);
+            java.util.Iterator<Map.Entry<String, Partition>> singletonIter =
+                    java.util.Collections.singletonList(entry).iterator();
+            return new CloseableIterator<Map.Entry<String, Partition>>() {
+                @Override
+                public boolean hasNext() {
+                    return singletonIter.hasNext();
+                }
+
+                @Override
+                public Map.Entry<String, Partition> next() {
+                    return singletonIter.next();
+                }
+
+                @Override
+                public void close() {
+                    // Nothing to close for in-memory singleton
+                }
+            };
+        }
+
+        PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils
+                .createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
+        TableScan tableScan = partitionsTable.newScan();
+        if (snapshotId != -1) {
+            tableScan = tableScan.useSnapshot(snapshotId);
+        }
+        if (executorService != null) {
+            tableScan = tableScan.planWith(executorService);
+        }
+
+        CloseableIterable<FileScanTask> tasks = tableScan.planFiles();
+        return new StreamingPartitionIterator(nativeTable, tasks, snapshotId);
+    }
+
     default List<String> listPartitionNames(IcebergTable icebergTable,
                                             ConnectorMetadatRequestContext requestContext,
                                             ExecutorService executorService) {
@@ -424,14 +512,47 @@ public interface IcebergCatalog extends MemoryTrackable {
             snapshotId = nativeTable.currentSnapshot().snapshotId();
         }
 
-        // Call public method so subclasses can override and optimize this method.
-        Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
+        // Unpartitioned tables use existing logic
         if (nativeTable.spec().isUnpartitioned()) {
+            Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
             return List.of(partitionMap.get(EMPTY_PARTITION_NAME));
-        } else {
-            ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
-            partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
-            return partitions.build();
         }
+
+        // Estimate partition count to decide on streaming vs. full load
+        long estimatedCount = -1;
+        try {
+            estimatedCount = estimatePartitionCount(icebergTable, snapshotId);
+        } catch (Exception e) {
+            // Fall through to full-load path
+        }
+
+        // If requested partitions are less than 10% of total, use streaming approach
+        // This avoids loading millions of partitions when only a few are needed
+        if (estimatedCount > 0 && partitionNames.size() < estimatedCount / 10) {
+            return getPartitionsByNamesStreaming(icebergTable, snapshotId, executorService, partitionNames);
+        }
+
+        // For larger requests or unknown count, use existing cached approach
+        Map<String, Partition> partitionMap = getPartitions(icebergTable, snapshotId, executorService);
+        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
+        for (String partitionName : partitionNames) {
+            Partition partition = partitionMap.get(partitionName);
+            // Use MISSING_PARTITION placeholder to maintain positional alignment
+            partitions.add(partition != null ? partition : Partition.MISSING_PARTITION);
+        }
+        return partitions.build();
+    }
+
+    /**
+     * Streaming implementation of getPartitionsByNames for large tables with small requests.
+     * Scans partitions and stops as soon as all requested partitions are found.
+     */
+    private List<Partition> getPartitionsByNamesStreaming(IcebergTable icebergTable, long snapshotId,
+                                                          ExecutorService executorService,
+                                                          List<String> partitionNames) {
+        return IcebergPartitionUtils.collectPartitionsFromIterator(
+                () -> getPartitionIterator(icebergTable, snapshotId, executorService),
+                partitionNames,
+                icebergTable.getNativeTable().name());
     }
 }
