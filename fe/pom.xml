@@ -46,13 +46,8 @@ under the License.
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
-<<<<<<< HEAD
         <parquet.version>1.15.2</parquet.version>
-        <hadoop.version>3.4.1</hadoop.version>
-=======
-        <parquet.version>1.16.0</parquet.version>
         <hadoop.version>3.4.2</hadoop.version>
->>>>>>> 0dc9242955 ([BugFix][CVE-2025-27821] upgrade hadoop to v3.4.2 (#68529))
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
         <skip.plugin>false</skip.plugin>
