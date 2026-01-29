@@ -592,6 +592,7 @@ public class FunctionSet {
 
     private static final Set<Type> MULTI_DISTINCT_COUNT_TYPES =
             ImmutableSet.<Type>builder()
+<<<<<<< HEAD
                     .addAll(Type.INTEGER_TYPES)
                     .addAll(Type.FLOAT_TYPES)
                     .addAll(Type.DECIMAL_TYPES)
@@ -599,6 +600,16 @@ public class FunctionSet {
                     .add(Type.DATE)
                     .add(Type.DATETIME)
                     .add(Type.DECIMALV2)
+=======
+                    .addAll(IntegerType.INTEGER_TYPES)
+                    .addAll(FloatType.FLOAT_TYPES)
+                    .addAll(DecimalType.DECIMAL_TYPES)
+                    .addAll(STRING_TYPES)
+                    .add(VarbinaryType.VARBINARY)
+                    .add(DateType.DATE)
+                    .add(DateType.DATETIME)
+                    .add(DecimalType.DECIMALV2)
+>>>>>>> c35e344ffe ([Enhancement] support varbinary for count distinct like agg functions (#68442))
                     .build();
 
     private static final Set<Type> SORTABLE_TYPES =
