@@ -402,6 +402,31 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testImmutablePartitionTransactionNotExist() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return null;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "site_access_exception");
+
+        TImmutablePartitionRequest request = new TImmutablePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_ids(Lists.newArrayList());
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
+        Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, partition.getStatus().getStatus_code());
+        String errorMsg = partition.getStatus().getError_msgs().get(0);
+        Assertions.assertTrue(errorMsg.contains("error: txn") && errorMsg.contains("does not exist"));
+    }
+
+    @Test
     public void testImmutablePartitionApi() throws TException {
         new MockUp<GlobalTransactionMgr>() {
             @Mock

@@ -885,9 +885,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         Preconditions.checkState(!indexIds.isEmpty());
         Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.computeIfAbsent(
                 tableId, k -> Maps.newHashMap());
-        if (!loadedPartitionIndexes.containsKey(physicalPartitionId)) {
-            loadedPartitionIndexes.put(physicalPartitionId, indexIds);
-        }
+        loadedPartitionIndexes.putIfAbsent(physicalPartitionId, indexIds);
     }
 
     public void addPartitionLoadedIndexes(long tableId, long physicalPartitionId, List<Long> indexIds) {
