@@ -1,11 +1,12 @@
--- name: test_iceberg_delete_unpartitioned
+-- name: test_iceberg_delete_unpartitioned @sequential
 create external catalog iceberg_del_unp_${uuid0}
 PROPERTIES ( "type"  =  "iceberg",
     "iceberg.catalog.type"  =  "hive",
     "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
     "aws.s3.access_key"  =  "${oss_ak}",
     "aws.s3.secret_key"  =  "${oss_sk}",
-    "aws.s3.endpoint"  =  "${oss_endpoint}" );
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
 -- result:
 -- !result
 create database iceberg_del_unp_${uuid0}.iceberg_delete_db_${uuid0} properties (
