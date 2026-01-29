@@ -90,7 +90,7 @@ SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
           _slot_size(_type.get_slot_size()),
           _is_materialized(pdesc.is_materialized()),
           _is_output_column(true),
-          _is_nullable(pdesc.null_indicator_bit() != -1) {}
+          _is_nullable(pdesc.has_is_nullable() ? pdesc.is_nullable() : pdesc.null_indicator_bit() != -1) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);
@@ -105,6 +105,7 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_col_name(_col_name);
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
+    pslot->set_is_nullable(_is_nullable);
 }
 
 std::string SlotDescriptor::debug_string() const {
