@@ -43,6 +43,19 @@ std::unique_ptr<FileSystem> new_fs_starlet();
 // to prevent shard fs re-create everty time, we will reuse the lru cache framework to cache the shard fs
 std::shared_ptr<FileSystem> new_fs_starlet(int64_t virtual_shard_id);
 
+// Create a starlet filesystem for cross-cluster migration with optional S3 raw path mode.
+//
+// When `use_s3_raw_path_mode` is true:
+//   - Sets s3.use_raw_path_with_scheme=true in starlet configuration
+//   - Starlet will use the input path as-is without normalize_path processing
+//   - This is required for S3 storage type to support partitioned prefix feature
+//
+// When `use_s3_raw_path_mode` is false:
+//   - Uses default starlet configuration
+//   - Starlet will use normalize_path to combine sys.root with the relative path
+//   - This is used for non-S3 storage types (OSS/Azure/HDFS/GFS)
+std::shared_ptr<FileSystem> new_fs_starlet(int64_t virtual_shard_id, bool use_s3_raw_path_mode);
+
 } // namespace starrocks
 
 #endif // USE_STAROS
