@@ -53,7 +53,7 @@ under the License.
         <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.16.0</parquet.version>
-        <hadoop.version>3.4.1</hadoop.version>
+        <hadoop.version>3.4.2</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
         <skip.plugin>false</skip.plugin>
