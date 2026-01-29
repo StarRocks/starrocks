@@ -21,6 +21,7 @@ displayed_sidebar: docs
 | `partitions`           | 显示表中分区的详细信息。                                     |
 | `files`                | 显示当前快照中数据文件（Data File）和删除文件（Delete File）的详细信息。 |
 | `refs`                 | 显示关于 Iceberg 引用（Reference）的详细信息，包括分支和标签。 |
+| `properties`           | 显示表属性的键值对。                                         |
 
 ## `history` 表
 
@@ -170,3 +171,26 @@ SELECT * FROM [<catalog>.][<database>.]table$refs;
 | max_reference_age_in_ms | 引用的最长保留时间，超出此时间引用可能会过期。               |
 | min_snapshots_to_keep   | 仅适用于分支，分支中必须保留的最小快照数。                   |
 | max_snapshot_age_in_ms  | 仅适用于分支，分支中允许的最长保留时间。过期的快照将被删除。 |
+
+## `properties` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$properties;
+```
+
+输出：
+
+| **字段** | **描述**       |
+| :------- | :------------- |
+| key      | 表属性的名称。 |
+| value    | 表属性的值。   |
+
+示例输出：
+
+| key                             | value                              |
+| :------------------------------ | :--------------------------------- |
+| location                        | s3://bucket/warehouse/db/my_table  |
+| write.format.default            | parquet                            |
+| write.parquet.compression-codec | zstd                               |
