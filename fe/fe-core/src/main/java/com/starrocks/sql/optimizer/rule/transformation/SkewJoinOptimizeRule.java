@@ -106,18 +106,19 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+        JoinOperator joinType = joinOperator.getJoinType();
+        if (joinType != JoinOperator.INNER_JOIN && joinType != JoinOperator.LEFT_OUTER_JOIN) {
+            // only support inner join and left join
+            return false;
+        }
+
         // respect the join hint
         if (((LogicalJoinOperator) input.getOp()).getJoinHint().equals(HintNode.HINT_JOIN_SKEW)) {
             return true;
         }
 
         if (!context.getSessionVariable().isEnableStatsToOptimizeSkewJoin()) {
-            return false;
-        }
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        JoinOperator joinType = joinOperator.getJoinType();
-        if (joinType != JoinOperator.INNER_JOIN && joinType != JoinOperator.LEFT_OUTER_JOIN) {
-            // only support inner join and left join
             return false;
         }
 

@@ -1175,10 +1175,6 @@ public class QueryAnalyzer {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
             } else if (HintNode.HINT_JOIN_SKEW.equals(join.getJoinHint())) {
-                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
-                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
-                    throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
-                }
                 if (join.getJoinOp().isRightJoin()) {
                     throw new SemanticException("RIGHT JOIN does not support SKEW JOIN optimize");
                 }

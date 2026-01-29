@@ -1114,7 +1114,7 @@ void test_pipeline_level_shuffle(size_t num_rows, TRuntimeFilterBuildJoinMode::t
 }
 
 void test_pipeline_level_broadcast(size_t num_rows, TRuntimeFilterBuildJoinMode::type join_mode) {
-    ASSERT_TRUE(join_mode == TRuntimeFilterBuildJoinMode::BORADCAST ||
+    ASSERT_TRUE(join_mode == TRuntimeFilterBuildJoinMode::BROADCAST ||
                 join_mode == TRuntimeFilterBuildJoinMode::REPLICATED);
     TRuntimeFilterLayout t_layout;
     t_layout.__set_filter_id(1);
@@ -1133,7 +1133,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
     std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
 
     switch (join_mode) {
-    case TRuntimeFilterBuildJoinMode::BORADCAST: {
+    case TRuntimeFilterBuildJoinMode::BROADCAST: {
         break;
     }
     case TRuntimeFilterBuildJoinMode::PARTITIONED:
@@ -1262,7 +1262,7 @@ TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
 }
 
 TEST_F(RuntimeFilterTest, TestPipelineLevelBroadcastJoin) {
-    test_pipeline_level_broadcast(100, TRuntimeFilterBuildJoinMode::BORADCAST);
+    test_pipeline_level_broadcast(100, TRuntimeFilterBuildJoinMode::BROADCAST);
 }
 
 TEST_F(RuntimeFilterTest, TestPipelineLevelShuffleJoin1) {

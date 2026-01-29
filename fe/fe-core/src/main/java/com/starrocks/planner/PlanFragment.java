@@ -774,8 +774,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             if (hashJoinNode.isSkewBroadJoin()) {
                 HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
-                // TODO(fixme): ensure broadcast jion 's rf size is equal to shuffle join's rf size, if not clear the specific
+                // TODO(fixme): ensure broadcast join 's rf size is equal to shuffle join's rf size, if not clear the specific
                 //  broadcast's rf.
+                if (shuffleJoinNode == null || shuffleJoinNode.getBuildRuntimeFilters() == null) {
+                   return;
+                }
                 if (shuffleJoinNode.getBuildRuntimeFilters().size() != hashJoinNode.getBuildRuntimeFilters().size()) {
                     shuffleJoinNode.clearBuildRuntimeFilters();
                     hashJoinNode.clearBuildRuntimeFilters();
@@ -783,7 +786,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 }
                 for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
                     int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
-                    // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                    // skew join's broadcast join rf need to remember the filter id of corresponding shuffle join
                     description.setSkew_shuffle_filter_id(filterId);
                 }
             }
