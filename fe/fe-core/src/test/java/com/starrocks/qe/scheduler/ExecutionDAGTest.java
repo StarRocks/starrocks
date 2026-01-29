@@ -42,13 +42,11 @@ public class ExecutionDAGTest extends SchedulerTestBase {
 
     @Test
     public void testSkewJoin() throws Exception {
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(false);
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(true);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(true);
         String sql = "select count(1) from lineitem t1 JOIN [skew|t1.l_orderkey(1,2,3)] lineitem t2 using(l_orderkey)";
         DefaultCoordinator scheduler = startScheduling(sql);
 
         Assertions.assertTrue(scheduler.getExecStatus().ok());
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByQueryRewrite(true);
-        connectContext.getSessionVariable().setEnableOptimizerSkewJoinByBroadCastSkewValues(false);
+        connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV2(false);
     }
 }
