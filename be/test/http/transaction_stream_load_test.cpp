@@ -34,6 +34,7 @@
 #include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
 
 class mg_connection;
 
@@ -1077,6 +1078,60 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
     ASSERT_EQ(2, ctx->num_refs());
     ASSERT_TRUE(ctx->lock.try_lock());
     ctx->lock.unlock();
+}
+
+TEST_F(TransactionStreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
+    // Test cases: {label, timeout_header, expected_timeout_ms}
+    struct TestCase {
+        const char* label;
+        const char* timeout_header;
+        int32_t expected_timeout_ms;
+    };
+    TestCase test_cases[] = {
+            {"rpc_timeout_default", nullptr, config::txn_commit_rpc_timeout_ms}, // default timeout
+            {"rpc_timeout_custom", "30", 15000},                                 // custom timeout: 30s -> 15000ms
+    };
+
+    for (const auto& tc : test_cases) {
+        TransactionManagerAction txn_action(&_env);
+        HttpRequest begin_req(_evhttp_req);
+        begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        begin_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        if (tc.timeout_header != nullptr) {
+            begin_req._headers.emplace(HTTP_TIMEOUT, tc.timeout_header);
+        }
+        begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&begin_req);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        int32_t captured_timeout = -1;
+        SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout",
+                                              [&](void* arg) {
+                                                  auto* request = static_cast<TStreamLoadPutRequest*>(arg);
+                                                  captured_timeout = request->thrift_rpc_timeout_ms;
+                                              });
+
+        TransactionStreamLoadAction action(&_env);
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        action.on_header(&request);
+        action.handle(&request);
+
+        EXPECT_EQ(tc.expected_timeout_ms, captured_timeout);
+    }
 }
 
 } // namespace starrocks
