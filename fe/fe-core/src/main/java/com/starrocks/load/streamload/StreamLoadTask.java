@@ -906,6 +906,12 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
+        try (var scope = context.bindScope()) {
+            do_unprotectedExecute(headers);
+        }
+    }
+
+    private void do_unprotectedExecute(HttpHeaders headers) throws StarRocksException {
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
                 loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
