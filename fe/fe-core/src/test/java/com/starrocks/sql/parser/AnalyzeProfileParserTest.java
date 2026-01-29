@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.parser;
 
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.UUID;
 
 public class AnalyzeProfileParserTest {
 
@@ -51,25 +53,35 @@ public class AnalyzeProfileParserTest {
 
     @Test
     public void testParseAnalyzeProfileWithLastQueryId() {
+        ConnectContext context = ConnectContext.build();
+        context.setThreadLocalInfo();
+        context.setLastQueryId(UUID.randomUUID());
+        String lastQueryId = context.getLastQueryId().toString();
+
         String sql = "ANALYZE PROFILE FROM LAST_QUERY_ID()";
         SessionVariable sessionVariable = new SessionVariable();
         StatementBase stmt = SqlParser.parseOneWithStarRocksDialect(sql, sessionVariable);
 
         Assertions.assertTrue(stmt instanceof AnalyzeProfileStmt);
         AnalyzeProfileStmt analyzeStmt = (AnalyzeProfileStmt) stmt;
-        Assertions.assertEquals("last_query_id()", analyzeStmt.getQueryId());
+        Assertions.assertEquals("lastQueryId", analyzeStmt.getQueryId());
         Assertions.assertEquals(Collections.emptyList(), analyzeStmt.getPlanNodeIds());
     }
 
     @Test
     public void testParseAnalyzeProfileWithLastQueryIdAndPlanNodes() {
+        ConnectContext context = ConnectContext.build();
+        context.setThreadLocalInfo();
+        context.setLastQueryId(UUID.randomUUID());
+        String lastQueryId = context.getLastQueryId().toString();
+        
         String sql = "ANALYZE PROFILE FROM LAST_QUERY_ID(), 0, 1";
         SessionVariable sessionVariable = new SessionVariable();
         StatementBase stmt = SqlParser.parseOneWithStarRocksDialect(sql, sessionVariable);
 
         Assertions.assertTrue(stmt instanceof AnalyzeProfileStmt);
         AnalyzeProfileStmt analyzeStmt = (AnalyzeProfileStmt) stmt;
-        Assertions.assertEquals("last_query_id()", analyzeStmt.getQueryId());
+        Assertions.assertEquals(lastQueryId, analyzeStmt.getQueryId());
         Assertions.assertEquals(Arrays.asList(0, 1), analyzeStmt.getPlanNodeIds());
     }
 }
