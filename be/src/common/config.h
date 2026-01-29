@@ -1910,4 +1910,8 @@ CONF_Int32(cow_optimization_diagnose_level, "0");
 // to potentially find a better predicate order. When selectivity is already good (low), sampling
 // is unlikely to help and will be skipped.
 CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
+
+// When enabled, HllSketchAggregateFunction will use get_composite_estimate() instead of get_estimate()
+// for more stable estimation results. Default is false to maintain current behavior.
+CONF_mBool(enable_data_sketches_hll_estimate_composite, "false");
 } // namespace starrocks::config
