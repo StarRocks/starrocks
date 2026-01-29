@@ -162,13 +162,13 @@ void offsets_copy(const T* __restrict arrow_offsets_data, T arrow_base_offset, s
     }
 }
 
-template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
+template <LogicalType LT, typename = StringOrBinaryGuard<LT>>
 static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
                                                              ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                              : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGaurd<LT>> {
+struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGuard<LT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<LT>;
