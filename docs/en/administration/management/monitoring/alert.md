@@ -271,7 +271,7 @@ An alert is triggered when the highest Compaction Score exceeds 100, indicating 
 
 **Resolution**
 
-This alert is typically caused by frequent loading, `INSERT INTO VALUES`, or `DELETE` operations (at a rate of 1 per second). It is recommended to set the interval between loading or DELETE tasks to more than 5 seconds and avoid submitting high-concurrency DELETE tasks.
+This alert is typically caused by frequent loading, `INSERT INTO VALUES`, or `DELETE` operations (at a rate of 1 per second). It is recommended to set the interval between loading or DELETE tasks to more than 5 seconds and avoid submitting high concurrency DELETE tasks.
 
 #### Exceeding Version Count Alert
 
