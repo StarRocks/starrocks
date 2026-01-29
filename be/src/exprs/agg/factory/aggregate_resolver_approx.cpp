@@ -25,7 +25,7 @@ namespace starrocks {
 struct HLLUnionBuilder {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_fixedlength<lt> || lt_is_string<lt>) {
+        if constexpr (lt_is_fixedlength<lt> || lt_is_string_or_binary<lt>) {
             resolver->add_aggregate_mapping<lt, TYPE_HLL, HyperLogLog>(
                     "hll_raw", false, AggregateFactory::MakeHllRawAggregateFunction<lt>());
 
@@ -64,8 +64,13 @@ struct ApproxTopKBuilder {
 };
 
 void AggregateFuncResolver::register_approx() {
-    for (auto type : aggregate_types()) {
+    auto hll_types = aggregate_types();
+    hll_types.push_back(TYPE_VARBINARY);
+    for (auto type : hll_types) {
         type_dispatch_all(type, HLLUnionBuilder(), this);
+    }
+
+    for (auto type : aggregate_types()) {
         type_dispatch_all(type, ApproxTopKBuilder(), this);
     }
     add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_union", false,
