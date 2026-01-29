@@ -14,16 +14,19 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
+import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -77,17 +80,8 @@ class ArrowFlightSqlAuthenticatorTest {
 
         doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken("bad-token");
 
-        SessionVariable mockSv = mock(SessionVariable.class);
-        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(false);
-
-        VariableMgr mockVariableMgr = mock(VariableMgr.class);
-        when(mockVariableMgr.getDefaultSessionVariable()).thenReturn(mockSv);
-
-        GlobalStateMgr mockGlobalStateMgr = mock(GlobalStateMgr.class);
-        when(mockGlobalStateMgr.getVariableMgr()).thenReturn(mockVariableMgr);
-
-        try (MockedStatic<GlobalStateMgr> mockedStatic = mockStatic(GlobalStateMgr.class)) {
-            mockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalStateMgr);
+        try (MockedStatic<GlobalVariable> mockedStatic = mockStatic(GlobalVariable.class)) {
+            mockedStatic.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(false);
 
             CallHeaders headers = mock(CallHeaders.class);
             when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + "bad-token");
@@ -98,31 +92,65 @@ class ArrowFlightSqlAuthenticatorTest {
     }
 
     @Test
-    void testValidateBearerToken_unknownTokenAllowedWhenProxyEnabled() {
+    void testValidateBearerToken_unknownTokenAllowedWhenProxyEnabledAndValidFe() {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
-        // Token not found in local cache
-        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken("remote-token");
+        // Token from valid remote FE, not found in local cache
+        String remoteToken = "10.0.6.7:some-uuid";
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(remoteToken);
 
-        SessionVariable mockSv = mock(SessionVariable.class);
-        when(mockSv.isArrowFlightProxyEnabled()).thenReturn(true);
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
 
-        VariableMgr mockVariableMgr = mock(VariableMgr.class);
-        when(mockVariableMgr.getDefaultSessionVariable()).thenReturn(mockSv);
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
 
-        GlobalStateMgr mockGlobalStateMgr = mock(GlobalStateMgr.class);
-        when(mockGlobalStateMgr.getVariableMgr()).thenReturn(mockVariableMgr);
-
-        try (MockedStatic<GlobalStateMgr> mockedStatic = mockStatic(GlobalStateMgr.class)) {
-            mockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalStateMgr);
+            // Mock FE list to include the remote FE
+            GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = mock(NodeMgr.class);
+            Frontend mockFe = mock(Frontend.class);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
+            when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
+            when(mockNodeMgr.getFrontends(null)).thenReturn(List.of(mockFe));
+            when(mockFe.getHost()).thenReturn("10.0.6.7");
 
             CallHeaders headers = mock(CallHeaders.class);
-            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + "remote-token");
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + remoteToken);
 
-            // token allowed through for proxy forwarding
+            // Token allowed through because FE host is valid
             CallHeaderAuthenticator.AuthResult result = authenticator.authenticate(headers);
-            assertEquals("remote-token", result.getPeerIdentity());
+            assertEquals(remoteToken, result.getPeerIdentity());
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownTokenRejectedWhenInvalidFe() {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        // Token from unknown FE, not found in local cache
+        String maliciousToken = "malicious.host:some-uuid";
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(maliciousToken);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
+
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+
+            // Mock FE list that does NOT include the malicious host
+            GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
+            NodeMgr mockNodeMgr = mock(NodeMgr.class);
+            Frontend mockFe = mock(Frontend.class);
+            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
+            when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
+            when(mockNodeMgr.getFrontends(null)).thenReturn(List.of(mockFe));
+            when(mockFe.getHost()).thenReturn("10.0.1.107");  // Different host
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + maliciousToken);
+
+            // Token rejected because FE host is not valid
+            assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
         }
     }
 }

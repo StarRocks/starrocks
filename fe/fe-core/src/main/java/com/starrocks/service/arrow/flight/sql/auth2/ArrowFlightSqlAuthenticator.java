@@ -14,8 +14,7 @@
 
 package com.starrocks.service.arrow.flight.sql.auth2;
 
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.CallStatus;
@@ -64,10 +63,12 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
         try {
             sessionManager.validateToken(token);
         } catch (IllegalArgumentException e) {
-            // Token not found locally - if proxy is enabled, allow through.
-            // Validation will happen on the remote FE when we forward the request.
+            // Token not found locally - if proxy is enabled and token is from a valid FE, allow through.
             if (isProxyEnabled()) {
-                return createAuthResult(token);
+                String feHost = ArrowFlightSqlSessionManager.extractFeHost(token);
+                if (feHost != null && ArrowFlightSqlSessionManager.isValidFeHost(feHost)) {
+                    return createAuthResult(token);
+                }
             }
             throw CallStatus.UNAUTHENTICATED.withCause(e).withDescription(e.getMessage()).toRuntimeException();
         }
@@ -76,9 +77,7 @@ public class ArrowFlightSqlAuthenticator implements CallHeaderAuthenticator {
     }
 
     private boolean isProxyEnabled() {
-        SessionVariable globalSv = GlobalStateMgr.getCurrentState()
-                .getVariableMgr().getDefaultSessionVariable();
-        return globalSv.isArrowFlightProxyEnabled();
+        return GlobalVariable.isArrowFlightProxyEnabled();
     }
 
     private AuthResult createAuthResult(String token) {
