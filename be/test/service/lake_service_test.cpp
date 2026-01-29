@@ -1601,6 +1601,55 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
 
+TEST_F(LakeServiceTest, test_drop_tablet_cache) {
+    // normal path
+    {
+        DropTabletCacheRequest request;
+        DropTabletCacheResponse response;
+        auto* tablet = request.add_tablets();
+        tablet->set_tablet_id(_tablet_id);
+        tablet->set_version(3);
+        brpc::Controller cntl;
+        CountDownLatch latch(1);
+        auto done = brpc::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.drop_tablet_cache(&cntl, &request, &response, done);
+        latch.wait();
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    }
+
+    // missing tablets
+    {
+        brpc::Controller cntl;
+        DropTabletCacheRequest request;
+        DropTabletCacheResponse response;
+        _lake_service.drop_tablet_cache(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablets", cntl.ErrorText());
+    }
+
+    // thread pool is null
+    {
+        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                              [](void* arg) { *(ThreadPool**)arg = nullptr; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        brpc::Controller cntl;
+        DropTabletCacheRequest request;
+        DropTabletCacheResponse response;
+        auto* tablet = request.add_tablets();
+        tablet->set_tablet_id(_tablet_id);
+        tablet->set_version(3);
+        _lake_service.drop_tablet_cache(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
+    }
+}
+
 TEST_F(LakeServiceTest, test_delete_txn_log) {
     // missing tablet_ids
     {
