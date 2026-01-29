@@ -579,6 +579,7 @@ public class AlterJobMgr {
                 .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
         String inlineViewDef = alterViewInfo.getInlineViewDef();
         long sqlMode = alterViewInfo.getSqlMode();
+        String originalViewDef = alterViewInfo.getOriginalViewDef();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
@@ -590,6 +591,7 @@ public class AlterJobMgr {
             }
             GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo, wal -> {
                 view.setInlineViewDefWithSqlMode(inlineViewDef, sqlMode);
+                view.setOriginalViewDef(originalViewDef);
                 view.setNewFullSchema(alterViewInfo.getNewFullSchema());
                 view.setComment(alterViewInfo.getComment());
             });
@@ -610,6 +612,7 @@ public class AlterJobMgr {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         try {
             view.setInlineViewDefWithSqlMode(alterViewInfo.getInlineViewDef(), alterViewInfo.getSqlMode());
+            view.setOriginalViewDef(alterViewInfo.getOriginalViewDef());
             view.setNewFullSchema(alterViewInfo.getNewFullSchema());
             view.setComment(alterViewInfo.getComment());
             AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(view,
