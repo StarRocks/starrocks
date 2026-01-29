@@ -36,8 +36,8 @@ Status ConnectorChunkSink::init() {
     init_profile();
     RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
     RETURN_IF_ERROR(_partition_chunk_writer_factory->init());
-    _op_mem_mgr->init(&_partition_chunk_writers, _io_poller,
-                      [this](const CommitResult& r) { this->callback_on_commit(r); });
+    RETURN_IF_ERROR(
+            _op_mem_mgr->init(&_writers, _io_poller, [this](const CommitResult& r) { this->callback_on_commit(r); }));
     return Status::OK();
 }
 
@@ -93,6 +93,7 @@ Status ConnectorChunkSink::write_partition_chunk(const std::string& partition,
         }
         // save the writer to the map, so errors from subsequent write() can be correctly handled.
         _partition_chunk_writers[partition_key] = writer;
+        _writers.push_back(writer);
         COUNTER_UPDATE(_sink_profile->partition_writer_counter, 1);
         RETURN_IF_ERROR(writer->write(chunk));
     }
