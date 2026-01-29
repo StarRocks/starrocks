@@ -27,8 +27,8 @@ public class TestRuntimeFilterDescription {
     public void testPushAcrossExchangeNode() throws IOException {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Object[][] testCases = new Object[][]{
-                {JoinNode.DistributionMode.BROADCAST, 1, true, TRuntimeFilterBuildJoinMode.BORADCAST},
-                {JoinNode.DistributionMode.BROADCAST, 2, true, TRuntimeFilterBuildJoinMode.BORADCAST},
+                {JoinNode.DistributionMode.BROADCAST, 1, true, TRuntimeFilterBuildJoinMode.BROADCAST},
+                {JoinNode.DistributionMode.BROADCAST, 2, true, TRuntimeFilterBuildJoinMode.BROADCAST},
                 {JoinNode.DistributionMode.LOCAL_HASH_BUCKET, 1, true, TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET},
                 {JoinNode.DistributionMode.LOCAL_HASH_BUCKET, 2, true, TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET},
                 {JoinNode.DistributionMode.PARTITIONED, 1, true, TRuntimeFilterBuildJoinMode.PARTITIONED},

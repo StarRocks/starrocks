@@ -41,7 +41,7 @@ include "Types.thrift"
 
 enum TRuntimeFilterBuildJoinMode {
   NONE,
-  BORADCAST,
+  BROADCAST,
   PARTITIONED,
   LOCAL_HASH_BUCKET,
   COLOCATE,
