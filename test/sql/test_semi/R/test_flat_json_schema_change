@@ -1,10 +1,4 @@
--- name: test_flat_json_after_schema_change @system
-CREATE DATABASE IF NOT EXISTS test_flat_json_schema_change;
--- result:
--- !result
-USE test_flat_json_schema_change;
--- result:
--- !result
+-- name: test_flat_json_after_schema_change
 CREATE TABLE `t_json_schema_change` (
   `id` bigint(20) NOT NULL,
   `data` json NULL,
@@ -52,6 +46,7 @@ ALTER TABLE t_json_schema_change ADD COLUMN col8 int;
 -- !result
 function: wait_alter_table_finish()
 -- result:
+None
 -- !result
 INSERT INTO t_json_schema_change (id, data, col4, col5, col6, col7, col8) VALUES
 (4, parse_json('{"name": "david", "age": 40, "city": "denver"}'), 10, 11, 12, 13, 14),
@@ -110,10 +105,4 @@ SELECT id, data->'name' as name FROM t_json_schema_change ORDER BY id;
 3	"charlie"
 4	"david"
 5	"eve"
--- !result
-DROP TABLE t_json_schema_change;
--- result:
--- !result
-DROP DATABASE test_flat_json_schema_change;
--- result:
 -- !result

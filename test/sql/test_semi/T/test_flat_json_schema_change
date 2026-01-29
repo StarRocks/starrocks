@@ -1,11 +1,9 @@
 -- name: test_flat_json_after_schema_change
+
 -- Test flat JSON query after ADD/DROP COLUMN operations
 -- This tests the fix for duplicate column unique_id conflict
 -- where extended columns (flat JSON subfields) could get the same
 -- unique_id as existing columns after schema changes.
-
-CREATE DATABASE IF NOT EXISTS test_flat_json_${uuid0};
-USE test_flat_json_schema_change;
 
 CREATE TABLE `t_json_schema_change` (
   `id` bigint(20) NOT NULL,
@@ -59,6 +57,3 @@ ORDER BY id;
 SELECT id, json_query(data, '$.name') as name FROM t_json_schema_change ORDER BY id;
 
 SELECT id, data->'name' as name FROM t_json_schema_change ORDER BY id;
-
-DROP TABLE t_json_schema_change;
-DROP DATABASE test_flat_json_schema_change;
