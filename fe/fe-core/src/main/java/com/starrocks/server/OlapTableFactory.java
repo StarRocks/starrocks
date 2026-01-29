@@ -366,6 +366,20 @@ public class OlapTableFactory implements AbstractTableFactory {
             // consume deprecated in_memory property if present
             PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
 
+            // set enable_query (default true)
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_QUERY)) {
+                String enableQueryStr = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_QUERY);
+                if (!enableQueryStr.equalsIgnoreCase("true") && !enableQueryStr.equalsIgnoreCase("false")) {
+                    throw new DdlException("Property " + PropertyAnalyzer.PROPERTIES_ENABLE_QUERY +
+                            " must be bool type(false/true)");
+                }
+                boolean enableQuery = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ENABLE_QUERY, true);
+                table.setEnableQuery(enableQuery);
+            } else {
+                table.setEnableQuery(true);
+            }
+
             boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 if (!enablePersistentIndex) {

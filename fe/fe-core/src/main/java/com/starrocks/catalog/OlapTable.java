@@ -2202,6 +2202,24 @@ public class OlapTable extends Table {
         tableProperty.buildTableQueryTimeout();
     }
 
+    public boolean isEnableQuery() {
+        if (tableProperty != null) {
+            return tableProperty.isEnableQuery();
+        }
+
+        return true;
+    }
+
+    public void setEnableQuery(boolean enableQuery) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_QUERY,
+                Boolean.valueOf(enableQuery).toString());
+        tableProperty.buildEnableQuery();
+    }
+
+
     public boolean allowBucketSizeSetting() {
         return (defaultDistributionInfo instanceof RandomDistributionInfo) && Config.enable_automatic_bucket;
     }
@@ -2981,6 +2999,12 @@ public class OlapTable extends Table {
             } catch (NumberFormatException e) {
                 LOG.warn("fail to parse table query_timeout.", e);
             }
+        }
+
+        // enable query
+        String enableQueryStr = tableProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_QUERY);
+        if (enableQueryStr != null && !Boolean.parseBoolean(enableQueryStr)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_QUERY, "false");
         }
 
         // partition live number
