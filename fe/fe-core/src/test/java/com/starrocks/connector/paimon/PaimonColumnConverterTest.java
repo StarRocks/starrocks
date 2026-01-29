@@ -15,12 +15,15 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -306,5 +309,14 @@ public class PaimonColumnConverterTest {
                 paimonType.getField("f0").type());
         Assertions.assertEquals(org.apache.paimon.types.DataTypes.BIGINT(), paimonType.getField("f1").type());
         Assertions.assertEquals(org.apache.paimon.types.DataTypes.FLOAT(), paimonType.getField("f2").type());
+    }
+
+    @Test
+    public void testConvertFromUnsupportedType() {
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> ColumnTypeConverter.toPaimonDataType(JsonType.JSON));
+        Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> ColumnTypeConverter.toPaimonDataType(AnyElementType.ANY_ELEMENT));
+
     }
 }
