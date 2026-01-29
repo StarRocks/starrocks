@@ -308,7 +308,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     return version;
 }
 
-size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column) {
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_broadcast_join(const ColumnPtr& column) {
     size_t size = RF_VERSION_SZ;
     size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool));
     size += serde::ColumnArraySerde::max_serialized_size(*column);
@@ -434,6 +434,9 @@ struct FilterIniter {
 
 Status RuntimeFilterHelper::fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                                 size_t column_offset, bool eq_null, bool is_skew_join) {
+    if (column == nullptr || filter == nullptr) {
+        return Status::InternalError("column or filter is nullptr");
+    }
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }

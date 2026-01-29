@@ -57,7 +57,7 @@ public:
     // serialization and deserialization.
     static size_t max_runtime_filter_serialized_size(RuntimeState* state, const RuntimeFilter* rf);
     static size_t max_runtime_filter_serialized_size(int rf_version, const RuntimeFilter* rf);
-    static size_t max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column);
+    static size_t max_runtime_filter_serialized_size_for_skew_broadcast_join(const ColumnPtr& column);
     static size_t serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int rf_version, const RuntimeFilter* rf, uint8_t* data);
     static StatusOr<size_t> serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
