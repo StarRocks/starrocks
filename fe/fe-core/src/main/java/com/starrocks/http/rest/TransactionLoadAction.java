@@ -261,9 +261,22 @@ public class TransactionLoadAction extends RestBaseAction {
         TNetworkAddress redirectAddress = result.getRedirectAddress();
         if (null == redirectAddress) {
             // TODO This must be a transaction stream load. Should refactor the code to make it clearer.
-            ComputeNode node = TXN_BEGIN.equals(txnOperation) ?
-                    coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName()) :
-                    coordinatorMgr.get(label, txnOperationParams.getDbName());
+            // For TXN_BEGIN operation, check if the label already exists in coordinatorMgr.
+            // If it does, return the existing node to ensure idempotency in case of network retries.
+            // Otherwise, allocate a new node for the transaction.
+            ComputeNode node;
+            if (TXN_BEGIN.equals(txnOperation)) {
+                if (coordinatorMgr.existInCache(label)) {
+                    // If label already exists, reuse the allocated node to ensure idempotency
+                    node = coordinatorMgr.get(label, txnOperationParams.getDbName());
+                } else {
+                    // First time seeing this label, allocate a new node
+                    node = coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName());
+                }
+            } else {
+                // For other operations, simply get the existing node
+                node = coordinatorMgr.get(label, txnOperationParams.getDbName());
+            }
 
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
         }
