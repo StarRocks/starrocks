@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -82,14 +82,14 @@ TEST_F(DecimalV2ConverterTest, test_write_string) {
     col->append_datum(DecimalV2Value("-0.00000001"));
     col->append_datum(DecimalV2Value("99999999999999999.00000001"));
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("0.00000001-0.0000000199999999999999999.00000001", buff.as_string());
 
-    csv::OutputStreamString buff2;
+    io::FormattedOutputStreamString buff2;
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());

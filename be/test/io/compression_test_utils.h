@@ -20,9 +20,10 @@
 #include <array>
 #include <string>
 
+#include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "util/compression/block_compression.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 #include "util/slice.h"
 
 namespace starrocks::test {
@@ -83,14 +84,15 @@ inline std::string decompress_stream_data(const std::string& compressed_data, Co
         return decompress_gzip(compressed_data);
     }
 
-    std::unique_ptr<StreamCompression> decompressor;
-    Status st = StreamCompression::create_decompressor(compression_type, &decompressor);
-    EXPECT_TRUE(st.ok());
+    auto maybe_decompressor = StreamDecompressor::create_decompressor(compression_type);
+    EXPECT_TRUE(maybe_decompressor.ok());
+    std::unique_ptr<StreamDecompressor> decompressor = std::move(maybe_decompressor).value();
 
     std::string output;
     size_t input_offset = 0;
     bool stream_end = false;
     std::array<uint8_t, 64 * 1024> out_buf{};
+    Status st;
     while (!stream_end) {
         size_t input_bytes_read = 0;
         size_t output_bytes_written = 0;
