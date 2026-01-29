@@ -1,4 +1,4 @@
--- name: test_skew_join
+-- name: test_skew_join_v2
 CREATE TABLE t1 (
     c_key      INT NOT NULL,
     c_tinyint  TINYINT,
@@ -44,7 +44,7 @@ PROPERTIES (
 set enable_optimize_skew_join_v1=false;
 -- result:
 -- !result
-set enable_optimize_skew_join_v2=false;
+set enable_optimize_skew_join_v2=true;
 -- result:
 -- !result
 truncate table t1;
@@ -682,6 +682,32 @@ select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on 
 5	2
 6	3
 -- !result
+select t1.c_key, t2.c_key from t2 join [skew|t2.c_int(1,2,99999)] t1 on abs(t1.c_bigint)=abs(t2.c_int) order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t2.c_int(1,2,99999)] t1 on abs(t2.c_int) = abs(t1.c_bigint) order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t2.c_int(1,2,99999)] t1 on t1.c_key = t2.c_key and abs(t2.c_int) = abs(t1.c_bigint) order by t1.c_key, t2.c_key;
+-- result:
+1	1
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t2.c_int(1,2,99999)] t2 on t1.c_key = t2.c_key and abs(t1.c_bigint) = abs(t2.c_int) order by t1.c_key, t2.c_key;
+-- result:
+1	1
+-- !result
 truncate table t1;
 -- result:
 -- !result
@@ -712,23 +738,13 @@ select t1.c_key, t2.c_key from t2 join [skew|t1.c_string("1","2","99999")] t1 on
 5	2
 6	3
 -- !result
-select t1.c_key, t2.c_key from t1 left join [skew|t1.c_string("1","2","99999")] t2 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_string("1","2","99999)] t2 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
 -- result:
-1	1
-2	1
-3	1
-4	2
-5	2
-6	3
+E: (1064, "Getting syntax error at line 1, column 134. Detail message: Unexpected input '<EOF>', the most similar input is {SINGLE_QUOTED_TEXT, 'CEIL', 'FALSE', 'DATETIME', 'INTERVAL', '?', '-'}.")
 -- !result
-select t1.c_key, t2.c_key from t2 left join [skew|t1.c_string("1","2","99999")] t1 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_string("1","2","99999)] t1 on t1.c_string=t2.c_int order by t1.c_key, t2.c_key;
 -- result:
-1	1
-2	1
-3	1
-4	2
-5	2
-6	3
+E: (1064, "Getting syntax error at line 1, column 134. Detail message: Unexpected input '<EOF>', the most similar input is {SINGLE_QUOTED_TEXT, 'CEIL', 'FALSE', 'DATETIME', 'INTERVAL', '?', '-'}.")
 -- !result
 truncate table t1;
 -- result:
@@ -777,4 +793,392 @@ select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on 
 4	2
 5	2
 6	3
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;
+-- result:
+1	1
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;
+-- result:
+1	1
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	None
+3	None
+4	None
+5	None
+6	None
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int and t1.c_key = t2.c_key order by t1.c_key, t2.c_key;
+-- result:
+None	2
+None	3
+1	1
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key limit 2;
+-- result:
+1	1
+2	1
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key limit 2;
+-- result:
+1	1
+2	1
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key limit 2;
+-- result:
+1	1
+2	1
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key limit 2;
+-- result:
+1	1
+2	1
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(555,666,777)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t1.c_bigint(555,666,777)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(555,666,777)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(555,666,777)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t1.c_bigint(1,1234567,3)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,1234567,3)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,1234567,3)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+insert into t1(c_key, c_bigint) values (7,4);
+-- result:
+-- !result
+insert into t2(c_key, c_int) values (4,9);
+-- result:
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t1.c_bigint(1,1234567,3,4)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+7	None
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,1234567,3,4)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+None	4
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t2 join [skew|t1.c_bigint(1,1234567,3,4)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select t1.c_key, t2.c_key from t1 left join [skew|t1.c_bigint(1,1234567,3,4)] t2 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+7	None
+-- !result
+select t1.c_key, t2.c_key from t2 left join [skew|t1.c_bigint(1,1234567,3,4)] t1 on t1.c_bigint=t2.c_int order by t1.c_key, t2.c_key;
+-- result:
+None	4
+1	1
+2	1
+3	1
+4	2
+5	2
+6	3
+-- !result
+select sum(t1.c_key), t1.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t1.c_bigint order by c_bigint limit 1;
+-- result:
+6	1
+-- !result
+select sum(t2.c_key), t2.c_bigint from t2 join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+-- result:
+10	None
+-- !result
+select sum(t1.c_key), t1.c_bigint from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t1.c_bigint order by c_bigint limit 1;
+-- result:
+6	1
+-- !result
+select sum(t2.c_key), t2.c_bigint from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+-- result:
+14	None
+-- !result
+select sum(t1.c_key), t2.c_bigint from t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+-- result:
+21	None
+-- !result
+select sum(t2.c_key), t2.c_bigint from t2 join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+-- result:
+10	None
+-- !result
+select sum(t1.c_key), t2.c_bigint from t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+-- result:
+28	None
+-- !result
+select sum(t2.c_key), t2.c_bigint from t2 left join [skew|t1.c_bigint(1,2,99999)] t1 on t1.c_bigint=t2.c_int group by t2.c_bigint;
+-- result:
+14	None
+-- !result
+CREATE TABLE skew_t1 (
+    c_key      INT NOT NULL,
+    c_tinyint  TINYINT,
+    c_smallint SMALLINT,
+    c_int      INT,
+    c_bigint   BIGINT,
+    c_largeint LARGEINT,
+    c_float    FLOAT,
+    c_double   DOUBLE,
+    c_decimal  DECIMAL(26,2),
+    c_date     DATE,
+    c_datetime DATETIME,
+    c_string   STRING
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+-- result:
+-- !result
+INSERT INTO skew_t1(c_key, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimal, c_date, c_datetime, c_string)
+SELECT t.c_key, t.c_key % 100 as c_tinyint, t.c_key % 1000 as c_smallint, t.c_key % 10000 as c_int, t.c_key % 100000 as c_bigint, t.c_key % 1000000 as c_largeint, t.c_key % 10000000 as c_float, t.c_key % 100000000 as c_double, t.c_key % 1000000000 as c_decimal, t.c_key % 10000000000 as c_date, t.c_key % 100000000000 as c_datetime, t.c_key % 1000000000000 as c_string
+FROM TABLE(generate_series(1, 4095*2)) t(c_key);
+-- result:
+-- !result
+INSERT INTO t2(c_key, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimal, c_date, c_datetime, c_string)
+SELECT t.c_key, t.c_key % 100 as c_tinyint, t.c_key % 1000 as c_smallint, t.c_key % 10000 as c_int, t.c_key % 100000 as c_bigint, t.c_key % 1000000 as c_largeint, t.c_key % 10000000 as c_float, t.c_key % 100000000 as c_double, t.c_key % 1000000000 as c_decimal, t.c_key % 10000000000 as c_date, t.c_key % 100000000000 as c_datetime, t.c_key % 1000000000000 as c_string
+FROM TABLE(generate_series(1, 4095*2)) t(c_key);
+-- result:
+-- !result
+INSERT INTO skew_t1(c_key, c_tinyint, c_smallint, c_int, c_bigint, c_largeint, c_float, c_double, c_decimal, c_date, c_datetime, c_string)
+SELECT t.c_key % 1, t.c_key % 1 as c_tinyint, t.c_key % 1 as c_smallint, t.c_key % 1 as c_int, t.c_key % 1 as c_bigint, t.c_key % 1 as c_largeint, t.c_key % 1 as c_float, t.c_key % 1 as c_double, t.c_key % 1 as c_decimal, t.c_key % 1 as c_date, t.c_key % 1 as c_datetime, t.c_key % 1 as c_string
+FROM TABLE(generate_series(1, 4095*2)) t(c_key);
+-- result:
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int;
+-- result:
+8193
+-- !result
+select count(1) from t2 join [skew|t1.c_bigint(1,2,99999)] skew_t1 as t1 on t1.c_bigint=t2.c_int;
+-- result:
+8193
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_bigint;
+-- result:
+8190
+-- !result
+select count(1) from t2 join [skew|t1.c_bigint(1,2,99999)] skew_t1 as t1 on t1.c_bigint=t2.c_bigint;
+-- result:
+8190
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_smallint=t2.c_smallint;
+-- result:
+132750
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_int=t2.c_int;
+-- result:
+8193
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_float=t2.c_float;
+-- result:
+8190
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_double=t2.c_double;
+-- result:
+8190
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_decimal=t2.c_decimal;
+-- result:
+8190
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_date=t2.c_date;
+-- result:
+366
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_datetime=t2.c_datetime;
+-- result:
+366
+-- !result
+select count(1) from skew_t1 as t1 join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_string=t2.c_string;
+-- result:
+8190
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_int;
+-- result:
+16383
+-- !result
+select count(1) from t2 left join [skew|t1.c_bigint(1,2,99999)] skew_t1 as t1 on t1.c_bigint=t2.c_int;
+-- result:
+8194
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_bigint=t2.c_bigint;
+-- result:
+16380
+-- !result
+select count(1) from t2 left join [skew|t1.c_bigint(1,2,99999)] skew_t1 as t1 on t1.c_bigint=t2.c_bigint;
+-- result:
+8194
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_smallint=t2.c_smallint;
+-- result:
+132750
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_int=t2.c_int;
+-- result:
+16383
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_float=t2.c_float;
+-- result:
+16380
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_double=t2.c_double;
+-- result:
+16380
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_decimal=t2.c_decimal;
+-- result:
+16380
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_date=t2.c_date;
+-- result:
+16380
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_datetime=t2.c_datetime;
+-- result:
+16380
+-- !result
+select count(1) from skew_t1 as t1 left join [skew|t1.c_bigint(1,2,99999)] t2 on t1.c_string=t2.c_string;
+-- result:
+16380
+-- !result
+drop table skew_t1;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
 -- !result
