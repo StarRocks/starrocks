@@ -385,7 +385,7 @@ Release date: February 8, 2024
 
 ### New Features
 
-- [Preview] Supports hybrid row-column storage for tables. It allows better performance for high-concurrency, low-latency point lookups against Primary Key tables and partial data updates. Currently, this feature does not support modification via ALTER TABLE, changing Sort Key, and partial updates in column mode.
+- [Preview] Supports hybrid row-column storage for tables. It allows better performance for high concurrency, low-latency point lookups against Primary Key tables and partial data updates. Currently, this feature does not support modification via ALTER TABLE, changing Sort Key, and partial updates in column mode.
 - Supports backing up and restoring asynchronous materialized views.
 - Broker Load supports loading JSON-type data.
 - Supports query rewrite using asynchronous materialized views created upon views. Queries against a view can be rewritten based on materialized views that are created upon that view.
@@ -462,7 +462,7 @@ Release date: December 21, 2023
 
 #### Query and SQL functions
 
-- Supports the prepared statement. It allows better performance for processing high-concurrency point lookup queries. It also prevents SQL injection effectively.
+- Supports the prepared statement. It allows better performance for processing high concurrency point lookup queries. It also prevents SQL injection effectively.
 - Supports the following Bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/).
 - Supports the Array function [array_unique_agg](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_unique_agg/).
 

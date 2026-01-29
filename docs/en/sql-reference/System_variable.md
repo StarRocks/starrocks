@@ -889,7 +889,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
   In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
 
-  However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
+  However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high concurrency scenarios.
 
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.

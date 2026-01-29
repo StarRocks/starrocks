@@ -713,7 +713,7 @@ This item corresponds to **BE Compaction Score** under **Cluster Overview**, and
 1. In the **Set an alert rule name** section, configure the name as "[PROD] BE Compaction Score".
 2. In the **Set a query and alert condition** section, configure the rule in section C as `B IS ABOVE 0`. You can use default values for other items.
 3. In the **Alert evaluation behavior** section, choose the **PROD** directory and Evaluation group **01** created earlier, and set the duration to 30 seconds.
-4. In the **Add details for your alert rule** section, click **Add annotation**, select **Description**, and input the alert content, for example, "High compaction pressure. Please check whether there are high-frequency or high-concurrency loading tasks and reduce the loading frequency. If the cluster has sufficient CPU, memory, and I/O resources, consider adjusting the cluster compaction strategy".
+4. In the **Add details for your alert rule** section, click **Add annotation**, select **Description**, and input the alert content, for example, "High compaction pressure. Please check whether there are high-frequency or high concurrency loading tasks and reduce the loading frequency. If the cluster has sufficient CPU, memory, and I/O resources, consider adjusting the cluster compaction strategy".
 5. In the **Notifications** section, configure **Labels** the same as the FE alert rule. If Labels are not configured, Grafana will use the Default policy and send alert emails to the "StarRocksOp" alert channel.
 
 ##### Clone
