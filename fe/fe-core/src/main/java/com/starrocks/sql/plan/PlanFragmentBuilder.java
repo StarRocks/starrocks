@@ -1034,7 +1034,7 @@ public class PlanFragmentBuilder {
                     final Partition partition = referenceTable.getPartition(partitionId);
                     List<TKeyRange> partitionRange = List.of();
                     if (!scanNode.getPartitionConjuncts().isEmpty()) {
-                         partitionRange = computePartitionRange(referenceTable, partition,
+                        partitionRange = computePartitionRange(referenceTable, partition,
                                  context.getConnectContext().getSessionVariable());
                     }
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
