@@ -14,6 +14,10 @@
 
 #pragma once
 
-// Backward-compatible shim. Canonical definitions live in gutil to avoid
-// introducing BE module dependencies into gutil.
-#include "gutil/compiler_util.h"
+// GLOG defines this based on the system but doesn't check if it's already
+// been defined. Undef it first to avoid warnings.
+#undef _XOPEN_SOURCE
+// This is including a glog internal file. We want this to expose the
+// function to get the stack trace.
+#include <glog/logging.h>
+#undef MutexLock

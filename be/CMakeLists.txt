@@ -393,6 +393,7 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
+    Gutil
     ${WL_START_GROUP}
     Agent
     Common
@@ -402,7 +403,6 @@ set(STARROCKS_LINK_LIBS
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
     FileSystem
     Formats
-    Gutil
     IO
     Serde
     Storage

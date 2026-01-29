@@ -16,10 +16,9 @@ using std::numeric_limits;
 using std::unordered_map;
 using std::unordered_set;
 
-#include <common/logging.h>
-
 #include "gutil/hash/hash.h"
 #include "gutil/integral_types.h"
+#include "gutil/logging.h"
 #include "gutil/strings/ascii_ctype.h"
 #include "gutil/strings/util.h"
 #include "gutil/strtoint.h"
