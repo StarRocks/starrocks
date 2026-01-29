@@ -784,7 +784,7 @@ struct TFusedMultiDistinctFunction final
         auto* struct_column = down_cast<StructColumn*>(dst);
         // compute count
         {
-            auto* count_column = struct_column->field_column_raw_ptr("count");
+            auto* count_column = struct_column->field_column_raw_ptr("count").value();
             Column* count_data_col = const_cast<Column*>(ColumnHelper::get_data_column(count_column));
             auto* count_data_column = static_cast<Int64Column*>(count_data_col);
             const auto count = state_impl.distinct_count();
@@ -795,7 +795,7 @@ struct TFusedMultiDistinctFunction final
 
         // compute sum
         if constexpr (lt_is_numeric<LT> && enable_bit_sum(compute_bits)) {
-            auto* sum_column = struct_column->field_column_raw_ptr("sum");
+            auto* sum_column = struct_column->field_column_raw_ptr("sum").value();
             Column* sum_data_col = const_cast<Column*>(ColumnHelper::get_data_column(sum_column));
             auto* sum_data_column = static_cast<SumColumn*>(sum_data_col);
             const auto sum = state_impl.sum;
@@ -806,7 +806,7 @@ struct TFusedMultiDistinctFunction final
 
         // compute avg
         if constexpr (lt_is_numeric<LT> && enable_bit_avg(compute_bits)) {
-            auto* avg_column = struct_column->field_column_raw_ptr("avg");
+            auto* avg_column = struct_column->field_column_raw_ptr("avg").value();
             Column* avg_data_col = const_cast<Column*>(ColumnHelper::get_data_column(avg_column));
             auto* avg_data_column = static_cast<AvgColumn*>(avg_data_col);
             const auto sum = state_impl.sum;
