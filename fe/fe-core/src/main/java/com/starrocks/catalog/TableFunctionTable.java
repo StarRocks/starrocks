@@ -718,7 +718,7 @@ public class TableFunctionTable extends Table {
 
         List<Column> columns = new ArrayList<>();
         for (PSlotDescriptor slot : result.schema) {
-            boolean isNullable = slot.hasIsNullable ? slot.isNullable : slot.nullIndicatorBit != -1;
+            boolean isNullable = slot.isIsNullable() ? slot.isNullable : slot.nullIndicatorBit != -1;
             columns.add(new Column(slot.colName, TypeDeserializer.fromProtobuf(slot.slotType), isNullable));
         }
         return columns;
