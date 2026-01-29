@@ -17,6 +17,7 @@ package com.starrocks.lake.vacuum;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -182,6 +183,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         boolean fileBundling = table.isFileBundling();
+        boolean enableSharedFileCleanup = table.getDefaultDistributionInfo().getType() == DistributionInfoType.RANGE;
         try {
             for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
@@ -205,14 +207,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
+        boolean singleNodeVacuum = fileBundling || enableSharedFileCleanup;
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
         ComputeNode pickNode = null;
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
 
-            if (fileBundling) {
-                // if enable file bundling, there will be only one node.
+            if (singleNodeVacuum) {
+                // file bundling or shared cleanup runs on a single node.
                 if (pickNode == null) {
                     pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
                 }
@@ -258,6 +261,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             vacuumRequest.partitionId = partition.getId();
             vacuumRequest.deleteTxnLog = needDeleteTxnLog;
             vacuumRequest.enableFileBundling = fileBundling;
+            vacuumRequest.enableSharedFileCleanup = enableSharedFileCleanup;
             // Perform deletion of txn log on the first node only.
             needDeleteTxnLog = false;
             try {
