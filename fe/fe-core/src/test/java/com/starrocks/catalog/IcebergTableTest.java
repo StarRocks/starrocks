@@ -42,6 +42,7 @@ import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -289,5 +290,78 @@ public class IcebergTableTest extends TableTestBase {
         // When scope is HOST, sort_order should NOT be set
         Assertions.assertFalse(tIcebergTable.isSetSort_order(),
                 "sort_order should not be set when connectorSinkSortScope=HOST");
+    }
+
+    @Test
+    public void testBasicFieldsCopied() {
+        // prepare a full IcebergTable
+        List<Column> schema = Lists.newArrayList(new Column("c1", com.starrocks.type.IntegerType.INT));
+        Map<String, String> props = Maps.newHashMap();
+        props.put("k", "v");
+
+        org.apache.iceberg.Schema icebergSchema =
+                new org.apache.iceberg.Schema(
+                        org.apache.iceberg.types.Types.NestedField.required(1, "c1", 
+                                org.apache.iceberg.types.Types.IntegerType.get()));
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        org.apache.iceberg.TableMetadata meta = Mockito.mock(org.apache.iceberg.TableMetadata.class);
+        org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
+        Mockito.when(nativeTable.schema()).thenReturn(icebergSchema);
+        Mockito.when(nativeTable.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
+        Mockito.when(nativeTable.operations()).thenReturn(ops);
+        Mockito.when(ops.current()).thenReturn(meta);
+        Mockito.when(meta.uuid()).thenReturn("uuid-1234");
+
+
+        IcebergTable full = IcebergTable.builder()
+                .setId(10)
+                .setSrTableName("sr")
+                .setCatalogName("cat")
+                .setResourceName("res")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setComment("cmt")
+                .setFullSchema(schema)
+                .setIcebergProperties(props)
+                .setNativeTable(nativeTable)
+                .build();
+
+        LightWeightIcebergTable light = new LightWeightIcebergTable(full);
+
+        Assertions.assertEquals(full.getId(), light.getId());
+        Assertions.assertEquals(full.getName(), light.getName());
+        Assertions.assertEquals(full.getCatalogName(), light.getCatalogName());
+        Assertions.assertEquals(full.getCatalogDBName(), light.getCatalogDBName());
+        Assertions.assertEquals(full.getCatalogTableName(), light.getCatalogTableName());
+        Assertions.assertEquals(full.getComment(), light.getComment());
+        Assertions.assertTrue(full.hashCode() == light.hashCode());
+    }
+
+    @Test
+    public void testGetNativeTableThrows() {
+        org.apache.iceberg.Schema icebergSchema =
+                new org.apache.iceberg.Schema(
+                        org.apache.iceberg.types.Types.NestedField.required(1, "c1", 
+                                org.apache.iceberg.types.Types.IntegerType.get()));
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        org.apache.iceberg.TableMetadata meta = Mockito.mock(org.apache.iceberg.TableMetadata.class);
+        org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
+        Mockito.when(nativeTable.schema()).thenReturn(icebergSchema);
+        Mockito.when(nativeTable.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
+        Mockito.when(nativeTable.operations()).thenReturn(ops);
+        Mockito.when(ops.current()).thenReturn(meta);
+        Mockito.when(meta.uuid()).thenReturn("uuid-1234");
+
+        IcebergTable base = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("cat")
+                .setCatalogDBName("db")
+                .setCatalogTableName("tbl")
+                .setFullSchema(Lists.newArrayList())
+                .setNativeTable(nativeTable)
+                .build();
+        LightWeightIcebergTable light = new LightWeightIcebergTable(base);
+        Assertions.assertThrows(UnsupportedOperationException.class, light::getNativeTable);
     }
 }
