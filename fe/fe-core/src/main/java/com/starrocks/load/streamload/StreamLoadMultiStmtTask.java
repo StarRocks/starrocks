@@ -22,12 +22,14 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
+import com.starrocks.sql.ast.txn.RollbackStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TNetworkAddress;
@@ -156,6 +158,23 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     public void beginTxn(TransactionResult resp) {
+        // Check if task already committed or finished - return LABEL_ALREADY_EXISTS like basic transaction
+        if (this.state == State.COMMITED || this.state == State.FINISHED) {
+            resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+            resp.msg = String.format("Label [%s] has already been used.", label);
+            resp.addResultEntry("ExistingJobStatus", state.name());
+            return;
+        }
+
+        // Check if transaction already started (Double Begin) - return LABEL_ALREADY_EXISTS like basic transaction
+        if (this.txnId != 0) {
+            resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+            resp.msg = String.format("Transaction already started with label [%s], txnId: %d", label, txnId);
+            resp.addResultEntry("ExistingJobStatus", state.name());
+            resp.addResultEntry("TxnId", txnId);
+            return;
+        }
+
         // Ensure a non-empty label is generated in TransactionStmtExecutor.beginStmt
         // by providing a valid executionId. Use the pre-generated loadId as executionId.
         if (context.getExecutionId() == null) {
@@ -185,6 +204,19 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
     @Override
     public void commitTxn(HttpHeaders headers, TransactionResult resp) throws StarRocksException {
+        // Check if already committed or finished - return OK like basic transaction does
+        if (this.state == State.COMMITED || this.state == State.FINISHED) {
+            resp.setOKMsg(String.format("Transaction %d has already committed, label is %s", txnId, label));
+            resp.addResultEntry("Label", label);
+            resp.addResultEntry("TxnId", txnId);
+            return;
+        }
+        // Check if already cancelled - return error
+        if (this.state == State.CANCELLED) {
+            resp.setErrorMsg(String.format("Can not commit CANCELLED transaction %d, label is %s", txnId, label));
+            return;
+        }
+
         // Commit all sub-tasks
         LOG.info("commit {} sub tasks", taskMaps.size());
         for (StreamLoadTask task : taskMaps.values()) {
@@ -202,13 +234,40 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         }
         TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
         this.state = State.COMMITED;
+        this.endTimeMs = System.currentTimeMillis();
     }
 
     @Override
     public void manualCancelTask(TransactionResult resp) throws StarRocksException {
-        // Cancel all sub-tasks
+        // Check if already committed or finished - cannot abort committed transaction
+        if (this.state == State.COMMITED || this.state == State.FINISHED) {
+            resp.setErrorMsg(String.format("Can not abort VISIBLE transaction %d, label is %s", txnId, label));
+            return;
+        }
+        // Check if already cancelled - return OK with already aborted message like basic transaction
+        if (this.state == State.CANCELLED) {
+            resp.setOKMsg(String.format("Transaction %d has already aborted, label is %s", txnId, label));
+            resp.addResultEntry("Label", label);
+            resp.addResultEntry("TxnId", txnId);
+            return;
+        }
+
+        // Use TransactionStmtExecutor.rollbackStmt to properly abort the transaction
+        // This ensures the transaction is looked up from explicitTxnStateMap (where it was created)
+        // instead of idToRunningTransactionState (which would cause "transaction not found" error)
+        try {
+            TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+            resp.setOKMsg("stream load " + label + " abort");
+        } catch (Exception e) {
+            LOG.warn("Failed to rollback multi-statement transaction, label: {}, txnId: {}", label, txnId, e);
+            resp.setErrorMsg("stream load " + label + " abort fail: " + e.getMessage());
+            return;
+        }
+        // Cancel all sub-tasks' coordinators without aborting transaction
+        // (the transaction is already rolled back above)
+        String reason = "multi-statement transaction rollback";
         for (StreamLoadTask task : taskMaps.values()) {
-            task.manualCancelTask(resp);
+            task.cancelCoordinatorOnly(reason);
         }
         this.state = State.CANCELLED;
         this.endTimeMs = System.currentTimeMillis();
