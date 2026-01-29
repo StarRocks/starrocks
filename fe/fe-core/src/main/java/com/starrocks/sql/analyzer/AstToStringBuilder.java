@@ -403,7 +403,8 @@ public class AstToStringBuilder {
         } else {
             createTableSql.append("CREATE TABLE ");
         }
-        createTableSql.append("`").append(tableName).append("`")
+        createTableSql.append("`").append(table.getCatalogName()).append("`.`").
+                append(table.getCatalogDBName()).append("`.`").append(table.getName()).append("`")
                 .append(" (\n");
 
         // Columns
@@ -485,7 +486,8 @@ public class AstToStringBuilder {
 
     public static String getExternalCatalogViewDdlStmt(ConnectorView view) {
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE VIEW `").append(view.getName()).append("` (");
+        sb.append("CREATE VIEW `").append(view.getCatalogName()).append("`.`").
+                append(view.getCatalogDBName()).append("`.`").append(view.getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
         for (Column column : view.getBaseSchema()) {
             colDef.add("`" + column.getName() + "`");
