@@ -107,6 +107,14 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
         ConstantOperator locationArg = args.get(LOCATION);
         if (locationArg != null) {
             location = locationArg.getVarchar();
+            if (location == null || location.isEmpty()) {
+                throw new StarRocksConnectorException("invalid argument value for %s, expected non-empty string",
+                        LOCATION);
+            }
+            if (!location.startsWith(table.location())) {
+                throw new StarRocksConnectorException("invalid argument value for %s, location must be a subdirectory of " +
+                        "table location %s, got %s", LOCATION, table.location(), location);
+            }
         } else {
             location = table.location();
         }

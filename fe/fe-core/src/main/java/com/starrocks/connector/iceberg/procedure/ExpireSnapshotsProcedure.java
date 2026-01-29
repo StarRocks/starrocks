@@ -30,8 +30,8 @@ import java.util.Map;
 public class ExpireSnapshotsProcedure extends IcebergTableProcedure {
     private static final String PROCEDURE_NAME = "expire_snapshots";
 
-    private static final String OLDER_THAN = "older_than";
-    private static final String RETAIN_LAST = "retain_last";
+    public static final String OLDER_THAN = "older_than";
+    public static final String RETAIN_LAST = "retain_last";
 
     private static final ExpireSnapshotsProcedure INSTANCE = new ExpireSnapshotsProcedure();
 
