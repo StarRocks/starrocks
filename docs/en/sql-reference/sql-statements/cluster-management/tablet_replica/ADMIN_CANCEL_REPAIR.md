@@ -4,9 +4,9 @@ displayed_sidebar: docs
 
 # ADMIN CANCEL REPAIR
 
-ADMIN CANCEL REPAIR is used to cancel repairing specified tables or partitions with high priority.
+Cancels repairing specified tables or partitions with high priority.
 
-Note: This statement only supports shared-nothing tables.
+ADMIN CANCEL REPAIR applies only to native tables in shared-nothing clusters.
 
 :::tip
 
