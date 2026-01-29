@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -28,6 +29,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -454,5 +456,175 @@ public class AnalyzeInsertTest {
                 Assertions.assertEquals("1", row.get(1));
             }
         }
+    }
+
+    /**
+     * Test for areTablesCopySafe method.
+     */
+    @Test
+    public void testAreTablesCopySafeForInsertStmt() {
+        // Test 1: INSERT INTO olap_table SELECT * FROM olap_table
+        // Both target and source tables are OlapTable, should be copy safe
+        InsertStmt insertStmt1 = (InsertStmt) analyzeSuccess("insert into t0 select * from t0");
+        Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(insertStmt1));
+
+        // Test 2: INSERT INTO olap_table VALUES (...)
+        // Target table is OlapTable, should be copy safe
+        InsertStmt insertStmt2 = (InsertStmt) analyzeSuccess("insert into t0 values(1, 2, 3)");
+        Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(insertStmt2));
+
+        // Test 3: INSERT INTO olap_table SELECT from multiple olap tables with JOIN
+        InsertStmt insertStmt3 = (InsertStmt) analyzeSuccess(
+                "insert into t0 select t1.v4, t1.v5, t1.v6 from t1 join t2 on t1.v4 = t2.v7");
+        Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(insertStmt3));
+
+        // Test 4: INSERT INTO olap_table SELECT with subquery
+        InsertStmt insertStmt4 = (InsertStmt) analyzeSuccess(
+                "insert into t0 select * from (select v4, v5, v6 from t1) sub");
+        Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(insertStmt4));
+    }
+
+    /**
+     * Test areTablesCopySafe for INSERT statement with Hive table.
+     * Hive table is in IMMUTABLE_EXTERNAL_TABLES, so it should be copy safe.
+     */
+    @Test
+    public void testAreTablesCopySafeForInsertIntoHiveTable(@Mocked HiveTable hiveTable) {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
+                if ("hive_catalog".equals(catalogName)) {
+                    return new Database();
+                }
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                if ("hive_catalog".equals(tableName.getCatalog())) {
+                    return hiveTable;
+                }
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tableName.getTbl());
+            }
+        };
+
+        new Expectations(hiveTable) {
+            {
+                hiveTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                hiveTable.isHiveTable();
+                result = true;
+                minTimes = 0;
+
+                hiveTable.isUnPartitioned();
+                result = true;
+                minTimes = 0;
+
+                hiveTable.getTableLocation();
+                result = "hdfs://path/to/hive/table";
+                minTimes = 0;
+
+                hiveTable.getHiveTableType();
+                result = HiveTable.HiveTableType.MANAGED_TABLE;
+                minTimes = 0;
+
+                hiveTable.getType();
+                result = Table.TableType.HIVE;
+                minTimes = 0;
+
+                hiveTable.getRelatedMaterializedViews();
+                result = com.google.common.collect.Sets.newHashSet();
+                minTimes = 0;
+
+                hiveTable.isOlapTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+
+                hiveTable.getPartitionColumnNames();
+                result = ImmutableList.of();
+                minTimes = 0;
+
+                hiveTable.getBaseSchema();
+                result = ImmutableList.of(
+                        new Column("v1", IntegerType.BIGINT),
+                        new Column("v2", IntegerType.BIGINT),
+                        new Column("v3", IntegerType.BIGINT));
+                minTimes = 0;
+
+                hiveTable.getFullSchema();
+                result = ImmutableList.of(
+                        new Column("v1", IntegerType.BIGINT),
+                        new Column("v2", IntegerType.BIGINT),
+                        new Column("v3", IntegerType.BIGINT));
+                minTimes = 0;
+            }
+        };
+
+        // INSERT INTO HiveTable SELECT FROM OlapTable should be copy safe
+        // because Hive is in IMMUTABLE_EXTERNAL_TABLES
+        InsertStmt insertStmt = (InsertStmt) analyzeSuccess(
+                "insert into hive_catalog.db.tbl select v1, v2, v3 from t0");
+        Assertions.assertTrue(AnalyzerUtils.areTablesCopySafe(insertStmt));
+    }
+
+    /**
+     * Test areTablesCopySafe for INSERT statement with Mysql table.
+     * Mysql table is not in IMMUTABLE_EXTERNAL_TABLES, so it should not be copy safe.
+     */
+    @Test
+    public void testAreTablesCopySafeForInsertIntoMysqlTable(@Mocked MysqlTable mysqlTable) {
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                if ("mysql_table".equals(tableName.getTbl())) {
+                    return mysqlTable;
+                }
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tableName.getTbl());
+            }
+        };
+
+        new Expectations(mysqlTable) {
+            {
+                mysqlTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                mysqlTable.getType();
+                result = Table.TableType.MYSQL;
+                minTimes = 0;
+
+                mysqlTable.getRelatedMaterializedViews();
+                result = com.google.common.collect.Sets.newHashSet();
+                minTimes = 0;
+
+                mysqlTable.isOlapTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+
+                mysqlTable.getBaseSchema();
+                result = ImmutableList.of(
+                        new Column("v1", IntegerType.BIGINT),
+                        new Column("v2", IntegerType.BIGINT),
+                        new Column("v3", IntegerType.BIGINT));
+                minTimes = 0;
+
+                mysqlTable.getFullSchema();
+                result = ImmutableList.of(
+                        new Column("v1", IntegerType.BIGINT),
+                        new Column("v2", IntegerType.BIGINT),
+                        new Column("v3", IntegerType.BIGINT));
+                minTimes = 0;
+            }
+        };
+
+        // INSERT INTO MysqlTable SELECT FROM OlapTable should not be copy safe
+        // because Mysql is not in IMMUTABLE_EXTERNAL_TABLES
+        InsertStmt insertStmt = (InsertStmt) analyzeSuccess(
+                "insert into test.mysql_table select v1, v2, v3 from t0");
+        Assertions.assertFalse(AnalyzerUtils.areTablesCopySafe(insertStmt));
     }
 }
