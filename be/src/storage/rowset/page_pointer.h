@@ -37,7 +37,6 @@
 #include <cstdint>
 #include <string>
 
-#include "gen_cpp/segment.pb.h"
 #include "util/coding.h"
 #include "util/faststring.h"
 
