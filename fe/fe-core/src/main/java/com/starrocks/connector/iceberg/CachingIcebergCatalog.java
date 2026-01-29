@@ -65,6 +65,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public static final long DEFAULT_CACHE_NUM = 100000;
     private static final int MEMORY_META_SAMPLES = 10;
     private static final int MEMORY_FILE_SAMPLES = 100;
+    private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
+    private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Table> tables;
@@ -86,13 +88,28 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.delegate = delegate;
         this.icebergProperties = icebergProperties;
         boolean enableCache = icebergProperties.isEnableIcebergMetadataCache();
-        this.databases = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
+        long tableCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergTableCacheMemoryUsageRatio());
+        this.databases = newCacheBuilderWithMaximumSize(
+                icebergProperties.getIcebergMetaCacheTtlSec(),
+                NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.tables = newCacheBuilder(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
-                icebergProperties.getIcebergTableCacheRefreshIntervalSec(),
-                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE)
+                icebergProperties.getIcebergTableCacheRefreshIntervalSec())
                 .executor(executorService)
+                .maximumWeight(tableCacheSize)
+                .weigher((Weigher<IcebergTableName, Table>) (IcebergTableName key, Table table) -> {
+                    long size = SizeEstimator.estimate(key);
+                    if (table != null) {
+                        size += 1L * countSnapshotsSafe(table) * MEMORY_SNAPSHOT_SIZE;
+                        if (((BaseTable) table).operations().current().currentSnapshot() != null) {
+                            size += 1L * (((BaseTable) table).operations().current().currentSnapshot()
+                                    .allManifests(((BaseTable) table).operations().io()).size() * MEMORY_MANIFEST_SIZE);
+                        }
+                    }
+                    return (size > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) size;
+                })
                 .removalListener((IcebergTableName key, Table value, RemovalCause cause) -> {
                     if (key != null) {
                         LOG.debug("iceberg table cache removal: {}.{}, cause={}, evicted={}",
@@ -107,8 +124,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                 key.dbName, key.tableName);
                         return delegate.getTable(key.dbName, key.tableName);
                     }
+
+                    @Override
+                    public Table reload(IcebergTableName key, Table oldValue) {
+                        try {
+                            BaseTable updateTable = 
+                                    (BaseTable) delegate.getTable(key.dbName, key.tableName);
+                            TableOperations newOps = updateTable.operations();
+                            TableOperations oldOps = ((BaseTable) oldValue).operations();
+                            if (oldOps.current().metadataFileLocation().equals(newOps.current().metadataFileLocation())) {
+                                return oldValue;
+                            }
+                            return updateTable;
+                        } catch (Exception e) {
+                            LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
+                            return oldValue;
+                        }
+                    }
                 });
-        this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
+        this.partitionCache = newCacheBuilderWithMaximumSize(
+                icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE,
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
@@ -447,8 +482,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.getTableScan(table, scanContext);
     }
 
-    private Caffeine<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshInterval,
-                                                         long maximumSize) {
+    private Caffeine<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshInterval) {
         Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder();
         if (expiresAfterWriteSec >= 0) {
             cacheBuilder.expireAfterWrite(expiresAfterWriteSec, SECONDS);
@@ -458,8 +492,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             cacheBuilder.refreshAfterWrite(refreshInterval, SECONDS);
         }
 
-        cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
+    }
+
+    private Caffeine<Object, Object> newCacheBuilderWithMaximumSize(long expiresAfterWriteSec, long refreshInterval,
+                                                                    long maximumSize) {
+        return newCacheBuilder(expiresAfterWriteSec, refreshInterval).maximumSize(maximumSize);
     }
 
     public static class IcebergTableName {
@@ -567,6 +605,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         List<List<String>> partitionNames = getAllCachedPartitionNames();
         counter.put("Database", databases.estimatedSize());
         counter.put("Table", tables.estimatedSize());
+        counter.put("TableSnapshot", tables.asMap().values()
+                .stream()
+                .mapToLong(this::countSnapshotsSafe)
+                .sum());
         counter.put("PartitionNames", partitionNames
                 .stream()
                 .mapToLong(List::size)
@@ -580,5 +622,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .mapToLong(Set::size)
                 .sum());
         return counter;
+    }
+
+    private long countSnapshotsSafe(Table table) {
+        if (!(table instanceof BaseTable)) {
+            return 0;
+        }
+        BaseTable baseTable = (BaseTable) table;
+        TableOperations ops = baseTable.operations();
+        if (ops == null || ops.current() == null || ops.current().snapshots() == null) {
+            return 0;
+        }
+        return ops.current().snapshots().size();
     }
 }
