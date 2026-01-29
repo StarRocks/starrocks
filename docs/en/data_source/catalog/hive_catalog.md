@@ -194,6 +194,7 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| hive.metastore.glue.catalogid | No       | The ID of the AWS Glue Data Catalog to use. When not specified, the catalog in the current AWS account is used. You must specify this parameter when you need to access a Glue Data Catalog in a different AWS account (cross-account access). |
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
