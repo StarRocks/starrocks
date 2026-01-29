@@ -378,6 +378,21 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     };
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, task_qlen_fun);
 
+    int num_fragment_prepare_threads = config::fragment_prepare_thread_pool_thread_num;
+    if (num_fragment_prepare_threads == 0) {
+        num_fragment_prepare_threads = CpuInfo::num_cores();
+    } else if (num_fragment_prepare_threads < 0) {
+        // -n: means n * num_cpu_cores
+        num_fragment_prepare_threads = -num_fragment_prepare_threads * CpuInfo::num_cores();
+    }
+    _fragment_prepare_pool = new PriorityThreadPool("fragment_prepare", num_fragment_prepare_threads,
+                                                    config::fragment_prepare_thread_pool_queue_size);
+    auto fragment_prepare_task_qlen_fun = [] {
+        auto pool = ExecEnv::GetInstance()->fragment_prepare_pool();
+        return (pool == nullptr) ? 0U : pool->get_queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(fragment_prepare_pool_queue_len, fragment_prepare_task_qlen_fun);
+
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
         num_sink_io_threads = CpuInfo::num_cores();
@@ -763,6 +778,18 @@ void ExecEnv::stop() {
         component_times.emplace_back("query_rpc_pool", MonotonicMillis() - start);
     }
 
+    if (_fragment_prepare_pool) {
+        start = MonotonicMillis();
+        _fragment_prepare_pool->shutdown();
+        component_times.emplace_back("fragment_prepare_pool", MonotonicMillis() - start);
+    }
+
+    if (_pipeline_prepare_pool) {
+        start = MonotonicMillis();
+        _pipeline_prepare_pool->shutdown();
+        component_times.emplace_back("pip_prepare_pool", MonotonicMillis() - start);
+    }
+
     if (_datacache_rpc_pool) {
         start = MonotonicMillis();
         _datacache_rpc_pool->shutdown();
@@ -878,6 +905,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
+    SAFE_DELETE(_fragment_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
     SAFE_DELETE(_datacache_rpc_pool);
@@ -1016,6 +1044,9 @@ void ExecEnv::try_release_resource_before_core_dump() {
     }
     if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
         _pipeline_prepare_pool->shutdown();
+    }
+    if (_fragment_prepare_pool != nullptr && need_release("fragment_prepare_thread_pool")) {
+        _fragment_prepare_pool->shutdown();
     }
     if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
         _pipeline_sink_io_pool->shutdown();
