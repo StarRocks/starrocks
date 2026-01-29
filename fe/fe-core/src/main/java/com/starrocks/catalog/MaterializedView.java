@@ -239,7 +239,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public boolean getUseFastSchemaEvolution() {
-        return false;
+        return true;
     }
 
     @Override
@@ -677,6 +677,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+
+        // Assign unique ids for columns
+        initUniqueId();
     }
 
     // Used for sync mv
@@ -2550,11 +2553,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // write edit log
         if (isWriteBaseTableInfoChangeEditLog) {
-            Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap =
-                    this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
             AlterMaterializedViewBaseTableInfosLog alterMaterializedViewBaseTableInfos =
-                    new AlterMaterializedViewBaseTableInfosLog(dbId, getId(), oldMvId, baseTableInfos,
-                            baseTableVisibleVersionMap);
+                    new AlterMaterializedViewBaseTableInfosLog(oldMvId, this);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(alterMaterializedViewBaseTableInfos);
         }
 
@@ -2573,31 +2573,112 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Replay AlterMaterializedViewBaseTableInfosLog and update associated variables.
      */
     public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
-        this.setBaseTableInfos(log.getBaseTableInfos());
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
-        for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> e :
-                log.getBaseTableVisibleVersionMap().entrySet()) {
-            if (!baseTableVisibleVersionMap.containsKey(e.getKey())) {
-                baseTableVisibleVersionMap.put(e.getKey(), e.getValue());
-            } else {
-                Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = baseTableVisibleVersionMap.get(e.getKey());
-                partitionInfoMap.putAll(e.getValue());
-            }
-        }
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
-            if (baseTableOpt.isEmpty()) {
-                continue;
-            }
-            Table baseTable = baseTableOpt.get();
-            baseTable.getRelatedMaterializedViews().remove(log.getMvId());
-            baseTable.getRelatedMaterializedViews().add(getMvId());
-        }
-        setActive();
+        int mvAlterType = log.getAlterType();
+        LOG.info("Replay alter materialized view base table infos log for mv {}, alter type is {}",
+                this.getName(), mvAlterType);
+        AlterMaterializedViewBaseTableInfosLog.AlterType alterType =
+                AlterMaterializedViewBaseTableInfosLog.AlterType.valueOf(mvAlterType);
+        switch (alterType) {
+            case ADD_COLUMN: {
+                // add column
+                this.viewDefineSql = log.getViewDefineSql();
+                this.simpleDefineSql = log.getSimpleDefineSql();
+                this.originalViewDefineSql = log.getOriginalViewDefineSql();
+                if (log.getQueryOutputIndices() != null) {
+                    this.queryOutputIndices = log.getQueryOutputIndices();
+                }
+                // reset cached query parse node
+                resetDefinedQueryParseNode();
+                // init unique id
+                initUniqueId();
 
-        // recheck again
-        fixRelationship();
+                // update version map if needed
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                        this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
+                // overwrite existing version info
+                for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> e :
+                        log.getBaseTableVisibleVersionMap().entrySet()) {
+                    baseTableVisibleVersionMap.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                            .putAll(e.getValue());
+                }
+                Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoVisibleVersionMap =
+                        this.refreshScheme.asyncRefreshContext.baseTableInfoVisibleVersionMap;
+                for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> e :
+                        log.getBaseTableInfoVisibleVersionMap().entrySet()) {
+                    baseTableInfoVisibleVersionMap.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                            .putAll(e.getValue());
+                }
+                break;
+            }
+            case DROP_COLUMN:
+                // drop column
+                this.viewDefineSql = log.getViewDefineSql();
+                this.simpleDefineSql = log.getSimpleDefineSql();
+                this.originalViewDefineSql = log.getOriginalViewDefineSql();
+                if (log.getQueryOutputIndices() != null) {
+                    this.queryOutputIndices = log.getQueryOutputIndices();
+                }
+                // reset cached query parse node
+                resetDefinedQueryParseNode();
+                // init unique id
+                initUniqueId();
+                break;
+            default: {
+                this.setBaseTableInfos(log.getBaseTableInfos());
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                        this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
+                for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> e :
+                        log.getBaseTableVisibleVersionMap().entrySet()) {
+                    baseTableVisibleVersionMap.computeIfAbsent(e.getKey(), k -> new HashMap<>())
+                            .putAll(e.getValue());
+                }
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Optional<Table> baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                    if (baseTableOpt.isEmpty()) {
+                        continue;
+                    }
+                    Table baseTable = baseTableOpt.get();
+                    baseTable.getRelatedMaterializedViews().remove(log.getMvId());
+                    baseTable.getRelatedMaterializedViews().add(getMvId());
+                }
+                setActive();
+
+                // recheck again
+                fixRelationship();
+            }
+        }
+    }
+
+    public synchronized void resetDefinedQueryParseNode() {
+        this.defineQueryParseNode = null;
+    }
+
+    public synchronized ParseNode initDefineQueryParseNode() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        ConnectContext connectContext = ConnectContext.buildInner();
+        if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
+            try {
+                String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
+                connectContext.setDatabase(currentDBName);
+                return MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("parse original view define sql failed:", e);
+            }
+        }
+        if (!Strings.isNullOrEmpty(viewDefineSql)) {
+            try {
+                connectContext.setDatabase(db.getOriginName());
+                return MvUtils.getQueryAst(viewDefineSql, connectContext);
+            } catch (Exception e) {
+                // ignore
+                LOG.warn("parse view define sql failed:", e);
+            }
+        }
+        return null;
     }
 
     /**
@@ -2605,32 +2686,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public synchronized ParseNode getDefineQueryParseNode() {
         if (this.defineQueryParseNode == null) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                return null;
-            }
-            ConnectContext connectContext = ConnectContext.buildInner();
-            if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
-                try {
-                    String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
-                    connectContext.setDatabase(currentDBName);
-                    this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
-                } catch (Exception e) {
-                    // ignore
-                    LOG.warn("parse original view define sql failed:", e);
-                }
-            }
-            if (this.defineQueryParseNode == null) {
-                if (!Strings.isNullOrEmpty(viewDefineSql)) {
-                    try {
-                        connectContext.setDatabase(db.getOriginName());
-                        this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
-                    } catch (Exception e) {
-                        // ignore
-                        LOG.warn("parse view define sql failed:", e);
-                    }
-                }
-            }
+            this.defineQueryParseNode = initDefineQueryParseNode();
         }
         return this.defineQueryParseNode;
     }
@@ -2659,6 +2715,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     .map(baseSchema::get)
                     .filter(col -> isWithInvisible || !col.isHidden())
                     .collect(Collectors.toList());
+        }
+    }
+
+    /**
+     * To support fast schema evolution, we need to init unique id for each column in base schema.
+     */
+    public void initUniqueId() {
+        List<Column> baseSchema = getBaseSchema();
+        if (baseSchema != null && !baseSchema.isEmpty()
+                && baseSchema.get(0).getUniqueId() == Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+            for (Column column : baseSchema) {
+                column.setUniqueId(incAndGetMaxColUniqueId());
+            }
         }
     }
 }

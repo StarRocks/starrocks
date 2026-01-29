@@ -141,7 +141,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void, ConnectContext> {
-    private final Table table;
+    protected final Table table;
 
     public AlterTableClauseAnalyzer(Table table) {
         this.table = table;

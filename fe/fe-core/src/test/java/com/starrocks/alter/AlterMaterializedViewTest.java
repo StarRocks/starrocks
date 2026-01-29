@@ -14,14 +14,24 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.mv.ivm.MVIVMTestBase;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 public class AlterMaterializedViewTest extends MVTestBase {
     @BeforeAll
@@ -273,5 +283,187 @@ public class AlterMaterializedViewTest extends MVTestBase {
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
         }
+    }
+
+    private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
+        // waiting table state to normal
+        int retryTimes = 5;
+        while (tb.getState() != OlapTable.OlapTableState.NORMAL && retryTimes > 0) {
+            Thread.sleep(5000);
+            retryTimes--;
+        }
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, tb.getState());
+    }
+
+    private void waitSchemaChangeJobDone(boolean rollupJob, OlapTable tb) throws InterruptedException {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();
+        if (rollupJob) {
+            alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        }
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "alter job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                Thread.sleep(1000);
+            }
+            System.out.println(alterJobV2.getType() + " alter job " + alterJobV2.getJobId() + " is done. state: " +
+                    alterJobV2.getJobState());
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+        checkTableStateToNormal(tb);
+    }
+
+    public static void alterMVAddColumn(String sql, boolean expectedException) {
+        try {
+            AlterMaterializedViewStmt alterTableStmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            if (expectedException) {
+                Assertions.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assertions.fail();
+            }
+        }
+    }
+
+    public static void alterMVDropColumn(String sql, boolean expectedException) {
+        try {
+            AlterMaterializedViewStmt alterTableStmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            DDLStmtExecutor.execute(alterTableStmt, connectContext);
+            if (expectedException) {
+                Assertions.fail();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (!expectedException) {
+                Assertions.fail();
+            }
+        }
+    }
+
+    @Test
+    public void testAddMVColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    v1 int, \n" +
+                "    v2 int, \n" +
+                "    v3 int \n" +
+                ")\n" +
+                "DUPLICATE KEY(`k1`)" +
+                "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, sum(v1) from base_tbl1 group by k1;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "base_tbl1");
+
+        // mv1
+        MaterializedView mv1 = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "mv1");
+        {
+            String stmt = "alter materialized view mv1 add column count_k1 as count(k1)";
+            alterMVAddColumn(stmt, false);
+            waitSchemaChangeJobDone(false, tbl);
+            Assertions.assertEquals(mv1.getColumns().size(), 3);
+        }
+        // check query rewrite
+        {
+            String query = "select count(k1) from base_tbl1 group by k1";
+            String plan = UtFrameUtils.getFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "mv1");
+        }
+
+        {
+            String stmt = "alter materialized view mv1 add column v2 as v2";
+            alterMVAddColumn(stmt, false);
+            waitSchemaChangeJobDone(false, tbl);
+            Assertions.assertEquals(mv1.getColumns().size(), 4);
+        }
+
+        {
+            String stmt = "alter materialized view mv1 add column v3_default as v3 default \"10\"";
+            alterMVAddColumn(stmt, false);
+            waitSchemaChangeJobDone(false, tbl);
+            Column column = mv1.getColumn("v3_default");
+            Assertions.assertNotNull(column);
+            Assertions.assertEquals("10", column.getDefaultValue());
+            Assertions.assertEquals(mv1.getColumns().size(), 5);
+        }
+
+        {
+            String dropStmt = "alter materialized view mv1 drop column count_k1";
+            alterMVDropColumn(dropStmt, false);
+            waitSchemaChangeJobDone(false, tbl);
+            Assertions.assertEquals(mv1.getColumns().size(), 4);
+        }
+        {
+            String dropStmt = "alter materialized view mv1 drop column v2";
+            alterMVDropColumn(dropStmt, true);
+            Assertions.assertEquals(mv1.getColumns().size(), 4);
+        }
+
+    }
+
+    @Test
+    public void testAddDropMVColumnEdgeCases() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl_mv_col1\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "DUPLICATE KEY(`k1`)" +
+                "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_add_drop_col1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT k1, sum(v1) from base_tbl_mv_col1 group by k1;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "mv_add_drop_col1");
+
+        String addStmt = "alter materialized view mv_add_drop_col1 add column cnt_k1 as count(k1)";
+        alterMVAddColumn(addStmt, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertNotNull(mv.getColumn("cnt_k1"));
+        Assertions.assertEquals(3, mv.getColumns().size());
+
+        alterMVAddColumn(addStmt, true);
+
+        String addLiteralStmt = "alter materialized view mv_add_drop_col1 add column c_literal as 1";
+        alterMVAddColumn(addLiteralStmt, true);
+
+        String addNonAggStmt = "alter materialized view mv_add_drop_col1 add column c_non_agg as v1 + 1";
+        alterMVAddColumn(addNonAggStmt, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertNotNull(mv.getColumn("c_non_agg"));
+        Assertions.assertEquals(4, mv.getColumns().size());
+
+        String dropMissingStmt = "alter materialized view mv_add_drop_col1 drop column missing_col";
+        alterMVDropColumn(dropMissingStmt, true);
+
+        String dropStmt = "alter materialized view mv_add_drop_col1 drop column cnt_k1";
+        alterMVDropColumn(dropStmt, false);
+        waitSchemaChangeJobDone(false, mv);
+        Assertions.assertNull(mv.getColumn("cnt_k1"));
+        Assertions.assertEquals(3, mv.getColumns().size());
+
+        alterMVDropColumn(dropStmt, true);
     }
 }
