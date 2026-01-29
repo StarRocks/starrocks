@@ -14,7 +14,13 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserProperty;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
@@ -24,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
@@ -193,5 +200,55 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params1, "root");
         assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
         assertEquals(0, batchWriteMgr.numJobs());
+    }
+
+    @Test
+    public void testRequestMergeCommitWithUserWarehouse() {
+        String user = "user1";
+        String warehouse = "test_warehouse";
+
+        new MockUp<AuthenticationMgr>() {
+            @Mock
+            public UserProperty getUserProperty(String userName) {
+                if (user.equals(userName)) {
+                    UserProperty userProperty = new UserProperty();
+                    HashMap<String, String> sessionVariables = new HashMap<>();
+                    sessionVariables.put(SessionVariable.WAREHOUSE_NAME, warehouse);
+                    userProperty.setSessionVariables(sessionVariables);
+                    return userProperty;
+                }
+                return null;
+            }
+
+            @Mock
+            public UserIdentity getUserIdentityByName(String userName) {
+                if (user.equals(userName)) {
+                    return new UserIdentity(userName, "%");
+                }
+                return null;
+            }
+        };
+
+        // Mock WarehouseMgr
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean warehouseExists(String name) {
+                return warehouse.equals(name);
+            }
+        };
+
+        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {
+            {
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "1");
+            }
+        });
+
+        RequestCoordinatorBackendResult result = batchWriteMgr.requestCoordinatorBackends(tableId1, params, user);
+        assertTrue(result.isOk());
+        ConcurrentHashMap<BatchWriteId, MergeCommitJob> jobs = Deencapsulation.getField(batchWriteMgr, "mergeCommitJobs");
+        assertEquals(1, jobs.size());
+        MergeCommitJob job = jobs.values().iterator().next();
+        assertEquals(warehouse, Deencapsulation.getField(job, "warehouseName"));
     }
 }
