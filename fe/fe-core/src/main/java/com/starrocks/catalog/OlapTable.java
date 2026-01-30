@@ -130,7 +130,6 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -164,7 +163,6 @@ import javax.annotation.Nullable;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW;
-import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 
 /**
  * Internal representation of tableFamilyGroup-related metadata. A
@@ -172,9 +170,6 @@ import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
  */
 public class OlapTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
-
-    // Virtual column singleton - lazily initialized
-    private static volatile Column TABLET_ID_VIRTUAL_COLUMN = null;
 
     public enum OlapTableState {
         NORMAL,
@@ -814,48 +809,17 @@ public class OlapTable extends Table {
             return column;
         }
         
-        // Check if this is a virtual column
-        return getVirtualColumn(name);
-    }
-
-    /**
-     * Get or create the singleton tablet_id virtual column.
-     * @return The tablet_id virtual column
-     */
-    private static Column getTabletIdVirtualColumn() {
-        if (TABLET_ID_VIRTUAL_COLUMN == null) {
-            synchronized (OlapTable.class) {
-                if (TABLET_ID_VIRTUAL_COLUMN == null) {
-                    Column col = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
-                    col.setIsVirtual(true);
-                    TABLET_ID_VIRTUAL_COLUMN = col;
-                }
-            }
-        }
-        return TABLET_ID_VIRTUAL_COLUMN;
-    }
-
-    /**
-     * Get virtual column by name. Virtual columns are not persisted but are available during query execution.
-     * @param name The column name
-     * @return The virtual column if it matches a known virtual column name, null otherwise
-     */
-    private Column getVirtualColumn(String name) {
-        if (TABLET_ID_COLUMN_NAME.equalsIgnoreCase(name)) {
-            return getTabletIdVirtualColumn();
-        }
-        return null;
+        // Check if this is a virtual column using registry
+        return VirtualColumnRegistry.getColumn(name);
     }
 
     /**
      * Get all virtual columns for this OLAP table.
-     * @return List of virtual columns
+     * @return List of virtual columns from the registry
      */
     @Override
     public List<Column> getVirtualColumns() {
-        List<Column> virtualColumns = Lists.newArrayList();
-        virtualColumns.add(getTabletIdVirtualColumn());
-        return virtualColumns;
+        return VirtualColumnRegistry.getAllColumns();
     }
 
     public Map<ColumnId, Column> getIdToColumn() {
