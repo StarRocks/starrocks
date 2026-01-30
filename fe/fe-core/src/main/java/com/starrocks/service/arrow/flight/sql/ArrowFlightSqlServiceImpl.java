@@ -147,7 +147,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         String token = context.peerIdentity();
 
         // When proxy is enabled and token is from another FE, forward the request
-        if (GlobalVariable.isArrowFlightProxyEnabled() && !sessionManager.isLocalToken(token)) {
+        if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
             forwardCloseSessionToRemoteFE(token, listener);
             return;
         }
@@ -182,7 +182,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
                 String token = context.peerIdentity();
 
                 // When proxy is enabled and token is from another FE, forward the request
-                if (GlobalVariable.isArrowFlightProxyEnabled() && !sessionManager.isLocalToken(token)) {
+                if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
                     forwardActionToRemoteFE(token, request, listener);
                     return;
                 }
@@ -224,7 +224,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         String token = context.peerIdentity();
 
         // When proxy is enabled and token is from another FE, forward the request
-        if (GlobalVariable.isArrowFlightProxyEnabled() && !sessionManager.isLocalToken(token)) {
+        if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
             EXECUTOR.submit(() -> {
                 forwardActionToRemoteFE(token, request, listener);
             });
@@ -252,7 +252,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
         // When proxy is enabled and token is from another FE, forward the request
         // The prepared statement state exists only on the FE that created it
-        if (GlobalVariable.isArrowFlightProxyEnabled() && !sessionManager.isLocalToken(token)) {
+        if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
             return forwardGetFlightInfoToRemoteFE(token, command);
         }
 
@@ -289,7 +289,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         String token = context.peerIdentity();
 
         // When proxy is enabled and token is from another FE, forward the request
-        if (GlobalVariable.isArrowFlightProxyEnabled() && !sessionManager.isLocalToken(token)) {
+        if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
             return forwardGetFlightInfoToRemoteFE(token, command);
         }
 
@@ -319,7 +319,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             String token = context.peerIdentity();
 
             // When proxy is enabled and token is from another FE, forward the request
-            if (GlobalVariable.isArrowFlightProxyEnabled() && !sessionManager.isLocalToken(token)) {
+            if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
                 forwardSetSessionOptionsToRemoteFE(token, request, listener);
                 return;
             }
@@ -925,5 +925,13 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     @VisibleForTesting
     protected FlightClient getClientFromCacheForTesting(String key) {
         return this.clientCache.getIfPresent(key);
+    }
+
+    /**
+     * Check if Arrow Flight proxy is enabled. Override in tests to control behavior.
+     */
+    @VisibleForTesting
+    protected boolean isProxyEnabled() {
+        return GlobalVariable.isArrowFlightProxyEnabled();
     }
 }

@@ -16,6 +16,7 @@ package com.starrocks.service.arrow.flight.sql;
 
 import com.google.common.cache.Cache;
 import com.google.protobuf.ByteString;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.metric.LongCounterMetric;
@@ -94,6 +95,26 @@ public class ArrowFlightSqlServiceImplTest {
     private FlightProducer.CallContext mockCallContext;
     @Mocked
     AuditEncryptionChecker mockChecker;
+
+    /**
+     * Testable subclass that allows controlling isProxyEnabled() without MockedStatic.
+     */
+    private static class TestableArrowFlightSqlServiceImpl extends ArrowFlightSqlServiceImpl {
+        private boolean proxyEnabled = false;
+
+        public TestableArrowFlightSqlServiceImpl(ArrowFlightSqlSessionManager sessionManager, Location feEndpoint) {
+            super(sessionManager, feEndpoint);
+        }
+
+        public void setProxyEnabled(boolean enabled) {
+            this.proxyEnabled = enabled;
+        }
+
+        @Override
+        protected boolean isProxyEnabled() {
+            return proxyEnabled;
+        }
+    }
 
     @BeforeEach
     public void setUp() throws IllegalAccessException, NoSuchFieldException, InterruptedException {
@@ -746,10 +767,6 @@ public class ArrowFlightSqlServiceImplTest {
 
     @Test
     public void testProxyForwarding_getFlightInfoPreparedStatement() throws Exception {
-        // Note: createPreparedStatement, closePreparedStatement, and setSessionOptions proxy forwarding
-        // cannot be tested with MockedStatic because their forwarding logic runs inside executor threads.
-        // Only synchronous methods (getFlightInfoPreparedStatement, getFlightInfoStatement, closeSession)
-        // can be tested with MockedStatic.
         try (MockedStatic<GlobalVariable> mockedGlobal = mockStatic(GlobalVariable.class);
                 MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
                         mockStatic(ArrowFlightSqlSessionManager.class)) {
@@ -767,7 +784,6 @@ public class ArrowFlightSqlServiceImplTest {
             when(mockCache.get(anyString(), any())).thenReturn(mockFeClient);
             setFinalField(service, "clientCache", mockCache);
 
-            // Test getFlightInfoPreparedStatement forwarding (synchronous, no executor)
             FlightInfo mockFlightInfo = mock(FlightInfo.class);
             when(mockFeClient.getInfo(any(FlightDescriptor.class), any())).thenReturn(mockFlightInfo);
 
@@ -777,7 +793,6 @@ public class ArrowFlightSqlServiceImplTest {
             FlightInfo result = service.getFlightInfoPreparedStatement(getInfoCmd, callContext, descriptor);
             assertEquals(mockFlightInfo, result);
 
-            // Test invalid token for getFlightInfoPreparedStatement
             mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost("invalid-token"))
                     .thenReturn(null);
             when(callContext.peerIdentity()).thenReturn("invalid-token");
@@ -785,7 +800,6 @@ public class ArrowFlightSqlServiceImplTest {
             assertThrows(FlightRuntimeException.class, () ->
                     service.getFlightInfoPreparedStatement(getInfoCmd, callContext, descriptor));
 
-            // Test remote exception for getFlightInfoPreparedStatement
             when(callContext.peerIdentity()).thenReturn(remoteToken);
             when(mockFeClient.getInfo(any(FlightDescriptor.class), any()))
                     .thenThrow(new RuntimeException("Connection timeout"));
@@ -796,8 +810,6 @@ public class ArrowFlightSqlServiceImplTest {
 
     @Test
     public void testProxyForwarding_getFlightInfoStatement() throws Exception {
-        // Note: setSessionOptions proxy forwarding cannot be tested with MockedStatic
-        // because the proxy check happens inside an executor thread where MockedStatic doesn't apply.
         try (MockedStatic<GlobalVariable> mockedGlobal = mockStatic(GlobalVariable.class);
                 MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
                         mockStatic(ArrowFlightSqlSessionManager.class)) {
@@ -815,7 +827,6 @@ public class ArrowFlightSqlServiceImplTest {
             when(mockCache.get(anyString(), any())).thenReturn(mockFeClient);
             setFinalField(service, "clientCache", mockCache);
 
-            // Test getFlightInfoStatement forwarding (synchronous, no executor)
             FlightInfo mockFlightInfo = mock(FlightInfo.class);
             when(mockFeClient.getInfo(any(FlightDescriptor.class), any())).thenReturn(mockFlightInfo);
 
@@ -838,7 +849,6 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockBeClient.getStream(any(Ticket.class))).thenReturn(mockBeStream);
         when(mockBeStream.getRoot()).thenReturn(mockRoot);
 
-        // Test 1: Cancel handler error (logs but doesn't propagate)
         when(mockBeStream.next()).thenReturn(true).thenReturn(false);
         doThrow(new RuntimeException("Cancel failed")).when(mockBeStream).cancel(anyString(), any());
         doNothing().when(mockBeStream).close();
@@ -854,15 +864,13 @@ public class ArrowFlightSqlServiceImplTest {
         verify(listener1).setOnCancelHandler(cancelCaptor.capture());
         cancelCaptor.getValue().run(); // Should handle exception gracefully
 
-        // Test 2: Close error (logs but doesn't propagate)
         doThrow(new RuntimeException("Close failed")).when(mockBeStream).close();
         when(mockBeStream.next()).thenReturn(true).thenReturn(false);
 
         FlightProducer.ServerStreamListener listener2 = mock(FlightProducer.ServerStreamListener.class);
         service.getStreamStatement(ticket, mockCallContext, listener2);
-        verify(listener2).completed(); // Should still complete
+        verify(listener2).completed();
 
-        // Test 3: Stream error with cancel also failing
         RuntimeException streamError = new RuntimeException("Connection lost");
         when(mockBeStream.next()).thenThrow(streamError);
         doThrow(new RuntimeException("Cancel also failed")).when(mockBeStream).cancel(anyString(), any(Throwable.class));
@@ -911,6 +919,188 @@ public class ArrowFlightSqlServiceImplTest {
 
         assertThrows(FlightRuntimeException.class, () ->
                 service.getStreamStatement(ticket, mockCallContext, listener));
+    }
+
+    @Test
+    public void testProxyForwarding_createPreparedStatement_withTestableService() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe:some-uuid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            Result mockResult = mock(Result.class);
+            java.util.Iterator<Result> mockIter = mock(java.util.Iterator.class);
+            when(mockIter.hasNext()).thenReturn(true).thenReturn(false);
+            when(mockIter.next()).thenReturn(mockResult);
+            when(mockFeClient.doAction(any(org.apache.arrow.flight.Action.class), any()))
+                    .thenReturn(mockIter);
+
+            FlightSql.ActionCreatePreparedStatementRequest createReq =
+                    FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
+                            .setQuery("SELECT 1").build();
+            FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
+
+            testService.createPreparedStatement(createReq, callContext, listener);
+            Thread.sleep(500);
+
+            verify(mockFeClient).doAction(any(org.apache.arrow.flight.Action.class), any());
+            verify(listener).onNext(mockResult);
+            verify(listener).onCompleted();
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_closePreparedStatement_withTestableService() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe:some-uuid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            java.util.Iterator<Result> emptyIter = mock(java.util.Iterator.class);
+            when(emptyIter.hasNext()).thenReturn(false);
+            when(mockFeClient.doAction(any(org.apache.arrow.flight.Action.class), any()))
+                    .thenReturn(emptyIter);
+
+            FlightSql.ActionClosePreparedStatementRequest closeReq =
+                    FlightSql.ActionClosePreparedStatementRequest.newBuilder()
+                            .setPreparedStatementHandle(ByteString.copyFromUtf8("stmt-id")).build();
+            FlightSqlProducer.StreamListener<Result> listener = mock(FlightSqlProducer.StreamListener.class);
+
+            testService.closePreparedStatement(closeReq, callContext, listener);
+            Thread.sleep(500);
+
+            verify(mockFeClient).doAction(any(org.apache.arrow.flight.Action.class), any());
+            verify(listener).onCompleted();
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_setSessionOptions_withTestableService() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe:some-uuid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            SetSessionOptionsResult mockResult = new SetSessionOptionsResult(new HashMap<>());
+            when(mockFeClient.setSessionOptions(any(SetSessionOptionsRequest.class), any()))
+                    .thenReturn(mockResult);
+
+            SetSessionOptionsRequest setReq = mock(SetSessionOptionsRequest.class);
+            FlightProducer.StreamListener<SetSessionOptionsResult> listener =
+                    mock(FlightProducer.StreamListener.class);
+
+            testService.setSessionOptions(setReq, callContext, listener);
+            Thread.sleep(500);
+
+            verify(mockFeClient).setSessionOptions(any(SetSessionOptionsRequest.class), any());
+            verify(listener).onNext(any(SetSessionOptionsResult.class));
+            verify(listener).onCompleted();
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_invalidToken_withTestableService() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String invalidToken = "invalid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(invalidToken);
+            when(sessionManager.isLocalToken(invalidToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(invalidToken))
+                    .thenReturn(null);
+
+            FlightSql.ActionCreatePreparedStatementRequest createReq =
+                    FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
+                            .setQuery("SELECT 1").build();
+            FlightProducer.StreamListener<Result> createListener = mock(FlightProducer.StreamListener.class);
+            testService.createPreparedStatement(createReq, callContext, createListener);
+            Thread.sleep(500);
+            verify(createListener).onError(any(FlightRuntimeException.class));
+
+            SetSessionOptionsRequest setReq = mock(SetSessionOptionsRequest.class);
+            FlightProducer.StreamListener<SetSessionOptionsResult> setListener =
+                    mock(FlightProducer.StreamListener.class);
+            testService.setSessionOptions(setReq, callContext, setListener);
+            Thread.sleep(500);
+            verify(setListener).onError(any(FlightRuntimeException.class));
+        }
+    }
+
+    @Test
+    public void testProxyForwarding_remoteException_withTestableService() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe:some-uuid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            when(mockFeClient.doAction(any(org.apache.arrow.flight.Action.class), any()))
+                    .thenThrow(new RuntimeException("Network error"));
+
+            FlightSql.ActionCreatePreparedStatementRequest createReq =
+                    FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
+                            .setQuery("SELECT 1").build();
+            FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
+            testService.createPreparedStatement(createReq, callContext, listener);
+            Thread.sleep(500);
+            verify(listener).onError(any(FlightRuntimeException.class));
+        }
     }
 
 }
