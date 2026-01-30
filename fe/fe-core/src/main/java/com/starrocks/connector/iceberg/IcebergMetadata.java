@@ -1117,7 +1117,6 @@ public class IcebergMetadata implements ConnectorMetadata {
                                 Tracers.record(Tracers.Module.EXTERNAL, name, value);
                             }
                         }
-                        System.out.println("Iceberg TableScan stop iter");
                     }
                     hasMore = false;
                 }
@@ -1131,6 +1130,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     }
                 } catch (Exception ignore) {
                 }
+
                 try {
                     if (fileScanTaskIterable != null) {
                         fileScanTaskIterable.close();

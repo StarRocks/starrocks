@@ -110,9 +110,6 @@ public class DeltaLakeScanNode extends ScanNode {
     @Override
     public void clear() {
         try {
-            if (deltaLakeTable != null) {
-                deltaLakeTable.clearMetadata();
-            }
             if (scanRangeSource != null) {
                 scanRangeSource.close();
             }

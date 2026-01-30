@@ -90,7 +90,6 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
-    // Debug hook: set -Diceberg.debug.throw_after_scanrange=N to throw after N scan ranges are produced.
 
     private final IcebergTable table;
     private final TupleDescriptor desc;

@@ -122,7 +122,6 @@ public class DeltaLakeTable extends Table {
 
     public void clearMetadata() {
         this.deltaSnapshot = null;
-        this.deltaEngine = null;
     }
 
     @Override
