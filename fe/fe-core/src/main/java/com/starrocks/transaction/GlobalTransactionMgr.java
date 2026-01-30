@@ -921,4 +921,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         return ImmutableMap.of("Txn", (long) getTransactionNum(),
                 "TxnCallbackCount", getCallbackFactory().getCallBackCnt());
     }
+
+    @Override
+    public long estimateSize() {
+        long size = 0;
+        for (DatabaseTransactionMgr dbTxnMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            size += dbTxnMgr.estimateSize();
+        }
+        return size;
+    }
 }

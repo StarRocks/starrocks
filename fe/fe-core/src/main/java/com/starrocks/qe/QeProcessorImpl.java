@@ -43,6 +43,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
@@ -343,6 +344,11 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(coordinatorMap, 20);
     }
 
     public static final class QueryInfo {

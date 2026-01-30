@@ -33,6 +33,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -118,6 +119,11 @@ public class ColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("ColumnMinMax", (long) cache.asMap().size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(cache.asMap(), 20);
     }
 
     @VisibleForTesting

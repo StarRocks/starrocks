@@ -70,8 +70,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
-    private static final int MEMORY_META_SAMPLES = 10;
-    private static final int MEMORY_FILE_SAMPLES = 100;
     private static final int MEMORY_SNAPSHOT_SIZE = 1536; // approx memory size of one snapshot object without manifests
     private static final int MEMORY_MANIFEST_SIZE = 512; // approx memory size of one manifest object in snapshot
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
@@ -628,6 +626,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
     @Override
     public long estimateSize() {
+        return Estimator.estimate(tables.asMap(), 10) +
+                Estimator.estimate(databases.asMap(), 10) +
+                estimateDataFileCacheSize() +
+                estimateDeleteFileCacheSize() + Estimator.estimate(metaFileCacheMap, 10);
+    }
+
+    private long estimateDataFileCacheSize() {
         int cnt = dataFileCache.asMap().size();
         long size = Estimator.estimate(dataFileCache.asMap().keySet(), cnt);
         for (Set<DataFile> files : dataFileCache.asMap().values()) {
@@ -643,9 +648,54 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 size += Estimator.estimate(files, 10, ignoreClass);
                 size += Estimator.estimate(schema, 10);
             } else {
-                size += Estimator.estimate(files, 20);
+                size += Estimator.estimate(files, 10);
             }
         }
+        return size;
+    }
+
+    private long estimateDeleteFileCacheSize() {
+        int cnt = deleteFileCache.asMap().size();
+        // Estimate size of keys
+        long size = Estimator.estimate(deleteFileCache.asMap().keySet(), cnt);
+
+        // Count total delete files across all cache entries
+        long totalDeleteFiles = deleteFileCache.asMap().values().stream()
+                .mapToLong(Set::size)
+                .sum();
+
+        if (totalDeleteFiles == 0) {
+            return size;
+        }
+
+        // Sample up to 100 DeleteFiles evenly distributed
+        int sampleTarget = (int) Math.min(100, totalDeleteFiles);
+        long step = totalDeleteFiles / sampleTarget;
+        List<DeleteFile> samples = new ArrayList<>(sampleTarget);
+        long index = 0;
+        long nextSampleIndex = 0;
+
+        outer:
+        for (Set<DeleteFile> files : deleteFileCache.asMap().values()) {
+            for (DeleteFile file : files) {
+                if (index == nextSampleIndex) {
+                    samples.add(file);
+                    nextSampleIndex += step;
+                    if (samples.size() >= sampleTarget) {
+                        break outer;
+                    }
+                }
+                index++;
+            }
+        }
+
+        // Estimate all samples at once, then calculate average and extrapolate
+        if (!samples.isEmpty()) {
+            long sampleTotalSize = Estimator.estimate(samples, samples.size());
+            long avgSize = sampleTotalSize / samples.size();
+            size += avgSize * totalDeleteFiles;
+        }
+
         return size;
     }
 

@@ -80,6 +80,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
@@ -158,6 +159,17 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
             long queueSize = (long) reportQueue.size() + (long) resourceReportQueue.size();
             return ImmutableMap.of("PendingTask", count, "ReportQueue", queueSize);
+        }
+    }
+
+    @Override
+    public long estimateSize() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.readLock())) {
+            long size = 0;
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                size += Estimator.estimate(taskMap, 20);
+            }
+            return size;
         }
     }
 

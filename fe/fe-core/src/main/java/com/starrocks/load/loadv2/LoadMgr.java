@@ -55,6 +55,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -857,6 +858,11 @@ public class LoadMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("LoadJob", (long) idToLoadJob.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(idToLoadJob, 20);
     }
 
     public Map<Long, Long> getRunningLoadCount() {

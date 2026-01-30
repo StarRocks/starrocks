@@ -64,6 +64,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -2308,6 +2309,16 @@ public class DatabaseTransactionMgr {
             transactionState.resetTabletCommitInfos();
         } finally {
             writeUnlock();
+        }
+    }
+
+    public long estimateSize() {
+        readLock();
+        try {
+            return Estimator.estimate(idToRunningTransactionState, 20) +
+                    Estimator.estimate(idToFinalStatusTransactionState, 20);
+        } finally {
+            readUnlock();
         }
     }
 }

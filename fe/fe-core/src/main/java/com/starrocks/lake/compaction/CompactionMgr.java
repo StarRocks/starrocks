@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -284,5 +285,10 @@ public class CompactionMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("PartitionStats", (long) partitionStatisticsHashMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(partitionStatisticsHashMap);
     }
 }

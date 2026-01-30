@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -89,6 +90,11 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
     @Override
     public Map<String, Long> estimateCount() {
         return Map.of("IcebergMinMax", (long) cache.asMap().size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(cache.asMap(), 20);
     }
 
     private static final class CacheLoader implements AsyncCacheLoader<CacheKey, Optional<ColumnMinMax>> {

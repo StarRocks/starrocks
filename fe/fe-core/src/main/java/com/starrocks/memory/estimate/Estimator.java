@@ -48,7 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Estimator {
 
     // Default maximum recursion depth
-    private static final int DEFAULT_MAX_DEPTH = 13;
+    private static final int DEFAULT_MAX_DEPTH = 20;
 
     private static final int DEFAULT_SAMPLE_SIZE = 5;
 

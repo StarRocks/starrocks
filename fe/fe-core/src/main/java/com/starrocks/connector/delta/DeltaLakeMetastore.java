@@ -27,6 +27,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
@@ -224,5 +225,10 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     @Override
     public Map<String, Long> estimateCount() {
         return Map.of("checkpointCache", checkpointCache.size(), "jsonCache", jsonCache.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(checkpointCache, 20) + Estimator.estimate(jsonCache, 20);
     }
 }

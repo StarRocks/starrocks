@@ -36,7 +36,9 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.memory.estimate.Estimator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
@@ -92,6 +94,29 @@ public class QueryDetailQueue {
 
     public static long getTotalQueriesCount() {
         return TOTAL_QUERIES.size();
+    }
+
+    public static long estimateSize() {
+        int totalSize = TOTAL_QUERIES.size();
+        if (totalSize == 0) {
+            return 0;
+        }
+
+        List<QueryDetail> samples = new ArrayList<>(Math.min(20, totalSize));
+        for (QueryDetail detail : TOTAL_QUERIES) {
+            samples.add(detail);
+            if (samples.size() >= 20) {
+                break;
+            }
+        }
+
+        if (samples.isEmpty()) {
+            return 0;
+        }
+
+        long sampleTotalSize = Estimator.estimate(samples, samples.size());
+        long avgSize = sampleTotalSize / samples.size();
+        return avgSize * totalSize;
     }
 
     private static long getCurrentTimeNS() {

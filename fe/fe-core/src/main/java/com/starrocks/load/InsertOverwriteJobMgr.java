@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
@@ -255,5 +256,10 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable, Mem
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("insertOverwriteJobs", (long) overwriteJobMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(overwriteJobMap, 10);
     }
 }

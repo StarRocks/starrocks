@@ -25,6 +25,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
@@ -242,5 +243,10 @@ public class CacheRelaxDictManager implements IRelaxDictManager, MemoryTrackable
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("ExternalTableColumnDict", (long) dictStatistics.asMap().size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(dictStatistics.asMap(), 20);
     }
 }

@@ -67,6 +67,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -957,6 +958,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(repoMgr)
+                + Estimator.estimate(dbIdToBackupOrRestoreJob, 5, 20);
     }
 
     public Map<Long, Long> getRunningBackupRestoreCount() {

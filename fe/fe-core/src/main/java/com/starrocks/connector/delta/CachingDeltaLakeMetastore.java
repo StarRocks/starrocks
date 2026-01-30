@@ -24,6 +24,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
@@ -229,5 +230,14 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
         delegateCount.put("databaseCache", databaseCache.size());
         delegateCount.put("tableCache", tableSnapshotCache.size());
         return delegateCount;
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(databaseCache.asMap(), 20)
+                + Estimator.estimate(databaseNamesCache.asMap(), 20)
+                + Estimator.estimate(tableNamesCache.asMap(), 20)
+                + Estimator.estimate(tableSnapshotCache.asMap(), 20)
+                + Estimator.estimate(tableCache.asMap(), 20);
     }
 }

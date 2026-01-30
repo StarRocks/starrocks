@@ -31,6 +31,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -728,6 +729,11 @@ public class StreamLoadMgr implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(idToStreamLoadTask, 20);
     }
 
     public long getLatestFinishTime() {

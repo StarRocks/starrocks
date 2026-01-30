@@ -33,6 +33,7 @@ import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -674,6 +675,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     public void expireMultiColumnStatistics(Long tableId) {
         Preconditions.checkNotNull(tableId);
         multiColumnStats.synchronous().invalidate(tableId);
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(tableStatsCache.synchronous().asMap(), 20) +
+                Estimator.estimate(columnStatistics.synchronous().asMap(), 20) +
+                Estimator.estimate(partitionStatistics.synchronous().asMap(), 20) +
+                Estimator.estimate(histogramCache.synchronous().asMap(), 20) +
+                Estimator.estimate(connectorTableCachedStatistics.synchronous().asMap(), 20) +
+                Estimator.estimate(connectorHistogramCache.synchronous().asMap(), 20) +
+                Estimator.estimate(multiColumnStats.synchronous().asMap(), 20);
     }
 
     @Override

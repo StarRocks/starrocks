@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
@@ -434,5 +435,10 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("ColumnDict", (long) dictStatistics.asMap().size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(dictStatistics.asMap(), 20);
     }
 }

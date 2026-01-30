@@ -52,6 +52,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.OriginStatementInfo;
@@ -788,6 +789,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("RoutineLoad", (long) idToRoutineLoadJob.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(idToRoutineLoadJob, 20);
     }
 
     public Map<Long, Long> getRunningRoutingLoadCount() {

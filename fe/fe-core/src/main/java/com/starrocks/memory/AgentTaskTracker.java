@@ -24,4 +24,9 @@ public class AgentTaskTracker implements MemoryTrackable {
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("AgentTask", (long) AgentTaskQueue.getTaskNum());
     }
+
+    @Override
+    public long estimateSize() {
+        return AgentTaskQueue.estimateSize();
+    }
 }

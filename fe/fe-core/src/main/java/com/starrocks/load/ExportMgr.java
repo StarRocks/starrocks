@@ -49,6 +49,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -419,6 +420,21 @@ public class ExportMgr implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("ExportJob", (long) idToJob.size());
+        readLock();
+        try {
+            return ImmutableMap.of("ExportJob", (long) idToJob.size());
+        } finally {
+            readUnlock();
+        }
+    }
+
+    @Override
+    public long estimateSize() {
+        readLock();
+        try {
+            return Estimator.estimate(idToJob, 20);
+        } finally {
+            readUnlock();
+        }
     }
 }

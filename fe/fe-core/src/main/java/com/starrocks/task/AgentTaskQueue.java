@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -262,6 +263,23 @@ public class AgentTaskQueue {
 
     public static synchronized int getTaskNum() {
         return taskNum;
+    }
+
+    public static synchronized long estimateSize() {
+        if (tasks.isEmpty()) {
+            return 0;
+        }
+
+        // Pick any one backend and estimate all its task types
+        Long anyBackendId = tasks.rowKeySet().iterator().next();
+        Map<TTaskType, Map<Long, AgentTask>> backendTasks = tasks.row(anyBackendId);
+
+        long singleBackendSize = 0;
+        for (Map<Long, AgentTask> signatureMap : backendTasks.values()) {
+            singleBackendSize += Estimator.estimate(signatureMap);
+        }
+
+        return singleBackendSize * tasks.rowKeySet().size();
     }
 
     public static synchronized Multimap<Long, Long> getTabletIdsByType(TTaskType type) {

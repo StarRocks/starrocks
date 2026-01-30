@@ -32,6 +32,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterTaskInfo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -1160,6 +1161,11 @@ public class TaskManager implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         return ImmutableMap.of("Task", (long) idToTaskMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return Estimator.estimate(idToTaskMap, 20);
     }
 
     public boolean containTask(String taskName) {

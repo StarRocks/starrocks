@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -281,6 +282,16 @@ public class ProfileManager implements MemoryTrackable {
         readLock.lock();
         try {
             return ImmutableMap.of("QueryProfile", (long) profileMap.size());
+        } finally {
+            readLock.unlock();
+        }
+    }
+
+    @Override
+    public long estimateSize() {
+        readLock.lock();
+        try {
+            return Estimator.estimate(profileMap, 10, 20);
         } finally {
             readLock.unlock();
         }
