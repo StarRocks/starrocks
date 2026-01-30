@@ -1102,6 +1102,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.lake_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+                msg.lake_scan_node.setNext_uniq_id(olapTable.getMaxColUniqueId());
             }
 
             if (!scanTabletIds.isEmpty()) {
@@ -1161,6 +1162,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
 
             if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
                 msg.olap_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+                msg.olap_scan_node.setNext_uniq_id(olapTable.getMaxColUniqueId());
             }
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
