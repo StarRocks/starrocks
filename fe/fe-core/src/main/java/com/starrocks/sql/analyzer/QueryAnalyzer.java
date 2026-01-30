@@ -836,7 +836,8 @@ public class QueryAnalyzer {
                 // Add virtual columns for OLAP tables
                 for (Column column : getVirtualColumns(table)) {
                     SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
-                    Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                    // Virtual columns are not visible in SELECT * but can be explicitly referenced
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
                             column.isAllowNull());
                     columns.put(field, column);
                     fields.add(field);
