@@ -116,6 +116,8 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     int64_t table_id;
     int64_t partition_id;
     int32_t subtask_id = -1; // -1 means not a parallel compaction subtask
+    // Number of subtasks in this compaction (1 for normal compaction, >1 for parallel compaction)
+    int32_t subtask_count = 1;
     // Flag to indicate this is a merged context from parallel compaction.
     // When true, cleanup_tablet should be called in remove_states after RPC response is sent.
     bool is_parallel_merged = false;
