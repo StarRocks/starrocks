@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
@@ -90,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitJoinORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNAggregateRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitWindowSkewToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.UnionToValuesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVCompensationPruneUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
@@ -559,6 +561,11 @@ public class QueryOptimizer extends Optimizer {
         // rewrite transparent materialized view
         tree = transparentMVRewrite(tree, rootTaskContext);
 
+        // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES because it introduces filter expressions
+        if (sessionVariable.isEnableSplitWindowSkewToUnion()) {
+            Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
+            scheduler.rewriteOnce(tree, rootTaskContext, SplitWindowSkewToUnionRule.getInstance());
+        }
         // This rule needs to be executed before PUSH_DOWN_PREDICATE_RULES
         scheduler.rewriteOnce(tree, rootTaskContext, new LargeInPredicateToJoinRule());
 
@@ -620,8 +627,7 @@ public class QueryOptimizer extends Optimizer {
 
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
-        if (sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite() &&
-                !sessionVariable.isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
+        if (sessionVariable.isEnableOptimizerSkewJoinOptimizeV1()) {
             skewJoinOptimize(tree, rootTaskContext);
         }
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergEqualityDeleteRewriteRule());
@@ -835,7 +841,8 @@ public class QueryOptimizer extends Optimizer {
         }
 
         if (context.getSessionVariable().getCboPushDownAggregateMode() != -1) {
-            if (context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
+            boolean hasAgg = Util.getStream(tree).anyMatch(op -> op instanceof LogicalAggregationOperator);
+            if (hasAgg && context.getSessionVariable().isCboPushDownAggregateOnBroadcastJoin()) {
                 if (pushDistinctBelowWindowFlag) {
                     deriveLogicalProperty(tree);
                 }
@@ -845,11 +852,13 @@ public class QueryOptimizer extends Optimizer {
                 joinReorder = true;
             }
 
-            PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
-            rule.getRewriter().collectRewriteContext(tree);
-            if (rule.getRewriter().isNeedRewrite()) {
-                pushAggFlag = true;
-                tree = rule.rewrite(tree, rootTaskContext);
+            if (hasAgg) {
+                PushDownAggregateRule rule = new PushDownAggregateRule(rootTaskContext);
+                rule.getRewriter().collectRewriteContext(tree);
+                if (rule.getRewriter().isNeedRewrite()) {
+                    pushAggFlag = true;
+                    tree = rule.rewrite(tree, rootTaskContext);
+                }
             }
         }
 
@@ -1050,12 +1059,9 @@ public class QueryOptimizer extends Optimizer {
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
 
         // this rule must be put after MarkParentRequiredDistributionRule
-        if (rootTaskContext.getOptimizerContext().getSessionVariable()
-                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
-                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinOptimizeV2()) {
             result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
         }
-
 
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 

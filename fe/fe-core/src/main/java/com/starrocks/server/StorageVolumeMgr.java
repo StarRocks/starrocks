@@ -160,19 +160,19 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
-    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws DdlException {
+    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws DdlException, MetaNotFoundException {
         updateStorageVolume(stmt.getName(), null, null, stmt.getProperties(), stmt.getComment());
     }
 
     public void updateStorageVolume(String name, String svType, List<String> locations,
-            Map<String, String> properties, String comment) throws DdlException {
+            Map<String, String> properties, String comment) throws DdlException, MetaNotFoundException {
         Map<String, String> params = new HashMap<>();
         Optional<Boolean> enabled = parseProperties(properties, params);
         updateStorageVolume(name, svType, locations, params, enabled, comment);
     }
 
     public void updateStorageVolume(String name, String svType, List<String> locations,
-            Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException {
+            Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException, MetaNotFoundException {
         List<String> immutableProperties = Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                 CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
         for (String param : immutableProperties) {
@@ -182,7 +182,9 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
-            Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
+            if (sv == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
             StorageVolume copied = new StorageVolume(sv);
             validateParams(copied.getType(), params);
 

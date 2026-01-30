@@ -206,7 +206,7 @@ public class AstToStringBuilder {
             }
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();
@@ -415,16 +415,16 @@ public class AstToStringBuilder {
         // Partition column names
         List<String> partitionNames;
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
-            createTableSql.append("\nPARTITION BY (");
-
             if (!table.isIcebergTable()) {
+                createTableSql.append("\nPARTITION BY (");
                 partitionNames = table.getPartitionColumnNames();
+                createTableSql.append(String.join(", ", partitionNames)).append(")");
             } else {
                 partitionNames = ((IcebergTable) table).getPartitionColumnNamesWithTransform();
+                createTableSql.append("\nPARTITION BY ").append(String.join(", ", partitionNames));
             }
-
-            createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
+
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {

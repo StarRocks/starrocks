@@ -335,7 +335,7 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
         }
     }
 
-    DCHECK(num_rows == result.data_column()->size());
+    DCHECK(num_rows == result.data_column_raw_ptr()->size());
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
@@ -693,7 +693,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             chunk.append_column(flat_column, 0);
             ret = state->cast_expr->evaluate_checked(nullptr, &chunk);
         } else {
-            ret = std::move(flat_column->clone());
+            ret = std::move(*flat_column).mutate();
         }
         if (ret.ok()) {
             ret.value()->check_or_die();

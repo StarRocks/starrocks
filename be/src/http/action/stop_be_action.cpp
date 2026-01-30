@@ -23,6 +23,10 @@
 #include "http/http_status.h"
 #include "util/defer_op.h"
 
+#ifdef USE_STAROS
+#include "service/staros_worker.h"
+#endif
+
 namespace starrocks {
 
 std::string StopBeAction::construct_response_message(const std::string& msg) {
@@ -38,7 +42,12 @@ std::string StopBeAction::construct_response_message(const std::string& msg) {
 void StopBeAction::handle(HttpRequest* req) {
     LOG(INFO) << "Accept one stop_be request " << req->debug_string();
 
-    DeferOp defer([&]() { set_process_quick_exit(); });
+    DeferOp defer([&]() {
+#ifdef USE_STAROS
+        set_starlet_in_shutdown();
+#endif
+        set_process_quick_exit();
+    });
 
     std::string response_msg = construct_response_message("OK");
     if (process_exit_in_progress()) {

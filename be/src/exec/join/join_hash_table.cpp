@@ -66,8 +66,6 @@ private:
 
 std::tuple<JoinKeyConstructorUnaryType, JoinHashMapMethodUnaryType>
 JoinHashMapSelector::construct_key_and_determine_hash_map(RuntimeState* state, JoinHashTableItems* table_items) {
-    DCHECK_GT(table_items->row_count, 0);
-
     const auto key_constructor_type = _determine_key_constructor(state, table_items);
     dispatch_join_key_constructor_unary(key_constructor_type, [&]<JoinKeyConstructorUnaryType CT> {
         using KeyConstructor = typename JoinKeyConstructorUnaryTypeTraits<CT>::BuildType;
@@ -137,7 +135,7 @@ size_t JoinHashMapSelector::_get_binary_column_max_size(RuntimeState* state, con
     }
 
     const auto& offsets = binary_column->get_offset();
-    const auto& bytes = binary_column->get_bytes();
+    auto bytes = binary_column->get_immutable_bytes();
 
     bool has_tail_zero = false;
     for (size_t i = offsets.size() - 1; i > 0 && offsets[i] > 0; i--) {
@@ -262,7 +260,7 @@ std::pair<bool, JoinHashMapMethodUnaryType> JoinHashMapSelector::_try_use_range_
         RuntimeState* state, JoinHashTableItems* table_items) {
     bool is_asof_join_type = is_asof_join(table_items->join_type);
 
-    if (!state->enable_hash_join_range_direct_mapping_opt()) {
+    if (!state->enable_hash_join_range_direct_mapping_opt() || table_items->row_count == 0) {
         return _get_fallback_method<LT>(is_asof_join_type);
     }
 
@@ -630,7 +628,7 @@ int64_t JoinHashTable::mem_usage() const {
     return usage;
 }
 
-Status JoinHashTable::build(RuntimeState* state) {
+Status JoinHashTable::build(RuntimeState* state, bool allow_build_empty_table) {
     CancelableDefer defer = CancelableDefer([&]() {
         _table_items->key_columns.clear();
         _table_items->build_chunk->columns().clear();
@@ -651,7 +649,7 @@ Status JoinHashTable::build(RuntimeState* state) {
 
     RETURN_IF_ERROR(_upgrade_key_columns_if_overflow());
 
-    if (_table_items->row_count == 0) {
+    if (_table_items->row_count == 0 && allow_build_empty_table) {
         _is_empty_map = true;
         _hash_map = std::make_unique<JoinHashMapForEmpty>(_table_items.get(), _probe_state.get());
     } else {

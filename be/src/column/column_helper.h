@@ -147,28 +147,11 @@ public:
             return col;
         } else if (column->is_constant()) {
             // use clone is not safe, because the new cloned data may be freed after the function returns.
-            auto mut_column = column->as_mutable_ptr();
-            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
+            auto* const_column = down_cast<ConstColumn*>(column->as_mutable_raw_ptr());
             const_column->assign(size, 0);
             return const_column->data_column()->as_mutable_ptr();
         } else {
             return column;
-        }
-    }
-
-    static MutableColumnPtr unfold_const_column(const TypeDescriptor& type_desc, size_t size, ColumnPtr&& column) {
-        if (column->only_null()) {
-            auto col = ColumnHelper::create_column(type_desc, true);
-            [[maybe_unused]] bool ok = col->append_nulls(size);
-            DCHECK(ok);
-            return col;
-        } else if (column->is_constant()) {
-            auto mut_column = Column::mutate(std::move(column));
-            auto* const_column = down_cast<ConstColumn*>(mut_column.get());
-            const_column->assign(size, 0);
-            return const_column->data_column()->as_mutable_ptr();
-        } else {
-            return Column::mutate(std::move(column));
         }
     }
 

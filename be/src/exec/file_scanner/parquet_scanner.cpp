@@ -40,6 +40,7 @@ ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, con
           _max_chunk_size(state->chunk_size() ? state->chunk_size() : 4096),
           _batch_start_idx(0),
           _chunk_start_idx(0) {
+    _file_format_str = "parquet";
     _chunk_filter.reserve(_max_chunk_size);
     _conv_ctx.state = state;
 }
@@ -256,11 +257,14 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
             conv_func->func = strict_conv_func;
             raw_type_desc->type = strict_pt;
             switch (strict_pt) {
-            case TYPE_DECIMAL128: {
-                const auto* discrete_type = down_cast<const arrow::Decimal128Type*>(arrow_type);
-                auto precision = discrete_type->precision();
-                auto scale = discrete_type->scale();
-                if (precision < 1 || precision > decimal_precision_limit<int128_t> || scale < 0 || scale > precision) {
+            case TYPE_DECIMAL128:
+            case TYPE_DECIMAL256: {
+                const auto* decimal_type = down_cast<const arrow::DecimalType*>(arrow_type);
+                auto precision = decimal_type->precision();
+                auto scale = decimal_type->scale();
+                auto max_precision = strict_pt == TYPE_DECIMAL256 ? decimal_precision_limit<int256_t>
+                                                                  : decimal_precision_limit<int128_t>;
+                if (precision < 1 || precision > max_precision || scale < 0 || scale > precision) {
                     return Status::InternalError(
                             strings::Substitute("Decimal($0, $1) is out of range.", precision, scale));
                 }
@@ -475,6 +479,10 @@ Status ParquetScanner::open_next_reader() {
             parquet_reader->set_invalid_as_null(true);
         }
         _next_file++;
+        if (range_desc.start_offset == 0) {
+            // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
+            ++_counter->num_files_read;
+        }
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
         _last_file_size = file_size;

@@ -293,7 +293,7 @@ public class VacuumTest {
                 OlapTable olapTbl = (OlapTable) tbl;
                 for (PhysicalPartition part : olapTbl.getPhysicalPartitions()) {
                     part.setLastFullVacuumTime(1L);
-                    for (MaterializedIndex index : part.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (MaterializedIndex index : part.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                         allTabletIds.addAll(index.getTablets().stream().map(Tablet::getId).toList());
                     }
                 }

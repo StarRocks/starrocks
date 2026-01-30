@@ -102,10 +102,10 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 new_col->assign(row_num, 0);
                 if (order_by_types[i].is_nullable) {
                     ColumnPtr nullable_column =
-                            NullableColumn::create(ColumnPtr(std::move(new_col)), NullColumn::create(row_num, 0));
-                    materialize_chunk->append_column(nullable_column, slots_in_row_descriptor[i]->id());
+                            NullableColumn::create(std::move(new_col), NullColumn::create(row_num, 0));
+                    materialize_chunk->append_column(std::move(nullable_column), slots_in_row_descriptor[i]->id());
                 } else {
-                    materialize_chunk->append_column(ColumnPtr(std::move(new_col)), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
                 }
             }
         } else {
@@ -113,7 +113,7 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (!col->is_nullable() && order_by_types[i].is_nullable) {
                 col = NullableColumn::create(col, NullColumn::create(col->size(), 0));
             }
-            materialize_chunk->append_column(col, slots_in_row_descriptor[i]->id());
+            materialize_chunk->append_column(std::move(col), slots_in_row_descriptor[i]->id());
         }
     }
 

@@ -16,7 +16,6 @@
 
 #include "column/column.h"
 #include "common/statusor.h"
-#include "formats/parquet/variant.h"
 #include "function_helper.h"
 #include "types/logical_type.h"
 
@@ -30,6 +29,28 @@ public:
      * @return: VariantColumn
      */
     DEFINE_VECTORIZED_FN(variant_query);
+
+    /**
+     *
+     * @param [variant, json_path]
+     * @paramType: [VariantColumn, BinaryColumn]
+     * @return : ResultTypeColumn
+     */
+    DEFINE_VECTORIZED_FN(get_variant_bool);
+    // return bigint to unify all integer types
+    DEFINE_VECTORIZED_FN(get_variant_int);
+    DEFINE_VECTORIZED_FN(get_variant_double);
+    DEFINE_VECTORIZED_FN(get_variant_string);
+    DEFINE_VECTORIZED_FN(get_variant_date);
+    DEFINE_VECTORIZED_FN(get_variant_datetime);
+    DEFINE_VECTORIZED_FN(get_variant_time);
+
+    /**
+     * @param: [variant, path]
+     * @paramType: [VariantColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(variant_typeof);
 
     // Preload the variant segments if necessary.
     // This function is called once per query execution

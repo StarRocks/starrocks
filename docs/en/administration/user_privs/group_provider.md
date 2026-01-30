@@ -5,13 +5,18 @@ sidebar_position: 30
 
 # Authenticate User Groups
 
+import UnixFileIntro from '../../_assets/user_priv/unix_file_intro.mdx'
+import UnixFileSyntax from '../../_assets/user_priv/unix_file_syntax.mdx'
+import UnixFileParam from '../../_assets/user_priv/unix_file_param.mdx'
+import GroupProviderRangerLink from '../../_assets/user_priv/group_provider_ranger_link.mdx'
+
 Enable Group Provider in StarRocks to authenticate, and authorize user groups from external authentication systems.
 
 From v3.5.0 onwards, StarRocks supports Group Provider to collect group information from external authentication systems for user group management.
 
 ## Overview
 
-To deepen its integration with external user authentication and authorization systems, such as LDAP, OpenID Connect, OAuth 2.0, and Apache Ranger, StarRocks supports collecting user group information for a better experience on the collective user management.
+To deepen its integration with external user authentication and authorization systems, such as LDAP and Apache Ranger, StarRocks supports collecting user group information for a better experience on the collective user management.
 
 With a group provider, you can fetch the group information from external user systems for different purposes. Group information is independent and can be integrated flexibly into authentication, authorization, or other processes without being tightly coupled to any specific workflow.
 
@@ -25,15 +30,13 @@ The following flow chart uses LDAP and Apache Ranger as an example to explain th
 
 ## Create a group provider
 
-StarRocks supports three types of group providers: 
-- **LDAP group provider**: Search and match users with groups in your LDAP service
-- **Unix group provider**: Search and match users with groups in your operating system
-- **File group provider**: Search and match users with groups defined by a file
+<UnixFileIntro />
 
 ### Syntax
 
+- LDAP group provider:
+
 ```SQL
--- LDAP group provider
 CREATE GROUP PROVIDER <group_provider_name> 
 PROPERTIES (
     "type" = "ldap",
@@ -65,29 +68,13 @@ ldap_search_user_arg ::=
 
 ldap_cache_arg ::= 
     "ldap_cache_refresh_interval" = ""
-
--- Unix group provider
-CREATE GROUP PROVIDER <group_provider_name> 
-PROPERTIES (
-    "type" = "unix"
-)
-
--- File group provider
-CREATE GROUP PROVIDER <group_provider_name> 
-PROPERTIES (
-    "type" = "file",
-    "group_file_url" = ""
-)
 ```
+
+<UnixFileSyntax />
 
 ### Parameters
 
-#### `type`
-
-The type of the group provider to create. Valid values:
-- `ldap`: Creates an LDAP group provider. When this value is set, you need to specify `ldap_info`, `ldap_search_group_arg`, `ldap_search_user_arg`, and optionally `ldap_cache_arg`.
-- `unix`: Creates a Unix group provider.
-- `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
+<UnixFileParam />
 
 #### `ldap_info` parameter group
 
@@ -179,16 +166,6 @@ The argument used to define the cache behavior for the LDAP group information.
 ##### `ldap_cache_refresh_interval`
 
 Optional. The interval at which StarRocks automatically refreshes the cached LDAP group information. Unit: Seconds. Default: `900`.
-
-#### `group_file_url`
-
-The URL or relative path (under `fe/conf`) to the file that defines the user groups.
-
-:::note
-
-A group file contains a list of groups and their members. You can define a group in each line where the group name and members are separated by a colon. Multiple users are separated by commas. Example: `group_name:user_1,user_2,user_3`.
-
-:::
 
 ### Example
 
@@ -310,30 +287,18 @@ ALTER SECURITY INTEGRATION LDAP SET
 );
 ```
 
-<!--enterprise
-## Grant role or privilege to a user group
+## Grant role to a user group
 
-You can grant roles or privileges to a user group via [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
+You can grant roles to a user group via [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
 
-- Grant a role to a user group.
+The following example grants the role `example_role` to the user group `analysts`:
 
-  The following example grants the role `example_role` to the user group `analysts`:
-
-  ```SQL
-  GRANT example_role TO EXTERNAL GROUP analysts;
-  ```
-
-- Grant a privilege to a user group.
-
-  The following example grants the SELECT privilege on the table `sr_member` to the user group `analysts`:
-
-  ```SQL
-  GRANT SELECT ON TABLE sr_member TO EXTERNAL GROUP analysts;
-  ```
--->
+```SQL
+GRANT example_role TO EXTERNAL GROUP analysts;
+```
 
 ## Combine group provider with external authorization system (Apache Ranger)
 
 Once you configure the associated group provider in the security integration, StarRocks will record the user's group information upon login. This group information will then be automatically included in the authorization process with Ranger, eliminating the need for additional configuration.
 
-For more instructions on integrating StarRocks with Ranger, see [Manage permissions with Apache Ranger](./authorization/ranger_plugin.md).
+<GroupProviderRangerLink />

@@ -183,7 +183,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         boolean fileBundling = table.isFileBundling();
         try {
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 tablets.addAll(index.getTablets());
             }
             visibleVersion = partition.getVisibleVersion();

@@ -385,7 +385,7 @@ CMAKE_FLAGS=(
     "-G" "Ninja"
     "-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
     "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-    "-DCMAKE_INSTALL_PREFIX=${ROOT_DIR}/be/output"
+    "-DCMAKE_INSTALL_PREFIX=${ROOT_DIR}/output/be"
 )
 
 if [[ -n "$USE_SANITIZER_FLAG" ]]; then
@@ -526,7 +526,7 @@ if [[ $DO_INSTALL -eq 1 ]]; then
     log_success "Installation command completed successfully"
 
     # Verify installation
-    BE_BINARY="${ROOT_DIR}/be/output/lib/starrocks_be"
+    BE_BINARY="${ROOT_DIR}/output/be/lib/starrocks_be"
     log_info "Verifying installation at: $BE_BINARY"
 
     if [[ -f "$BE_BINARY" ]]; then
@@ -563,11 +563,11 @@ if [[ $DO_INSTALL -eq 1 ]]; then
         fi
     else
         log_error "Binary not found after installation: $BE_BINARY"
-        log_info "Checking be/output/lib directory contents:"
-        ls -la "${ROOT_DIR}/be/output/lib/" 2>/dev/null || log_warn "Could not list lib directory"
+        log_info "Checking output/be/lib directory contents:"
+        ls -la "${ROOT_DIR}/output/be/lib/" 2>/dev/null || log_warn "Could not list lib directory"
 
-        log_info "Checking be/output directory structure:"
-        find "${ROOT_DIR}/be/output" -name "*starrocks*" -type f 2>/dev/null | while read -r file; do
+        log_info "Checking output/be directory structure:"
+        find "${ROOT_DIR}/output/be" -name "*starrocks*" -type f 2>/dev/null | while read -r file; do
             log_info "Found starrocks file: $file"
         done || log_warn "No starrocks files found in output directory"
 
@@ -602,10 +602,10 @@ echo "Build Directory: $BUILD_DIR"
 echo "Completed:       $BUILD_TIME"
 
 if [[ $DO_INSTALL -eq 1 ]]; then
-    echo "Installation:    ${ROOT_DIR}/be/output/lib/starrocks_be"
+    echo "Installation:    ${ROOT_DIR}/output/be/lib/starrocks_be"
     echo ""
     echo "To run StarRocks BE:"
-    echo "  cd ${ROOT_DIR}/be/output/lib"
+    echo "  cd ${ROOT_DIR}/output/be/lib"
     echo "  ./starrocks_be --help"
 fi
 

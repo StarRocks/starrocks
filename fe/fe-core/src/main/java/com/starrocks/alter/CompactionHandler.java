@@ -84,7 +84,7 @@ public class CompactionHandler  {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
                 for (Partition partition : allPartitions) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+                        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                                 MaterializedIndex.IndexExtState.VISIBLE)) {
                             for (Tablet tablet : index.getTablets()) {
                                 for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {

@@ -15,47 +15,43 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.NodePosition;
 
 // SHOW COLUMNS
 public class ShowColumnStmt extends ShowStmt {
-    private final TableName tableName;
-    private final String db;
+    private TableRef tableRef;
     private final String pattern;
     private final boolean isVerbose;
     private Expr where;
 
-    public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose) {
-        this(tableName, db, pattern, isVerbose, null, NodePosition.ZERO);
+    public ShowColumnStmt(TableRef tableRef, String pattern, boolean isVerbose) {
+        this(tableRef, pattern, isVerbose, null, NodePosition.ZERO);
     }
 
-    public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose, Expr where) {
-        this(tableName, db, pattern, isVerbose, where, NodePosition.ZERO);
+    public ShowColumnStmt(TableRef tableRef, String pattern, boolean isVerbose, Expr where) {
+        this(tableRef, pattern, isVerbose, where, NodePosition.ZERO);
     }
 
-    public ShowColumnStmt(TableName tableName, String db, String pattern, boolean isVerbose,
+    public ShowColumnStmt(TableRef tableRef, String pattern, boolean isVerbose,
                           Expr where, NodePosition pos) {
         super(pos);
-        this.tableName = tableName;
-        this.db = db;
+        this.tableRef = tableRef;
         this.pattern = pattern;
         this.isVerbose = isVerbose;
         this.where = where;
     }
 
     public String getCatalog() {
-        return tableName.getCatalog();
+        return tableRef == null ? null : tableRef.getCatalogName();
     }
 
     public String getDb() {
-        return tableName.getDb();
+        return tableRef == null ? null : tableRef.getDbName();
     }
 
     public String getTable() {
-        return tableName.getTbl();
+        return tableRef == null ? null : tableRef.getTableName();
     }
 
     public boolean isVerbose() {
@@ -66,14 +62,12 @@ public class ShowColumnStmt extends ShowStmt {
         return pattern;
     }
 
-    public TableName getTableName() {
-        return tableName;
+    public TableRef getTableRef() {
+        return tableRef;
     }
 
-    public void init() {
-        if (!Strings.isNullOrEmpty(db)) {
-            tableName.setDb(db);
-        }
+    public void setTableRef(TableRef tableRef) {
+        this.tableRef = tableRef;
     }
 
     public Expr getWhereClause() {

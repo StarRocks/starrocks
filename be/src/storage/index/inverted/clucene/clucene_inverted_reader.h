@@ -61,7 +61,8 @@ public:
     static Status create(const std::string& path, const std::shared_ptr<TabletIndex>& tablet_index,
                          LogicalType field_type, std::unique_ptr<InvertedReader>* res);
 
-    Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator) override;
+    Status new_iterator(const std::shared_ptr<TabletIndex> index_meta, InvertedIndexIterator** iterator,
+                        const IndexReadOptions& index_opt) override;
 };
 
 class FullTextCLuceneInvertedReader : public CLuceneInvertedReader {

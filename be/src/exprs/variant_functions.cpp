@@ -14,23 +14,45 @@
 
 #include "exprs/variant_functions.h"
 
-#include <memory>
-
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "runtime/runtime_state.h"
+#include "util/variant_converter.h"
 #include "variant_path_parser.h"
 
 namespace starrocks {
 
 StatusOr<ColumnPtr> VariantFunctions::variant_query(FunctionContext* context, const Columns& columns) {
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    if (columns.size() != 2) {
-        return Status::InvalidArgument("VariantFunctions::variant_query requires 2 arguments");
-    }
-
     return _do_variant_query<TYPE_VARIANT>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_string(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_VARCHAR>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_int(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_BIGINT>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_bool(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_BOOLEAN>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_double(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DOUBLE>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_date(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DATE>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_datetime(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_DATETIME>(context, columns);
+}
+
+StatusOr<ColumnPtr> VariantFunctions::get_variant_time(FunctionContext* context, const Columns& columns) {
+    return _do_variant_query<TYPE_TIME>(context, columns);
 }
 
 Status VariantFunctions::variant_segments_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
@@ -85,6 +107,11 @@ Status VariantFunctions::variant_segments_close(FunctionContext* context, Functi
 
 template <LogicalType ResultType>
 StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    if (columns.size() != 2) {
+        return Status::InvalidArgument("Variant query functions requires 2 arguments");
+    }
+
     size_t num_rows = columns[0]->size();
 
     auto variant_viewer = ColumnViewer<TYPE_VARIANT>(columns[0]);
@@ -105,13 +132,13 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
             continue;
         }
 
-        const VariantValue* variant_value = variant_viewer.value(row);
-        if (variant_value == nullptr) {
+        const VariantRowValue* variant = variant_viewer.value(row);
+        if (variant == nullptr) {
             result.append_null();
             continue;
         }
 
-        auto field = VariantPath::seek(variant_value, variant_segments_status.value());
+        auto field = VariantPath::seek(variant, variant_segments_status.value());
         if (!field.ok()) {
             // If seek fails (e.g., path not found), append null
             result.append_null();
@@ -121,13 +148,37 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
         if constexpr (ResultType == TYPE_VARIANT) {
             result.append(std::move(field.value()));
         } else {
-            // TODO: support cast conversions in the following PR
-            return Status::NotSupported(
-                    fmt::format("VariantFunctions::variant_query does not support result type {} yet",
-                                logical_type_to_string(ResultType)));
+            const RuntimeState* state = context->state();
+            cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
+            Status casted = cast_variant_value_to<ResultType, true>(field.value(), zone, result);
+            // Append null if casting fails
+            if (!casted.ok()) {
+                result.append_null();
+            }
         }
     }
 
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, const Columns& columns) {
+    const auto& variant_column = columns[0];
+    auto variant_viewer = ColumnViewer<TYPE_VARIANT>(variant_column);
+    size_t num_rows = variant_column->size();
+
+    ColumnBuilder<TYPE_VARCHAR> result(num_rows);
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (variant_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        const VariantRowValue* variant = variant_viewer.value(row);
+        if (variant == nullptr) {
+            result.append_null();
+            continue;
+        }
+        result.append(VariantUtil::variant_type_to_string(variant->get_value().type()));
+    }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

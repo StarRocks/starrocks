@@ -505,7 +505,7 @@ struct AggHashMapVariant {
     };
 
     detail::AggHashMapWithKeyPtr hash_map_with_key;
-    auto& get_variant() { return hash_map_with_key; }
+    auto& get_value() { return hash_map_with_key; }
 
     template <class Vistor>
     auto visit(Vistor&& vistor) const {
@@ -631,7 +631,7 @@ struct AggHashSetVariant {
     };
 
     detail::AggHashSetWithKeyPtr hash_set_with_key;
-    auto& get_variant() { return hash_set_with_key; }
+    auto& get_value() { return hash_set_with_key; }
 
     template <class Vistor>
     auto visit(Vistor&& vistor) const {

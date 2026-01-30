@@ -123,17 +123,17 @@ public:
             const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
             if (!ctx->is_notnull_constant_column(1)) {
                 const auto* column_sep = down_cast<const InputColumnType*>(columns[1]);
-                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                              column_sep->get_bytes().size());
+                this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() +
+                                                              column_sep->get_immutable_bytes().size());
             } else {
                 auto const_column_sep = ctx->get_constant_column(1);
                 Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
-                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
+                this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() +
                                                               sep.get_size() * chunk_size);
             }
         } else {
             const auto* column_val = down_cast<const InputColumnType*>(columns[0]);
-            this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * chunk_size);
+            this->data(state).intermediate_string.reserve(column_val->get_immutable_bytes().size() + 2 * chunk_size);
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -213,8 +213,8 @@ public:
                 if (chunk_size > 0) {
                     size_t old_size = bytes.size();
                     CHECK_EQ(old_size, 0);
-                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_bytes().size() +
-                                      column_sep->get_bytes().size();
+                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
+                                      column_sep->get_immutable_bytes().size();
                     bytes.resize(new_size);
                     dst_column->get_offset().resize(chunk_size + 1);
 
@@ -235,7 +235,7 @@ public:
                 if (chunk_size > 0) {
                     size_t old_size = bytes.size();
                     CHECK_EQ(old_size, 0);
-                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_bytes().size() +
+                    size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
                                       chunk_size * sep.size;
                     bytes.resize(new_size);
                     dst_column->get_offset().resize(chunk_size + 1);
@@ -263,8 +263,8 @@ public:
 
                 size_t old_size = bytes.size();
                 CHECK_EQ(old_size, 0);
-                size_t new_size =
-                        2 * chunk_size * sizeof(uint32_t) + column_value->get_bytes().size() + size_sep * chunk_size;
+                size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
+                                  size_sep * chunk_size;
                 bytes.resize(new_size);
                 dst_column->get_offset().resize(chunk_size + 1);
 

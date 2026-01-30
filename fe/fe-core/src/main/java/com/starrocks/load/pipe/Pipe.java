@@ -131,7 +131,12 @@ public class Pipe implements GsonPostProcessable {
         PipeName pipeName = stmt.getPipeName();
         long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
         PipeId pipeId = new PipeId(dbId, id);
-        Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
+        com.starrocks.catalog.TableName targetTableName = 
+                com.starrocks.catalog.TableName.fromTableRef(stmt.getTargetTableRef());
+        if (targetTableName == null) {
+            throw new IllegalArgumentException("Target table reference cannot be null when creating a pipe");
+        }
+        Pipe res = new Pipe(pipeId, pipeName.getPipeName(), targetTableName, stmt.getDataSource(),
                 stmt.getInsertSql());
         stmt.getDataSource().initPipeId(pipeId);
         res.recovered = true;

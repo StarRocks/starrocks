@@ -1,0 +1,31 @@
+-- name: test_spill_set_finishing @sequential
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="NONE";
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 100000 - generate_series FROM TABLE(generate_series(1, 300000));
+-- result:
+-- !result
+admin enable failpoint 'chunk_sorter_spill_on_set_finishing';
+-- result:
+-- !result
+select sum(k1),sum(crc32(k2)) from (select k1,k2 from t1 order by k1,k2 limit 270000, 10)t;
+-- result:
+2700055	24200037139
+-- !result
+select sum(k1),sum(crc32(k2)),sum(rn) from (select k1,k2, row_number() over (PARTITION BY k1 order by k2) as rn from t1)t;
+-- result:
+45000150000	644247848463746	300000
+-- !result
+admin disable failpoint 'chunk_sorter_spill_on_set_finishing';
+-- result:
+-- !result

@@ -11,6 +11,78 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.22
+
+Release Date: January 27, 2026
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- CVE-2025-27818. [#67335](https://github.com/StarRocks/starrocks/pull/67335)
+- SIGSEGV crash in CN when querying non-partitioned Iceberg tables with DATE/TIME predicates on ARM64/Graviton architectures. [#66864](https://github.com/StarRocks/starrocks/pull/66864)
+- Deadlock caused by lock ordering issues when closing `LocalTabletsChannel` and `LakeTabletsChannel`. [#66748](https://github.com/StarRocks/starrocks/pull/66748)
+- Potential BE crash when executing `CACHE SELECT` queries with filter conditions. [#67375](https://github.com/StarRocks/starrocks/pull/67375)
+- Issue where the Multicast Sink Operator could get stuck in the `OUTPUT_FULL` state if an upstream operator (for example, LIMIT) finished early, causing the query to hang. [#67153](https://github.com/StarRocks/starrocks/pull/67153)
+- Potential Segfault caused by failure to invalidate cache pointers when `ObjectColumn` is resized or moved. [#66957](https://github.com/StarRocks/starrocks/pull/66957)
+- Potential errors or OOM issues when Java UDFs handle Nullable columns containing all NULLs. [#67025](https://github.com/StarRocks/starrocks/pull/67025)
+- BE crash caused by the optimization logic of Ranking Window Functions when `PARTITION BY` and `ORDER BY` are missing. [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- Incorrect result issue where `COUNT(DISTINCT)` was not correctly rewritten to `multi_distinct_count` when queried alongside non-distinct aggregations (like SUM) on a single-bucket table. [#66767](https://github.com/StarRocks/starrocks/pull/66767)
+- Incorrect results when `regexp_replace` processes multiple rows with `enable_hyperscan_vec` enabled. [#67380](https://github.com/StarRocks/starrocks/pull/67380)
+- Potential incorrect results with Sorted Streaming Aggregate in shared-data mode. [#67376](https://github.com/StarRocks/starrocks/pull/67376)
+- Query failure where the optimizer generated access paths using the old column name after the column was renamed. [#67533](https://github.com/StarRocks/starrocks/pull/67533)
+- Incorrect Bitmap column type propagation in the rewrite rule from `bitmap_to_array` to `unnest_bitmap`. [#66855](https://github.com/StarRocks/starrocks/pull/66855)
+- Dependency derivation error in Low Cardinality optimization logic by adopting the Union-Find algorithm to correctly handle column relationships. [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+- "Compute node not found" error in Short-circuit Read under shared-data clusters by adding a fallback mechanism to non-short-circuit mode. [#67323](https://github.com/StarRocks/starrocks/pull/67323)
+- "Version not found" error during Replication publishing caused by FE Replicas not updating the minimum readable version. [#67538](https://github.com/StarRocks/starrocks/pull/67538)
+- Logic error in physical partition comparison during replication transactions to ensure deterministic comparison using ID order. [#67616](https://github.com/StarRocks/starrocks/pull/67616)
+- Inaccurate statistics for counters like scan rows in Cloud Native Tables. [#67307](https://github.com/StarRocks/starrocks/pull/67307)
+- Issue where expired Tablets were not cleaned up from the scheduler, causing the scheduling queue to pile up. [#66718](https://github.com/StarRocks/starrocks/pull/66718)
+- Inaccurate SQL statements displayed in the Profile when multiple statements are submitted. [#67097](https://github.com/StarRocks/starrocks/pull/67097)
+- Issue where the transaction ID was empty in `publish_version` logs in the new FE. [#66732](https://github.com/StarRocks/starrocks/pull/66732)
+- Performance issue caused by unnecessary Protobuf message copying after `set_allocated`. [#67844](https://github.com/StarRocks/starrocks/pull/67844)
+
+## 3.3.21
+
+Release Date: December 25, 2025
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- Logic errors when the `trim` function handles specific Unicode whitespace characters (for example, `\u1680`) and performance issues caused by reserved memory calculation. [#66428](https://github.com/StarRocks/starrocks/pull/66428) [#66477](https://github.com/StarRocks/starrocks/pull/66477)
+- Foreign key constraints are lost after FE restart due to table loading order. [#66474](https://github.com/StarRocks/starrocks/pull/66474)
+- Security vulnerabilities CVE-2025-66566 and CVE-2025-12183 in `lz4-java`, and potential crashes in upstream. [#66453](https://github.com/StarRocks/starrocks/pull/66453) [#66362](https://github.com/StarRocks/starrocks/pull/66362) [#67075](https://github.com/StarRocks/starrocks/pull/67075)
+- Incorrect results when Join is used with window functions in Group Execution mode. [#66441](https://github.com/StarRocks/starrocks/pull/66441)
+- System continues attempting to fetch metadata for a deleted warehouse, causing `SHOW LOAD` or SQL execution failures. [#66436](https://github.com/StarRocks/starrocks/pull/66436)
+- `PartitionColumnMinMaxRewriteRule` optimization incorrectly returns an empty set instead of NULL when the Scan input for aggregation is fully filtered. [#66356](https://github.com/StarRocks/starrocks/pull/66356)
+- Rowset IDs are not properly released when Rowset Commit or Compaction fails, preventing disk space reclamation. [#66301](https://github.com/StarRocks/starrocks/pull/66301)
+- Missing scan statistics (for example, scanned rows/bytes) in audit logs when a high-selectivity filter causes the Scan to end early (EOS). [#66280](https://github.com/StarRocks/starrocks/pull/66280)
+- BE continues to respond to heartbeats as Alive after entering the crash handling process (for example, SIGSEGV), causing the FE to continue dispatching queries and reporting errors [#66212](https://github.com/StarRocks/starrocks/pull/66212)
+- BE crash caused by multiple calls to `set_collector` of the Runtime Filter due to Local TopN pushdown optimization. [#66199](https://github.com/StarRocks/starrocks/pull/66199)
+- Load task failures caused by un-initialized `rssid` when column-mode Partial Update is used with Conditional Update. [#66139](https://github.com/StarRocks/starrocks/pull/66139)
+- Race condition when submitting drivers in Colocate Execution Group, leading to BE crashes. [#66099](https://github.com/StarRocks/starrocks/pull/66099)
+- `MemoryScratchSinkOperator` remains in a pending state and cannot be cancelled after `RecordBatchQueue` is closed (For example, triggered by SparkSQL Limit), causing queries to hang. [#66041](https://github.com/StarRocks/starrocks/pull/66041)
+- Use-after-free issue caused by a race condition when accessing `_num_pipelines` in the `ExecutionGroup` countdown logic. [#65940](https://github.com/StarRocks/starrocks/pull/65940)
+- Incorrect calculation logic for query error rate monitoring metrics (Internal/Analysis/Timeout error rate), resulting in negative values. [#65891](https://github.com/StarRocks/starrocks/pull/65891)
+- Null Pointer Exception (NPE) caused by unset `ConnectContext` when executing tasks as an LDAP user. [#65843](https://github.com/StarRocks/starrocks/pull/65843)
+- Performance issues where Filesystem Cache lookups for the same Key fail because object reference comparison is used instead of value comparison. [#65823](https://github.com/StarRocks/starrocks/pull/65823)
+- Tablet-related files are not correctly cleaned up after a snapshot load failure due to incorrect status variable checking. [#65709](https://github.com/StarRocks/starrocks/pull/65709)
+- Compression type and level configured in FE are not correctly propagated to BE or persisted during table creation or Schema Change, resulting in default compression settings. [#65673](https://github.com/StarRocks/starrocks/pull/65673)
+- `COM_STMT_EXECUTE` has no audit logs by default, and Profile information is incorrectly merged into the Prepare stage. [#65448](https://github.com/StarRocks/starrocks/pull/65448)
+- Delete Vector CRC32 check failures during cluster upgrade/downgrade scenarios due to version incompatibility. [#65442](https://github.com/StarRocks/starrocks/pull/65442)
+- BE crash caused by improper handling of Nullable properties when `UnionConstSourceOperator` merges Union to Values. [#65429](https://github.com/StarRocks/starrocks/pull/65429)
+- Concurrent load tasks fail during the Commit phase if the target tablet is dropped during an ALTER TABLE operation. [#65396](https://github.com/StarRocks/starrocks/pull/65396)
+- Inaccurate error log information when authentication fails due to incorrect context setting if users are switched in the HTTP SQL interface. [#65371](https://github.com/StarRocks/starrocks/pull/65371)
+- Statistics collection issues after `INSERT OVERWRITE`, including failure to collect statistics for temporary partitions and inaccurate row count statistics at transaction commit preventing collection trigger. [#65327](https://github.com/StarRocks/starrocks/pull/65327), [#65298](https://github.com/StarRocks/starrocks/pull/65298), [#65225](https://github.com/StarRocks/starrocks/pull/65225)
+- `HttpConnectContext` related to SQL is not released in TCP connection reuse scenarios because subsequent non-SQL HTTP requests overwrite the context. [#65203](https://github.com/StarRocks/starrocks/pull/65203)
+- Potential version loss caused by incomplete tablet loading when RocksDB iteration times out during BE startup metadata loading. [#65146](https://github.com/StarRocks/starrocks/pull/65146)
+- BE crash caused by out-of-bounds access when processing compression parameters in the `percentile_approx_weighted` function. [#64838](https://github.com/StarRocks/starrocks/pull/64838)
+- Missing Query Profile logs for queries forwarded from Follower to Leader. [#64395](https://github.com/StarRocks/starrocks/pull/64395)
+- BE crash caused by lax size checks during LZ4 encoding of large string columns during spilling. [#61495](https://github.com/StarRocks/starrocks/pull/61495)
+- `MERGING-EXCHANGE` operator crash caused by Ranking window function optimization generating an empty `ORDER BY` when there is no `PARTITION BY` and `GROUP BY`. [#67081](https://github.com/StarRocks/starrocks/pull/67081)
+- Unstable results or errors in the Low Cardinality column rewrite logic due to dependence on the Set iteration order. [#66724](https://github.com/StarRocks/starrocks/pull/66724)
+
 ## 3.3.20
 
 Release Date: November 18, 2025

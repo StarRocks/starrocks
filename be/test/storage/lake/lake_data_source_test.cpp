@@ -146,7 +146,7 @@ protected:
             ASSERT_OK(writer->write(chunk1));
             ASSERT_OK(writer->finish());
 
-            auto files = writer->files();
+            const auto& files = writer->segments();
             ASSERT_EQ(2, files.size());
 
             // add rowset metadata
@@ -155,8 +155,8 @@ protected:
             rowset->set_id(1);
             rowset->set_num_rows(k0.size() + k1.size());
             auto* segs = rowset->mutable_segments();
-            for (auto& file : writer->files()) {
-                segs->Add(std::move(file.path));
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
             }
 
             writer->close();

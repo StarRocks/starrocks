@@ -37,6 +37,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
@@ -303,6 +304,143 @@ public class ExplicitTxnTest {
 
         Assertions.assertFalse(context.getState().isError());
         Assertions.assertEquals("{'label':'test-label', 'status':'PREPARE', 'txnId':'1'}", context.getState().getInfoMessage());
+    }
+
+    @Test
+    public void testBeginWithLabel() throws IOException, DdlException {
+        // Test BEGIN with user-specified label
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(100, 200);
+        context.setExecutionId(queryId);
+
+        // Test parsing BEGIN with label
+        String sql = "BEGIN WITH LABEL my_custom_label";
+        BeginStmt beginStmt = (BeginStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Assertions.assertEquals("my_custom_label", beginStmt.getLabel());
+
+        // Test parsing START TRANSACTION with label
+        sql = "START TRANSACTION WITH LABEL another_label";
+        beginStmt = (BeginStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Assertions.assertEquals("another_label", beginStmt.getLabel());
+
+        // Test execution with user-specified label
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "user_txn_label"));
+
+        Assertions.assertFalse(context.getState().isError());
+        String infoMessage = context.getState().getInfoMessage();
+        Assertions.assertTrue(infoMessage.contains("'label':'user_txn_label'"));
+        Assertions.assertTrue(infoMessage.contains("'status':'PREPARE'"));
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testBeginWithoutLabel() throws IOException, DdlException {
+        // Test BEGIN without label (should use executionId as default)
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(300, 400);
+        context.setExecutionId(queryId);
+
+        // Test parsing BEGIN without label
+        String sql = "BEGIN";
+        BeginStmt beginStmt = (BeginStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Assertions.assertNull(beginStmt.getLabel());
+
+        // Test parsing START TRANSACTION without label
+        sql = "START TRANSACTION";
+        beginStmt = (BeginStmt) SqlParser.parseSingleStatement(sql, context.getSessionVariable().getSqlMode());
+        Assertions.assertNull(beginStmt.getLabel());
+
+        // Test execution without label (should generate default label)
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+
+        Assertions.assertFalse(context.getState().isError());
+        String infoMessage = context.getState().getInfoMessage();
+        // Default label is generated from executionId
+        Assertions.assertTrue(infoMessage.contains("'status':'PREPARE'"));
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testBeginWithInvalidLabel() {
+        // Test BEGIN with invalid label format (contains spaces or special characters)
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(500, 600);
+        context.setExecutionId(queryId);
+
+        // Test label with spaces - should throw SemanticException
+        Assertions.assertThrows(SemanticException.class, () -> {
+            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "label with spaces"));
+        });
+
+        // Test label with special characters - should throw SemanticException
+        Assertions.assertThrows(SemanticException.class, () -> {
+            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "label@special#chars"));
+        });
+
+        // Test label exceeds max length (128 chars) - should throw SemanticException
+        String longLabel = "a".repeat(129);
+        Assertions.assertThrows(SemanticException.class, () -> {
+            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, longLabel));
+        });
+
+        // Verify valid labels still work (alphanumeric with underscores and hyphens)
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "valid_label-123"));
+        Assertions.assertFalse(context.getState().isError());
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
+    }
+
+    @Test
+    public void testBeginWithDifferentLabelWhenTxnExists() {
+        // Test that BEGIN WITH LABEL throws error when transaction already exists with different label
+        ConnectContext context = new ConnectContext();
+        context.setThreadLocalInfo();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        TUniqueId queryId = new TUniqueId(700, 800);
+        context.setExecutionId(queryId);
+
+        // First BEGIN with a label
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "first_label"));
+        Assertions.assertFalse(context.getState().isError());
+        String infoMessage = context.getState().getInfoMessage();
+        Assertions.assertTrue(infoMessage.contains("'label':'first_label'"));
+
+        // Second BEGIN with a different label should throw SemanticException
+        Assertions.assertThrows(SemanticException.class, () -> {
+            TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "different_label"));
+        });
+
+        // Second BEGIN with the same label should succeed (return existing transaction)
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO, "first_label"));
+        Assertions.assertFalse(context.getState().isError());
+        infoMessage = context.getState().getInfoMessage();
+        Assertions.assertTrue(infoMessage.contains("'label':'first_label'"));
+
+        // Second BEGIN without label should also succeed (return existing transaction)
+        TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO));
+        Assertions.assertFalse(context.getState().isError());
+
+        // Cleanup
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(context.getTxnId());
+        context.setTxnId(0);
     }
 
     @Test

@@ -42,10 +42,10 @@ public class OlapTableHistorySchema {
         return historyTxnIdThreshold;
     }
 
-    public Optional<SchemaInfo> getSchemaByIndexId(long indexId) {
+    public Optional<SchemaInfo> getSchemaByIndexMetaId(long indexMetaId) {
         return getSchemaInfosSafety().flatMap(
                     infos -> infos.stream()
-                        .filter(schema -> schema.getIndexId() == indexId)
+                        .filter(schema -> schema.getIndexMetaId() == indexMetaId)
                         .findFirst().map(IndexSchemaInfo::getSchemaInfo)
                 );
     }

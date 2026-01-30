@@ -165,7 +165,7 @@ public class BackendResourceStatTest {
         stat.setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 1L, 4);
         stat.setNumCoresOfBe(1, 11L, 12);
         assertThat(stat.getAvgNumCoresOfBe()).isEqualTo(8);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(4);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(4);
 
         stat.setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 0L, 100);
         stat.setMemLimitBytesOfBe(DEFAULT_WAREHOUSE_ID, 1L, 50);
@@ -177,7 +177,7 @@ public class BackendResourceStatTest {
         stat.reset();
 
         assertThat(stat.getAvgNumCoresOfBe()).isEqualTo(1);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(1);
         assertThat(stat.getAvgMemLimitBytes(DEFAULT_WAREHOUSE_ID)).isEqualTo(0);
         assertThat(stat.getNumBes(DEFAULT_WAREHOUSE_ID)).isEqualTo(0);
     }
@@ -233,27 +233,27 @@ public class BackendResourceStatTest {
     }
 
     @Test
-    public void testGetMinNumHardwareCoresOfBe() {
+    public void testGetMinNumCoresOfBe() {
         BackendResourceStat stat = BackendResourceStat.getInstance();
 
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(1);
 
         stat.setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 0L, 0);
         stat.setNumCoresOfBe(1, 1L, 0);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(1);
 
         stat.setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 0L, 4);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(1);
 
         stat.setNumCoresOfBe(1, 1L, 8);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(4);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(4);
 
         stat.removeBe(DEFAULT_WAREHOUSE_ID, 0L);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(8);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(8);
 
         stat.removeBe(1, 1L);
-        assertThat(stat.getMinNumHardwareCoresOfBe()).isEqualTo(1);
+        assertThat(stat.getMinNumCoresOfBe()).isEqualTo(1);
     }
 
 }

@@ -76,6 +76,8 @@ private:
     void update_counter(RuntimeState* state);
 
     Status _extend_schema_by_access_paths();
+    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                          const ColumnAccessPath* path);
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -160,6 +162,18 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    // Gin filter Statistics
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
@@ -228,6 +242,9 @@ public:
     bool output_chunk_by_bucket() const override {
         return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
     }
+
+    size_t next_uniq_id() const { return starrocks::next_uniq_id(_t_lake_scan_node); }
+
     bool is_asc_hint() const override {
         if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
             return _t_lake_scan_node.output_asc_hint;

@@ -221,6 +221,10 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-slf4j-impl")
     implementation("org.apache.paimon:paimon-bundle") {
         exclude(group = "org.lz4", module = "lz4-java")
+        // https://avd.aquasec.com/nvd/cve-2024-7254
+        exclude(group = "com.google.protobuf", module = "protobuf-java")
+        // https://avd.aquasec.com/nvd/cve-2025-27820
+        exclude(group = "org.apache.httpcomponents.client5", module = "httpclient5")
     }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
@@ -474,7 +478,7 @@ tasks.test {
 
 // Checkstyle configuration to match Maven behavior
 checkstyle {
-    toolVersion = "10.21.1"  // puppycrawl.version from parent pom
+    toolVersion = project.ext["puppycrawl.version"].toString()
     configFile = rootProject.file("checkstyle.xml")
 }
 
@@ -496,9 +500,14 @@ tasks.withType<Checkstyle>().configureEach {
 
 // Bind checkstyle to run before compilation
 tasks.compileJava {
+    dependsOn("checkstyleMain")
     dependsOn("generateThriftSources", "generateProtoSources", "generateByScripts")
     // Add explicit dependency on hive-udf shadowJar task
     dependsOn(":plugin:hive-udf:shadowJar")
+}
+
+tasks.named<JavaCompile>("compileTestJava") {
+    dependsOn("checkstyleTest")
 }
 
 // Configure JAR task

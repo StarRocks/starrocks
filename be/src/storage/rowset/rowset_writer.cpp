@@ -256,8 +256,8 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
 
     auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
-    RETURN_IF_ERROR(
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
+    RETURN_IF_ERROR(RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta,
+                                                 &rowset, nullptr));
     if (_rows_mapper_builder != nullptr) {
         RETURN_IF_ERROR(_rows_mapper_builder->finalize());
     }
@@ -753,9 +753,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
 }
 
 Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
-    RETURN_IF_ERROR(rowset->link_files_to(tablet == nullptr ? nullptr : tablet->data_dir()->get_meta(),
-                                          _context.rowset_path_prefix, _context.rowset_id));
+    RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());

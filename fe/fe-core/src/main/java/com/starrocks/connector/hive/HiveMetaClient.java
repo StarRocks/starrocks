@@ -45,14 +45,12 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_CONNECTION_POOL_SIZE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
-import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
@@ -112,14 +110,18 @@ public class HiveMetaClient {
         // When the number of currently used clients is less than maxPoolSize,
         // the client will be recycled and reused. If it does, we close the client.
         public void finish() {
+            boolean shouldClose = false;
             synchronized (clientPoolLock) {
                 if (clientPool.size() >= maxPoolSize) {
-                    LOG.warn("There are more than {} connections currently accessing the metastore",
-                            maxPoolSize);
-                    close();
+                    shouldClose = true;
                 } else {
                     clientPool.offer(this);
                 }
+            }
+            if (shouldClose) {
+                LOG.warn("There are more than {} connections currently accessing the metastore",
+                        maxPoolSize);
+                close();
             }
         }
 
@@ -146,17 +148,12 @@ public class HiveMetaClient {
             Thread.currentThread().setContextClassLoader(ClassLoader.getSystemClassLoader());
         }
 
+        RecyclableClient client = null;
         synchronized (clientPoolLock) {
-            RecyclableClient client = clientPool.poll();
-            // The pool was empty so create a new client and return that.
-            // Serialize client creation to defend against possible race conditions accessing
-            // local Kerberos state
-            if (client == null) {
-                return new RecyclableClient(conf);
-            } else {
-                return client;
-            }
+            client = clientPool.poll();
         }
+
+        return client != null ? client : new RecyclableClient(conf);
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
@@ -317,10 +314,8 @@ public class HiveMetaClient {
             RecyclableClient client = null;
             StarRocksConnectorException connectionException = null;
             try {
-                List<String> decodedPartitionNames = partitionNames.stream().
-                        map(name -> unescapePathName(name)).collect(Collectors.toList());
                 client = getClient();
-                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, decodedPartitionNames);
+                partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
                 if (partitions.size() != partitionNames.size()) {
                     LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
                             partitionNames.size(), dbName, tblName, partitions.size());

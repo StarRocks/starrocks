@@ -4,6 +4,8 @@ displayed_sidebar: docs
 
 # CREATE MATERIALIZED VIEW
 
+import MVWarehouse from '../../../_assets/commonMarkdown/mv_warehouse.mdx'
+
 ## 功能
 
 创建物化视图。关于物化视图适用的场景请参考[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/async_mv/Materialized_view.md)。
@@ -239,7 +241,8 @@ AS
 **refresh_scheme**（选填）
 
 :::note
-创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+- 创建异步物化视图时必须至少指定 `distribution_desc` 和 `refresh_scheme` 其中之一。
+- 外表物化视图不支持**由基表数据变更触发的**自动刷新。仅支持**异步定时**刷新和手动刷新。
 :::
 
 物化视图的刷新方式。该参数支持如下值：
@@ -403,6 +406,8 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `AUTO`：如果可能，会尝试使用增量刷新。如果物化视图的查询定义不支持增量刷新，则会自动回退到 `PCT` 模式进行本次操作。在进行了一次 PCT 刷新后，如果条件允许，后续刷新有可能再次回到增量刷新模式。
   - `INCREMENTAL`：仅允许进行增量刷新。如果根据定义物化视图不支持增量刷新，或遇到无法增量处理的数据，则创建或刷新的操作会失败。
   - `FULL`：每次都强制进行全量刷新，无论物化视图是否支持增量刷新或分区级刷新。
+
+<MVWarehouse />
 
 **query_statement**（必填）
 

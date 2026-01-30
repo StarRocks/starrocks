@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -166,12 +167,16 @@ public class MaterializedViewMgr {
 
             // Create the job but not execute it
             MVMaintenanceJob job = new MVMaintenanceJob(view);
-            Preconditions.checkState(jobMap.putIfAbsent(view.getMvId(), job) == null, "job already existed");
-
-            IMTCreator.createIMT(stmt, view);
-
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
-            GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
+            AtomicBoolean jobExist = new AtomicBoolean(false);
+            GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job, wal -> {
+                if (jobMap.putIfAbsent(view.getMvId(), job) != null) {
+                    jobExist.set(true);
+                }
+            });
+            if (!jobExist.get()) {
+                IMTCreator.createIMT(stmt, view);
+            }
             LOG.info("create the maintenance job for MV: {}", view.getName());
         } catch (Exception e) {
             jobMap.remove(view.getMvId());
@@ -278,8 +283,13 @@ public class MaterializedViewMgr {
         throw UnsupportedException.unsupportedException("rebuild mv job is not supported");
     }
 
-    private MVMaintenanceJob getJob(MvId mvId) {
+    protected MVMaintenanceJob getJob(MvId mvId) {
         return jobMap.get(mvId);
+    }
+
+    // fot test
+    protected void clearJobs() {
+        jobMap.clear();
     }
 
     public List<MVMaintenanceJob> getRunnableJobs() {

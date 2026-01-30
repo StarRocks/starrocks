@@ -21,7 +21,6 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-class AggTopNRuntimeFilterBuilder;
 namespace pipeline {
 
 class AggregateStreamingSinkOperatorFactory;
@@ -64,15 +63,18 @@ private:
     Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
-    Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_force_preaggregation(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
-    Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_auto(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
 
     Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
-    Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_limited_memory(RuntimeState* state, const ChunkPtr& chunk, const size_t chunk_size);
+
+    // Build the topn runtime filter for the current chunk
+    Status _build_topn_runtime_filter(RuntimeState* state);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
@@ -85,6 +87,8 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    // the size of hash table when the last time the topn runtime filter is built
+    size_t _hash_table_size = 0;
 
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };

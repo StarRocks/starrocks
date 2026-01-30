@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
-import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
@@ -32,11 +31,10 @@ import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -75,6 +73,7 @@ public class IcebergScanNode extends ScanNode {
     private Optional<List<BucketProperty>> bucketProperties = Optional.empty();
     private PartitionIdGenerator partitionIdGenerator = null;
     private IcebergMetricsReporter icebergScanMetricsReporter;
+    private boolean usedForDelete = false;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
                            IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams,
@@ -164,6 +163,7 @@ public class IcebergScanNode extends ScanNode {
                         .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
                         .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
+                        .setUsedForDelete(usedForDelete)
                         .build();
 
         RemoteFileInfoSource remoteFileInfoSource;
@@ -188,7 +188,7 @@ public class IcebergScanNode extends ScanNode {
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
-                scanOptimizeOption.getCanUseMinMaxOpt());
+                scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
     }
 
     private void setupCloudCredential() {
@@ -197,41 +197,27 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-        // Try to get vended credentials from loadTable response
-        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
-                        icebergTable.getNativeTable().location());
-        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            cloudConfiguration = vendedCredentialsCloudConfiguration;
-            return;
-        }
-
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
-        Preconditions.checkState(connector != null,
-                String.format("connector of catalog %s should not be null", catalogName));
-
-        // Try to get credentials from catalog config (/v1/config response).
-        // This is used as fallback when STS is unavailable (e.g., Apache Polaris without STS).
-        CloudConfiguration catalogConfigCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
-                        icebergTable.getNativeTable().location());
-        if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            cloudConfiguration = catalogConfigCloudConfiguration;
-            return;
-        }
-
-        // Fall back to user-provided catalog credentials
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-        Preconditions.checkState(cloudConfiguration != null,
-                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+        cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
     }
 
     public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
         this.cloudConfiguration = cloudConfiguration;
     }
 
+    public void setUsedForDelete(boolean usedForDelete) {
+        this.usedForDelete = usedForDelete;
+    }
+
+    public boolean isUsedForDelete() {
+        return usedForDelete;
+    }
+
     public void preProcessIcebergPredicate(ScalarOperator predicate) {
         this.icebergJobPlanningPredicate = predicate;
+    }
+
+    public IcebergTable getIcebergTable() {
+        return icebergTable;
     }
 
     // for unit tests

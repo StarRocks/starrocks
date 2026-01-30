@@ -71,7 +71,9 @@ ORCScanner::ORCScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfile
           _max_chunk_size(_state->chunk_size() ? _state->chunk_size() : 4096),
           _next_range(0),
           _error_counter(0),
-          _status_eof(false) {}
+          _status_eof(false) {
+    _file_format_str = "orc";
+}
 
 Status ORCScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());
@@ -247,6 +249,10 @@ Status ORCScanner::_open_next_orc_reader() {
 
         // Attach a byte-range RowReaderFilter to only open stripes within [start_offset, start_offset + size)
         int64_t start_offset = std::max<int64_t>(0, range_desc.start_offset);
+        if (start_offset == 0) {
+            // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
+            ++_counter->num_files_read;
+        }
         int64_t size = range_desc.size >= 0 ? range_desc.size : file_size - start_offset;
         auto filter = std::make_shared<OrcRangeRowReaderFilter>(start_offset, start_offset + size);
         _orc_reader->set_row_reader_filter(filter);

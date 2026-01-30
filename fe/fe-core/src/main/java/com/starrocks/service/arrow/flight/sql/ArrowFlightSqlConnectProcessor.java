@@ -225,10 +225,10 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         try {
             ArrowFlightSqlServiceImpl.submitTask(() -> {
-                final boolean prevUseLowCardinalityOptimizeOnLake = ctx.getSessionVariable().isUseLowCardinalityOptimizeOnLake();
-                try {
+                final boolean prevUseLowCardinalityOptimizeOnLake =
+                        ctx.getSessionVariable().isUseLowCardinalityOptimizeOnLake();
+                try (var scope = ctx.bindScope()) {
                     ctx.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
-                    ctx.setThreadLocalInfo();
                     executor.execute();
                     deploymentFinished.complete(null);
                     processorFinished.complete(null);
@@ -310,6 +310,7 @@ public class ArrowFlightSqlConnectProcessor extends ConnectProcessor {
 
         executor = new StmtExecutor(ctx, parsedStmt, deploymentFinished);
         ctx.setIsLastStmt(true);
+        ctx.setSingleStmt(true);
         ctx.setExecutor(executor);
 
         executor.addRunningQueryDetail(parsedStmt);

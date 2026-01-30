@@ -221,6 +221,7 @@ public class FunctionSet {
     public static final String ENDS_WITH = "ends_with";
     public static final String FIND_IN_SET = "find_in_set";
     public static final String GROUP_CONCAT = "group_concat";
+    public static final String STRING_AGG = "string_agg";
     public static final String FORMAT_BYTES = "format_bytes";
     public static final String INSTR = "instr";
     public static final String LCASE = "lcase";
@@ -235,6 +236,7 @@ public class FunctionSet {
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String REGEXP_EXTRACT = "regexp_extract";
     public static final String REGEXP_REPLACE = "regexp_replace";
+    public static final String REGEXP_POSITION = "regexp_position";
     public static final String REPEAT = "repeat";
     public static final String REPLACE = "replace";
     public static final String REVERSE = "reverse";
@@ -254,6 +256,7 @@ public class FunctionSet {
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
+    public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
 
@@ -277,7 +280,14 @@ public class FunctionSet {
 
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
-
+    public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String GET_VARIANT_BOOL = "get_variant_bool";
+    public static final String GET_VARIANT_INT = "get_variant_int";
+    public static final String GET_VARIANT_DOUBLE = "get_variant_double";
+    public static final String GET_VARIANT_STRING = "get_variant_string";
+    public static final String GET_VARIANT_DATE = "get_variant_date";
+    public static final String GET_VARIANT_DATETIME = "get_variant_datetime";
+    public static final String GET_VARIANT_TIME = "get_variant_time";
     // Matching functions:
     public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
@@ -288,6 +298,8 @@ public class FunctionSet {
     public static final String LAST_QUERY_ID = "last_query_id";
     public static final String UUID = "uuid";
     public static final String UUID_NUMERIC = "uuid_numeric";
+    public static final String UUID_V7 = "uuid_v7";
+    public static final String UUID_V7_NUMERIC = "uuid_v7_numeric";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
     public static final String ISNOTNULL = "isnotnull";
@@ -315,6 +327,8 @@ public class FunctionSet {
     public static final String MIN_BY = "min_by";
     public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
+    public static final String MIN_N = "min_n";
+    public static final String MAX_N = "max_n";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_APPROX_WEIGHTED = "percentile_approx_weighted";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -546,6 +560,7 @@ public class FunctionSet {
     public static final String MAP_SIZE = "map_size";
 
     public static final String MAP_AGG = "map_agg";
+    public static final String SUM_MAP = "sum_map";
 
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
@@ -678,6 +693,7 @@ public class FunctionSet {
                     .addAll(FloatType.FLOAT_TYPES)
                     .addAll(DecimalType.DECIMAL_TYPES)
                     .addAll(STRING_TYPES)
+                    .add(VarbinaryType.VARBINARY)
                     .add(DateType.DATE)
                     .add(DateType.DATETIME)
                     .add(DecimalType.DECIMALV2)
@@ -765,6 +781,9 @@ public class FunctionSet {
                     .add(RAND)
                     .add(RANDOM)
                     .add(UUID)
+                    .add(UUID_NUMERIC)
+                    .add(UUID_V7)
+                    .add(UUID_V7_NUMERIC)
                     .add(SLEEP)
                     .build();
 
@@ -919,6 +938,7 @@ public class FunctionSet {
                     .add(INTERSECT_COUNT)
                     .add(LC_PERCENTILE_DISC)
                     .add(MAP_AGG)
+                    .add(SUM_MAP)
                     .build();
 
     public static final Set<String> RANK_RALATED_FUNCTIONS =
@@ -1176,6 +1196,11 @@ public class FunctionSet {
         fns.add(fn);
     }
 
+    public boolean isAggregateFunction(String functionName) {
+        List<Function> fns = vectorizedFunctions.getOrDefault(functionName, Collections.EMPTY_LIST);
+        return !fns.isEmpty() && fns.get(0) instanceof AggregateFunction;
+    }
+
     // for vectorized engine
     public void addVectorizedScalarBuiltin(long fid, String fnName, boolean varArgs,
                                            Type retType, Type... args) {
@@ -1275,7 +1300,7 @@ public class FunctionSet {
                 false, false, false));
 
         for (Type t : SUPPORTED_TYPES) {
-            if (t.isFunctionType()) {
+            if (t.isFunctionType() || t.isVariantType()) {
                 continue;
             }
             if (t.isNull()) {
@@ -1303,6 +1328,17 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
+
+            // min_n(value, n) - returns an array of n minimum values
+            Type arrayType = new ArrayType(t);
+            addBuiltin(AggregateFunction.createBuiltin(MIN_N,
+                    Lists.newArrayList(t, IntegerType.INT), arrayType, VarbinaryType.VARBINARY,
+                    false, false, false));
+
+            // max_n(value, n) - returns an array of n maximum values
+            addBuiltin(AggregateFunction.createBuiltin(MAX_N,
+                    Lists.newArrayList(t, IntegerType.INT), arrayType, VarbinaryType.VARBINARY,
+                    false, false, false));
 
             // MAX_BY
             for (Type t1 : SUPPORTED_TYPES) {
@@ -1431,6 +1467,9 @@ public class FunctionSet {
 
         // map_agg
         registerBuiltinMapAggFunction();
+
+        // sum_map
+        registerBuiltinSumMapFunction();
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
@@ -1748,6 +1787,13 @@ public class FunctionSet {
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
                 Lists.newArrayList(DateType.TIME, AnyElementType.ANY_ELEMENT), AnyMapType.ANY_MAP, null,
+                false, false, false));
+    }
+
+    private void registerBuiltinSumMapFunction() {
+        // sum_map takes a MAP as input and returns a MAP with summed values
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.SUM_MAP,
+                Lists.newArrayList(AnyMapType.ANY_MAP), AnyMapType.ANY_MAP, null,
                 false, false, false));
     }
 

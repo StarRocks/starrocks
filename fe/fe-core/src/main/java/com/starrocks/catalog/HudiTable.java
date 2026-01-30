@@ -370,6 +370,11 @@ public class HudiTable extends Table {
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
+    }
+
     public static Builder builder() {
         return new Builder();
     }

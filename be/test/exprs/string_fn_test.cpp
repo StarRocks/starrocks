@@ -4256,6 +4256,168 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, regexpPositionTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto pattern = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto pos = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    auto occurrence = NullableColumn::create(Int32Column::create(), NullColumn::create());
+
+    struct TestCase {
+        std::optional<std::string> str;
+        std::optional<std::string> pattern;
+        std::optional<int> pos;
+        std::optional<int> occurrence;
+        int expected;
+        bool expect_null;
+    };
+
+    std::vector<TestCase> test_cases = {
+            // Basic matching
+            {"a,b,c", ",", 1, 1, 2, false},
+            {"a1b2c3d", "[0-9]", 1, 1, 2, false},
+            {"test:data", ":", 1, 1, 5, false},
+
+            // Multiple occurrences
+            {"a1b2c3d", "[0-9]", 1, 2, 4, false},
+            {"a1b2c3d", "[0-9]", 1, 3, 6, false},
+            {"a1b2c3", "[0-9]", 1, 4, -1, false},
+
+            // Start position
+            {"a,b,c", ",", 3, 1, 4, false},
+            {"a1b2c3d", "[0-9]", 5, 1, 6, false},
+
+            // Empty pattern (zero-width)
+            {"abc", "", 1, 1, 1, false},
+            {"abc", "", 1, 2, 2, false},
+            {"abc", "", 1, 4, 4, false},
+            {"abc", "", 1, 5, -1, false},
+            {"", "", 1, 1, -1, false},
+
+            // Empty string
+            {"", ",", 1, 1, -1, false},
+
+            // Out of bounds
+            {"abc", ",", 10, 1, -1, false},
+            {"abc", "b", 5, 1, -1, false},
+
+            // Invalid pos/occurrence
+            {"abc", "b", 0, 1, -1, false},
+            {"abc", "b", -1, 1, -1, false},
+            {"abc", "b", 1, 0, -1, false},
+            {"abc", "b", 1, -1, -1, false},
+
+            // NULL inputs
+            {std::nullopt, "x", 1, 1, 0, true},
+            {"hello", std::nullopt, 1, 1, 0, true},
+            {"hello", "l", std::nullopt, 1, 0, true},
+            {"hello", "l", 1, std::nullopt, 0, true},
+
+            {"你好世界", "世", 1, 1, 3, false},
+    };
+
+    for (const auto& tc : test_cases) {
+        // Append str
+        if (tc.str.has_value()) {
+            str->append_datum(Slice(tc.str.value()));
+        } else {
+            str->append_nulls(1);
+        }
+
+        // Append pattern
+        if (tc.pattern.has_value()) {
+            pattern->append_datum(Slice(tc.pattern.value()));
+        } else {
+            pattern->append_nulls(1);
+        }
+
+        // Append pos
+        if (tc.pos.has_value()) {
+            pos->append_datum(tc.pos.value());
+        } else {
+            pos->append_nulls(1);
+        }
+
+        // Append occurrence
+        if (tc.occurrence.has_value()) {
+            occurrence->append_datum(tc.occurrence.value());
+        } else {
+            occurrence->append_nulls(1);
+        }
+    }
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    columns.push_back(pos);
+    columns.push_back(occurrence);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_position_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_position(context, columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    auto nullable_result = ColumnHelper::as_column<NullableColumn>(result);
+    auto data_col = ColumnHelper::cast_to<TYPE_INT>(nullable_result->data_column());
+
+    for (size_t i = 0; i < test_cases.size(); ++i) {
+        if (test_cases[i].expect_null) {
+            ASSERT_TRUE(nullable_result->is_null(i)) << "Test case " << i << " should return NULL";
+        } else {
+            ASSERT_FALSE(nullable_result->is_null(i)) << "Test case " << i << " should not be NULL";
+            ASSERT_EQ(test_cases[i].expected, data_col->get_data()[i])
+                    << "Test case " << i << " failed: expected " << test_cases[i].expected << " but got "
+                    << data_col->get_data()[i];
+        }
+    }
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_position_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+    auto str = BinaryColumn::create();
+    auto pattern = BinaryColumn::create();
+    auto pos = Int32Column::create();
+    auto occurrence = Int32Column::create();
+
+    str->append("hello");
+    pattern->append("[");
+    pos->append(1);
+    occurrence->append(1);
+
+    str->append("world");
+    pattern->append("(");
+    pos->append(1);
+    occurrence->append(1);
+
+    columns.push_back(str);
+    columns.push_back(pattern);
+    columns.push_back(pos);
+    columns.push_back(occurrence);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(StringFunctions::regexp_position_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto result = StringFunctions::regexp_position(context, columns);
+
+    ASSERT_FALSE(result.ok()) << "Expected error for invalid regex";
+    ASSERT_TRUE(result.status().to_string().find("Invalid regex") != std::string::npos);
+
+    StringFunctions::regexp_position_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();
@@ -4402,6 +4564,76 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
         ASSERT_EQ(result->get(0).get_int64(), 2);
         ASSERT_EQ(result->get(1).get_int64(), 3);
     }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, initcapTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto str = BinaryColumn::create();
+
+    // --- Fast Path (ASCII) Tests ---
+    str->append("hello world");
+    str->append("HELLO WORLD");
+    str->append("hElLo wOrLd");
+    str->append("Starrocks Database");
+    str->append("1st place, in-the-world!");
+    str->append("   hello   world   ");
+    str->append("abc_def.ghi+jkl");
+    str->append("a");
+    str->append("");
+
+    // --- Slow Path (UTF-8/ICU) Tests ---
+    str->append("héllo");
+    str->append("école");
+    str->append("ÇA VA");
+    str->append("café resumé");
+    str->append("привет мир");
+    str->append("hello-wörld_123");
+
+    columns.emplace_back(str);
+
+    // Check Happy Path (Valid Inputs)
+    auto result_status = StringFunctions::initcap(ctx.get(), columns);
+    ASSERT_TRUE(result_status.ok());
+
+    ColumnPtr result = result_status.value();
+    ASSERT_EQ(15, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    // Fast Path Assertions
+    ASSERT_EQ("Hello World", v->get_data()[0].to_string());
+    ASSERT_EQ("Hello World", v->get_data()[1].to_string());
+    ASSERT_EQ("Hello World", v->get_data()[2].to_string());
+    ASSERT_EQ("Starrocks Database", v->get_data()[3].to_string());
+    ASSERT_EQ("1st Place, In-The-World!", v->get_data()[4].to_string());
+    ASSERT_EQ("   Hello   World   ", v->get_data()[5].to_string());
+    ASSERT_EQ("Abc_Def.Ghi+Jkl", v->get_data()[6].to_string());
+    ASSERT_EQ("A", v->get_data()[7].to_string());
+    ASSERT_EQ("", v->get_data()[8].to_string());
+
+    // Slow Path Assertions
+    ASSERT_EQ("Héllo", v->get_data()[9].to_string());
+    ASSERT_EQ("École", v->get_data()[10].to_string());
+    ASSERT_EQ("Ça Va", v->get_data()[11].to_string());
+    ASSERT_EQ("Café Resumé", v->get_data()[12].to_string());
+    ASSERT_EQ("Привет Мир", v->get_data()[13].to_string());
+    ASSERT_EQ("Hello-Wörld_123", v->get_data()[14].to_string());
+
+    // --- Error Path (Invalid UTF-8) ---
+    Columns invalid_columns;
+    auto invalid_str = BinaryColumn::create();
+    // 0xFF is an invalid byte in UTF-8
+    invalid_str->append(std::string(1, (char)0xFF));
+    invalid_columns.emplace_back(invalid_str);
+
+    auto error_result = StringFunctions::initcap(ctx.get(), invalid_columns);
+
+    // Should return Status::InvalidArgument, NOT throw exception
+    ASSERT_FALSE(error_result.ok());
+    ASSERT_TRUE(error_result.status().is_invalid_argument());
+    // Verify specific error message logic (covers Substitute and ToHex lines)
+    ASSERT_NE(std::string(error_result.status().message()).find("Invalid UTF-8 sequence"), std::string::npos);
 }
 
 } // namespace starrocks

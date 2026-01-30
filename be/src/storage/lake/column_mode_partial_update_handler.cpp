@@ -476,11 +476,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     for (const auto& each : rss_upt_id_to_rowid_pairs) {
         builder->append_dcg(each.first, dcg_column_file_with_encryption_metas[each.first], dcg_column_ids[each.first]);
     }
-    // COLUMN_UPDATE_MODE: remove segments that contain only updated columns
-    // COLUMN_UPSERT_MODE: keep segments; upper layer will append delvec/PK index changes and new rowsets
-    if (params.op_write.txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-        builder->apply_column_mode_partial_update(params.op_write);
-    }
+    builder->apply_column_mode_partial_update(params.op_write);
 
     TRACE_COUNTER_INCREMENT("pcu_rss_cnt", rss_upt_id_to_rowid_pairs.size());
     TRACE_COUNTER_INCREMENT("pcu_upt_cnt", _partial_update_states.size());

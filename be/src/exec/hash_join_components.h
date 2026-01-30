@@ -175,7 +175,10 @@ public:
 
     ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const override;
 
+    void set_is_sub_partition(bool is_sub_partition) { _is_sub_partition = is_sub_partition; }
+
 private:
+    bool _is_sub_partition = false;
     JoinHashTable _ht;
     Columns _key_columns;
 };

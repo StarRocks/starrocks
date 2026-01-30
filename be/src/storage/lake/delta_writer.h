@@ -24,6 +24,7 @@
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/memtable_flush_executor.h"
+#include "storage/rowset/segment_file_info.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -138,7 +139,9 @@ public:
 
     // Return the list of file infos created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
-    std::vector<FileInfo> files() const;
+    const std::vector<SegmentFileInfo>& segments() const;
+
+    const std::vector<FileInfo>& dels() const;
 
     // The sum of all segment file sizes, in bytes.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.

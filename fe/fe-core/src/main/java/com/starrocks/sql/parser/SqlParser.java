@@ -177,6 +177,14 @@ public class SqlParser {
         return statements;
     }
 
+    public static Expr parseExpression(String expressionSql, SessionVariable sessionVariable) {
+        ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
+                com.starrocks.sql.parser.StarRocksParser::expressionSingleton).first;
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode(), GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
+                .visit(expressionContext);
+    }
+
     /**
      * We need not only sqlMode but also other parameters to define the property of parser.
      * Please consider use {@link #parse(String, SessionVariable)}

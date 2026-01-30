@@ -341,6 +341,22 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    public Map<Long, List<Long>> getAllComputeNodeIdsAssignToTablets(ComputeResource computeResource,
+                                                                    List<Long> tabletIds) {
+        // check warehouse exists
+        if (!warehouseExists(computeResource.getWarehouseId())) {
+            throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE,
+                    String.format("id: %d", computeResource.getWarehouseId()));
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getAllNodeIdsByShards(tabletIds, computeResource.getWorkerGroupId());
+        } catch (StarRocksException e) {
+            LOG.warn("get all compute node ids assign to tablets {} fail {}.", tabletIds, e.getMessage());
+            return null;
+        }
+    }
+
     public List<Long> getAllComputeNodeIdsAssignToTablet(ComputeResource computeResource, long tabletId) {
         // check warehouse exists
         if (!warehouseExists(computeResource.getWarehouseId())) {

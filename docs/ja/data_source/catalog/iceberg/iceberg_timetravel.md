@@ -123,69 +123,6 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
-### ブランチを別のブランチにファストフォワード
-
-**`fast_forward` 構文**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE fast_forward('<from_branch>', '<to_branch>')
-```
-
-**パラメータ**
-
-- `from_branch`: ファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
-- `to_branch`: `from_branch` をファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
-
-**例**
-
-`main` ブランチを `test-branch` ブランチにファストフォワードします。
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE fast_forward('main', 'test-branch');
-```
-
-### スナップショットを選択的に適用
-
-特定のスナップショットを選択してテーブルの現在の状態に適用できます。この操作により、既存のスナップショットに基づいて新しいスナップショットが作成され、元のスナップショットは影響を受けません。
-
-**`cherrypick_snapshot` 構文**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE cherrypick_snapshot(<snapshot_id>)
-```
-
-**パラメータ**
-
-`snapshot_id`: 選択的に適用したいスナップショットの ID。
-
-**例**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE cherrypick_snapshot(54321);
-```
-
-### スナップショットの期限切れ
-
-特定の時点よりも前のスナップショットを期限切れにできます。この操作により、期限切れのスナップショットのデータファイルが削除されます。
-
-**`expire_snapshots` 構文**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshots('<datetime>')
-```
-
-**例**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshots('2023-12-17 00:14:38')
-```
-
 ### ブランチまたはタグの削除
 
 **`DROP BRANCH`、`DROP TAG` 構文**

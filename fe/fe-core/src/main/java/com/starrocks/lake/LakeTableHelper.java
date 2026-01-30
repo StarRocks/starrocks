@@ -119,7 +119,7 @@ public class LakeTableHelper {
 
     static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition,
                                                       ComputeResource computeResource) throws StarClientException {
-        List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+        List<MaterializedIndex> allIndices = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         final long workerGroupId = computeResource.getWorkerGroupId();
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
@@ -174,7 +174,7 @@ public class LakeTableHelper {
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
         Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
         for (PhysicalPartition subPartition : subPartitions) {
-            for (MaterializedIndex index : subPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index : subPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 needRemoveShardGroupIdSet.add(index.getShardGroupId());
             }
         }
@@ -218,7 +218,7 @@ public class LakeTableHelper {
             List<Column> indexMetaSchema = indexMeta.getSchema();
             // check and restore column unique id for each schema
             if (restoreColumnUniqueId(indexMetaSchema)) {
-                LOG.info("Column unique ids in table {} with index {} have been restored, columns size: {}",
+                LOG.info("Column unique ids in table {} with index meta {} have been restored, columns size: {}",
                         table.getName(), indexMeta.getIndexMetaId(), indexMetaSchema.size());
             }
         }

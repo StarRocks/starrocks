@@ -46,6 +46,8 @@ public:
 
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
 
+    Status do_for_each_child(const std::function<Status(Expr*)>& callback) override;
+
 private:
     StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk, const Column* data_column);
 

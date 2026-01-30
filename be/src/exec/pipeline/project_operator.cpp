@@ -85,7 +85,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
 
     _cur_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < result_columns.size(); ++i) {
-        _cur_chunk->append_column(result_columns[i], _column_ids[i]);
+        _cur_chunk->append_column(std::move(result_columns[i]), _column_ids[i]);
     }
     _cur_chunk->owner_info() = chunk->owner_info();
     TRY_CATCH_ALLOC_SCOPE_END()

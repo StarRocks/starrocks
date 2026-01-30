@@ -186,6 +186,29 @@ public:
         return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
     }
 
+    /**
+     * find character position in this slice.
+     * @param c character need to find in slice
+     * @param offset start position
+     * @return position if found, otherwise -1
+     */
+    int64_t find(const char& c, const int64_t& offset = 0) const;
+
+    /**
+     * find sub slice in this slice by KMP algorithm
+     * @param pattern pattern need to find in slice
+     * @param next next array build by pattern.build_next
+     * @param offset start position
+     * @return position if found, otherwise -1
+     */
+    int64_t find(const Slice& pattern, const std::vector<size_t>& next, const int64_t& offset = 0) const;
+
+    /**
+     * build next array for KMP algorithm
+     * @return next array
+     */
+    std::vector<size_t> build_next() const;
+
     Slice tolower(std::string& buf) {
         // copy this slice into buf
         buf.assign(get_data(), get_size());
@@ -237,6 +260,25 @@ public:
         }
         return buf;
     }
+};
+
+class SliceContainerAdaptor {
+public:
+    using value_type = Slice;
+
+    SliceContainerAdaptor(const Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+    SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+    explicit SliceContainerAdaptor(const std::vector<Slice>& slices) : _slices(slices.data()), _size(slices.size()) {}
+
+    const Slice* data() const { return _slices; }
+
+    size_t size() const { return _size; }
+
+private:
+    const Slice* _slices;
+    size_t _size;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Slice& slice) {

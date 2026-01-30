@@ -113,13 +113,11 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testInit() {
         MaterializedView mv = new MaterializedView();
         Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv.getType());
-        Assertions.assertEquals(null, mv.getTableProperty());
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv2", columns, KeysType.AGG_KEYS,
                 null, null, null);
         Assertions.assertEquals(100, mv2.getDbId());
         Assertions.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv2.getType());
-        Assertions.assertEquals(null, mv2.getTableProperty());
         Assertions.assertEquals("mv2", mv2.getName());
         Assertions.assertEquals(KeysType.AGG_KEYS, mv2.getKeysType());
         mv2.setBaseIndexMetaId(10003);

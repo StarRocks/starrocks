@@ -396,9 +396,60 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushStatusNotOk) {
     flush_token->set_status(Status::NotSupported("Not Suppoted"));
     ASSERT_FALSE(flush_token->status().ok());
 
-    flush_token->_flush_memtable(nullptr, nullptr, false, nullptr);
+    flush_token->_flush_memtable(nullptr, nullptr, false, nullptr, 0);
 
     ASSERT_TRUE(MemTableFlushExecutor::calc_max_threads_for_lake_table(data_dirs) > 0);
+}
+
+TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSlotIdx) {
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSlotIdx";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    const size_t n = 1000;
+    std::atomic<int> segment_count{0};
+
+    // Submit multiple memtables - slot_idx should be automatically incremented
+    for (int i = 0; i < 3; i++) {
+        auto mem_table =
+                make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+        ASSERT_TRUE(mem_table->prepare().ok());
+
+        auto pchunk = gen_chunk(*_slots, n);
+        vector<uint32_t> indexes;
+        indexes.reserve(n);
+        for (int j = 0; j < n; j++) {
+            indexes.emplace_back(j);
+        }
+
+        auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+        ASSERT_TRUE(res.ok());
+        ASSERT_TRUE(mem_table->finalize().ok());
+
+        ASSERT_TRUE(flush_token
+                            ->submit(std::move(mem_table), false,
+                                     [&segment_count, n](std::unique_ptr<SegmentPB> seg, bool eos,
+                                                         int64_t flush_data_size) {
+                                         // Verify segment was created
+                                         ASSERT_NE(nullptr, seg);
+                                         ASSERT_EQ(n, seg->num_rows());
+                                         segment_count++;
+                                     })
+                            .ok());
+    }
+
+    ASSERT_TRUE(flush_token->wait().ok());
+
+    // Verify all segments were created
+    ASSERT_EQ(3, segment_count);
+
+    checkResult(n * 3);
 }
 
 } // namespace starrocks

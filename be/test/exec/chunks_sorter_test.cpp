@@ -484,9 +484,9 @@ public:
             map[i] = i;
         }
 
-        _chunk_1 = std::make_shared<Chunk>(columns1, map);
-        _chunk_2 = std::make_shared<Chunk>(columns2, map);
-        _chunk_3 = std::make_shared<Chunk>(columns3, map);
+        _chunk_1 = std::make_shared<Chunk>(std::move(columns1), map);
+        _chunk_2 = std::make_shared<Chunk>(std::move(columns2), map);
+        _chunk_3 = std::make_shared<Chunk>(std::move(columns3), map);
 
         _expr_cust_key = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);     // refer to cust_key
         _expr_nation = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 1);   // refer to nation
@@ -512,8 +512,8 @@ public:
             map[i] = i;
         }
 
-        _chunk_ranking_1 = std::make_shared<Chunk>(columns1, map);
-        _chunk_ranking_2 = std::make_shared<Chunk>(columns2, map);
+        _chunk_ranking_1 = std::make_shared<Chunk>(std::move(columns1), map);
+        _chunk_ranking_2 = std::make_shared<Chunk>(std::move(columns2), map);
 
         _expr_ranking_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);
     }
@@ -613,6 +613,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
                          pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_1));
+    (void)sorter._reserved_bytes(_chunk_1);
+    (void)sorter._get_revocable_mem_bytes();
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_2));
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_3));
     ASSERT_OK(sorter.done(_runtime_state.get()));
@@ -735,6 +737,8 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
             ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit);
             size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
+            (void)sorter._reserved_bytes(_chunk_1);
+            (void)sorter._get_revocable_mem_bytes();
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release())));
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release())));
             ASSERT_OK(sorter.done(_runtime_state.get()));

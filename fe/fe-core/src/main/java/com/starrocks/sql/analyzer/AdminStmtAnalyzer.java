@@ -17,7 +17,8 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Enums;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.Replica;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
@@ -31,6 +32,7 @@ import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -38,6 +40,8 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
@@ -56,7 +60,7 @@ public class AdminStmtAnalyzer {
                                                         ConnectContext session) {
             long tabletId = -1;
             long backendId = -1;
-            Replica.ReplicaStatus status = null;
+            ReplicaStatus status = null;
             NodePosition pos = NodePosition.ZERO;
             for (Property property : adminSetReplicaStatusStmt.getProperties().getPropertySet()) {
                 String key = property.getKey();
@@ -75,8 +79,8 @@ public class AdminStmtAnalyzer {
                         throw new SemanticException(PARSER_ERROR_MSG.invalidIdFormat("backend", val), pos);
                     }
                 } else if (key.equalsIgnoreCase(AdminSetReplicaStatusStmt.STATUS)) {
-                    status = Enums.getIfPresent(Replica.ReplicaStatus.class, val.toUpperCase()).orNull();
-                    if (status != Replica.ReplicaStatus.BAD && status != Replica.ReplicaStatus.OK) {
+                    status = Enums.getIfPresent(ReplicaStatus.class, val.toUpperCase()).orNull();
+                    if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
                         throw new SemanticException(PARSER_ERROR_MSG.invalidPropertyValue("replica status", val), pos);
                     }
                 } else {
@@ -160,6 +164,21 @@ public class AdminStmtAnalyzer {
                             partitionRef.getPos());
                 }
             }
+
+            Map<String, String> properties = adminRepairTableStmt.getProperties();
+            if (!properties.isEmpty()) {
+                boolean enforceConsistentVersion = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ENFORCE_CONSISTENT_VERSION, true);
+                adminRepairTableStmt.setEnforceConsistentVersion(enforceConsistentVersion);
+
+                boolean allowEmptyTabletRecovery = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY, false);
+                adminRepairTableStmt.setAllowEmptyTabletRecovery(allowEmptyTabletRecovery);
+
+                if (!properties.isEmpty()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, properties);
+                }
+            }
             return null;
         }
 
@@ -201,7 +220,7 @@ public class AdminStmtAnalyzer {
 
         @Override
         public Void visitAdminSetPartitionVersionStmt(AdminSetPartitionVersionStmt statement, ConnectContext context) {
-            statement.getTableName().normalization(context);
+            statement.setTableRef(AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context));
             return null;
         }
 
@@ -233,7 +252,7 @@ public class AdminStmtAnalyzer {
             if (!leftKey.equalsIgnoreCase("status")) {
                 return false;
             }
-            Replica.ReplicaStatus statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
+            ReplicaStatus statusFilter = Enums.getIfPresent(ReplicaStatus.class,
                     ((StringLiteral) rightChild).getStringValue().toUpperCase()).orNull();
             return statusFilter != null;
         }

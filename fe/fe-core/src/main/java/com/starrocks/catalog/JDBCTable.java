@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
@@ -34,6 +35,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class JDBCTable extends Table {
 
@@ -279,5 +281,10 @@ public class JDBCTable extends Table {
         MARIADB,
 
         CLICKHOUSE
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 }

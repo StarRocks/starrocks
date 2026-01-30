@@ -97,20 +97,17 @@ StatusOr<MutableColumnPtr> ConstColumn::upgrade_if_overflow() {
     if (_size > Column::MAX_CAPACITY_LIMIT) {
         return Status::InternalError("Size of ConstColumn exceed the limit");
     }
-
-    auto mutable_data_col = _data->as_mutable_ptr();
-    auto ret = upgrade_helper_func(&mutable_data_col);
-    if (ret.ok()) {
-        _data = std::move(mutable_data_col);
+    auto ret = upgrade_helper_func(_data->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _data = std::move(ret.value());
     }
     return ret;
 }
 
 StatusOr<MutableColumnPtr> ConstColumn::downgrade() {
-    auto mutable_data_col = _data->as_mutable_ptr();
-    auto ret = downgrade_helper_func(&mutable_data_col);
-    if (ret.ok()) {
-        _data = std::move(mutable_data_col);
+    auto ret = downgrade_helper_func(_data->as_mutable_raw_ptr());
+    if (ret.ok() && ret.value() != nullptr) {
+        _data = std::move(ret.value());
     }
     return ret;
 }

@@ -41,7 +41,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "common/tracer_fwd.h"

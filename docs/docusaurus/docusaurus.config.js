@@ -48,6 +48,9 @@ const config = {
       zh: {
         htmlLang: "zh-CN",
       },
+      ja: {
+        htmlLang: "ja-JP",
+      },
     },
   },
 
@@ -214,6 +217,7 @@ const config = {
           "diff",
           "json",
           "scss",
+          "scala",
         ],
       },
       algolia: {

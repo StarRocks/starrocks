@@ -19,7 +19,7 @@ public class IcebergRewriteStmt extends InsertStmt {
     private final boolean rewriteAll;
 
     public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll) {
-        super(base.getTableName(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(), 
+        super(base.getTableRef(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(), 
                 base.getQueryStatement(), base.isOverwrite(), base.getProperties(), base.getPos());
         super.setOrigStmt(base.getOrigStmt());
         this.rewriteAll = rewriteAll;

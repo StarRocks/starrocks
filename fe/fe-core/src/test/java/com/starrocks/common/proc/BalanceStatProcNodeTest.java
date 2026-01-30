@@ -164,8 +164,8 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1011L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
-            indexNameToId.put("index1", index.getId());
+            Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+            indexNameToMetaId.put("index1", index.getMetaId());
 
             // balance stat
             index.setBalanceStat(BalanceStat.createClusterTabletBalanceStat(be1.getId(), be2.getId(), 9L, 1L));
@@ -199,8 +199,8 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1111L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
-            indexNameToId.put("index1", index.getId());
+            Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+            indexNameToMetaId.put("index1", index.getMetaId());
 
             // balance stat
             index.setBalanceStat(BalanceStat.createColocationGroupBalanceStat(
@@ -242,8 +242,8 @@ public class BalanceStatProcNodeTest {
             index.addTablet(new LocalTablet(tablet1Id), tabletMeta);
             long tablet2Id = 1211L;
             index.addTablet(new LocalTablet(tablet2Id), tabletMeta);
-            Map<String, Long> indexNameToId = olapTable.getIndexNameToMetaId();
-            indexNameToId.put("index1", index.getId());
+            Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+            indexNameToMetaId.put("index1", index.getMetaId());
 
             // balance stat
             Set<Long> currentBes = Sets.newHashSet(be1.getId(), be2.getId());

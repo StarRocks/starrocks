@@ -17,6 +17,7 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/partition_chunk_writer.h"
+#include "runtime/current_thread.h"
 #include "storage/load_chunk_spiller.h"
 
 namespace starrocks::connector {

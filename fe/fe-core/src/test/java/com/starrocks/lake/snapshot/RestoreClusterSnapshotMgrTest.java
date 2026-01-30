@@ -19,6 +19,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.persist.ImageLoader;
 import com.starrocks.persist.Storage;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -167,5 +168,33 @@ public class RestoreClusterSnapshotMgrTest {
         Assertions.assertNotEquals(oldStoragePath, newStoragePath);
         Assertions.assertTrue(oldStoragePath.startsWith(sv1.getLocation()));
         Assertions.assertTrue(newStoragePath.startsWith(sv2.getLocation()));
+    }
+
+    @Test
+    public void testManualRestoreCollectSnapshotInfo() throws Exception {
+        new MockUp<ImageLoader>() {
+            @Mock
+            public long getImageJournalId() {
+                return 20L;
+            }
+        };
+
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 30L;
+            }
+        };
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_manual.yaml", true);
+
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+        RestoredSnapshotInfo restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
+        Assertions.assertTrue(restoredSnapshotInfo.getSnapshotName() == null);
+        Assertions.assertEquals(20L, restoredSnapshotInfo.getFeJournalId());
+        Assertions.assertEquals(30L, restoredSnapshotInfo.getStarMgrJournalId());
+
+        RestoreClusterSnapshotMgr.finishRestoring();
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
     }
 }

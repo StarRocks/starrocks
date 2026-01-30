@@ -272,7 +272,7 @@ MutableColumnPtr FunctionContext::create_column(const FunctionContext::TypeDesc&
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else {
         auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
-        p = col ? std::move(col)->as_mutable_ptr() : nullptr;
+        p = col ? std::move(*col).mutate() : nullptr;
     }
 
     if (nullable && p != nullptr) {

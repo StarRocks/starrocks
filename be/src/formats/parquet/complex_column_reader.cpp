@@ -16,7 +16,9 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "exprs/literal.h"
@@ -27,6 +29,7 @@
 #include "storage/column_expr_predicate.h"
 #include "types/variant_value.h"
 #include "util/slice.h"
+#include "util/variant_encoder.h"
 
 namespace starrocks::parquet {
 
@@ -231,7 +234,7 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] != nullptr) {
-                auto& child_column = struct_column->field_column(field_name);
+                ASSIGN_OR_RETURN(auto& child_column, struct_column->field_column(field_name));
                 RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                 real_read = child_column->size();
                 first_read = false;
@@ -249,7 +252,8 @@ Status StructColumnReader::read_range(const Range<uint64_t>& range, const Filter
     for (size_t i = 0; i < field_names.size(); i++) {
         const auto& field_name = field_names[i];
         if (_child_readers[field_name] == nullptr) {
-            auto* child_column = struct_column->field_column_raw_ptr(field_name);
+            ASSIGN_OR_RETURN(auto* child_column, struct_column->field_column_raw_ptr(field_name));
+
             child_column->append_default(real_read);
         }
     }
@@ -298,7 +302,7 @@ Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
         DCHECK(!get_column_parquet_field()->is_nullable);
         struct_column = down_cast<StructColumn*>(column_mut);
     }
-    auto& field_col = struct_column->field_column(sub_field);
+    ASSIGN_OR_RETURN(auto& field_col, struct_column->field_column(sub_field));
     auto ans = _child_readers[sub_field]->filter_dict_column(field_col, filter, sub_field_path, layer + 1);
     return ans;
 }
@@ -328,12 +332,13 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         const auto& field_name = field_names[i];
         if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
             if (_child_readers[field_name] == nullptr) {
-                auto* dst_field = struct_column_dst->field_column_raw_ptr(field_name);
-                auto* src_field = struct_column_src->field_column_raw_ptr(field_name);
+                ASSIGN_OR_RETURN(auto* dst_field, struct_column_dst->field_column_raw_ptr(field_name));
+                ASSIGN_OR_RETURN(auto* src_field, struct_column_src->field_column_raw_ptr(field_name));
+
                 dst_field->swap_column(*src_field);
             } else {
-                auto& dst_field = struct_column_dst->field_column(field_name);
-                auto& src_field = struct_column_src->field_column(field_name);
+                ASSIGN_OR_RETURN(auto& dst_field, struct_column_dst->field_column(field_name));
+                ASSIGN_OR_RETURN(auto& src_field, struct_column_src->field_column(field_name));
                 RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(dst_field, src_field));
             }
         } else {
@@ -679,10 +684,20 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     RETURN_IF_ERROR(_metadata_reader->read_range(range, filter, metadata_col));
     RETURN_IF_ERROR(_value_reader->read_range(range, filter, value_col));
 
+    ColumnPtr typed_value_col;
+    const NullableColumn* typed_value_nullable = nullptr;
+    if (_has_typed_value) {
+        typed_value_col = ColumnHelper::create_column(_typed_value_type, true);
+        RETURN_IF_ERROR(_typed_value_reader->read_range(range, filter, typed_value_col));
+        typed_value_nullable = down_cast<const NullableColumn*>(typed_value_col.get());
+    }
+
     auto* metadata_nullable = down_cast<NullableColumn*>(metadata_col->as_mutable_raw_ptr());
     auto* value_nullable = down_cast<NullableColumn*>(value_col->as_mutable_raw_ptr());
     const auto* metadata_column = down_cast<const BinaryColumn*>(metadata_nullable->data_column().get());
     const auto* value_column = down_cast<const BinaryColumn*>(value_nullable->data_column().get());
+    const auto& metadata_nulls = metadata_nullable->null_column()->get_data();
+    const auto& value_nulls = value_nullable->null_column()->get_data();
 
     // Get definition levels to determine which variant groups are null
     level_t* def_levels = nullptr;
@@ -692,84 +707,240 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     // Use definition levels to determine null values
     const LevelInfo level_info = get_column_parquet_field()->level_info;
 
+    // Verify metadata and value columns are aligned
     DCHECK_EQ(metadata_column->size(), value_column->size());
+    DCHECK_EQ(metadata_nulls.size(), value_nulls.size());
+    DCHECK_EQ(metadata_nulls.size(), metadata_column->size());
 
-    const size_t expected_size = range.span_size();
-    const size_t actual_rows = metadata_column->size();
-    variant_column->reserve(expected_size);
-
-    auto append_variant_column = [&](const size_t idx) {
-        const Slice metadata_slice = metadata_column->get_slice(idx);
-        const Slice value_slice = value_column->get_slice(idx);
-        if (auto variant_value = VariantValue::create(metadata_slice, value_slice); !variant_value.ok()) {
-            // Read malformed variant value as null
-            variant_column->append(VariantValue::of_null());
-        } else {
-            variant_column->append(variant_value.value());
-        }
-    };
+    // ScalarColumnReader returns a value for each row (including null values when parent group is null)
+    // So metadata_column->size() should equal num_levels
+    const size_t num_rows = metadata_column->size();
+    if (typed_value_col != nullptr && typed_value_col->size() != num_rows) {
+        return Status::InternalError("Typed value column size mismatch for variant reader");
+    }
+    variant_column->reserve(num_rows);
 
     if (def_levels != nullptr && num_levels > 0) {
-        size_t data_idx = 0;
-        for (size_t i = 0; i < expected_size && i < num_levels; ++i) {
-            if (def_levels[i] >= level_info.max_def_level) {
-                if (data_idx < actual_rows) {
-                    append_variant_column(data_idx);
-                    data_idx++;
+        // For optional variant group, num_levels should equal num_rows
+        DCHECK_EQ(num_levels, num_rows);
+
+        for (size_t i = 0; i < num_levels; ++i) {
+            const bool has_typed = typed_value_nullable != nullptr && !typed_value_nullable->is_null(i);
+            // Check if metadata or value is null (which indicates variant group is null)
+            if (!has_typed && (metadata_nulls[i] || value_nulls[i])) {
+                // Usually when metadata/value are null, def_level should be less than max_def_level
+                // But there may be edge cases in parquet encoding, so just log a warning instead of DCHECK
+                if (def_levels[i] >= level_info.max_def_level) {
+                    VLOG_FILE << "Null metadata/value at row " << i
+                              << " but variant group marked as non-null (def_level=" << def_levels[i]
+                              << " >= max_def_level=" << level_info.max_def_level << ")";
+                }
+                variant_column->append(VariantRowValue::from_null());
+            } else if (def_levels[i] >= level_info.max_def_level) {
+                // Variant group exists, prefer typed_value when available
+                const Slice metadata_slice = metadata_column->get_slice(i);
+                const Slice value_slice = value_column->get_slice(i);
+
+                // Apache Parquet Variant Shredding Spec:
+                // value=null, typed_value=null    → Missing value (valid only for object fields)
+                // value=non-null, typed_value=null → Value present, use raw variant encoding
+                // value=null, typed_value=non-null → Value present, encode from shredded type
+                // value=non-null, typed_value=non-null → Partially shredded object (both fields used)
+                //
+                // For primitives/arrays: value and typed_value must be mutually exclusive
+                // For objects: both can be non-null (typed_value has shredded fields, value has non-shredded fields)
+                if (has_typed) {
+                    // Validation: Check for spec violations (both non-null for non-objects)
+                    if (!value_slice.empty() && !_typed_value_type.is_struct_type()) {
+                        VLOG_FILE << "Warning: Both value and typed_value are non-null at row " << i
+                                  << " for non-object type " << type_to_string(_typed_value_type.type)
+                                  << ". Per Parquet Variant Shredding spec, this should only occur for objects. "
+                                  << "Using typed_value.";
+                    }
+
+                    VariantMetadata meta(metadata_slice);
+                    RETURN_IF_ERROR(_ctx.use_metadata(meta));
+
+                    // For partially shredded objects (both value and typed_value non-null),
+                    // we need to pass both columns to the encoder for merging
+                    if (!value_slice.empty() && _typed_value_type.is_struct_type()) {
+                        // Construct wrapper struct with value and typed_value fields
+                        Columns fields{value_col, typed_value_col};
+                        auto wrapper_col = StructColumn::create(fields, {"value", "typed_value"});
+                        TypeDescriptor wrapper_type;
+                        wrapper_type.type = TYPE_STRUCT;
+                        wrapper_type.field_names = {"value", "typed_value"};
+                        wrapper_type.children.emplace_back(TYPE_VARBINARY);
+                        wrapper_type.children.emplace_back(_typed_value_type);
+
+                        auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
+                        if (!variant.ok()) {
+                            variant_column->append(VariantRowValue::from_null());
+                            continue;
+                        }
+                        variant_column->append(variant.value());
+                    } else {
+                        // Only typed_value is present, encode directly
+                        auto variant = VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i,
+                                                                                  &_ctx);
+                        if (!variant.ok()) {
+                            variant_column->append(VariantRowValue::from_null());
+                            continue;
+                        }
+                        variant_column->append(variant.value());
+                    }
+                    continue;
+                }
+
+                // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
+                // But Variant requires non-empty value, so treat empty slices as null
+                if (metadata_slice.empty() || value_slice.empty()) {
+                    // value slice probably is empty since it's been filtered out during encoding according to `filter`
+                    // VLOG_FILE << "Empty metadata or value slice at row " << i
+                    //           << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
+                    //           << "), treating as null variant";
+                    variant_column->append(VariantRowValue::from_null());
+                } else if (auto variant = VariantRowValue::create(metadata_slice, value_slice); !variant.ok()) {
+                    // Read malformed variant value as null
+                    VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant.status();
+                    variant_column->append(VariantRowValue::from_null());
                 } else {
-                    variant_column->append(VariantValue::of_null());
+                    variant_column->append(variant.value());
                 }
             } else {
-                variant_column->append(VariantValue::of_null());
+                // Variant group is null, metadata and value should also be null
+                if (!metadata_nulls[i] || !value_nulls[i]) {
+                    VLOG_FILE << "Null variant group at row " << i
+                              << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
+                              << ", value_null=" << value_nulls[i] << ")";
+                }
+                variant_column->append(VariantRowValue::from_null());
             }
         }
 
-        // If we still have fewer rows than expected, fill with nulls
-        if (size_t current_size = variant_column->size(); current_size < expected_size) {
-            size_t to_fill = expected_size - current_size;
-            variant_column->append_nulls(to_fill);
-        }
+        // Verify we produced the expected number of rows
+        DCHECK_EQ(variant_column->size(), num_levels)
+                << "Variant column size mismatch: expected " << num_levels << ", got " << variant_column->size();
     } else {
-        // Variant group is required, so all rows are non-null
-        for (size_t i = 0; i < actual_rows; ++i) {
-            append_variant_column(i);
+        // Variant group is required, so all rows should have valid data (but fields can still be null)
+        for (size_t i = 0; i < num_rows; ++i) {
+            const bool has_typed = typed_value_nullable != nullptr && !typed_value_nullable->is_null(i);
+            const Slice metadata_slice = metadata_column->get_slice(i);
+            const Slice value_slice = value_column->get_slice(i);
+            if (!has_typed && (metadata_nulls[i] || value_nulls[i])) {
+                // Even for required variant group, metadata/value fields can be null
+                variant_column->append(VariantRowValue::from_null());
+            } else if (has_typed) {
+                // Validation: Check for spec violations (both non-null for non-objects)
+                if (!value_slice.empty() && !_typed_value_type.is_struct_type()) {
+                    VLOG_FILE << "Warning: Both value and typed_value are non-null at row " << i
+                              << " for non-object type " << type_to_string(_typed_value_type.type)
+                              << ". Per Parquet Variant Shredding spec, this should only occur for objects. "
+                              << "Using typed_value.";
+                }
+
+                VariantMetadata meta(metadata_slice);
+                RETURN_IF_ERROR(_ctx.use_metadata(meta));
+
+                // For partially shredded objects (both value and typed_value non-null),
+                // we need to pass both columns to the encoder for merging
+                if (!value_slice.empty() && _typed_value_type.is_struct_type()) {
+                    // Construct wrapper struct with value and typed_value fields
+                    Columns fields{value_col, typed_value_col};
+                    auto wrapper_col = StructColumn::create(fields, {"value", "typed_value"});
+                    TypeDescriptor wrapper_type;
+                    wrapper_type.type = TYPE_STRUCT;
+                    wrapper_type.field_names = {"value", "typed_value"};
+                    wrapper_type.children.emplace_back(TYPE_VARBINARY);
+                    wrapper_type.children.emplace_back(_typed_value_type);
+
+                    auto variant = VariantEncoder::encode_shredded_column_row(wrapper_col, wrapper_type, i, &_ctx);
+                    if (!variant.ok()) {
+                        variant_column->append(VariantRowValue::from_null());
+                        continue;
+                    }
+                    variant_column->append(variant.value());
+                } else {
+                    // Only typed_value is present, encode directly
+                    auto variant =
+                            VariantEncoder::encode_shredded_column_row(typed_value_col, _typed_value_type, i, &_ctx);
+                    if (!variant.ok()) {
+                        variant_column->append(VariantRowValue::from_null());
+                        continue;
+                    }
+                    variant_column->append(variant.value());
+                }
+            } else {
+                // Even if null flags are false, slices can be empty (empty strings are valid non-null values in BinaryColumn)
+                // But Variant requires non-empty value, so treat empty slices as null
+                if (metadata_slice.empty() || value_slice.empty()) {
+                    VLOG_FILE << "Empty metadata or value slice at row " << i
+                              << " (metadata_size=" << metadata_slice.size << ", value_size=" << value_slice.size
+                              << "), treating as null variant";
+                    variant_column->append(VariantRowValue::from_null());
+                } else if (auto variant = VariantRowValue::create(metadata_slice, value_slice); !variant.ok()) {
+                    VLOG_FILE << "Failed to create variant value at row " << i << ": " << variant.status();
+                    variant_column->append(VariantRowValue::from_null());
+                } else {
+                    variant_column->append(variant.value());
+                }
+            }
         }
 
-        DCHECK_EQ(actual_rows, expected_size);
-        if (actual_rows < expected_size) {
-            size_t to_fill = expected_size - actual_rows;
-            variant_column->append_nulls(to_fill);
-        }
+        // Verify we produced the expected number of rows
+        DCHECK_EQ(variant_column->size(), num_rows)
+                << "Variant column size mismatch: expected " << num_rows << ", got " << variant_column->size();
     }
 
     // Handle nullable column null flags
     if (dst->is_nullable()) {
         DCHECK(nullable_column != nullptr);
+        DCHECK_EQ(variant_column->size(), num_rows)
+                << "Variant column size must equal num_rows before setting nullable flags";
+
         if (def_levels != nullptr && num_levels > 0) {
-            NullColumn null_column(expected_size);
+            NullColumn null_column(num_levels);
             auto& is_nulls = null_column.get_data();
             bool has_null = false;
-            for (size_t i = 0; i < expected_size && i < num_levels; ++i) {
+
+            for (size_t i = 0; i < num_levels; ++i) {
                 if (def_levels[i] >= level_info.max_def_level) {
-                    is_nulls[i] = 0; // Variant group exists
+                    is_nulls[i] = 0; // Variant group exists (at parquet level)
+                    // Note: Even if variant group exists, we may still have null metadata/value or empty slices,
+                    // which result in null variants at the application level
+                    if (metadata_nulls[i] || value_nulls[i]) {
+                        VLOG_ROW << "Variant group marked as non-null at row " << i
+                                 << " but has null metadata/value fields";
+                    }
                 } else {
                     is_nulls[i] = 1; // Variant group is null
                     has_null = true;
+                    // Verify consistency: null group should usually have null metadata/value
+                    if (!metadata_nulls[i] || !value_nulls[i]) {
+                        VLOG_ROW << "Null variant group at row " << i
+                                 << " but metadata/value not marked as null (metadata_null=" << metadata_nulls[i]
+                                 << ", value_null=" << value_nulls[i] << ")";
+                    }
                 }
-            }
-
-            for (size_t i = num_levels; i < expected_size; ++i) {
-                is_nulls[i] = 1;
-                has_null = true;
             }
 
             nullable_column->null_column_raw_ptr()->swap_column(null_column);
             nullable_column->set_has_null(has_null);
+
+            // Final verification
+            DCHECK_EQ(nullable_column->size(), num_levels) << "Final nullable column size mismatch";
         } else {
-            NullColumn null_column(expected_size, 0);
+            NullColumn null_column(num_rows, 0);
             nullable_column->null_column_raw_ptr()->swap_column(null_column);
             nullable_column->set_has_null(false);
+
+            // Final verification
+            DCHECK_EQ(nullable_column->size(), num_rows)
+                    << "Final nullable column size mismatch for required variant group";
         }
+    } else {
+        // Non-nullable variant column
+        DCHECK_EQ(variant_column->size(), num_rows) << "Final variant column size must equal num_rows";
     }
 
     return Status::OK();

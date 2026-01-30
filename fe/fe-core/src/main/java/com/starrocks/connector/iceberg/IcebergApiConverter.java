@@ -44,6 +44,7 @@ import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -303,9 +304,20 @@ public class IcebergApiConverter {
         throw new StarRocksConnectorException("Unsupported complex column type %s", type);
     }
 
+    private static void addMetaColumns(List<Column> fullSchema) {
+        Column column = new Column(IcebergTable.FILE_PATH, StringType.STRING, true);
+        column.setIsHidden(true);
+        fullSchema.add(column);
+
+        column = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT, true);
+        column.setIsHidden(true);
+        fullSchema.add(column);
+    }
+
     public static List<Column> toFullSchemas(Schema schema, Table table) {
         List<Column> fullSchema = toFullSchemas(schema);
         if (table instanceof BaseTable) {
+            addMetaColumns(fullSchema);
             if (((BaseTable) table).operations().current().formatVersion() >= 3) {
                 boolean hasRowId = fullSchema.stream().anyMatch(column -> column.getName().equals(IcebergTable.ROW_ID));
                 if (!hasRowId) {
@@ -448,31 +460,51 @@ public class IcebergApiConverter {
                 nullValueCounts, null, lowerBounds, upperBounds);
     }
 
+    private static void setFormatProperties(ImmutableMap.Builder<String, String> tableProperties,
+                                         String fileFormat, String compressionCodec) {
+        String format = "parquet";
+        String compressionKey = TableProperties.PARQUET_COMPRESSION;
+        if ("avro".equalsIgnoreCase(fileFormat)) {
+            format = "avro";
+            compressionKey = TableProperties.AVRO_COMPRESSION;
+        } else if ("orc".equalsIgnoreCase(fileFormat)) {
+            format = "orc";
+            compressionKey = TableProperties.ORC_COMPRESSION;
+        } else if (fileFormat != null && !"parquet".equalsIgnoreCase(fileFormat)) {
+            throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        }
+        tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, format);
+        if (compressionCodec != null) {
+            tableProperties.put(compressionKey, compressionCodec);
+        }
+    }
+
+    private static void setCompressionProperties(ImmutableMap.Builder<String, String> tableProperties,
+                                             String fileFormat, String compressionCodec) {
+        if ("parquet".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
+        } else if ("avro".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
+        } else if ("orc".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
+        }
+    }
+
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
         createProperties.entrySet().forEach(tableProperties::put);
         String fileFormat = createProperties.getOrDefault(FILE_FORMAT, TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
         String compressionCodec = createProperties.get(COMPRESSION_CODEC);
 
-        if ("parquet".equalsIgnoreCase(fileFormat)) {
-            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
-            if (compressionCodec != null) {
-                tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
-            }
-        } else if ("avro".equalsIgnoreCase(fileFormat)) {
-            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
-            if (compressionCodec != null) {
-                tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
-            }
-        } else if ("orc".equalsIgnoreCase(fileFormat)) {
-            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
-            if (compressionCodec != null) {
-                tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
-            }
-        } else if (fileFormat != null) {
-            throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        if (!createProperties.containsKey(TableProperties.DEFAULT_FILE_FORMAT)) {
+            setFormatProperties(tableProperties, fileFormat, compressionCodec);
+        } else if (compressionCodec != null) {
+            setCompressionProperties(tableProperties, fileFormat, compressionCodec);
         }
-        tableProperties.put(TableProperties.FORMAT_VERSION, "2");
+
+        if (!createProperties.containsKey(TableProperties.FORMAT_VERSION)) {
+            tableProperties.put(TableProperties.FORMAT_VERSION, "2");
+        }
 
         return tableProperties.build();
     }

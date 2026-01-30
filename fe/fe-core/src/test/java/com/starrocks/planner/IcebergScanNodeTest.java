@@ -1325,6 +1325,8 @@ public class IcebergScanNodeTest {
 
     @Test
     public void testSetupCloudCredentialVendedCredentialsPriority(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked CatalogConnector connector,
             @Mocked IcebergTable table,
             @Mocked org.apache.iceberg.Table nativeTable,
             @Mocked org.apache.iceberg.io.FileIO fileIO,
@@ -1338,6 +1340,10 @@ public class IcebergScanNodeTest {
         vendedCredentials.put("client.region", "eu-west-1");
 
         new Expectations() {{
+            GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            result = connector;
+            minTimes = 0;
+
             table.getCatalogName();
             result = catalogName;
             minTimes = 0;

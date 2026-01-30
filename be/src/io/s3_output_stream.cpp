@@ -29,12 +29,13 @@
 namespace starrocks::io {
 
 S3OutputStream::S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
-                               int64_t max_single_part_size, int64_t min_upload_part_size)
+                               int64_t max_single_part_size, int64_t min_upload_part_size, std::string content_type)
         : _client(std::move(client)),
           _bucket(std::move(bucket)),
           _object(std::move(object)),
           _max_single_part_size(max_single_part_size),
           _min_upload_part_size(min_upload_part_size),
+          _content_type(std::move(content_type)),
           _buffer(),
           _upload_id(),
           _etags() {
@@ -99,6 +100,7 @@ Status S3OutputStream::create_multipart_upload() {
     Aws::S3::Model::CreateMultipartUploadRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+    req.SetContentType(_content_type);
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
@@ -114,6 +116,7 @@ Status S3OutputStream::singlepart_upload() {
     Aws::S3::Model::PutObjectRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+    req.SetContentType(_content_type);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
     req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);

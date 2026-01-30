@@ -1021,7 +1021,7 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
+                    List<MaterializedIndex> allIndices = txn.getPartitionLoadedIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partition.getParentId(), table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partition.getParentId());
                     for (MaterializedIndex index : allIndices) {
@@ -1201,7 +1201,7 @@ public class DatabaseTransactionMgr {
                                 partitionInfo.getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
 
                         List<MaterializedIndex> allIndices =
-                                transactionState.getPartitionLoadedTblIndexes(tableId, physicalPartition);
+                                transactionState.getPartitionLoadedIndexesWithoutLock(tableId, physicalPartition);
                         for (MaterializedIndex index : allIndices) {
                             for (Tablet tablet : index.getTablets()) {
                                 int healthReplicaNum = 0;
@@ -1507,6 +1507,13 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                // make sure remove txn from startup active compaction transaction map for visible/aborted state
+                // The startup active compaction transaction map is built when FE starts, and it is used to track the
+                // active compaction txn when FE restarts.
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
+            }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
             finalStatusTransactionStateDeque.add(transactionState);
@@ -1542,6 +1549,13 @@ public class DatabaseTransactionMgr {
                 } else {
                     runningTxnNums--;
                 }
+            }
+            if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                // make sure remove txn from startup active compaction transaction map for visible/aborted state
+                // The startup active compaction transaction map is built when FE starts, and it is used to track the
+                // active compaction txn when FE restarts.
+                GlobalStateMgr.getCurrentState().getCompactionMgr()
+                        .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);

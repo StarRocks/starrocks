@@ -66,6 +66,8 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.TypeFactory;
@@ -127,7 +129,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testSinglePartition() throws StarRocksException {
+    public void testSinglePartition(@Mocked GlobalStateMgr globalStateMgr,
+                                    @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -138,6 +141,14 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitionInfo();
@@ -160,9 +171,10 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testRangePartition(
-            @Injectable RangePartitionInfo partInfo,
-            @Injectable MaterializedIndex index) throws StarRocksException {
+    public void testRangePartition(@Injectable RangePartitionInfo partInfo,
+                                   @Injectable MaterializedIndex index,
+                                   @Mocked GlobalStateMgr globalStateMgr,
+                                   @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
 
         HashDistributionInfo distInfo = new HashDistributionInfo(
@@ -176,6 +188,14 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitionInfo();
@@ -299,7 +319,7 @@ public class OlapTableSinkTest {
         tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, partitionParam, false);
+                table, partitionParam, false, null);
         System.out.println(param);
 
         // Check
@@ -404,7 +424,7 @@ public class OlapTableSinkTest {
         tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, partitionParam, true);
+                table, partitionParam, true, null);
         System.out.println(param);
 
         // Check
@@ -425,7 +445,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testSingleListPartition() throws StarRocksException {
+    public void testSingleListPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                        @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("province", StringType.STRING)));
@@ -441,6 +462,14 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitions();
@@ -465,7 +494,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testImmutablePartition() throws StarRocksException {
+    public void testImmutablePartition(@Mocked GlobalStateMgr globalStateMgr,
+                                       @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -473,10 +503,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
-        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, 2, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartition(4, "", 2, index);
+        physicalPartition = new PhysicalPartition(4, 2, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
@@ -484,6 +514,14 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitionInfo();
@@ -507,7 +545,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testInitialOpenPartition() throws StarRocksException {
+    public void testInitialOpenPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -515,10 +554,10 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
-        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, 2, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartition(4, "", 2, index);
+        physicalPartition = new PhysicalPartition(4, 2, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
@@ -526,6 +565,14 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitionInfo();
@@ -553,7 +600,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testSchemaChangeOpenPartition() throws StarRocksException {
+    public void testSchemaChangeOpenPartition(@Mocked GlobalStateMgr globalStateMgr,
+                                              @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -561,15 +609,23 @@ public class OlapTableSinkTest {
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
-        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, 2, index);
         partition.addSubPartition(physicalPartition);
 
-        physicalPartition = new PhysicalPartition(4, "", 2, index);
+        physicalPartition = new PhysicalPartition(4, 2, index);
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
                 dstTable.getId();
                 result = 1;
                 dstTable.getPartitionInfo();
@@ -737,7 +793,7 @@ public class OlapTableSinkTest {
         TOlapTablePartition tPartition = new TOlapTablePartition();
         tPartition.setId(physicalPartitionId);
         partitionParam.addToPartitions(tPartition);
-        TOlapTableLocationParam param = OlapTableSink.createLocation(table, partitionParam, false);
+        TOlapTableLocationParam param = OlapTableSink.createLocation(table, partitionParam, false, null);
         LOG.warn("TableLocationParam: {}", param);
         // Check
         List<TTabletLocation> locations = param.getTablets();

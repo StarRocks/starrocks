@@ -22,27 +22,23 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -50,22 +46,13 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
-public class CloudNativeFastSchemaEvolutionV2Test extends StarRocksTestBase {
-    private static final String DB_NAME = "test_cloud_native_fse_v2";
+public class CloudNativeFastSchemaEvolutionV2Test extends LakeFastSchemaChangeTestBase {
+
     private static final AtomicInteger TABLE_SUFFIX = new AtomicInteger(0);
 
-    private static ConnectContext connectContext;
-    private static SchemaChangeHandler schemaChangeHandler;
-
-    @BeforeAll
-    public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
-        schemaChangeHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
-        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
-        UtFrameUtils.setUpForPersistTest();
+    @Override
+    protected boolean isFastSchemaEvolutionV2() {
+        return true;
     }
 
     @Test
@@ -238,6 +225,7 @@ public class CloudNativeFastSchemaEvolutionV2Test extends StarRocksTestBase {
     private static void alterTableProperty(String tableName, String value) throws Exception {
         String sql = String.format("ALTER TABLE %s.%s SET ('%s' = '%s')",
                 DB_NAME, tableName, PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2, value);
+        connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.executeSql(sql);
     }
 
@@ -272,14 +260,14 @@ public class CloudNativeFastSchemaEvolutionV2Test extends StarRocksTestBase {
 
     private static Map<Long, SchemaInfo> snapshotTableSchema(LakeTable table) {
         Map<Long, SchemaInfo> snapshot = Maps.newHashMap();
-        table.getIndexMetaIdToMeta().forEach((indexId, meta) -> snapshot.put(indexId, toSchemaInfo(meta)));
+        table.getIndexMetaIdToMeta().forEach((indexMetaId, meta) -> snapshot.put(indexMetaId, toSchemaInfo(meta)));
         return snapshot;
     }
 
     private static void assertTableSchemaMatchesSnapshot(LakeTable table, Map<Long, SchemaInfo> snapshot) {
-        snapshot.forEach((indexId, signature) -> {
-            MaterializedIndexMeta meta = table.getIndexMetaIdToMeta().get(indexId);
-            Assertions.assertNotNull(meta, () -> "Table missing indexId " + indexId);
+        snapshot.forEach((indexMetaId, signature) -> {
+            MaterializedIndexMeta meta = table.getIndexMetaIdToMeta().get(indexMetaId);
+            Assertions.assertNotNull(meta, () -> "Table missing indexMetaId " + indexMetaId);
             assertSchemaInfoEquals(signature, toSchemaInfo(meta));
         });
     }

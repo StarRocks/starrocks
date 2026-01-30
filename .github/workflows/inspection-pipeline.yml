@@ -178,7 +178,7 @@ jobs:
           echo "${{ steps.run_ut.outcome }}" > ./${{ matrix.build_type }}.txt
 
       - name: Upload Log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
         with:
           name: BE UT LOG
@@ -187,7 +187,7 @@ jobs:
           overwrite: true
 
       - name: Upload BE UT Result
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: BE-UT-RESULT-${{ matrix.build_type }}
@@ -244,7 +244,7 @@ jobs:
 
       - name: Upload log
         if: always() && (steps.run_ut.outcome == 'success' || steps.run_ut.outcome == 'failure')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -324,7 +324,7 @@ jobs:
           echo ${{ steps.run_build.outputs.FE_OUTPUT_TAR }} >> $GITHUB_STEP_SUMMARY
           echo -e "BE=${{ steps.run_build.outputs.BE_OUTPUT_TAR }}\nFE=${{ steps.run_build.outputs.FE_OUTPUT_TAR }}"> tar.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: BUILD-RESULT-${{ matrix.build_type }}-${{ matrix.linux }}
           path: tar.txt
@@ -369,7 +369,7 @@ jobs:
 
       - name: Download Build Artifact
         if: github.event_name == 'schedule' || inputs.IS_REBUILD
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           pattern: BUILD-RESULT-*
           path: outputs
@@ -534,7 +534,7 @@ jobs:
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

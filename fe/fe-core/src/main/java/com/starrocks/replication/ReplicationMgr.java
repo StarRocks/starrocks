@@ -227,15 +227,16 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
-    private void clearExpiredJobs() {
+    protected void clearExpiredJobs() {
         for (Iterator<Map.Entry<Long, ReplicationJob>> it = committedJobs.entrySet().iterator(); it.hasNext();) {
             ReplicationJob job = it.next().getValue();
             if (!job.isExpired()) {
                 continue;
             }
 
-            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job);
-            it.remove();
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job, wal -> {
+                it.remove();
+            });
         }
 
         for (Iterator<Map.Entry<Long, ReplicationJob>> it = abortedJobs.entrySet().iterator(); it.hasNext();) {
@@ -244,8 +245,9 @@ public class ReplicationMgr extends FrontendDaemon {
                 continue;
             }
 
-            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job);
-            it.remove();
+            GlobalStateMgr.getServingState().getEditLog().logDeleteReplicationJob(job, wal -> {
+                it.remove();
+            });
         }
     }
 

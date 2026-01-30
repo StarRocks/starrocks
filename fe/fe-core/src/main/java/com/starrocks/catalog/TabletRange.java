@@ -36,18 +36,9 @@ public class TabletRange {
         return this.range;
     }
 
-    public static TabletRange fromThrift(TTabletRange tTabletRange) {
-        return new TabletRange(
-                Range.of(Tuple.fromThrift(tTabletRange.lower_bound), Tuple.fromThrift(tTabletRange.upper_bound),
-                        tTabletRange.lower_bound_included, tTabletRange.upper_bound_included));
-    }
-
-    public static TabletRange fromProto(TabletRangePB tabletRangePB) {
-        Tuple lowerBound = tabletRangePB.lowerBound != null ? Tuple.fromProto(tabletRangePB.lowerBound) : null;
-        Tuple upperBound = tabletRangePB.upperBound != null ? Tuple.fromProto(tabletRangePB.upperBound) : null;
-        boolean lowerIncluded = tabletRangePB.lowerBoundIncluded != null ? tabletRangePB.lowerBoundIncluded : false;
-        boolean upperIncluded = tabletRangePB.upperBoundIncluded != null ? tabletRangePB.upperBoundIncluded : false;
-        return new TabletRange(Range.of(lowerBound, upperBound, lowerIncluded, upperIncluded));
+    @Override
+    public String toString() {
+        return range.toString();
     }
 
     public TTabletRange toThrift() {
@@ -63,4 +54,33 @@ public class TabletRange {
         }
         return tRange;
     }
+
+    public TabletRangePB toProto() {
+        TabletRangePB rangePB = new TabletRangePB();
+        rangePB.lowerBoundIncluded = range.isLowerBoundIncluded();
+        rangePB.upperBoundIncluded = range.isUpperBoundIncluded();
+
+        if (!range.isMinimum()) {
+            rangePB.lowerBound = range.getLowerBound().toProto();
+        }
+        if (!range.isMaximum()) {
+            rangePB.upperBound = range.getUpperBound().toProto();
+        }
+        return rangePB;
+    }
+
+    public static TabletRange fromThrift(TTabletRange tTabletRange) {
+        return new TabletRange(
+                Range.of(Tuple.fromThrift(tTabletRange.lower_bound), Tuple.fromThrift(tTabletRange.upper_bound),
+                        tTabletRange.lower_bound_included, tTabletRange.upper_bound_included));
+    }
+
+    public static TabletRange fromProto(TabletRangePB tabletRangePB) {
+        Tuple lowerBound = tabletRangePB.lowerBound != null ? Tuple.fromProto(tabletRangePB.lowerBound) : null;
+        Tuple upperBound = tabletRangePB.upperBound != null ? Tuple.fromProto(tabletRangePB.upperBound) : null;
+        boolean lowerIncluded = tabletRangePB.lowerBoundIncluded != null ? tabletRangePB.lowerBoundIncluded : false;
+        boolean upperIncluded = tabletRangePB.upperBoundIncluded != null ? tabletRangePB.upperBoundIncluded : false;
+        return new TabletRange(Range.of(lowerBound, upperBound, lowerIncluded, upperIncluded));
+    }
+
 }

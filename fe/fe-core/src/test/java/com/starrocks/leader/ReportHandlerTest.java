@@ -60,6 +60,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.thrift.TException;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ReportHandlerTest {
     private static ConnectContext connectContext;
@@ -234,11 +236,13 @@ public class ReportHandlerTest {
     }
 
     @Test
-    public void testHandleResourceUsageReport() {
+    public void testHandleResourceUsageReport() throws TException {
         ResourceUsageMonitor resourceUsageMonitor = GlobalStateMgr.getCurrentState().getResourceUsageMonitor();
 
         Backend backend = new Backend(0, "127.0.0.1", 80);
+        backend.setBePort(90);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
+        computeNode.setBePort(99);
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -253,6 +257,24 @@ public class ReportHandlerTest {
             }
         };
 
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackendWithBePort(String host, int bePort) {
+                if (host.equals(backend.getHost()) && bePort == backend.getBePort()) {
+                    return backend;
+                }
+                return null;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
+                if (host.equals(computeNode.getHost()) && bePort == computeNode.getBePort()) {
+                    return computeNode;
+                }
+                return null;
+            }
+        };
+
         new Expectations(resourceUsageMonitor) {
             {
                 resourceUsageMonitor.notifyResourceUsageUpdate();
@@ -260,33 +282,55 @@ public class ReportHandlerTest {
             }
         };
 
-        int numRunningQueries = 1;
-        long memLimitBytes = 3;
-        long memUsedBytes = 2;
-        int cpuUsedPermille = 300;
-        TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+        ReportHandler handler = new ReportHandler();
+        handler.start();
 
-        // For backend, sync to FE followers and notify pending queries.
-        ReportHandler.testHandleResourceUsageReport(backend.getId(), resourceUsage);
-        Assertions.assertEquals(numRunningQueries, backend.getNumRunningQueries());
-        //        Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
-        Assertions.assertEquals(memUsedBytes, backend.getMemUsedBytes());
-        Assertions.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        {
+            int numRunningQueries = 1;
+            long memLimitBytes = 3;
+            long memUsedBytes = 2;
+            int cpuUsedPermille = 300;
+            TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            handler.handleReport(genRequest(resourceUsage, backend));
 
-        // For compute node, sync to FE followers and notify pending queries.
-        numRunningQueries = 10;
-        memLimitBytes = 30;
-        memUsedBytes = 20;
-        cpuUsedPermille = 310;
-        resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-        ReportHandler.testHandleResourceUsageReport(computeNode.getId(), resourceUsage);
-        Assertions.assertEquals(numRunningQueries, computeNode.getNumRunningQueries());
-        //        Assert.assertEquals(memLimitBytes, computeNode.getMemLimitBytes());
-        Assertions.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
-        Assertions.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> numRunningQueries == backend.getNumRunningQueries());
+            // For backend, sync to FE followers and notify pending queries.
+            Assertions.assertEquals(memUsedBytes, backend.getMemUsedBytes());
+            Assertions.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
+        }
 
-        // Don't sync and notify, because this BE doesn't exist.
-        ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
+        {
+            // For compute node, sync to FE followers and notify pending queries.
+            int numRunningQueries = 10;
+            int memLimitBytes = 30;
+            int memUsedBytes = 20;
+            int cpuUsedPermille = 310;
+            TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            handler.handleReport(genRequest(resourceUsage, computeNode));
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> numRunningQueries == computeNode.getNumRunningQueries());
+            Assertions.assertEquals(memUsedBytes, computeNode.getMemUsedBytes());
+            Assertions.assertEquals(cpuUsedPermille, computeNode.getCpuUsedPermille());
+
+            // Don't sync and notify, because this BE doesn't exist.
+            ComputeNode nonExistCN = new ComputeNode(2, "127.10.0.1", 100);
+            nonExistCN.setBePort(199);
+            handler.handleReport(genRequest(resourceUsage, nonExistCN));
+        }
+
+        handler.setStop();
+    }
+
+    private TReportRequest genRequest(TResourceUsage resourceUsage, ComputeNode worker) {
+        TReportRequest req = new TReportRequest();
+        req.setResource_usage(resourceUsage);
+
+        TBackend tcn = new TBackend();
+        tcn.setHost(worker.getHost());
+        tcn.setBe_port(worker.getBePort());
+        req.setBackend(tcn);
+
+        return req;
     }
 
     @Test
@@ -421,7 +465,7 @@ public class ReportHandlerTest {
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
-                .getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());

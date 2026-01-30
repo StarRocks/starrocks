@@ -143,6 +143,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
                     }
                 }
             }
+            physicalScanOperator.getColRefToColumnMetaMap().keySet().forEach(context::addScan);
             return visit(optExpression, context);
         }
     }
@@ -207,7 +208,7 @@ public class PruneSubfieldsForComplexType implements TreeRewriteRule {
         private static void pruneForComplexType(ColumnRefOperator columnRefOperator,
                                                 PruneComplexTypeUtil.Context context) {
             ComplexTypeAccessGroup accessGroup = context.getVisitedAccessGroup(columnRefOperator);
-            if (accessGroup == null) {
+            if (accessGroup == null || !context.getScanRefs().contains(columnRefOperator)) {
                 return;
             }
             // Clone a new type for prune

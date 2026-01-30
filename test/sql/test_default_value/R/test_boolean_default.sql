@@ -27,11 +27,23 @@ INSERT INTO users_basic VALUES
 ALTER TABLE users_basic ADD COLUMN flag_true BOOLEAN DEFAULT 'true';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN flag_false BOOLEAN DEFAULT 'false';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 ALTER TABLE users_basic ADD COLUMN flag_1 BOOLEAN DEFAULT '1';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 ALTER TABLE users_basic ADD COLUMN flag_0 BOOLEAN DEFAULT '0';
 -- result:
@@ -164,6 +176,10 @@ SELECT * FROM orders_column_mode ORDER BY order_id;
 ALTER TABLE orders_column_mode ADD COLUMN is_delivered BOOLEAN DEFAULT '1';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO orders_column_mode (order_id, product_name) VALUES (6, 'mouse');
 -- result:
 -- !result
@@ -226,6 +242,10 @@ SELECT * FROM users_pk_table ORDER BY user_id;
 ALTER TABLE users_pk_table ADD COLUMN is_premium BOOLEAN DEFAULT '1';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO users_pk_table (user_id, username) VALUES (4, 'david');
 -- result:
 -- !result
@@ -264,6 +284,10 @@ INSERT INTO event_logs VALUES (1, 'event_1'), (2, 'event_2');
 -- !result
 ALTER TABLE event_logs ADD COLUMN is_processed BOOLEAN DEFAULT 'false';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM event_logs ORDER BY log_id;
 -- result:
@@ -334,6 +358,10 @@ INSERT INTO sales_summary (product_id, region) VALUES (1, 'North'), (1, 'North')
 ALTER TABLE sales_summary ADD COLUMN is_verified BOOLEAN REPLACE DEFAULT 'false';
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 SELECT * FROM sales_summary ORDER BY product_id, region;
 -- result:
 1	North	1	0	0
@@ -353,6 +381,10 @@ INSERT INTO inventory_items (item_id, item_name) VALUES (1, 'widget'), (2, 'gadg
 -- !result
 ALTER TABLE inventory_items ADD COLUMN is_discontinued BOOLEAN DEFAULT '0';
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 SELECT * FROM inventory_items ORDER BY item_id;
 -- result:

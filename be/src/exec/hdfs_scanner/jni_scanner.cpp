@@ -57,8 +57,8 @@ Status JniScanner::do_open(RuntimeState* state) {
 }
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
-    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_scanner_obj != nullptr) {
+        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
         if (_jni_scanner_close != nullptr) {
             env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
         }
@@ -66,6 +66,7 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
+        JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
         env->DeleteLocalRef(_jni_scanner_cls);
         _jni_scanner_cls = nullptr;
     }

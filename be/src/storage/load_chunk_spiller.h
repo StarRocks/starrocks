@@ -24,12 +24,31 @@ namespace starrocks {
 class RuntimeState;
 class LoadSpillBlockManager;
 class ChunkIterator;
+class LoadChunkSpiller;
+class LoadSpillPipelineMergeTask;
+class LoadSpillPipelineMergeContext;
 
 using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
+using LoadSpillPipelineMergeTaskPtr = std::unique_ptr<LoadSpillPipelineMergeTask>;
 
+namespace lake {
+class TabletWriter;
+class TabletInternalParallelMergeTask;
+} // namespace lake
+
+namespace spill {
+class BlockGroup;
+} // namespace spill
+
+// Output stream for spilling data to disk blocks
+// Each stream writes to a specific block group, which is tagged with a slot_idx
+// to maintain ordering information for parallel flush scenarios.
 class LoadSpillOutputDataStream : public spill::SpillOutputDataStream {
 public:
-    LoadSpillOutputDataStream(LoadSpillBlockManager* block_manager) : _block_manager(block_manager) {}
+    // @param block_group: the target block group to write spilled data into,
+    //                     which carries the slot_idx for ordering
+    LoadSpillOutputDataStream(LoadSpillBlockManager* block_manager, spill::BlockGroup* block_group)
+            : _block_manager(block_manager), _block_group(block_group) {}
 
     Status append(RuntimeState* state, const std::vector<Slice>& data, size_t total_write_size,
                   size_t write_num_rows) override;
@@ -51,6 +70,8 @@ private:
 
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
+    // Target block group for this output stream, tagged with slot_idx for ordering
+    spill::BlockGroup* _block_group = nullptr;
     spill::BlockPtr _block;
     int64_t _append_bytes = 0;
 };
@@ -64,20 +85,24 @@ struct SpillBlockInputTasks {
 
 class LoadChunkSpiller {
 public:
-    LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile);
+    friend class LoadSpillPipelineMergeIterator;
+    LoadChunkSpiller(LoadSpillBlockManager* block_manager, RuntimeProfile* profile,
+                     LoadSpillPipelineMergeContext* pipeline_merge_context = nullptr);
     ~LoadChunkSpiller() = default;
 
-    StatusOr<size_t> spill(const Chunk& chunk);
+    StatusOr<size_t> spill(const Chunk& chunk, int64_t slot_idx = -1);
 
     // `target_size` controls the maximum amount of data merged per operation,
     // while `memory_usage_per_merge` controls the peak memory usage of each merge.
     Status merge_write(size_t target_size, size_t memory_usage_per_merge, bool do_sort, bool do_agg,
                        std::function<Status(Chunk*)> write_func, std::function<Status()> flush_func);
 
-    // Traverse all load spill block files produced during ingestion, and split the input into multiple input tasks
-    // according to specific constraints.
     StatusOr<SpillBlockInputTasks> generate_spill_block_input_tasks(size_t target_size, size_t memory_usage_per_merge,
                                                                     bool do_sort, bool do_agg);
+
+    StatusOr<LoadSpillPipelineMergeTaskPtr> generate_pipeline_merge_task(size_t target_size,
+                                                                         size_t memory_usage_per_merge, bool do_sort,
+                                                                         bool do_agg, bool final_round);
 
     bool empty();
 
@@ -96,16 +121,16 @@ private:
 
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
+    RuntimeProfile* _profile = nullptr;
     // destroy spiller before runtime_state
     std::shared_ptr<RuntimeState> _runtime_state;
+    // pipeline merge context for managing merge tasks
+    LoadSpillPipelineMergeContext* _pipeline_merge_context = nullptr;
     // used when input profile is nullptr
     std::unique_ptr<RuntimeProfile> _dummy_profile;
-    RuntimeProfile* _profile = nullptr;
     spill::SpillerFactoryPtr _spiller_factory;
     std::shared_ptr<spill::Spiller> _spiller;
     SchemaPtr _schema;
-    // used for spill merge, parent trakcer is compaction tracker
-    std::unique_ptr<MemTracker> _merge_mem_tracker = nullptr;
 };
 
 } // namespace starrocks

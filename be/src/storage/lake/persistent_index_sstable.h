@@ -40,6 +40,7 @@ class FilterPolicy;
 namespace lake {
 // <version, IndexValue>
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
+class PersistentIndexBlockCache;
 
 class PersistentIndexSstable {
 public:
@@ -68,6 +69,9 @@ public:
 
     size_t memory_usage() const;
 
+    // Sample keys from the table for parallel compaction task splitting.
+    Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
     // `_delvec` should only be modified in `init()` via publish version thread
     // which is thread-safe. And after that, it should be immutable.
     DelVectorPtr delvec() const { return _delvec; }
@@ -75,6 +79,13 @@ public:
     void set_fileset_id(const UniqueId& fileset_id) {
         _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
     }
+
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
+                                                                 const std::string& location, Cache* cache,
+                                                                 bool need_filter = true,
+                                                                 const DelVectorPtr& delvec = nullptr,
+                                                                 const TabletMetadataPtr& metadata = nullptr,
+                                                                 TabletManager* tablet_mgr = nullptr);
 
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};

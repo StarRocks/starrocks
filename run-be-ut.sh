@@ -174,7 +174,11 @@ if [[ -z ${USE_AVX512} ]]; then
 fi
 echo "Build Backend UT"
 
-CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/ut_build_${CMAKE_BUILD_TYPE}
+if [ -z $CMAKE_BUILD_PREFIX ]; then
+    CMAKE_BUILD_PREFIX=${STARROCKS_HOME}/be
+fi
+
+CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
     rm ${CMAKE_BUILD_DIR} -rf
     rm ${STARROCKS_HOME}/be/output/ -rf
@@ -229,7 +233,8 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_JIT_ENABLE=ON \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            ${STARROCKS_HOME}/be
 
 ${BUILD_SYSTEM} -j${PARALLEL}
 

@@ -20,16 +20,84 @@
 #include <emmintrin.h>
 #endif
 
+#include <algorithm>
 #include <cstring>
+#include <limits>
 
+#include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
+#include "simd/simd.h"
+#include "storage/column_predicate.h"
 #include "types/logical_type.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::get_dict_filter_selection(const std::vector<const ColumnPredicate*>& predicates,
+                                                               const uint8_t** selection, uint32_t* dict_size,
+                                                               uint32_t* selected_count) const {
+    DCHECK(_parsed);
+    DCHECK(selection != nullptr);
+    DCHECK(dict_size != nullptr);
+    DCHECK(selected_count != nullptr);
+
+    *dict_size = _num_elems;
+    if (UNLIKELY(_num_elems == 0)) {
+        *selection = nullptr;
+        *selected_count = 0;
+        return Status::OK();
+    }
+
+    if (!_dict_filter_cache_valid) {
+        raw::stl_vector_resize_uninitialized(&_dict_filter_cache_selection, _num_elems);
+
+        // NOTE:
+        // compound_and_predicates_evaluate() (and ColumnPredicate::evaluate*) uses uint16_t [from,to) bounds, so we must
+        // evaluate the dictionary in chunks when dict_size > 65535. This is correctness critical: otherwise the
+        // truncated range would leave part of dict_selection as 0, causing over-filtering.
+
+        constexpr uint32_t kMaxRowsPerEval = std::numeric_limits<uint16_t>::max(); // 65535
+        std::vector<uint16_t> selected_idx(std::min(_num_elems, kMaxRowsPerEval));
+        uint32_t begin = 0;
+        while (begin < _num_elems) {
+            const uint32_t end = std::min(_num_elems, begin + kMaxRowsPerEval);
+            const uint32_t chunk_elems = end - begin;
+
+            BinaryColumn::Offsets offsets;
+            offsets.resize(chunk_elems + 1);
+            offsets[0] = 0;
+
+            const uint32_t base_abs_off = offset_uncheck(static_cast<int>(begin));
+            // Intermediate offsets: i in (begin, end)
+            for (uint32_t i = begin + 1; i < end; ++i) {
+                offsets[i - begin] = offset_uncheck(static_cast<int>(i)) - base_abs_off;
+            }
+            const uint32_t chunk_bytes = offset(static_cast<int>(end)) - base_abs_off;
+            offsets[chunk_elems] = chunk_bytes;
+
+            ContainerResource container(_page_handle, &_data[base_abs_off], chunk_bytes);
+            auto dict_chunk_column = BinaryColumn::create(std::move(container), std::move(offsets));
+
+            RETURN_IF_ERROR(compound_and_predicates_evaluate(
+                    predicates, dict_chunk_column.get(), _dict_filter_cache_selection.data() + begin,
+                    selected_idx.data(), 0, static_cast<uint16_t>(chunk_elems)));
+
+            begin = end;
+        }
+
+        _dict_filter_cache_selected_count = SIMD::count_nonzero(_dict_filter_cache_selection.data(), _num_elems);
+        _dict_filter_cache_valid = true;
+    }
+
+    *selection = _dict_filter_cache_selection.data();
+    *selected_count = _dict_filter_cache_selected_count;
+    return Status::OK();
+}
 
 template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, Column* dst) {
@@ -135,14 +203,6 @@ bool BinaryPlainPageDecoder<Type>::append_range(uint32_t idx, uint32_t end, Colu
 
         size_t append_bytes_length = offsets.back() - begin_offset;
         size_t old_bytes_size = bytes.size();
-        // try to reserve to avoid extra memcpy
-        if (bytes.capacity() == 0 && end - idx == _num_elems) {
-            // We assume each row is roughly the same size and then estimate the required buffer size.
-            size_t chunk_size = config::vector_chunk_size;
-            size_t read_rows = std::min<size_t>(end - idx, chunk_size);
-            size_t reserve_length = config::data_page_size * 1.5 / read_rows * chunk_size;
-            bytes.reserve(reserve_length);
-        }
 
         bytes.resize(old_bytes_size + append_bytes_length);
         // TODO: need did some optimize for large memory copy
@@ -197,6 +257,165 @@ void BinaryPlainPageDecoder<Type>::batch_string_at_index(Slice* dst, const int32
         }
     }
 #endif
+}
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
+        Column* column, const SparseRange<>& range, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        const uint8_t* null_data, uint8_t* selection, uint16_t* selected_idx) {
+    DCHECK(null_data == nullptr || column->is_nullable());
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
+        return Status::OK();
+    }
+
+    size_t to_read = std::min(range.span_size(), _num_elems - _cur_idx);
+    SparseRangeIterator<> iter = range.new_iterator();
+    size_t index = 0;
+    while (to_read > 0) {
+        _cur_idx = iter.begin();
+        Range<> r = iter.next(to_read);
+        size_t length = r.span_size();
+        size_t end = _cur_idx + length;
+        RETURN_IF_ERROR(next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
+                                               null_data != nullptr ? null_data + index : nullptr, selection + index,
+                                               selected_idx + index));
+        index += length;
+        to_read -= length;
+        _cur_idx = end;
+    }
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
+        uint32_t idx, uint32_t end, Column* dst, const std::vector<const ColumnPredicate*>& compound_and_predicates,
+        const uint8_t* null, uint8_t* selection, uint16_t* selected_idx) {
+    if constexpr (Type == TYPE_VARCHAR) {
+        uint32_t num_rows = end - idx;
+        if (num_rows == 0) {
+            return Status::OK();
+        }
+
+        BinaryColumn::Offsets temp_offsets;
+        temp_offsets.resize(num_rows + 1);
+        temp_offsets[0] = 0;
+
+        const uint32_t page_data_offset = offset_uncheck(idx);
+        for (uint32_t i = idx; i < end - 1; i++) {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+            auto offset = _offsets_ptr[i + 1];
+#else
+            // direct call offset_uncheck() will break auto-vectorized
+            // maybe we can remove this condition compile after we upgrade the toolchain
+            auto offset = offset_uncheck(i + 1);
+#endif
+
+            uint32_t current_offset = offset - page_data_offset;
+            temp_offsets[i - idx + 1] = current_offset;
+        }
+
+        for (uint32_t i = end - 1; i < end; i++) {
+            uint32_t current_offset = offset(i + 1) - page_data_offset;
+            temp_offsets[i - idx + 1] = current_offset;
+        }
+
+        size_t data_length = temp_offsets.back();
+        const void* data_ptr = _data.get_data() + page_data_offset;
+
+        // Create zero-copy BinaryColumn directly from page
+        ContainerResource container(_page_handle, data_ptr, data_length);
+        auto temp_data_column = BinaryColumn::create(container, std::move(temp_offsets));
+
+        // Create temporary column for predicate evaluation
+        ColumnPtr temp_eval_column;
+        if (null != nullptr) {
+            // If null data is provided, create a NullableColumn for predicate evaluation
+            auto temp_null_column = NullColumn::create();
+            temp_null_column->append_numbers(null, num_rows);
+            temp_eval_column = NullableColumn::create(temp_data_column, temp_null_column);
+        } else {
+            // No null data, use data column directly
+            temp_eval_column = temp_data_column;
+        }
+
+        // Evaluate predicates on the temporary column
+        RETURN_IF_ERROR(compound_and_predicates_evaluate(compound_and_predicates, temp_eval_column.get(), selection,
+                                                         selected_idx, 0, num_rows));
+
+        uint32_t selected_count = SIMD::count_nonzero(selection, num_rows);
+        if (selected_count == 0) {
+            return Status::OK();
+        }
+
+        auto data_column = ColumnHelper::get_data_column(dst);
+        RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(data_column, *temp_data_column, selection, num_rows));
+
+        if (dst->is_nullable()) {
+            auto* nullable_column = down_cast<NullableColumn*>(dst);
+            if (null != nullptr) {
+                // Append null flags for selected rows if null_data is provided
+                auto* temp_nullable = down_cast<NullableColumn*>(temp_eval_column->as_mutable_raw_ptr());
+                RETURN_IF_ERROR(append_with_mask</*PositiveSelect=*/true>(
+                        nullable_column->null_column_raw_ptr(), *temp_nullable->null_column(), selection, num_rows));
+                nullable_column->update_has_null();
+            } else {
+                // The page has no null flags (all values are not-null), but destination can still be nullable.
+                // Keep its null column in sync with selected rows.
+                nullable_column->null_column_raw_ptr()->resize(nullable_column->null_column_raw_ptr()->size() +
+                                                               selected_count);
+            }
+        }
+
+#ifndef NDEBUG
+        dst->check_or_die();
+#endif
+        return Status::OK();
+    } else {
+        DCHECK(false) << "unreachable path";
+        return Status::InternalError("BinaryPlainPageDecoder::next_range_with_filter error!");
+    }
+}
+
+template <LogicalType Type>
+Status BinaryPlainPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal_in_page, const rowid_t* rowids,
+                                                    size_t* count, Column* column) {
+    DCHECK(_parsed);
+    if (PREDICT_FALSE(*count == 0)) {
+        return Status::OK();
+    }
+    size_t total = *count;
+    static_assert(sizeof(Slice) == sizeof(int128_t));
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(total * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
+    if constexpr (Type == TYPE_CHAR) {
+        for (size_t i = 0; i < total; i++) {
+            ordinal_t ord = rowids[i] - first_ordinal_in_page;
+            if (UNLIKELY(ord >= _num_elems)) {
+                total = i;
+                break;
+            }
+            Slice element = string_at_index(ord);
+            element.size = strnlen(element.data, element.size);
+            slices[i] = element;
+        }
+    } else {
+        for (size_t i = 0; i < total; i++) {
+            ordinal_t ord = rowids[i] - first_ordinal_in_page;
+            if (UNLIKELY(ord >= _num_elems)) {
+                total = i;
+                break;
+            }
+            slices[i] = string_at_index(ord);
+        }
+    }
+
+    SliceContainerAdaptor adaptor(slices, total);
+    if (column->append_strings(adaptor)) {
+        *count = total;
+        return Status::OK();
+    }
+    return Status::InvalidArgument("Column::append_strings() not supported");
 }
 
 template class BinaryPlainPageDecoder<TYPE_CHAR>;

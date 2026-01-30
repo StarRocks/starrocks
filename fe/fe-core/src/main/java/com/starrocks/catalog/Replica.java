@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -70,15 +71,6 @@ public class Replica implements Writable {
         public boolean canQuery() {
             return this == NORMAL || this == SCHEMA_CHANGE;
         }
-    }
-
-    public enum ReplicaStatus {
-        OK, // health
-        DEAD, // backend is not available
-        VERSION_ERROR, // missing version
-        MISSING, // replica does not exist
-        SCHEMA_ERROR, // replica's schema hash does not equal to index's schema hash
-        BAD // replica is broken.
     }
 
     @SerializedName(value = "id")

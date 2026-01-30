@@ -387,4 +387,68 @@ public class LoadMgrTest {
         // recover config
         Config.label_keep_max_second = origKeep;
     }
+
+    @Test
+    public void testRemoveLoadJobsByDb(@Mocked GlobalStateMgr globalStateMgr,
+                                       @Injectable Database db1,
+                                       @Injectable Database db2) throws Exception {
+        LoadMgr loadMgr = new LoadMgr(new LoadJobScheduler());
+
+        // Create load jobs for database 1
+        long dbId1 = 100L;
+        InsertLoadJob job1 = new InsertLoadJob("label1", dbId1, 1L, System.currentTimeMillis(), "", "", null);
+        job1.id = 1001L;
+        job1.state = JobState.FINISHED;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job1);
+
+        InsertLoadJob job2 = new InsertLoadJob("label2", dbId1, 1L, System.currentTimeMillis(), "", "", null);
+        job2.id = 1002L;
+        job2.state = JobState.LOADING;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job2);
+
+        // Create load jobs for database 2
+        long dbId2 = 200L;
+        InsertLoadJob job3 = new InsertLoadJob("label3", dbId2, 2L, System.currentTimeMillis(), "", "", null);
+        job3.id = 2001L;
+        job3.state = JobState.FINISHED;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job3);
+
+        InsertLoadJob job4 = new InsertLoadJob("label4", dbId2, 2L, System.currentTimeMillis(), "", "", null);
+        job4.id = 2002L;
+        job4.state = JobState.CANCELLED;
+        Deencapsulation.invoke(loadMgr, "addLoadJob", job4);
+
+        // Verify all jobs are added
+        Map<Long, LoadJob> idToLoadJob = Deencapsulation.getField(loadMgr, "idToLoadJob");
+        Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Deencapsulation.getField(
+                loadMgr, "dbIdToLabelToLoadJobs");
+
+        Assertions.assertEquals(4, idToLoadJob.size());
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.containsKey(dbId1));
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.containsKey(dbId2));
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.get(dbId1).size());
+        Assertions.assertEquals(2, dbIdToLabelToLoadJobs.get(dbId2).size());
+
+        // Remove all jobs for database 1
+        loadMgr.removeLoadJobsByDb(dbId1);
+
+        // Verify jobs for database 1 are removed
+        Assertions.assertEquals(2, idToLoadJob.size());
+        Assertions.assertFalse(idToLoadJob.containsKey(job1.id));
+        Assertions.assertFalse(idToLoadJob.containsKey(job2.id));
+        Assertions.assertTrue(idToLoadJob.containsKey(job3.id));
+        Assertions.assertTrue(idToLoadJob.containsKey(job4.id));
+
+        // Verify database 1 is removed from dbIdToLabelToLoadJobs
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.containsKey(dbId1));
+        Assertions.assertTrue(dbIdToLabelToLoadJobs.containsKey(dbId2));
+
+        // Remove all jobs for database 2
+        loadMgr.removeLoadJobsByDb(dbId2);
+
+        // Verify all jobs are removed
+        Assertions.assertEquals(0, idToLoadJob.size());
+        Assertions.assertFalse(dbIdToLabelToLoadJobs.containsKey(dbId2));
+        Assertions.assertEquals(0, dbIdToLabelToLoadJobs.size());
+    }
 }

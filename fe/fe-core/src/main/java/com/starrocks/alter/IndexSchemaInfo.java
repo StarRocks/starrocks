@@ -20,21 +20,22 @@ import com.starrocks.catalog.SchemaInfo;
 import static java.util.Objects.requireNonNull;
 
 public class IndexSchemaInfo {
+    // not change the SerializedName for compatibility
     @SerializedName("indexId")
-    private final long indexId;
+    private final long indexMetaId;
     @SerializedName("indexName")
     private final String indexName;
     @SerializedName("schemaInfo")
     private final SchemaInfo schemaInfo;
 
-    IndexSchemaInfo(long indexId, String indexName, SchemaInfo schemaInfo) {
-        this.indexId = indexId;
+    IndexSchemaInfo(long indexMetaId, String indexName, SchemaInfo schemaInfo) {
+        this.indexMetaId = indexMetaId;
         this.indexName = indexName;
         this.schemaInfo = requireNonNull(schemaInfo, "schema is null");
     }
 
-    public long getIndexId() {
-        return indexId;
+    public long getIndexMetaId() {
+        return indexMetaId;
     }
 
     public String getIndexName() {

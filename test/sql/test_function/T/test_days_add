@@ -2,6 +2,10 @@
 select days_add('2023-10-31 23:59:59', 1);
 select days_add('2023-10-31 23:59:59', 1000);
 select adddate('2023-10-31 23:59:59', INTERVAL 1 YEAR);
+select adddate('2023-10-31 23:59:59', INTERVAL 1 YEAR * 2);
+select adddate('2023-10-31 23:59:59', 2 * INTERVAL 1 YEAR);
+select adddate('2023-10-31 23:59:59', INTERVAL 2 YEAR / 2);
+select adddate('2023-10-31 23:59:59', 2 / INTERVAL 2 YEAR);
 select adddate('2023-10-31 23:59:59', INTERVAL 100 YEAR);
 select adddate('2023-10-31 23:59:59', INTERVAL 1 MONTH);
 select adddate('2023-10-31 23:59:59', INTERVAL 11 MONTH);

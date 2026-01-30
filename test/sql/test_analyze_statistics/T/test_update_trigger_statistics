@@ -1,4 +1,4 @@
--- name: test_update_trigger_statistics @sequential
+-- name: test_update_trigger_statistics @sequential @native
 
 DROP DATABASE IF EXISTS test_update_trigger_statistics;
 CREATE DATABASE test_update_trigger_statistics;

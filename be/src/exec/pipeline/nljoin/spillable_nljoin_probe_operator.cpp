@@ -156,7 +156,6 @@ bool SpillableNLJoinProbeOperator::is_finished() const {
 
 bool SpillableNLJoinProbeOperator::has_output() const {
     if (!is_ready()) {
-        DCHECK(false) << "is_ready() must be true before call has_output";
         return false;
     }
     RETURN_TRUE_IF_SPILL_TASK_ERROR(_spiller);
@@ -165,7 +164,6 @@ bool SpillableNLJoinProbeOperator::has_output() const {
 
 bool SpillableNLJoinProbeOperator::need_input() const {
     if (!is_ready()) {
-        DCHECK(false) << "is_ready() must be true before call has_output";
         return false;
     }
     return _prober.probe_finished() && _is_current_build_probe_finished();

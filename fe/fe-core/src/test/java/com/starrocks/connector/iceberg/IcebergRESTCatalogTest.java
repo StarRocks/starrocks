@@ -22,7 +22,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -36,6 +35,8 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -229,7 +230,9 @@ public class IcebergRESTCatalogTest {
             }
         };
 
-        metadata.dropTable(connectContext, new DropTableStmt(false, new TableName("catalog", "db", "view"),
+        metadata.dropTable(connectContext, new DropTableStmt(false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "view")),
+                        null, NodePosition.ZERO),
                 false));
     }
 
@@ -238,7 +241,9 @@ public class IcebergRESTCatalogTest {
                                @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
 
-        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
+        CreateViewStmt stmt = new CreateViewStmt(false, false,
+                new TableRef(QualifiedName.of(Lists.newArrayList("catalog", "db", "table")),
+                        null, NodePosition.ZERO),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(connectContext, stmt);

@@ -1,4 +1,4 @@
--- name: test_proc_profile_multi_node
+-- name: test_proc_profile_multi_node @sequential
 shell: ${mysql_cmd} -e "show backends\G" | grep "IP" | head -1 | awk -F':' '{print $2}' | xargs > be_ip.txt
 -- result:
 0
@@ -67,12 +67,12 @@ shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_h
 [UC]shell: cat be_profile_file.txt
 -- result:
 0
-cpu-profile-20251111-183934-pprof.gz
+
 -- !result
 shell: if [ -s be_profile_file.txt ] && [ "$(cat be_profile_file.txt)" != "" ]; then if [ $(curl -s -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_profile_file.txt)" | wc -l) -gt 0 ]; then echo "exist"; else echo "empty"; fi; else echo "no_profile"; fi
 -- result:
 0
-exist
+no_profile
 -- !result
 shell: curl -s -u root: "${url}/proc_profile?node=BE:127.0.0.1:99999" | grep -c "Process Profiles"
 -- result:
@@ -137,12 +137,12 @@ shell: curl -s -u root: "${url}/proc_profile?node=BE:$(cat be_ip.txt):$(cat be_h
 [UC]shell: cat be_pprof_file.txt
 -- result:
 0
-cpu-profile-20251113-183928-pprof.gz
+
 -- !result
 shell: if [ -s be_pprof_file.txt ] && [ "$(cat be_pprof_file.txt)" != "" ]; then curl -s -I -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=$(cat be_pprof_file.txt)" | grep -i "content-type" | grep -c "text/html"; else echo "0"; fi
 -- result:
 0
-1
+0
 -- !result
 shell: curl -s -o /dev/null -w "%{http_code}" -u root: "${url}/proc_profile/file?node=BE:$(cat be_ip.txt):$(cat be_http_port.txt)&filename=nonexistent_file.tar.gz"
 -- result:

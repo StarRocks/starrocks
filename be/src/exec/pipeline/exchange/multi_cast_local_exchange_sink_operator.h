@@ -26,7 +26,7 @@ public:
                                        const int32_t driver_sequence,
                                        std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id, true, driver_sequence),
-              _exchanger(std::move(std::move(exchanger))) {}
+              _exchanger(std::move(exchanger)) {}
 
     ~MultiCastLocalExchangeSinkOperator() override = default;
 
@@ -36,7 +36,7 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
 
     Status set_finishing(RuntimeState* state) override;
 
@@ -59,8 +59,7 @@ class MultiCastLocalExchangeSinkOperatorFactory : public OperatorFactory {
 public:
     MultiCastLocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                               std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : OperatorFactory(id, "multi_cast_local_exchange_sink", plan_node_id),
-              _exchanger(std::move(std::move(exchanger))) {}
+            : OperatorFactory(id, "multi_cast_local_exchange_sink", plan_node_id), _exchanger(std::move(exchanger)) {}
 
     ~MultiCastLocalExchangeSinkOperatorFactory() override = default;
 

@@ -35,13 +35,13 @@ class SchemaChangeData {
     private final Database database;
     private final OlapTable table;
     private final long timeoutInSeconds;
-    private final Map<Long, List<Column>> newIndexSchema;
+    private final Map<Long, List<Column>> newIndexMetaIdToSchema;
     private final List<Index> indexes;
     private final boolean bloomFilterColumnsChanged;
     private final Set<ColumnId> bloomFilterColumns;
     private final double bloomFilterFpp;
     private final boolean hasIndexChanged;
-    private final Map<Long, Short> newIndexShortKeyCount;
+    private final Map<Long, Short> newIndexMetaIdToShortKeyCount;
     private final boolean shortKeyChanged;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
@@ -68,8 +68,8 @@ class SchemaChangeData {
     }
 
     @NotNull
-    Map<Long, List<Column>> getNewIndexSchema() {
-        return Collections.unmodifiableMap(newIndexSchema);
+    Map<Long, List<Column>> getNewIndexMetaIdToSchema() {
+        return Collections.unmodifiableMap(newIndexMetaIdToSchema);
     }
 
     @Nullable
@@ -96,8 +96,8 @@ class SchemaChangeData {
 
 
     @NotNull
-    Map<Long, Short> getNewIndexShortKeyCount() {
-        return Collections.unmodifiableMap(newIndexShortKeyCount);
+    Map<Long, Short> getNewIndexMetaIdToShortKeyCount() {
+        return Collections.unmodifiableMap(newIndexMetaIdToShortKeyCount);
     }
 
     boolean isShortKeyChanged() {
@@ -127,13 +127,14 @@ class SchemaChangeData {
         this.database = Objects.requireNonNull(builder.database, "database is null");
         this.table = Objects.requireNonNull(builder.table, "table is null");
         this.timeoutInSeconds = builder.timeoutInSeconds;
-        this.newIndexSchema = Objects.requireNonNull(builder.newIndexSchema, "newIndexSchema is null");
+        this.newIndexMetaIdToSchema = Objects.requireNonNull(builder.newIndexMetaIdToSchema, "newIndexSchema is null");
         this.indexes = builder.indexes;
         this.bloomFilterColumnsChanged = builder.bloomFilterColumnsChanged;
         this.bloomFilterColumns = builder.bloomFilterColumns;
         this.bloomFilterFpp = builder.bloomFilterFpp;
         this.hasIndexChanged = builder.hasIndexChanged;
-        this.newIndexShortKeyCount = Objects.requireNonNull(builder.newIndexShortKeyCount, "newIndexShortKeyCount is null");
+        this.newIndexMetaIdToShortKeyCount =
+                Objects.requireNonNull(builder.newIndexMetaIdToShortKeyCount, "newIndexShortKeyCount is null");
         this.shortKeyChanged = builder.shortKeyChanged;
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
@@ -146,13 +147,13 @@ class SchemaChangeData {
         private Database database;
         private OlapTable table;
         private long timeoutInSeconds = Config.alter_table_timeout_second;
-        private Map<Long, List<Column>> newIndexSchema = new HashMap<>();
+        private Map<Long, List<Column>> newIndexMetaIdToSchema = new HashMap<>();
         private List<Index> indexes;
         private boolean bloomFilterColumnsChanged = false;
         private Set<ColumnId> bloomFilterColumns;
         private double bloomFilterFpp;
         private boolean hasIndexChanged = false;
-        private Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
+        private Map<Long, Short> newIndexMetaIdToShortKeyCount = new HashMap<>();
         private boolean shortKeyChanged = false;
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
@@ -195,14 +196,14 @@ class SchemaChangeData {
             return this;
         }
 
-        Builder withNewIndexShortKeyCount(long indexId, short shortKeyCount, boolean shortKeyChanged) {
-            this.newIndexShortKeyCount.put(indexId, shortKeyCount);
+        Builder withNewIndexMetaIdToShortKeyCount(long indexMetaId, short shortKeyCount, boolean shortKeyChanged) {
+            this.newIndexMetaIdToShortKeyCount.put(indexMetaId, shortKeyCount);
             this.shortKeyChanged |= shortKeyChanged;
             return this;
         }
 
-        Builder withNewIndexSchema(long indexId, @NotNull List<Column> indexSchema) {
-            newIndexSchema.put(indexId, indexSchema);
+        Builder withNewIndexMetaIdToSchema(long indexMetaId, @NotNull List<Column> indexSchema) {
+            newIndexMetaIdToSchema.put(indexMetaId, indexSchema);
             return this;
         }
 

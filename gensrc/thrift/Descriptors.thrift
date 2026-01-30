@@ -57,8 +57,8 @@ struct TSlotDescriptor {
   3: optional Types.TTypeDesc slotType
   4: optional i32 columnPos   // Deprecated
   5: optional i32 byteOffset  // Deprecated
-  6: optional i32 nullIndicatorByte // Deprecated
-  7: optional i32 nullIndicatorBit // Deprecated
+  6: optional i32 nullIndicatorByte = 0 // Deprecated
+  7: optional i32 nullIndicatorBit = -1 // Deprecated
   8: optional string colName;
   9: optional i32 slotIdx // Deprecated
   10: optional bool isMaterialized // Deprecated
@@ -267,7 +267,11 @@ struct TColumn {
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    // Default value expression for complex types (array/map/struct).
+    // If set, BE will evaluate this expression and convert to JSON string for storage.
+    // For simple types, use |default_value| (field 6) instead.
+    22: optional Exprs.TExpr default_expr
 }
 
 // Key information for locating a specific table schema version.
@@ -283,6 +287,8 @@ struct TOlapTableTablet {
 }
 
 struct TOlapTableIndexTablets {
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `index id` is set to the `index meta id`.
     1: required i64 index_id
     2: required list<i64> tablet_ids
     3: optional list<TOlapTableTablet> tablets
@@ -338,7 +344,9 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id // index id
+    // Because multiple versions of a materialized index cannot be loaded simultaneously,
+    // the `id` is set to the `index meta id`.
+    1: required i64 id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
@@ -530,6 +538,8 @@ struct TTableFunctionTable {
 
     10: optional bool parquet_use_legacy_encoding
     11: optional Types.TParquetOptions parquet_options
+
+    12: optional bool csv_include_header
 }
 
 struct TIcebergSchemaField {

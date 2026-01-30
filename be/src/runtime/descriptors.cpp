@@ -37,7 +37,6 @@
 #include <protocol/TDebugProtocol.h>
 #include <util/timezone_utils.h>
 
-#include <boost/algorithm/string/join.hpp>
 #include <ios>
 #include <sstream>
 
@@ -53,25 +52,11 @@
 #include "util/thrift_util.h"
 
 namespace starrocks {
-using boost::algorithm::join;
-
 const int RowDescriptor::INVALID_IDX = -1;
-std::string NullIndicatorOffset::debug_string() const {
-    std::stringstream out;
-    out << "(offset=" << byte_offset << " mask=" << std::hex << static_cast<int>(bit_mask) << std::dec << ")";
-    return out.str();
-}
-
-std::ostream& operator<<(std::ostream& os, const NullIndicatorOffset& null_indicator) {
-    os << null_indicator.debug_string();
-    return os;
-}
-
 SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
         : _id(id),
           _type(std::move(type)),
           _parent(0),
-          _null_indicator_offset(0, 0),
           _col_name(std::move(name)),
           _col_unique_id(-1),
           _slot_idx(0),
@@ -84,7 +69,6 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
         : _id(tdesc.id),
           _type(TypeDescriptor::from_thrift(tdesc.slotType)),
           _parent(tdesc.parent),
-          _null_indicator_offset(tdesc.nullIndicatorByte, tdesc.nullIndicatorBit),
           _col_name(tdesc.colName),
           _col_unique_id(tdesc.col_unique_id),
           _col_physical_name(tdesc.col_physical_name),
@@ -92,21 +76,21 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
           _slot_size(_type.get_slot_size()),
           _is_materialized(tdesc.isMaterialized),
           _is_output_column(tdesc.__isset.isOutputColumn ? tdesc.isOutputColumn : true),
-          _is_nullable(tdesc.__isset.isNullable ? tdesc.isNullable : true) {}
+          _is_nullable(tdesc.__isset.isNullable
+                               ? tdesc.isNullable
+                               : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)) {}
 
 SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
         : _id(pdesc.id()),
           _type(TypeDescriptor::from_protobuf(pdesc.slot_type())),
           _parent(pdesc.parent()),
-          _null_indicator_offset(pdesc.null_indicator_byte(), pdesc.null_indicator_bit()),
           _col_name(pdesc.col_name()),
           _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
           _is_materialized(pdesc.is_materialized()),
           _is_output_column(true),
-          // keep same as is_nullable()
-          _is_nullable(_null_indicator_offset.bit_mask != 0) {}
+          _is_nullable(pdesc.has_is_nullable() ? pdesc.is_nullable() : pdesc.null_indicator_bit() != -1) {}
 
 void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_id(_id);
@@ -116,17 +100,18 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_column_pos(0);
     // NOTE: _tuple_offset is not used anymore, use default value 0.
     pslot->set_byte_offset(0);
-    pslot->set_null_indicator_byte(_null_indicator_offset.byte_offset);
-    pslot->set_null_indicator_bit(_null_indicator_offset.bit_offset);
+    pslot->set_null_indicator_byte(0);
+    pslot->set_null_indicator_bit(_is_nullable ? 0 : -1);
     pslot->set_col_name(_col_name);
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
+    pslot->set_is_nullable(_is_nullable);
 }
 
 std::string SlotDescriptor::debug_string() const {
     std::stringstream out;
     out << "Slot(id=" << _id << " type=" << _type << " name=" << _col_name << " col_unique_id=" << _col_unique_id
-        << " col_physical_name=" << _col_physical_name << " null=" << _null_indicator_offset.debug_string() << ")";
+        << " col_physical_name=" << _col_physical_name << " nullable=" << _is_nullable << ")";
     return out.str();
 }
 

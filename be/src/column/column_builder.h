@@ -102,16 +102,16 @@ public:
         }
 
         if (is_const) {
-            return ConstColumn::create(_column->as_mutable_ptr(), _column->size());
+            return ConstColumn::create(std::move(*_column).mutate(), _column->size());
         } else if (_has_null) {
-            return NullableColumn::create(_column->as_mutable_ptr(), _null_column->as_mutable_ptr());
+            return NullableColumn::create(std::move(*_column).mutate(), std::move(*_null_column).mutate());
         } else {
-            return _column->as_mutable_ptr();
+            return std::move(*_column).mutate();
         }
     }
 
     MutableColumnPtr build_nullable_column() {
-        return NullableColumn::create(_column->as_mutable_ptr(), _null_column->as_mutable_ptr());
+        return NullableColumn::create(std::move(*_column).mutate(), std::move(*_null_column).mutate());
     }
 
     void reserve(size_t size) {
@@ -124,8 +124,8 @@ public:
         _null_column->resize_uninitialized(size);
     }
 
-    DataColumnMutablePtr data_column() { return DataColumn::static_pointer_cast(_column->as_mutable_ptr()); }
-    NullColumnMutablePtr null_column() { return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr()); }
+    DataColumn* data_column_raw_ptr() { return _column.get(); }
+    NullColumn* null_column_raw_ptr() { return _null_column.get(); }
     void set_has_null(bool v) { _has_null = v; }
 
 protected:
@@ -211,7 +211,7 @@ public:
         bytes.resize(bytes.size() - n);
     }
 
-    NullColumnMutablePtr get_null_column() { return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr()); }
+    NullColumn* get_null_column_raw_ptr() { return _null_column.get(); }
 
     NullColumn::Container& get_null_data() { return _null_column->get_data(); }
 

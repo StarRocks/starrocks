@@ -27,6 +27,7 @@ class TxnLogPB;
 namespace starrocks::lake {
 
 class TabletManager;
+class PublishTabletInfo;
 
 // Publish a new version of tablet metadata by applying a set of transactions.
 //
@@ -51,8 +52,8 @@ class TabletManager;
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, std::span<const TxnInfoPB> txns,
+StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata);
 
 // Publish a batch new versions of transaction logs.

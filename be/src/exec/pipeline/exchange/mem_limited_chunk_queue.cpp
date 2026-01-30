@@ -263,6 +263,11 @@ void MemLimitedChunkQueue::close_consumer(int32_t consumer_index) {
     }
 }
 
+bool MemLimitedChunkQueue::is_all_source_finished() const {
+    std::shared_lock l(_mutex);
+    return _opened_source_number == 0;
+}
+
 void MemLimitedChunkQueue::open_producer() {
     std::unique_lock l(_mutex);
     _opened_sink_number++;

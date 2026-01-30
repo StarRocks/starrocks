@@ -18,8 +18,18 @@
 #include <orc/Writer.hh>
 #include <util/priority_thread_pool.hpp>
 
+#include "column/column.h"
 #include "formats/file_writer.h"
-#include "orc_memory_pool.h"
+#include "formats/orc/orc_memory_pool.h"
+#include "gen_cpp/Types_types.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+class ColumnEvaluator;
+class FileSystem;
+class RuntimeState;
+class TypeDescriptor;
+} // namespace starrocks
 
 namespace starrocks::formats {
 

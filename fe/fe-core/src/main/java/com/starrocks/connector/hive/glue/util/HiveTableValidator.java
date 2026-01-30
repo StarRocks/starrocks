@@ -17,11 +17,9 @@ package com.starrocks.connector.hive.glue.util;
 
 import com.starrocks.connector.hive.glue.metastore.AWSGlueMetastore;
 import org.apache.hadoop.hive.metastore.TableType;
-import org.apache.thrift.TException;
 import software.amazon.awssdk.services.glue.model.InvalidInputException;
 import software.amazon.awssdk.services.glue.model.Table;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
@@ -60,22 +58,18 @@ public enum HiveTableValidator {
                         .build();
             }
 
-            for (Map.Entry<String, String> entry : table.parameters().entrySet()) {
-                String key = entry.getKey();
-                String value = entry.getValue();
-                if (key.equalsIgnoreCase("projection.enable") && "true".equalsIgnoreCase(value)) {
-                    // With partition projection enabled, the metadata may not store in glue.
-                    // Thus we can not get the partition meta
-                    // So read these tables may return no data
-                    // Just throw some exception to remind user
-                    List<software.amazon.awssdk.services.glue.model.Partition> partitions = null;
-                    try {
-                        partitions = metastore.getPartitions(table.databaseName(), table.name(), null, 1);
-                    } catch (TException e) {
-                        throw new RuntimeException("Get partitions failed", e);
-                    }
-                    if (partitions.isEmpty()) {
-                        throw new IllegalArgumentException("Partition projection table may not readable");
+            // Check for partition projection tables
+            // Support both 'projection.enabled' (AWS standard) and 'projection.enable' (legacy)
+            if (table.parameters() != null) {
+                for (Map.Entry<String, String> entry : table.parameters().entrySet()) {
+                    String key = entry.getKey();
+                    String value = entry.getValue();
+                    if ((key.equalsIgnoreCase("projection.enabled") || key.equalsIgnoreCase("projection.enable"))
+                            && "true".equalsIgnoreCase(value)) {
+                        // Tables with partition projection enabled are treated as valid here and do not require
+                        // metastore partition validation, because partitions are dynamically generated from
+                        // table properties, so empty metastore partitions are expected and acceptable.
+                        return;
                     }
                 }
             }

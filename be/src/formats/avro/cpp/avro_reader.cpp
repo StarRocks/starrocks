@@ -21,6 +21,7 @@
 #include <avrocpp/ValidSchema.hh>
 
 #include "column/adaptive_nullable_column.h"
+#include "column/chunk.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/utils.h"

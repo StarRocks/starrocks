@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
@@ -299,6 +300,7 @@ public class LoadJobTest {
 
     @Test
     public void testProcessTimeout(@Mocked EditLog editLog) {
+        new FakeEditLog();
         LoadJob loadJob = new BrokerLoadJob();
         Deencapsulation.setField(loadJob, "timeoutSecond", 0);
         new Expectations() {

@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/schedule/timeout_tasks.h"
 
+#include "common/logconfig.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/common.h"

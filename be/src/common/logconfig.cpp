@@ -45,6 +45,7 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
+#include "common/logconfig.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "gutil/sysinfo.h"
@@ -226,7 +227,7 @@ static void failure_function() {
 std::string lite_exec(const std::vector<std::string>& argv_vec, int timeout_ms);
 static std::mutex gcore_mutex;
 static bool gcore_done = false;
-void hook_on_query_timeout(TUniqueId& query_id, size_t timeout_seconds) {
+void hook_on_query_timeout(const TUniqueId& query_id, size_t timeout_seconds) {
     if (config::pipeline_gcore_timeout_threshold_sec > 0 &&
         timeout_seconds > static_cast<size_t>(config::pipeline_gcore_timeout_threshold_sec)) {
         std::unique_lock<std::mutex> lock(gcore_mutex);
@@ -267,7 +268,7 @@ static std::string get_timezone_offset_string(const google::LogMessageTime& time
     }
 
     // Slow path: recalculate and update cache
-    char tz_str[7] = "+0000";
+    char tz_str[16] = "+0000";
     int offset_hours = static_cast<int>(offset_seconds / 3600);
     int offset_mins = static_cast<int>((offset_seconds % 3600) / 60);
     if (offset_mins < 0) offset_mins = -offset_mins;

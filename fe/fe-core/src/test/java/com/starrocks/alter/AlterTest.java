@@ -98,9 +98,11 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.expression.DateLiteral;
@@ -317,8 +319,8 @@ public class AlterTest {
                     (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                                    refreshMaterializedViewStatement.getMvName().getTbl(), false, null,
+                        .refreshMaterializedView(refreshMaterializedViewStatement.getDbName(),
+                                    refreshMaterializedViewStatement.getMvName(), false, null,
                                     Constants.TaskRunPriority.LOWEST.value(), false, true);
         } catch (Exception e) {
             e.printStackTrace();
@@ -619,7 +621,7 @@ public class AlterTest {
         alterTableWithNewParser(stmt, false);
 
         Assertions.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().isEnabled());
-        Assertions.assertEquals(4, tbl.getIndexIdToSchema().size());
+        Assertions.assertEquals(4, tbl.getIndexMetaIdToSchema().size());
 
         // add partition when dynamic partition is enable
         stmt = "alter table test.tbl1 add partition p3 values less than('2020-04-01') " +
@@ -647,6 +649,11 @@ public class AlterTest {
         stmt = "alter table test.tbl1 set ('default.replication_num' = '3');";
         alterTableWithNewParser(stmt, false);
         Assertions.assertEquals(Short.valueOf("3"), tbl.getDefaultReplicationNum());
+
+        // set table_query_timeout
+        stmt = "alter table test.tbl1 set ('table_query_timeout' = '120');";
+        alterTableWithNewParser(stmt, false);
+        Assertions.assertEquals(120, tbl.getTableQueryTimeout());
 
         // set range table's real replication num
         Partition p1 = tbl.getPartition("p1");
@@ -964,10 +971,10 @@ public class AlterTest {
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assertions.assertEquals(3,
                     replace1.getPartition("replace1").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assertions.assertEquals(1,
                     replace2.getPartition("replace2").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
 
         alterTableWithNewParser(replaceStmt, false);
 
@@ -975,10 +982,10 @@ public class AlterTest {
         replace2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "replace2");
         Assertions.assertEquals(1,
                     replace1.getPartition("replace1").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assertions.assertEquals(3,
                     replace2.getPartition("replace2").getDefaultPhysicalPartition()
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size());
         Assertions.assertEquals("replace1", replace1.getIndexNameByMetaId(replace1.getBaseIndexMetaId()));
         Assertions.assertEquals("replace2", replace2.getIndexNameByMetaId(replace2.getBaseIndexMetaId()));
     }
@@ -1348,7 +1355,7 @@ public class AlterTest {
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             Assertions.assertEquals(physicalPartition.getVisibleVersion(), 1);
             Assertions.assertEquals(physicalPartition.getParentId(), partition.get().getId());
-            Assertions.assertNotNull(physicalPartition.getBaseIndex());
+            Assertions.assertNotNull(physicalPartition.getLatestBaseIndex());
             Assertions.assertFalse(physicalPartition.isImmutable());
             Assertions.assertEquals(physicalPartition.getShardGroupId(), PhysicalPartition.INVALID_SHARD_GROUP_ID);
             Assertions.assertTrue(physicalPartition.hasStorageData());
@@ -2610,7 +2617,7 @@ public class AlterTest {
 
         stmt = "alter table test.tbl1 drop column col1, drop column col2";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        Assertions.assertEquals("test", alterTableStmt.getTbl().getDb());
+        Assertions.assertEquals("test", com.starrocks.catalog.TableName.fromTableRef(alterTableStmt.getTableRef()).getDb());
         Assertions.assertEquals(2, alterTableStmt.getAlterClauseList().size());
     }
 
@@ -2706,7 +2713,9 @@ public class AlterTest {
                     new MaterializedViewHandler(),
                     new SystemHandler());
             TableName tableName = new TableName("test_db", "test_table");
-            AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
+            AlterTableStmt stmt = new AlterTableStmt(
+                    new TableRef(QualifiedName.of(Lists.newArrayList(tableName.getDb(), tableName.getTbl())),
+                            null, NodePosition.ZERO), cList);
             DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
         });
     }

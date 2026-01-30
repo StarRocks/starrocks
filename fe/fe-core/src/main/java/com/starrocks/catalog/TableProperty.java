@@ -328,8 +328,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private TCompactionStrategy compactionStrategy = TCompactionStrategy.DEFAULT;
 
+    // Maximum number of parallel compaction subtasks per tablet
+    // 0 means disable parallel compaction, positive value enables it
+    // Default: 3
+    @SerializedName(value = "lakeCompactionMaxParallel")
+    private int lakeCompactionMaxParallel = 3;
+
     @SerializedName(value = "enableStatisticCollectOnFirstLoad")
     private boolean enableStatisticCollectOnFirstLoad = true;
+
+    // table level query timeout in seconds
+    // default value -1 means use cluster query_timeout
+    @SerializedName(value = "tableQueryTimeout")
+    private int tableQueryTimeout = -1;
 
     /**
      * Whether to enable the v2 implementation of fast schema evolution for cloud-native tables.
@@ -390,9 +401,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
-            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
-                buildMvProperties();
-                break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
                 break;
@@ -416,6 +424,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 buildBinlogAvailableVersion();
                 break;
+            case OperationType.OP_MODIFY_FLAT_JSON_CONFIG:
+                buildFlatJsonConfig();
+                break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionTTL();
                 buildPartitionLiveNumber();
@@ -426,6 +437,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildStorageCoolDownTTL();
                 buildEnableStatisticCollectOnFirstLoad();
                 buildCloudNativeFastSchemaEvolutionV2();
+                buildLakeCompactionMaxParallel();
+                buildTableQueryTimeout();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -448,6 +461,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
         buildMVPartitionRefreshStrategy();
+        buildPartitionRetentionCondition();
         buildAutoRefreshPartitionsLimit();
         buildMVRefreshMode();
         buildExcludedTriggerTables();
@@ -458,6 +472,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildQueryRewrite();
         buildMVQueryRewriteSwitch();
         buildMVTransparentRewriteMode();
+        buildLocation();
         return this;
     }
 
@@ -529,6 +544,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
             }
         }
         return this;
+    }
+
+    public void setReplicationNum(short replicationNum) {
+        this.replicationNum = replicationNum;
     }
 
     public TableProperty buildReplicationNum() {
@@ -847,6 +866,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public void setDataCachePartitionDuration(PeriodDuration dataCachePartitionDuration) {
+        this.dataCachePartitionDuration = dataCachePartitionDuration;
+    }
+
     public TableProperty buildDataCachePartitionDuration() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
             dataCachePartitionDuration = TimeUtils.parseHumanReadablePeriodOrDuration(
@@ -861,6 +884,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                     properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING, "false"));
         }
         return this;
+    }
+
+    public void setStorageCoolDownTTL(PeriodDuration storageCoolDownTTL) {
+        this.storageCoolDownTTL = storageCoolDownTTL;
     }
 
     public TableProperty buildStorageCoolDownTTL() {
@@ -905,6 +932,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
             compactionStrategy = TCompactionStrategy.DEFAULT;
         } else if (defaultStrategy.equalsIgnoreCase(REAL_TIME_COMPACTION_STRATEGY)) {
             compactionStrategy = TCompactionStrategy.REAL_TIME;
+        }
+        return this;
+    }
+
+    public TableProperty buildLakeCompactionMaxParallel() {
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_LAKE_COMPACTION_MAX_PARALLEL);
+        if (value != null) {
+            try {
+                lakeCompactionMaxParallel = Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                LOG.warn("Invalid lake_compaction_max_parallel value: {}", value);
+                lakeCompactionMaxParallel = 0;
+            }
         }
         return this;
     }
@@ -1115,6 +1155,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return compactionStrategy;
     }
 
+    public int getLakeCompactionMaxParallel() {
+        return lakeCompactionMaxParallel;
+    }
+
     public Multimap<String, String> getLocation() {
         return location;
     }
@@ -1261,6 +1305,41 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return cloudNativeFastSchemaEvolutionV2;
     }
 
+    public TableProperty buildTableQueryTimeout() {
+        String timeoutStr = properties.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+
+        if (timeoutStr == null) {
+            tableQueryTimeout = -1;
+            return this;
+        }
+        try {
+            int timeout = Integer.parseInt(timeoutStr);
+            if (timeout > 0) {
+                tableQueryTimeout = timeout;
+                return this;
+            }
+
+            // -1 means unset table_query_timeout and fallback to default behavior.
+            if (timeout == -1) {
+                LOG.info("table_query_timeout reset to default");
+            } else {
+                LOG.warn("Invalid table_query_timeout value: {}. Must be > 0 or -1 for default. Using default (-1).",
+                        timeoutStr);
+            }
+        } catch (NumberFormatException e) {
+            LOG.warn("Invalid table_query_timeout value: {}. Must be a valid integer. Using default (-1).",
+                    timeoutStr, e);
+        }
+
+        properties.remove(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT);
+        tableQueryTimeout = -1;
+        return this;
+    }
+
+    public int getTableQueryTimeout() {
+        return tableQueryTimeout;
+    }
+
     @Override
     public void gsonPostProcess() throws IOException {
         try {
@@ -1296,6 +1375,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildFileBundling();
         buildMutableBucketNum();
         buildCompactionStrategy();
+        buildLakeCompactionMaxParallel();
         buildEnableStatisticCollectOnFirstLoad();
+        buildTableQueryTimeout();
     }
 }

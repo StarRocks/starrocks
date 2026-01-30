@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -23,7 +24,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -39,6 +42,7 @@ import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.ThreadUtil;
@@ -73,8 +77,13 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -97,6 +106,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
@@ -3023,8 +3033,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
@@ -3050,8 +3060,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             newStarRocksAssert.getCtx());
-            Assertions.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
-            Assertions.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getDb(), "test_mv_different_db");
+            Assertions.assertEquals(com.starrocks.catalog.TableName.fromTableRef(stmt.getTableRef()).getTbl(), "test_mv_use_different_tbl");
 
             currentState.getLocalMetastore().createMaterializedView(stmt);
 
@@ -3889,7 +3899,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvName = createMaterializedViewStatement.getTableName();
+            TableName mvName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName.getTbl());
             Assertions.assertNotNull(table);
             Assertions.assertTrue(table instanceof MaterializedView);
@@ -3910,7 +3920,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
             currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
-            TableName mvTableName = createMaterializedViewStatement.getTableName();
+            TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             mvName = mvTableName.getTbl();
 
             Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName);
@@ -4745,7 +4755,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
         System.out.println(result);
         Assertions.assertTrue(result.contains("rack:*"));
         for (Tablet tablet : materializedView.getPartitions().iterator().next()
-                .getDefaultPhysicalPartition().getBaseIndex().getTablets()) {
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()) {
             Assertions.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
         }
 
@@ -6032,5 +6042,51 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     "AS SELECT 'This is a test' AS `'This is a test'`, 123 AS `123`, `iceberg0`.`partitioned_db`.`v1`.`date`, `iceberg0`.`partitioned_db`.`v1`.`id`\n" +
                     "FROM `iceberg0`.`partitioned_db`.`t2` AS `v1`;", ddl);
         }
+    }
+
+    @Test
+    public void testRemoveHeavyObjectsFromTableClearsNativeIcebergTable() throws Exception {
+        Column column = new Column("c1", com.starrocks.type.IntegerType.INT);
+        ColumnRefOperator colRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "c1", true);
+
+        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
+        org.apache.iceberg.Schema schema =
+                new org.apache.iceberg.Schema(org.apache.iceberg.types.Types.NestedField.required(
+                        1, "c1", org.apache.iceberg.types.Types.IntegerType.get()));
+        org.apache.iceberg.PartitionSpec spec =
+                org.apache.iceberg.PartitionSpec.builderFor(schema).identity("c1").build();
+        org.apache.iceberg.TableMetadata meta = Mockito.mock(org.apache.iceberg.TableMetadata.class);
+        org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
+        Mockito.when(nativeTable.schema()).thenReturn(schema);
+        Mockito.when(nativeTable.spec()).thenReturn(spec);
+        Mockito.when(nativeTable.operations()).thenReturn(ops);
+        Mockito.when(ops.current()).thenReturn(meta);
+        Mockito.when(meta.uuid()).thenReturn("uuid-1234");
+
+        IcebergTable icebergTable = IcebergTable.builder()
+                .setId(1)
+                .setSrTableName("t")
+                .setCatalogName("iceberg")
+                .setCatalogDBName("db")
+                .setCatalogTableName("t")
+                .setNativeTable(nativeTable)
+                .setFullSchema(java.util.List.of(column))
+                .build();
+
+        LogicalIcebergScanOperator scan = new LogicalIcebergScanOperator(
+                icebergTable,
+                ImmutableMap.of(colRef, column),
+                ImmutableMap.of(column, colRef),
+                Operator.DEFAULT_LIMIT,
+                null,
+                TvrTableSnapshot.empty());
+        OptExpression opt = OptExpression.create(scan);
+
+        Method remover = CachingMvPlanContextBuilder.class
+                .getDeclaredMethod("removeHeavyObjectsFromTable", OptExpression.class);
+        remover.setAccessible(true);
+        remover.invoke(null, opt);
+
+        Assertions.assertTrue(scan.getTable() instanceof LightWeightIcebergTable);
     }
 }

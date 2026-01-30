@@ -1760,6 +1760,34 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_running_transaction_count(self, db_name):
+        """
+        Get the number of running transactions in the specified database.
+        :param db_name: database name
+        :return: row count as string (for safe variable substitution in sql test framework)
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        row_count = len(result["result"]) if "result" in result and result["result"] is not None else 0
+        return str(row_count)
+
+    def get_single_running_transaction_label(self, db_name):
+        """
+        Get the label of the single running transaction in the specified database.
+        Assert there is exactly one running transaction.
+        :param db_name: database name
+        :return: label string
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        tools.assert_true("result" in result, f"Unexpected SQL result: {result}")
+        tools.assert_equal(1, len(result["result"]), f"Expected exactly 1 running transaction, got {len(result['result'])}")
+        row = result["result"][0]
+        tools.assert_true(len(row) > 1, f"Unexpected show proc row format: {row}")
+        return str(row[1])
+
     def get_table_state(self, db_name, table_name):
         """
         Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name
@@ -2283,7 +2311,7 @@ class StarrocksSQLApiLib(object):
         sleep_time = 0
         while True:
             res = self.execute_sql(
-                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
                 True,
             )
             if (not res["status"]) or len(res["result"]) <= 0:
@@ -3038,6 +3066,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_contains_times(self, query, expect, expected_times: int):
+        """
+        Assert query result contains `expect` exactly `expected_times` times.
+
+        This is useful for validating trace outputs, e.g. making sure a specific optimizer phase
+        runs only once.
+        """
+        res = self.execute_sql(query, True)
+        haystack = str(res["result"])
+        actual_times = haystack.count(str(expect))
+        tools.assert_true(
+            actual_times == int(expected_times),
+            "assert expect {} appears {} times (expected {}), result: {}".format(
+                expect, actual_times, expected_times, res["result"]
+            ),
+        )
+
     def assert_query_error_contains(self, query, *expects):
         """
         assert error message contains expect string
@@ -3582,3 +3627,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         return {
             "success": True
         }
+
+    def set_first_tablet_id(self, table_name, partition_name=None):
+        """
+        Get the first tablet ID for a table (optionally from a specific partition)
+        and store it as self.tablet_id for use in subsequent SQL with ${tablet_id}
+        """
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name}) LIMIT 1"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name} LIMIT 1"
+        result = self.execute_sql(sql, True)
+        if result and result.get("result") and len(result["result"]) > 0:
+            self.tablet_id = str(result["result"][0][0])  # First column is TabletId
+            log.info(f"Set tablet_id = {self.tablet_id}")
+        else:
+            raise Exception(f"Failed to get tablet ID for table {table_name}")

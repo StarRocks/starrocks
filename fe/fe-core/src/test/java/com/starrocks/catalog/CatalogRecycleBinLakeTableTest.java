@@ -118,7 +118,7 @@ public class CatalogRecycleBinLakeTableTest {
     private static void checkPartitionTablet(Partition partition, boolean expectExist) {
         TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (MaterializedIndex index :
-                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 TabletMeta meta = tabletIndex.getTabletMeta(tablet.getId());
                 if (expectExist) {

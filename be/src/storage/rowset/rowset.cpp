@@ -66,10 +66,12 @@
 
 namespace starrocks {
 
-Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
+Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta,
+               KVStore* kvstore)
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
+          _kvstore(kvstore),
           _refs_by_reader(0) {
     _schema = _rowset_meta->tablet_schema() ? _rowset_meta->tablet_schema() : schema;
     _keys_type = _schema->keys_type();
@@ -389,35 +391,30 @@ Status Rowset::remove() {
     return result;
 }
 
+// Remove delta column group files and metadata for this rowset
+// Uses the rowset's internal _kvstore reference to ensure we access the correct
+// KVStore for this rowset's tablet, avoiding metadata corruption when the same
+// tablet exists on multiple disks.
 Status Rowset::remove_delta_column_group() {
-    std::filesystem::path schema_hash_path(_rowset_path);
-    std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
-    std::string data_dir_string = data_dir_path.string();
-    DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
-    if (data_dir == nullptr) {
-        LOG(ERROR) << "DataDir not found! rowset_path: " << _rowset_path << ", dir_path: " << data_dir_string;
-        return Status::OK();
-    }
-    return remove_delta_column_group(data_dir->get_meta());
-}
-
-Status Rowset::remove_delta_column_group(KVStore* kvstore) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
-    return _remove_delta_column_group_files(fs, kvstore);
+    return _remove_delta_column_group_files(fs);
 }
 
-Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs, KVStore* kvstore) {
-    if (num_segments() > 0) {
+// Internal helper to remove delta column group files and metadata
+// Uses _kvstore member to access the correct KVStore instance for this rowset,
+// which is essential when a tablet is duplicated across multiple disks on the same BE node.
+Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem>& fs) {
+    if (num_segments() > 0 && _kvstore != nullptr) {
         // 1. remove dcg files
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
             if (_keys_type == PRIMARY_KEYS) {
-                RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(kvstore, _rowset_meta->tablet_id(),
+                RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(_kvstore, _rowset_meta->tablet_id(),
                                                                            _rowset_meta->get_rowset_seg_id() + i, 0,
                                                                            INT64_MAX, &list));
             } else {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
+                        _kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
             }
 
             for (const auto& dcg : list) {
@@ -435,16 +432,16 @@ Status Rowset::_remove_delta_column_group_files(const std::shared_ptr<FileSystem
         // 2. remove dcg from rocksdb
         if (_keys_type == PRIMARY_KEYS) {
             RETURN_IF_ERROR(TabletMetaManager::delete_delta_column_group(
-                    kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id(), num_segments()));
+                    _kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id(), num_segments()));
         } else {
-            RETURN_IF_ERROR(TabletMetaManager::delete_delta_column_group(kvstore, _rowset_meta->tablet_id(),
+            RETURN_IF_ERROR(TabletMetaManager::delete_delta_column_group(_kvstore, _rowset_meta->tablet_id(),
                                                                          _rowset_meta->rowset_id(), num_segments()));
         }
     }
     return Status::OK();
 }
 
-Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId new_rowset_id, int64_t version) {
+Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int64_t version) {
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_link_path = segment_file_path(dir, new_rowset_id, i);
         std::string src_file_path = segment_file_path(_rowset_path, rowset_id(), i);
@@ -510,22 +507,25 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
             VLOG(2) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
-    RETURN_IF_ERROR(_link_delta_column_group_files(kvstore, dir, version));
+    RETURN_IF_ERROR(_link_delta_column_group_files(dir, version));
     return Status::OK();
 }
 
-Status Rowset::_link_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version) {
-    if (num_segments() > 0 && kvstore != nullptr && _rowset_path != dir) {
+// Internal helper to hard link delta column group files
+// Uses _kvstore member to query DCG metadata from the correct KVStore instance.
+// Only links DCGs up to the specified version to avoid including future changes.
+Status Rowset::_link_delta_column_group_files(const std::string& dir, int64_t version) {
+    if (num_segments() > 0 && _kvstore != nullptr && _rowset_path != dir) {
         // link dcg files
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
 
             if (_keys_type == PRIMARY_KEYS) {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
+                        _kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
             } else {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
+                        _kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
             }
 
             for (const auto& dcg : list) {
@@ -550,7 +550,7 @@ Status Rowset::_link_delta_column_group_files(KVStore* kvstore, const std::strin
     return Status::OK();
 }
 
-StatusOr<int64_t> Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
+StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
     int64_t ncopy = 0;
     for (int i = 0; i < num_segments(); ++i) {
         std::string dst_path = segment_file_path(dir, rowset_id(), i);
@@ -645,25 +645,28 @@ StatusOr<int64_t> Rowset::copy_files_to(KVStore* kvstore, const std::string& dir
         }
     }
 
-    ASSIGN_OR_RETURN(auto delta_file_size, _copy_delta_column_group_files(kvstore, dir, INT64_MAX));
+    ASSIGN_OR_RETURN(auto delta_file_size, _copy_delta_column_group_files(dir, INT64_MAX));
     ncopy += delta_file_size;
 
     return ncopy;
 }
 
-StatusOr<int64_t> Rowset::_copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version) {
+// Internal helper to copy delta column group files
+// Uses _kvstore member to query DCG metadata from the correct KVStore instance.
+// Returns the total number of bytes copied.
+StatusOr<int64_t> Rowset::_copy_delta_column_group_files(const std::string& dir, int64_t version) {
     int64_t ncopy = 0;
-    if (num_segments() > 0 && kvstore != nullptr && _rowset_path != dir) {
+    if (num_segments() > 0 && _kvstore != nullptr && _rowset_path != dir) {
         // link dcg files
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
 
             if (_keys_type == PRIMARY_KEYS) {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
+                        _kvstore, _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0, version, &list));
             } else {
                 RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                        kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
+                        _kvstore, _rowset_meta->tablet_id(), _rowset_meta->rowset_id(), i, 0, INT64_MAX, &list));
             }
 
             for (const auto& dcg : list) {
@@ -773,6 +776,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.vector_search_option = options.vector_search_option;
     seg_options.sample_options = options.sample_options;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
@@ -781,12 +785,17 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.is_primary_keys = true;
         seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
         seg_options.version = options.version;
-        seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
+        // Use _kvstore to ensure we access the correct metadata store for this rowset
+        if (_kvstore == nullptr) {
+            return Status::InternalError("KVStore is null when loading rowset metadata");
+        }
+        seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(_kvstore);
     }
     seg_options.rowset_path = _rowset_path;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
-    seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
+    // Use _kvstore to ensure we access the correct metadata store for this rowset
+    seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(_kvstore);
     if (options.short_key_ranges_option != nullptr) { // logical split.
         seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
     }
@@ -863,28 +872,43 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     return Status::OK();
 }
 
+// Get segment iterators for reading rowset data
+// |meta_load_mode| - Controls which metadata to load:
+//   - DELETE_VEC_ONLY: Load only delete vectors (for PK tables to filter deleted rows)
+//   - DCG_ONLY: Load only delta column groups (for partial updates/schema changes)
+//   - ALL: Load both delete vectors and DCGs
+//   - NONE: Load no metadata
+// Uses _kvstore member to ensure metadata is loaded from the correct KVStore instance.
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema,
                                                                        const TabletSchemaCSPtr& tablet_schema,
-                                                                       KVStore* meta, int64_t version,
-                                                                       OlapReaderStatistics* stats, KVStore* dcg_meta,
+                                                                       const MetaLoadMode& meta_load_mode,
+                                                                       int64_t version, OlapReaderStatistics* stats,
                                                                        size_t chunk_size) {
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
-    seg_options.is_primary_keys = meta != nullptr;
+    seg_options.is_primary_keys = schema.keys_type() == KeysType::PRIMARY_KEYS;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.rowset_path = _rowset_path;
     seg_options.version = version;
     seg_options.tablet_schema = tablet_schema;
-    seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
-    seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
+    // Conditionally load metadata loaders based on the requested mode
+    // Both loaders use _kvstore to access the correct metadata store
+    if (meta_load_mode != MetaLoadMode::NONE && _kvstore == nullptr) {
+        return Status::InternalError("KVStore is null when loading rowset metadata");
+    }
+    if (meta_load_mode == MetaLoadMode::DELETE_VEC_ONLY || meta_load_mode == MetaLoadMode::ALL) {
+        seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(_kvstore);
+    }
+    if (meta_load_mode == MetaLoadMode::DCG_ONLY || meta_load_mode == MetaLoadMode::ALL) {
+        seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(_kvstore);
+    }
     if (chunk_size > 0) {
         seg_options.chunk_size = chunk_size;
     }
-    seg_options.read_by_generated_column_adding = (dcg_meta != nullptr);
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;

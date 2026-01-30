@@ -31,18 +31,21 @@ import java.util.Objects;
 public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     private Map<Integer, Pair<String, Column>> aggColumnIdToColumns;
     private List<String> selectPartitionNames;
+    private List<Long> hintsTabletIds;
     private long selectedIndexId = -1;
 
     public PhysicalMetaScanOperator() {
         super(OperatorType.PHYSICAL_META_SCAN);
         this.aggColumnIdToColumns = ImmutableMap.of();
         this.selectPartitionNames = ImmutableList.of();
+        this.hintsTabletIds = ImmutableList.of();
     }
 
     public PhysicalMetaScanOperator(LogicalMetaScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_META_SCAN, scanOperator);
         this.aggColumnIdToColumns = scanOperator.getAggColumnIdToColumns();
         this.selectPartitionNames = scanOperator.getSelectPartitionNames();
+        this.hintsTabletIds = scanOperator.getHintsTabletIds();
         this.selectedIndexId = scanOperator.getSelectedIndexId();
     }
 
@@ -56,6 +59,10 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
 
     public long getSelectedIndexId() {
         return selectedIndexId;
+    }
+
+    public List<Long> getHintsTabletIds() {
+        return hintsTabletIds;
     }
 
     @Override
@@ -81,12 +88,13 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
         return Objects.equals(aggColumnIdToColumns, that.aggColumnIdToColumns) &&
                 Objects.equals(selectPartitionNames, that.selectPartitionNames) &&
+                Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
                 selectedIndexId == that.selectedIndexId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), aggColumnIdToColumns, selectPartitionNames, selectedIndexId);
+        return Objects.hash(super.hashCode(), aggColumnIdToColumns, selectPartitionNames, hintsTabletIds, selectedIndexId);
     }
 
     public static Builder builder() {
@@ -106,6 +114,7 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
             super.withOperator(operator);
             builder.aggColumnIdToColumns = ImmutableMap.copyOf(operator.aggColumnIdToColumns);
             builder.selectPartitionNames = ImmutableList.copyOf(operator.selectPartitionNames);
+            builder.hintsTabletIds = ImmutableList.copyOf(operator.hintsTabletIds);
             builder.selectedIndexId = operator.selectedIndexId;
             return this;
         }

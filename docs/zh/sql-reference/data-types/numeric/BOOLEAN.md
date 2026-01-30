@@ -16,10 +16,23 @@ BOOL, BOOLEAN
 
 ```sql
 CREATE TABLE booleanDemo (
-    pk INT COMMENT "range [-2147483648, 2147483647]",
+    pk INT COMMENT "Sort Key",
     ispass BOOLEAN COMMENT "true/false"
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO booleanDemo VALUES (1, true), (2, false), (3, 1), (4, 0);
+```
+
+```Plaintext
+MySQL > SELECT * FROM booleanDemo;
++------+--------+
+| pk   | ispass |
++------+--------+
+|    1 |      1 |
+|    2 |      0 |
+|    3 |      1 |
+|    4 |      0 |
++------+--------+
 ```

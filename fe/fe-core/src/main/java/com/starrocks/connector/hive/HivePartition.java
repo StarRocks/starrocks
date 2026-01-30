@@ -28,9 +28,11 @@ public class HivePartition {
     private final HiveStorageFormat storage;
     private final List<Column> columns;
     private final Map<String, String> parameters;
+    private final Map<String, String> serDeParameters;
 
     public HivePartition(String databaseName, String tableName, List<String> values, String location,
-                         HiveStorageFormat storage, List<Column> columns, Map<String, String> parameters) {
+                         HiveStorageFormat storage, List<Column> columns, Map<String, String> parameters,
+                         Map<String, String> serDeParameters) {
         this.databaseName = databaseName;
         this.tableName = tableName;
         this.values = values;
@@ -38,6 +40,7 @@ public class HivePartition {
         this.storage = storage;
         this.columns = columns;
         this.parameters = parameters;
+        this.serDeParameters = serDeParameters;
     }
 
     public String getDatabaseName() {
@@ -64,6 +67,10 @@ public class HivePartition {
         return parameters;
     }
 
+    public Map<String, String> getSerDeParameters() {
+        return serDeParameters;
+    }
+
     public String getLocation() {
         return location;
     }
@@ -80,6 +87,7 @@ public class HivePartition {
         private List<Column> columns;
         private String location;
         private Map<String, String> parameters = ImmutableMap.of();
+        private Map<String, String> serDeParameters = ImmutableMap.of();
 
         private Builder() {
         }
@@ -119,8 +127,14 @@ public class HivePartition {
             return this;
         }
 
+        public Builder setSerDeParameters(Map<String, String> serDeParameters) {
+            this.serDeParameters = serDeParameters;
+            return this;
+        }
+
         public HivePartition build() {
-            return new HivePartition(databaseName, tableName, values, location, storageFormat, columns, parameters);
+            return new HivePartition(databaseName, tableName, values, location, storageFormat, columns, parameters,
+                                     serDeParameters);
         }
     }
 }

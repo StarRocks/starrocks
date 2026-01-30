@@ -100,7 +100,7 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             // Put this `.cols` files into orphan files
             FileMetaPB file_meta;
             file_meta.set_name(dcg_ver.column_files(i));
-            if (dcg_ver.shared_files_size() > 0) {
+            if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
                 file_meta.set_shared(dcg_ver.shared_files(i));
             }
             _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
@@ -289,6 +289,22 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
     }
 }
 
+void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compaction) {
+    // Mark lcrm file as orphan for garbage collection
+    // WHY: After compaction publish completes, the mapper file is no longer needed.
+    // However, we cannot delete it immediately because:
+    // 1. It's on remote storage (S3/HDFS) - deletes are slower and may fail
+    // 2. Other nodes might still be reading it during parallel pk execution
+    // 3. Transaction rollback scenarios may need it
+    //
+    // STRATEGY: Add to orphan_files list so it gets cleaned up asynchronously by the
+    // tablet metadata GC process, which runs periodically and handles failures gracefully.
+    // This approach is safe, non-blocking, and handles distributed cleanup correctly.
+    if (op_compaction.has_lcrm_file()) {
+        _tablet_meta->add_orphan_files()->CopyFrom(op_compaction.lcrm_file());
+    }
+}
+
 Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
                                            uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
     // delete input rowsets
@@ -362,6 +378,9 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
 
     // remove compacted sst
     remove_compacted_sst(op_compaction);
+
+    // remove lcrm file
+    remove_lcrm_file(op_compaction);
 
     // add output rowset
     bool has_output_rowset = false;
@@ -736,6 +755,10 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
         // Merge shared_segments
         for (int i = 0; i < rowset_pb.shared_segments_size(); i++) {
             _pending_rowset_data.rowset_pb.add_shared_segments(rowset_pb.shared_segments(i));
+        }
+        // Merge segment metadatas
+        for (int i = 0; i < rowset_pb.segment_metas_size(); i++) {
+            _pending_rowset_data.rowset_pb.add_segment_metas()->CopyFrom(rowset_pb.segment_metas(i));
         }
     }
 

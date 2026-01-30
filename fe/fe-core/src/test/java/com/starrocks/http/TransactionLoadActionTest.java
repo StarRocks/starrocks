@@ -20,7 +20,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.http.rest.ActionStatus;
+import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
 import com.starrocks.http.rest.TransactionResult;
@@ -29,6 +31,11 @@ import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
+import com.starrocks.sql.ast.warehouse.cngroup.EnableDisableCnGroupStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -42,6 +49,7 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -74,6 +82,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
@@ -532,6 +541,164 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 assertEquals(FAILED, body.get(TransactionResult.STATUS_KEY));
                 assertTrue(Objects.toString(body.get(TransactionResult.MESSAGE_KEY))
                         .contains("Warehouse name: non_exist_warehouse not exist"));
+            }
+        }
+    }
+
+    @Test
+    public void beginTransactionWithUserDefaultWarehouseTest() throws Exception {
+        long expectedWarehouseId = 12345L;
+        {
+            new Expectations() {
+                {
+                    streamLoadMgr.beginLoadTaskFromFrontend(
+                            anyString, anyString, anyString, anyString, anyString,
+                            anyLong, anyInt, anyInt, (TransactionResult) any, (ComputeResource) any);
+                    times = 1;
+                    result = new Delegate<Void>() {
+                        public void beginLoadTaskFromFrontend(String dbName,
+                                                              String tableName,
+                                                              String label,
+                                                              String user,
+                                                              String clientIp,
+                                                              long timeoutMillis,
+                                                              int channelNum,
+                                                              int channelId,
+                                                              TransactionResult resp,
+                                                              ComputeResource computeResource) {
+                            resp.addResultEntry(TransactionResult.LABEL_KEY, label);
+                            // Validate that the correct warehouse is passed
+                            assertEquals(expectedWarehouseId, computeResource.getWarehouseId());
+                        }
+                    };
+                }
+            };
+
+            new MockUp<RestBaseAction>() {
+                @Mock
+                public Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+                    return Optional.of("user_wh");
+                }
+            };
+
+            new MockUp<WarehouseManager>() {
+                @Mock
+                public boolean warehouseExists(String warehouseName) {
+                    return "user_wh".equals(warehouseName);
+                }
+
+                @Mock
+                public Warehouse getWarehouse(String warehouseName) {
+                    if ("user_wh".equals(warehouseName)) {
+                        return new Warehouse(expectedWarehouseId, "user_wh", "root")  {
+                            @Override
+                            public long getResumeTime() {
+                                return 0L;
+                            }
+
+                            @Override
+                            public Long getAnyWorkerGroupId() {
+                                return 0L;
+                            }
+
+                            @Override
+                            public void addNodeToCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+
+                            }
+
+                            @Override
+                            public void validateRemoveNodeFromCNGroup(ComputeNode node, String cnGroupName) throws DdlException {
+
+                            }
+
+                            @Override
+                            public List<Long> getWorkerGroupIds() {
+                                return List.of();
+                            }
+
+                            @Override
+                            public List<String> getWarehouseInfo() {
+                                return List.of();
+                            }
+
+                            @Override
+                            public List<List<String>> getWarehouseNodesInfo() {
+                                return List.of();
+                            }
+
+                            @Override
+                            public ProcResult fetchResult() {
+                                return null;
+                            }
+
+                            @Override
+                            public void createCNGroup(CreateCnGroupStmt stmt) throws DdlException {
+
+                            }
+
+                            @Override
+                            public void dropCNGroup(DropCnGroupStmt stmt) throws DdlException {
+
+                            }
+
+                            @Override
+                            public void enableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+
+                            }
+
+                            @Override
+                            public void disableCNGroup(EnableDisableCnGroupStmt stmt) throws DdlException {
+
+                            }
+
+                            @Override
+                            public void alterCNGroup(AlterCnGroupStmt stmt) throws DdlException {
+
+                            }
+
+                            @Override
+                            public void replayInternalOpLog(String payload) {
+
+                            }
+
+                            @Override
+                            public boolean isAvailable() {
+                                return false;
+                            }
+                        };
+                    }
+                    return null;
+                }
+
+                @Mock
+                public ComputeResource acquireComputeResource(long warehouseId) {
+                    return new ComputeResource() {
+                        @Override
+                        public long getWarehouseId() {
+                            return warehouseId;
+                        }
+
+                        @Override
+                        public long getWorkerGroupId() {
+                            return 0;
+                        }
+                    };
+                }
+            };
+
+            String label = RandomStringUtils.randomAlphanumeric(32);
+            Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
+                reqBuilder.addHeader(DB_KEY, DB_NAME);
+                reqBuilder.addHeader(TABLE_KEY, TABLE_NAME);
+                reqBuilder.addHeader(LABEL_KEY, label);
+                reqBuilder.addHeader(CHANNEL_ID_STR, "0");
+                reqBuilder.addHeader(CHANNEL_NUM_STR, "2");
+                // no warehouse set here
+            });
+            try (Response response = networkClient.newCall(request).execute()) {
+                Map<String, Object> body = parseResponseBody(response);
+                assertEquals(OK, body.get(TransactionResult.STATUS_KEY));
+                assertEquals(label, Objects.toString(body.get(TransactionResult.LABEL_KEY)));
             }
         }
     }

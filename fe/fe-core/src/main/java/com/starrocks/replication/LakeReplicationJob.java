@@ -57,30 +57,37 @@ public class LakeReplicationJob extends ReplicationJob {
                 .getOrCreateVirtualTabletId(request.src_storage_volume_name, request.src_service_id);
     }
 
+    protected LakeReplicationJob(LakeReplicationJob job) {
+        super(job);
+        this.virtualTabletId = job.virtualTabletId;
+        this.srcDatabaseId = job.srcDatabaseId;
+        this.srcTableId = job.srcTableId;
+    }
+
     @Override
     public void run() {
         try {
             if (super.getState().equals(ReplicationJobState.INITIALIZING)) {
                 beginTransaction();
                 sendReplicateLakeRemoteStorageTasks();
-                setState(ReplicationJobState.REPLICATING);
+                persistStateChange(ReplicationJobState.REPLICATING);
             } else if (super.getState().equals(ReplicationJobState.REPLICATING)) {
                 if (isTransactionAborted()) {
-                    setState(ReplicationJobState.ABORTED);
+                    persistStateChange(ReplicationJobState.ABORTED);
                 } else if (isCrashRecovery()) {
                     sendReplicateLakeRemoteStorageTasks();
                     LOG.info("Lake replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
                             super.getState(), super.getDatabaseId(), super.getTableId(), super.getTransactionId());
                 } else if (isAllTaskFinished()) {
                     commitTransaction();
-                    setState(ReplicationJobState.COMMITTED);
+                    persistStateChange(ReplicationJobState.COMMITTED);
                 }
             }
         } catch (Exception e) {
             LOG.warn("Lake replication job exception, state: {}, database id: {}, table id: {}, transaction id: {}",
                     super.getState(), super.getDatabaseId(), super.getTableId(), super.getTransactionId(), e);
             abortTransaction(e.getMessage());
-            setState(ReplicationJobState.ABORTED);
+            persistStateChange(ReplicationJobState.ABORTED);
         }
     }
 
@@ -113,6 +120,11 @@ public class LakeReplicationJob extends ReplicationJob {
         LOG.info("Send lake replicate snapshot task, task num: {}, database id: {}, table id: {}, transaction id: {}",
                 taskNum, super.getDatabaseId(), super.getTableId(), super.getTransactionId());
         sendRunningTasks();
+    }
+
+    @Override
+    public LakeReplicationJob copyForPersist() {
+        return new LakeReplicationJob(this);
     }
 
     @Override

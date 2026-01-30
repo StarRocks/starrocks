@@ -31,13 +31,17 @@ public class SubqueryTest extends PlanTestBase {
     public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
         String sql = "select t0.v1 from t0 where (t0.v2 in (select t1.v4 from t1 where t0.v3 + t1.v5 = 1)) is NULL";
         String plan = getFragmentPlan(sql);
-        Assertions.assertTrue(plan.contains("  15:NESTLOOP JOIN\n" +
+        Assertions.assertTrue(plan.contains("15:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 3: v3 + 11: v5 = 1, if(((2: v2 IS NULL) AND " +
-                "(NOT ((12: countRows IS NULL) OR (12: countRows = 0)))) OR " +
-                "((13: countNotNulls < 12: countRows) AND (((NOT ((12: countRows IS NULL) OR " +
-                "(12: countRows = 0))) AND (2: v2 IS NOT NULL)) AND (8: v4 IS NULL))), TRUE, FALSE)"), plan);
+                "  |  other predicates: 3: v3 + 11: v5 = 1, if(((2: v2 IS NULL) AND (17: expr)) " +
+                "OR ((13: countNotNulls < 12: countRows) AND (((17: expr) AND (2: v2 IS NOT NULL)) " +
+                "AND (8: v4 IS NULL))), TRUE, FALSE)\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 16> : (14: expr) OR (15: expr)\n" +
+                "  |    <slot 17> : NOT (16: expr)\n" +
+                "  |    <slot 14> : 12: countRows IS NULL\n" +
+                "  |    <slot 15> : 12: countRows = 0"), plan);
         assertContains(plan, "8:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -2012,5 +2016,15 @@ public class SubqueryTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
         }
+    }
+
+    @Test
+    public void testOrderBySubquery() throws Exception {
+        String sql = "SELECT t0.* "
+                + " FROM t0"
+                + " left join t1 x1 on t0.v2 = x1.v4 and x1.v6 = (select v8 from t2 where v9 = 1 order by v8 limit 1, 1) "
+                + " left join t1 xx1 on x1.v5 = xx1.v5 and xx1.v6 = (select v8 from t2 where v9 = 1 order by v8 limit 1) ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "ASSERT NUMBER OF ROWS");
     }
 }

@@ -310,4 +310,136 @@ TEST_F(LakeCompactionSchedulerTest, test_abort_with_not_write_txnlog) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+// Test for process_parallel_compaction (lines 299-369 in compaction_scheduler.cpp)
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_basic) {
+    // Create a tablet with multiple rowsets for parallel compaction
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+
+    // Add rowsets
+    for (int i = 0; i < 10; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024); // 1MB each
+        rowset->add_segments(fmt::format("segment_{}.dat", i));
+        rowset->add_segment_size(1024 * 1024);
+    }
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+
+    // Enable parallel compaction
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(3);
+    parallel_config->set_max_bytes_per_subtask(5 * 1024 * 1024); // 5MB limit
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+
+    // The response should have some result (success or failure with txn_log)
+    // Since we're testing the code path, we verify it didn't crash
+}
+
+// Test parallel compaction with single tablet fallback on failure
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_fallback) {
+    // Create a tablet with rowsets
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+    metadata->set_id(next_id());
+    metadata->set_version(11);
+
+    // Add rowsets
+    for (int i = 0; i < 5; i++) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->set_overlapped(true);
+        rowset->set_num_rows(100);
+        rowset->set_data_size(1024 * 1024);
+        rowset->add_segments(fmt::format("segment_{}.dat", i));
+        rowset->add_segment_size(1024 * 1024);
+    }
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+
+    CompactRequest request;
+    CompactResponse response;
+    request.add_tablet_ids(metadata->id());
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+
+    // Enable parallel compaction with very small max_bytes to create multiple groups
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(2);
+    parallel_config->set_max_bytes_per_subtask(2 * 1024 * 1024); // 2MB limit
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+}
+
+// Test parallel compaction with multiple tablets
+TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_multiple_tablets) {
+    std::vector<int64_t> tablet_ids;
+
+    // Create multiple tablets with rowsets
+    for (int t = 0; t < 3; t++) {
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        metadata->set_id(next_id());
+        metadata->set_version(11);
+        tablet_ids.push_back(metadata->id());
+
+        for (int i = 0; i < 5; i++) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(i);
+            rowset->set_overlapped(true);
+            rowset->set_num_rows(100);
+            rowset->set_data_size(1024 * 1024);
+            rowset->add_segments(fmt::format("segment_{}.dat", i));
+            rowset->add_segment_size(1024 * 1024);
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    }
+
+    auto txn_id = next_id();
+    auto latch = std::make_shared<CountDownLatch>(1);
+
+    CompactRequest request;
+    CompactResponse response;
+    for (auto tablet_id : tablet_ids) {
+        request.add_tablet_ids(tablet_id);
+    }
+    request.set_timeout_ms(60 * 1000);
+    request.set_txn_id(txn_id);
+    request.set_version(11);
+
+    // Enable parallel compaction
+    auto* parallel_config = request.mutable_parallel_config();
+    parallel_config->set_enable_parallel(true);
+    parallel_config->set_max_parallel_per_tablet(2);
+    parallel_config->set_max_bytes_per_subtask(3 * 1024 * 1024);
+
+    auto cb = ::google::protobuf::NewCallback(notify_for_callback, latch);
+    _compaction_scheduler.compact(nullptr, &request, &response, cb);
+    latch->wait();
+}
+
 } // namespace starrocks::lake

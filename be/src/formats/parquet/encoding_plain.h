@@ -53,6 +53,8 @@ public:
 
     Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
+    std::string to_string() const override { return fmt::format("PlainEncoder<{}>", typeid(T).name()); }
+
 private:
     enum { SIZE_OF_TYPE = sizeof(T) };
 
@@ -75,6 +77,8 @@ public:
     }
 
     Slice build() override { return {_buffer.data(), _buffer.size()}; }
+
+    std::string to_string() const override { return "PlainEncoder<Slice>"; }
 
 private:
     faststring _buffer;
@@ -99,6 +103,8 @@ public:
         return {_buffer.data(), _buffer.size()};
     }
 
+    std::string to_string() const override { return "PlainEncoder<bool>"; }
+
 private:
     faststring _buffer;
     BitWriter _bit_writer;
@@ -109,6 +115,8 @@ class PlainDecoder final : public Decoder {
 public:
     PlainDecoder() = default;
     ~PlainDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("PlainDecoder<{}>", typeid(T).name()); }
 
     static Status decode(const std::string& buffer, T* value) {
         int byte_size = sizeof(T);
@@ -167,6 +175,8 @@ class PlainDecoder<Slice> final : public Decoder {
 public:
     PlainDecoder() = default;
     ~PlainDecoder() override = default;
+
+    std::string to_string() const override { return "PlainDecoder<Slice>"; }
 
     static Status decode(const std::string& buffer, Slice* value) {
         value->data = const_cast<char*>(buffer.data());
@@ -354,6 +364,8 @@ public:
     PlainDecoder() = default;
     ~PlainDecoder() override = default;
 
+    std::string to_string() const override { return "PlainDecoder<bool>"; }
+
     Status set_data(const Slice& data) override {
         _batched_bit_reader.reset(reinterpret_cast<const uint8_t*>(data.data), data.size);
         _decoded_values_buffer.reset();
@@ -452,6 +464,8 @@ public:
     FLBAPlainEncoder() = default;
     ~FLBAPlainEncoder() override = default;
 
+    std::string to_string() const override { return "FLBAPlainEncoder"; }
+
     Status append(const uint8_t* vals, size_t count) override {
         if (count == 0) return Status::OK();
 
@@ -474,6 +488,8 @@ class FLBAPlainDecoder final : public Decoder {
 public:
     FLBAPlainDecoder() = default;
     ~FLBAPlainDecoder() override = default;
+
+    std::string to_string() const override { return "FLBAPlainDecoder"; }
 
     static Status decode(const std::string& buffer, Slice* value) {
         value->data = const_cast<char*>(buffer.data());

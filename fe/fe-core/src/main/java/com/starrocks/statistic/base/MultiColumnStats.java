@@ -14,7 +14,7 @@
 
 package com.starrocks.statistic.base;
 
-import com.starrocks.statistic.StatsConstants;
+import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.statistic.sample.SampleInfo;
 
 import java.text.MessageFormat;
@@ -28,9 +28,9 @@ import static com.starrocks.statistic.StatsConstants.COLUMN_ID_SEPARATOR;
 // whether it is in the statistics types, but if it is not, it will return empty.
 public class MultiColumnStats implements ColumnStats {
     private final List<DefaultColumnStats> columnGroup;
-    private final List<StatsConstants.StatisticsType> statisticsTypes;
+    private final List<StatisticsType> statisticsTypes;
 
-    public MultiColumnStats(List<DefaultColumnStats> columnGroup, List<StatsConstants.StatisticsType> statisticsTypes) {
+    public MultiColumnStats(List<DefaultColumnStats> columnGroup, List<StatisticsType> statisticsTypes) {
         this.columnGroup = columnGroup;
         this.statisticsTypes = statisticsTypes;
     }
@@ -45,7 +45,7 @@ public class MultiColumnStats implements ColumnStats {
 
     @Override
     public String getNDV() {
-        if (statisticsTypes.contains(StatsConstants.StatisticsType.MCDISTINCT)) {
+        if (statisticsTypes.contains(StatisticsType.MCDISTINCT)) {
             return "ndv(" + getCombinedMultiColumnKey() + ")";
         } else {
             return "0";
@@ -70,7 +70,7 @@ public class MultiColumnStats implements ColumnStats {
     // f1 is the number of values that appear exactly once in the sample.
     @Override
     public String getSampleNDV(SampleInfo info) {
-        if (statisticsTypes.contains(StatsConstants.StatisticsType.MCDISTINCT)) {
+        if (statisticsTypes.contains(StatisticsType.MCDISTINCT)) {
             String sampleRows = "SUM(t1.count)";
             String onceCount = "SUM(IF(t1.count = 1, 1, 0))";
             String sampleNdv = "COUNT(1)";

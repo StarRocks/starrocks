@@ -34,7 +34,7 @@ class BitmapValue;
 class HyperLogLog;
 class PercentileValue;
 class JsonValue;
-class VariantValue;
+class VariantRowValue;
 } // namespace starrocks
 
 namespace starrocks {
@@ -90,7 +90,7 @@ public:
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
     const JsonValue* get_json() const { return get<JsonValue*>(); }
-    const VariantValue* get_variant() const { return get<VariantValue*>(); }
+    const VariantRowValue* get_variant() const { return get<VariantRowValue*>(); }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -116,7 +116,7 @@ public:
     void set_bitmap(BitmapValue* v) { set<decltype(v)>(v); }
     void set_percentile(PercentileValue* v) { set<decltype(v)>(v); }
     void set_json(JsonValue* v) { set<decltype(v)>(v); }
-    void set_variant(VariantValue* v) { set<decltype(v)>(v); }
+    void set_variant(VariantRowValue* v) { set<decltype(v)>(v); }
 
     template <typename T>
     const T& get() const {
@@ -198,10 +198,10 @@ public:
     [[nodiscard]] bool operator!=(const Datum& other) const { return !(*this == other); }
 
 private:
-    using Variant =
-            std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
-                         uint64_t, int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value, float, double,
-                         DatumArray, DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*, JsonValue*, VariantValue*>;
+    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
+                                 int64_t, uint64_t, int96_t, int128_t, int256_t, Slice, decimal12_t, DecimalV2Value,
+                                 float, double, DatumArray, DatumMap, HyperLogLog*, BitmapValue*, PercentileValue*,
+                                 JsonValue*, VariantRowValue*>;
     Variant _value;
 };
 

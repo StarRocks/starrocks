@@ -172,7 +172,7 @@ public class ResourceGroupMgrEditLogTest {
         // Verify initial state
         ResourceGroup resourceGroup = masterResourceGroupMgr.getResourceGroup(resourceGroupName);
         Assertions.assertNotNull(resourceGroup);
-        Integer initialCpuWeight = resourceGroup.geNormalizedCpuWeight();
+        Integer initialCpuWeight = resourceGroup.getNormalizedCpuWeight();
         Double initialMemLimit = resourceGroup.getMemLimit();
         Integer initialConcurrencyLimit = resourceGroup.getConcurrencyLimit();
         Integer initialMaxCpuCores = resourceGroup.getMaxCpuCores();
@@ -202,7 +202,7 @@ public class ResourceGroupMgrEditLogTest {
         // 4. Verify master state - check all modified properties
         resourceGroup = masterResourceGroupMgr.getResourceGroup(resourceGroupName);
         Assertions.assertNotNull(resourceGroup);
-        Assertions.assertEquals(1, resourceGroup.geNormalizedCpuWeight());
+        Assertions.assertEquals(1, resourceGroup.getNormalizedCpuWeight());
         Assertions.assertEquals(0.6, resourceGroup.getMemLimit(), 0.001);
         Assertions.assertEquals(5, resourceGroup.getConcurrencyLimit());
         Assertions.assertEquals(1, resourceGroup.getMaxCpuCores());
@@ -231,7 +231,7 @@ public class ResourceGroupMgrEditLogTest {
         // 6. Verify follower state is consistent with master - check all properties
         ResourceGroup followerResourceGroup = followerResourceGroupMgr.getResourceGroup(resourceGroupName);
         Assertions.assertNotNull(followerResourceGroup);
-        Assertions.assertEquals(resourceGroup.geNormalizedCpuWeight(), followerResourceGroup.geNormalizedCpuWeight());
+        Assertions.assertEquals(resourceGroup.getNormalizedCpuWeight(), followerResourceGroup.getNormalizedCpuWeight());
         Assertions.assertEquals(resourceGroup.getMemLimit(), followerResourceGroup.getMemLimit());
         Assertions.assertEquals(resourceGroup.getConcurrencyLimit(), followerResourceGroup.getConcurrencyLimit());
         Assertions.assertEquals(resourceGroup.getMaxCpuCores(), followerResourceGroup.getMaxCpuCores());

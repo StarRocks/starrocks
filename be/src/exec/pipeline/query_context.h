@@ -320,6 +320,7 @@ private:
     ExecEnv* _exec_env = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
+    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;
     size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
@@ -401,8 +402,6 @@ private:
 
     // STREAM MV
     std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
-
-    std::unique_ptr<spill::QuerySpillManager> _spill_manager;
 
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;

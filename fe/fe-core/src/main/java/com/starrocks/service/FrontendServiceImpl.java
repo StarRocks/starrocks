@@ -43,6 +43,8 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
@@ -167,11 +169,14 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
@@ -186,6 +191,7 @@ import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
 import com.starrocks.thrift.TAnalyzeStatusReq;
 import com.starrocks.thrift.TAnalyzeStatusRes;
+import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
@@ -903,6 +909,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tableKeysType = olapTable.getKeysType().name().substring(0, 3).toUpperCase();
         }
         for (Column column : table.getBaseSchema()) {
+            if (column.isHidden()) {
+                continue;
+            }
             final TColumnDesc desc =
                     new TColumnDesc(column.getName(), TypeSerializer.toThrift(column.getPrimitiveType()));
             final Integer precision = column.getType().getPrecision();
@@ -1489,11 +1498,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 clientAddr);
         LOG.debug("stream load put request: {}", request);
 
+        ConnectContext context = new ConnectContext();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        AuthenticationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        final Map.Entry<UserIdentity, UserAuthenticationInfo> res =
+                authMgr.getBestMatchedUserIdentity(request.getUser(), request.getUser_ip());
+        if (res != null) {
+            context.setCurrentUserIdentity(res.getKey());
+            context.setCurrentRoleIds(res.getKey());
+        } else {
+            TAuthInfo auth = new TAuthInfo();
+            auth.setUser(request.getUser());
+            auth.setUser_ip(request.getUser_ip());
+            UserIdentityUtils.setAuthInfoFromThrift(context, auth);
+        }
+
         TStreamLoadPutResult result = new TStreamLoadPutResult();
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
-        try {
-            result.setParams(streamLoadPutImpl(request));
+        try (var scope = context.bindScope()) {
+            result.setParams(streamLoadPutImpl(context, request));
         } catch (LockTimeoutException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.TIMEOUT);
@@ -1515,7 +1540,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
-    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws StarRocksException, LockTimeoutException {
+    TExecPlanFragmentParams streamLoadPutImpl(ConnectContext context, TStreamLoadPutRequest request)
+            throws StarRocksException, LockTimeoutException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1555,7 +1581,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         try {
             StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
+            StreamLoadPlanner planner = new StreamLoadPlanner(context, db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
@@ -1582,7 +1608,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState == null) {
                 throw new StarRocksException("txn does not exist: " + request.getTxnId());
             }
-            txnState.addTableIndexes((OlapTable) table);
             plan.setImport_label(txnState.getLabel());
             plan.setDb_name(dbName);
             plan.setLoad_job_id(request.getTxnId());
@@ -1610,8 +1635,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     request.getTbl(), request.getUser_ip());
             TableId tableId = new TableId(request.getDb(), request.getTbl());
             StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
-            RequestLoadResult loadResult = GlobalStateMgr.getCurrentState()
-                    .getBatchWriteMgr().requestLoad(tableId, params, request.getBackend_id(), request.getBackend_host());
+            RequestLoadResult loadResult = GlobalStateMgr.getCurrentState().getBatchWriteMgr().requestLoad(
+                            tableId, params, request.getUser(), request.getBackend_id(), request.getBackend_host());
             result.setStatus(loadResult.getStatus());
             if (loadResult.isOk()) {
                 result.setLabel(loadResult.getValue());
@@ -2034,12 +2059,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
-        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
-                tTablet.setRange(tablet.getRange().toThrift());
+                if (tablet.getRange() != null) {
+                    tTablet.setRange(tablet.getRange().toThrift());
+                }
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
@@ -2051,7 +2078,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                      OlapTable olapTable, ComputeResource computeResource) throws StarRocksException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
-        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
             if (olapTable.isCloudNativeTable()) {
                 for (Tablet tablet : index.getTablets()) {
@@ -2236,18 +2263,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         + "-caused-by-concurrent-execution-of-loading-tasks-and-partition-creation-tasks";
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP && willCreateNewPartition) {
                     LOG.info("cancel rollup for automatic create partition txn_id={}", request.getTxn_id());
+                    QualifiedName qualifiedName = QualifiedName.of(
+                            Lists.newArrayList(db.getFullName(), olapTable.getName()));
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     state.getLocalMetastore().cancelAlter(
-                            new CancelAlterTableStmt(
-                                    ShowAlterStmt.AlterType.ROLLUP,
-                                    new TableName(db.getFullName(), olapTable.getName())), errMsg);
+                            new CancelAlterTableStmt(ShowAlterStmt.AlterType.ROLLUP, tableRef), errMsg);
                 }
 
                 if (olapTable.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE && willCreateNewPartition) {
                     LOG.info("cancel schema change for automatic create partition txn_id={}", request.getTxn_id());
+                    QualifiedName qualifiedName = QualifiedName.of(
+                            Lists.newArrayList(db.getFullName(), olapTable.getName()));
+                    TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
                     state.getLocalMetastore().cancelAlter(
-                            new CancelAlterTableStmt(
-                                    ShowAlterStmt.AlterType.COLUMN,
-                                    new TableName(db.getFullName(), olapTable.getName())), errMsg);
+                            new CancelAlterTableStmt(ShowAlterStmt.AlterType.COLUMN, tableRef), errMsg);
                 }
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
@@ -2340,13 +2369,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             Partition partition = olapTable.getPartition(partitionName, isTemp);
+            // partition maybe dropped between create and get, e.g. by TTL cleaner.
+            // Skip this partition and let BE handle it as partition not exist, data will be filtered.
+            if (partition == null) {
+                LOG.warn("partition {} is dropped during auto partition creation, skip it", partitionName);
+                continue;
+            }
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
             tPartition = new TOlapTablePartition();
-            tPartition.setId(partition.getDefaultPhysicalPartition().getId());
+            tPartition.setId(physicalPartition.getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
-            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (MaterializedIndex index :
+                    txnState.getPartitionLoadedIndexesWithoutLock(olapTable.getId(), physicalPartition)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         try {
@@ -2469,19 +2505,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
-        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+
+        List<Long> indexIds = Lists.newArrayList();
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
-                tTablet.setRange(tablet.getRange().toThrift());
+                if (tablet.getRange() != null) {
+                    tTablet.setRange(tablet.getRange().toThrift());
+                }
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
+            indexIds.add(index.getId());
         }
         partitions.add(tPartition);
         txnState.getPartitionNameToTPartition(olapTable.getId()).put(partition.getName(), tPartition);
+        txnState.addPartitionLoadedIndexesWithoutLock(olapTable.getId(), physicalPartition.getId(), indexIds);
     }
 
     @Override
@@ -2640,7 +2682,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                 // STREAM LOAD
                 StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-                StreamLoadTask streamLoadTask = streamLoadManager.getTaskById(request.getJob_id());
+                AbstractStreamLoadTask streamLoadTask = streamLoadManager.getTaskById(request.getJob_id());
                 if (streamLoadTask != null) {
                     trackingLoadInfoList = convertStreamLoadInfoList(request);
                 }
@@ -2854,9 +2896,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
                     db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
-                    dictTable.getAutomaticBucketSize(), allPartitions);
+                    dictTable.getAutomaticBucketSize(), allPartitions, null);
             response.setPartition(partitionParam);
-            response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
+            response.setLocation(OlapTableSink.createLocation(
+                    dictTable, partitionParam, dictTable.enableReplicatedStorage(), null));
             // TODO(ComputeResource): support more better compute resource acquiring.
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_RESOURCE,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
@@ -3106,7 +3149,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
                 TPartitionMeta partitionMeta = new TPartitionMeta();
                 partitionMeta.setPartition_id(partitionId);
-                partitionMeta.setPartition_name(physicalPartition.getName());
+                partitionMeta.setPartition_name(partition.getName());
                 partitionMeta.setState(partition.getState().name());
                 partitionMeta.setVisible_version(physicalPartition.getVisibleVersion());
                 partitionMeta.setVisible_time(physicalPartition.getVisibleVersionTime());

@@ -18,6 +18,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/statusor.h"
@@ -126,6 +128,102 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         ColumnPtr result = UtilityFunctions::host_name(ctx, columns).value();
         ColumnViewer<TYPE_VARCHAR> column_viewer(result);
         ASSERT_EQ(column_viewer.size(), 1);
+    }
+}
+
+TEST_F(UtilityFunctionsTest, uuidV7Test) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    // Test uuid_v7 generation
+    {
+        int column_size = 100;
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(column_size, column_size);
+
+        Columns columns;
+        columns.emplace_back(std::move(var1_col));
+
+        ColumnPtr result = UtilityFunctions::uuid_v7(ctx, columns).value();
+
+        ASSERT_FALSE(result->is_constant());
+        ASSERT_EQ(result->size(), column_size);
+
+        std::set<std::string> deduplication;
+        ColumnViewer<TYPE_VARCHAR> column_viewer(result);
+
+        for (int i = 0; i < column_viewer.size(); i++) {
+            auto& uuid = column_viewer.value(i);
+            // Verify UUID format (8-4-4-4-12 = 36 chars)
+            ASSERT_EQ(36, uuid.get_size()) << "UUID v7 should be 36 characters";
+
+            std::string uuid_str = uuid.to_string();
+
+            // Check hyphen positions
+            ASSERT_EQ('-', uuid_str[8]);
+            ASSERT_EQ('-', uuid_str[13]);
+            ASSERT_EQ('-', uuid_str[18]);
+            ASSERT_EQ('-', uuid_str[23]);
+
+            // Check version (character at position 14 should be '7')
+            ASSERT_EQ('7', uuid_str[14]) << "UUID version should be 7";
+
+            // Check variant (character at position 19 should be '8', '9', 'a', or 'b')
+            char variant_char = uuid_str[19];
+            ASSERT_TRUE(variant_char == '8' || variant_char == '9' || variant_char == 'a' || variant_char == 'b')
+                    << "UUID variant should be RFC 4122 compliant";
+
+            deduplication.insert(uuid_str);
+        }
+
+        // Verify all UUIDs are unique
+        ASSERT_EQ(deduplication.size(), column_size) << "All UUID v7 should be unique";
+    }
+
+    // Test uuid_v7_numeric
+    {
+        int32_t chunk_size = 1000;
+        auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(chunk_size, 1);
+        Columns columns;
+        columns.emplace_back(std::move(var1_col));
+
+        ColumnPtr result = UtilityFunctions::uuid_v7_numeric(ctx, columns).value();
+        const Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
+
+        // Verify all values are unique
+        std::set<int128_t> vals;
+        vals.insert(col->get_data().begin(), col->get_data().end());
+        ASSERT_EQ(vals.size(), chunk_size) << "All UUID v7 numeric values should be unique";
+    }
+
+    // Test time ordering of uuid_v7
+    {
+        // Generate UUIDs in sequence and verify they are time-ordered
+        int num_batches = 5;
+        std::vector<std::string> all_uuids;
+
+        for (int batch = 0; batch < num_batches; batch++) {
+            auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(10, 10);
+            Columns columns;
+            columns.emplace_back(std::move(var1_col));
+
+            ColumnPtr result = UtilityFunctions::uuid_v7(ctx, columns).value();
+            ColumnViewer<TYPE_VARCHAR> column_viewer(result);
+
+            for (int i = 0; i < column_viewer.size(); i++) {
+                all_uuids.push_back(column_viewer.value(i).to_string());
+            }
+
+            // Small delay to ensure different timestamps
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+
+        // Verify UUIDs from later batches have equal or greater timestamp prefixes
+        // Compare first 15 characters (timestamp portion before version nibble)
+        for (size_t i = 1; i < all_uuids.size(); i += 10) {
+            std::string prev_prefix = all_uuids[i - 1].substr(0, 13);
+            std::string curr_prefix = all_uuids[i].substr(0, 13);
+            ASSERT_LE(prev_prefix, curr_prefix) << "UUID v7 should be time-ordered across batches";
+        }
     }
 }
 

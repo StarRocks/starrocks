@@ -188,6 +188,7 @@ set(STORAGE_FILES
     lake/compaction_scheduler.cpp
     lake/compaction_task.cpp
     lake/compaction_task_context.cpp
+    lake/tablet_parallel_compaction_manager.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/vacuum.cpp
@@ -196,6 +197,7 @@ set(STORAGE_FILES
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp
     lake/primary_key_compaction_policy.cpp
+    lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
@@ -204,6 +206,8 @@ set(STORAGE_FILES
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/tablet_range_helper.cpp
+    lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
@@ -269,6 +273,8 @@ set(STORAGE_FILES
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
+    load_spill_pipeline_merge_iterator.cpp
+    load_spill_pipeline_merge_context.cpp
     index/inverted/inverted_index_iterator.cpp
     index/inverted/inverted_index_option.cpp
     index/inverted/inverted_plugin_factory.cpp
@@ -287,7 +293,12 @@ set(STORAGE_FILES
     index/vector/tenann/tenann_index_utils.cpp
     record_predicate/record_predicate_helper.cpp
     record_predicate/column_hash_is_congruent.cpp
-    lake/table_schema_service.cpp)
+    lake/table_schema_service.cpp
+    index/inverted/builtin/builtin_plugin.cpp
+    index/inverted/builtin/builtin_inverted_writer.cpp
+    index/inverted/builtin/builtin_inverted_reader.cpp
+    index/inverted/builtin/builtin_inverted_index_iterator.cpp
+    index/inverted/builtin/builtin_simple_analyzer.cpp)
 
 if (NOT BUILD_FORMAT_LIB)
     list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)

@@ -1,0 +1,16 @@
+#### `type`
+
+The type of the group provider to create. Valid values:
+- `ldap`: Creates an LDAP group provider. When this value is set, you need to specify `ldap_info`, `ldap_search_group_arg`, `ldap_search_user_arg`, and optionally `ldap_cache_arg`.
+- `unix`: Creates a Unix group provider.
+- `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
+
+#### `group_file_url`
+
+The URL or relative path (under `fe/conf`) to the file that defines the user groups.
+
+:::note
+
+A group file contains a list of groups and their members. You can define a group in each line where the group name and members are separated by a colon. Multiple users are separated by commas. Example: `group_name:user_1,user_2,user_3`.
+
+:::

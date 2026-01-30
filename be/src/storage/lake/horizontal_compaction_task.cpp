@@ -69,8 +69,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
-    if (should_enable_pk_parallel_execution(input_bytes)) {
-        writer->try_enable_pk_parallel_execution();
+    if (should_enable_pk_index_eager_build(input_bytes)) {
+        writer->try_enable_pk_index_eager_build();
     }
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
@@ -122,6 +122,10 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
     _context->progress.update(100);
+
+    // Close reader to ensure IO statistics are updated via SegmentIterator::_update_stats() before collecting
+    reader.close();
+
     _context->stats->collect(reader.stats());
     _context->stats->collect(writer->stats());
 
@@ -155,7 +159,8 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         TabletWriteLogManager::instance()->add_compaction_log(
                 get_backend_id().value_or(0), _txn_id, _tablet.id(), _context->table_id, _context->partition_id,
                 total_num_rows, input_bytes, writer->num_rows(), writer->data_size(),
-                _context->stats->read_segment_count, writer->files().size(), 0, "horizontal", begin_time, finish_time);
+                _context->stats->read_segment_count, writer->segments().size(), 0, "horizontal", begin_time,
+                finish_time);
     }
 
     return Status::OK();
