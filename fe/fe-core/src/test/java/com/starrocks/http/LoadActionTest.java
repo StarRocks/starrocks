@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.http.rest.LoadAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -37,6 +36,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Utils;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -567,9 +567,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
             }
         };
 
-        new MockUp<LoadAction>() {
+        new MockUp<Utils>() {
             @Mock
-            public Optional<String> getUserDefaultWarehouse(BaseRequest request) {
+            public Optional<String> getUserDefaultWarehouse(String user) {
                 return Optional.of("user_wh");
             }
         };

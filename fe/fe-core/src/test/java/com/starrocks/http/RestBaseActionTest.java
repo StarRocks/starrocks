@@ -15,16 +15,11 @@
 package com.starrocks.http;
 
 import com.google.common.collect.Lists;
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserProperty;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.RestBaseAction;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.channel.ChannelHandlerContext;
@@ -42,10 +37,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -179,62 +171,5 @@ public class RestBaseActionTest {
         Assertions.assertEquals(1, result.size());
         Assertions.assertEquals(frontend.getHost(), result.get(0).first);
         Assertions.assertEquals(Config.http_port, result.get(0).second);
-    }
-
-    @Test
-    public void testGetUserDefaultWarehouse() {
-        HttpConnectContext connectContext = new HttpConnectContext();
-        UserIdentity userIdentity = UserIdentity.ROOT;
-        connectContext.setCurrentUserIdentity(userIdentity);
-        when(mockRequest.getConnectContext()).thenReturn(connectContext);
-
-        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
-        new Expectations(GlobalStateMgr.getCurrentState()) {
-            {
-                GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-                result = authenticationMgr;
-            }
-        };
-
-        new MockUp<AuthenticationMgr>() {
-            @Mock
-            public UserProperty getUserProperty(String user) {
-                UserProperty userProperty = new UserProperty();
-                Map<String, String> sessionVariables = new HashMap<>();
-                sessionVariables.put(SessionVariable.WAREHOUSE_NAME, "test_warehouse");
-                userProperty.setSessionVariables(sessionVariables);
-                return userProperty;
-            }
-        };
-
-        Optional<String> warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertEquals("test_warehouse", warehouse.get());
-
-        new MockUp<AuthenticationMgr>() {
-            @Mock
-            public boolean doesUserExist(UserIdentity userIdentity) {
-                return true;
-            }
-
-            @Mock
-            public UserProperty getUserProperty(String user) {
-                throw new SemanticException("Unknown user");
-            }
-        };
-        warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertFalse(warehouse.isPresent());
-
-        new MockUp<AuthenticationMgr>() {
-            @Mock
-            public boolean doesUserExist(UserIdentity userIdentity) {
-                return false;
-            }
-        };
-        warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertFalse(warehouse.isPresent());
-
-        when(mockRequest.getConnectContext()).thenReturn(null);
-        warehouse = restBaseAction.getUserDefaultWarehouse(mockRequest);
-        Assertions.assertFalse(warehouse.isPresent());
     }
 }

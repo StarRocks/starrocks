@@ -14,21 +14,17 @@
 
 package com.starrocks.load.batchwrite;
 
-import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserProperty;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.warehouse.Utils;
+import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -158,28 +154,6 @@ public class BatchWriteMgr extends FrontendDaemon {
         }
     }
 
-    private Optional<String> getUserDefaultWarehouse(String user) {
-        if (Strings.isNullOrEmpty(user)) {
-            return Optional.empty();
-        }
-
-        AuthenticationMgr mgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        try {
-            UserIdentity userIdentity = mgr.getUserIdentityByName(user);
-            if (!userIdentity.isEphemeral()) {
-                UserProperty userProperty = GlobalStateMgr.getCurrentState().getAuthenticationMgr().getUserProperty(user);
-                String userWarehouse = userProperty.getSessionVariables().get(SessionVariable.WAREHOUSE_NAME);
-                if (!Strings.isNullOrEmpty(userWarehouse)) {
-                    return Optional.of(userWarehouse);
-                }
-            }
-        } catch (SemanticException e) {
-            LOG.warn("Failed to get user property. user: {}", user, e);
-        }
-
-        return Optional.empty();
-    }
-
     /**
      * Retrieves or creates an MergeCommitJob instance for the specified table and parameters.
      *
@@ -198,7 +172,7 @@ public class BatchWriteMgr extends FrontendDaemon {
         String warehouseName = params.getWarehouse().orElse(null);
         if (warehouseName == null) {
             // Try to use `session.warehouse` in user property if warehouse is not specified
-            Optional<String> userWarehouseName = getUserDefaultWarehouse(user);
+            Optional<String> userWarehouseName = Utils.getUserDefaultWarehouse(user);
             if (userWarehouseName.isPresent() &&
                     GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(userWarehouseName.get())) {
                 warehouseName = userWarehouseName.get();
@@ -210,7 +184,8 @@ public class BatchWriteMgr extends FrontendDaemon {
 
         StreamLoadInfo streamLoadInfo;
         try {
-            streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params);
+            CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
+            streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(null, -1, Optional.empty(), params, acquireContext);
         } catch (Exception e) {
             TStatus status = new TStatus();
             status.setStatus_code(TStatusCode.INVALID_ARGUMENT);
