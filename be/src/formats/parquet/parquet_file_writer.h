@@ -104,7 +104,8 @@ public:
                       std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type, std::shared_ptr<ParquetWriterOptions> writer_options,
-                      const std::function<void()>& rollback_action);
+                      const std::function<void()>& rollback_action,
+                      const std::vector<bool>& nullable = {});
 
     ~ParquetFileWriter() override;
 
@@ -123,7 +124,7 @@ public:
 private:
     arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
-            const std::vector<FileColumnId>& file_column_ids);
+            const std::vector<FileColumnId>& file_column_ids, const std::vector<bool>& nullable);
 
     static FileStatistics _statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id);
 
@@ -141,6 +142,7 @@ private:
     TCompressionType::type _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
+    std::vector<bool> _nullable;
 
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
@@ -153,7 +155,7 @@ public:
                              std::map<std::string, std::string> options, std::vector<std::string> column_names,
                              std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
-                             RuntimeState* runtime_state);
+                             RuntimeState* runtime_state, const std::vector<bool>& nullable = {});
 
     Status init() override;
 
@@ -170,6 +172,7 @@ private:
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> _column_evaluators;
     PriorityThreadPool* _executors = nullptr;
     RuntimeState* _runtime_state = nullptr;
+    std::vector<bool> _nullable;
 };
 
 } // namespace starrocks::formats
