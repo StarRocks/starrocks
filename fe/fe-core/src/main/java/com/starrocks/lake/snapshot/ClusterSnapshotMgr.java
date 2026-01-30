@@ -35,7 +35,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminAlterAutomatedSnapshotIntervalStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
-import com.starrocks.sql.ast.expression.IntervalLiteral;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
@@ -145,7 +145,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
 
         long lastStartTimeMs = 0L;
-        ClusterSnapshotJobScheduler scheduler = clusterSnapshotJobScheduler;
+        ClusterSnapshotCheckpointScheduler scheduler = clusterSnapshotCheckpointScheduler;
         if (scheduler != null) {
             lastStartTimeMs = scheduler.getLastAutomatedJobStartTimeMs();
         }

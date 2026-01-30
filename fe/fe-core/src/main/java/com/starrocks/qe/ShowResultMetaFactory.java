@@ -34,11 +34,8 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
-<<<<<<< HEAD
 import com.starrocks.sql.ShowTemporaryTableStmt;
-=======
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
->>>>>>> 8fa8ced33d ([Enhancement] Add ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT status output (#68455))
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -741,11 +738,11 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
     public ShowResultSetMetaData visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
                                                                           Void context) {
         return ShowResultSetMetaData.builder()
-                .addColumn(new Column("Enabled", TypeFactory.createVarcharType(5)))
-                .addColumn(new Column("Interval", TypeFactory.createVarcharType(32)))
-                .addColumn(new Column("StorageVolume", TypeFactory.createVarcharType(256)))
-                .addColumn(new Column("LastSnapshotTime", TypeFactory.createVarcharType(20)))
-                .addColumn(new Column("NextSnapshotTime", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("Enabled", ScalarType.createVarcharType(5)))
+                .addColumn(new Column("Interval", ScalarType.createVarcharType(32)))
+                .addColumn(new Column("StorageVolume", ScalarType.createVarcharType(256)))
+                .addColumn(new Column("LastSnapshotTime", ScalarType.createVarcharType(20)))
+                .addColumn(new Column("NextSnapshotTime", ScalarType.createVarcharType(20)))
                 .build();
     }
 

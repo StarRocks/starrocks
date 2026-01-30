@@ -34,7 +34,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     // cluster snapshot information used for start
     protected final RestoredSnapshotInfo restoredSnapshotInfo;
 
-    protected long lastAutomatedJobStartTimeMs;
+    protected volatile long lastAutomatedJobStartTimeMs;
     protected volatile ClusterSnapshotJob runningJob;
 
     public ClusterSnapshotCheckpointScheduler(CheckpointController feController,
@@ -44,6 +44,10 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         this.starMgrController = starMgrController;
         this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
         this.lastAutomatedJobStartTimeMs = 0;
+    }
+
+    public long getLastAutomatedJobStartTimeMs() {
+        return lastAutomatedJobStartTimeMs;
     }
 
     @Override
