@@ -56,6 +56,10 @@ public class LogicalWindowOperator extends LogicalOperator {
     private boolean useHashBasedPartition;
     private boolean isSkewed;
 
+    // Skew hint with explicit column and value: [skew|t.column(value)]
+    private ScalarOperator skewColumn;
+    private ScalarOperator skewValue;
+
     // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
     // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
     private boolean inputIsBinary;
@@ -67,6 +71,8 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.enforceSortColumns = ImmutableList.of();
         this.useHashBasedPartition = false;
         this.isSkewed = false;
+        this.skewColumn = null;
+        this.skewValue = null;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -95,6 +101,14 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public boolean isSkewed() {
         return isSkewed;
+    }
+
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public ScalarOperator getSkewValue() {
+        return skewValue;
     }
 
     public boolean isInputIsBinary() {
@@ -160,13 +174,15 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(analyticWindow, that.analyticWindow)
                 && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
                 && Objects.equals(isSkewed, that.isSkewed)
+                && Objects.equals(skewColumn, that.skewColumn)
+                && Objects.equals(skewValue, that.skewValue)
                 && Objects.equals(inputIsBinary, that.inputIsBinary);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed, inputIsBinary);
+                useHashBasedPartition, isSkewed, skewColumn, skewValue, inputIsBinary);
     }
 
     public static Builder builder() {
@@ -190,6 +206,8 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.enforceSortColumns = windowOperator.enforceSortColumns;
             builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
             builder.isSkewed = windowOperator.isSkewed;
+            builder.skewColumn = windowOperator.skewColumn;
+            builder.skewValue = windowOperator.skewValue;
             return this;
         }
 
@@ -225,6 +243,16 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setIsSkewed(boolean isSkewed) {
             builder.isSkewed = isSkewed;
+            return this;
+        }
+
+        public Builder setSkewColumn(ScalarOperator skewColumn) {
+            builder.skewColumn = skewColumn;
+            return this;
+        }
+
+        public Builder setSkewValue(ScalarOperator skewValue) {
+            builder.skewValue = skewValue;
             return this;
         }
 
