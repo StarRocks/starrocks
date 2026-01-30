@@ -616,7 +616,7 @@ Status OlapChunkSource::_extend_schema_by_access_paths() {
     }
 
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
-    int field_number = tmp_schema->num_columns();
+    int field_number = _scan_ctx->next_unique_id();
     for (auto& path : *access_paths) {
         if (!path->is_extended()) {
             continue;

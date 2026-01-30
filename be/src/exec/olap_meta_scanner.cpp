@@ -82,7 +82,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     // add the extended column access paths into tablet_schema
     {
         TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_reader_params.tablet_schema);
-        int field_number = tmp_schema->num_columns();
+        int field_number = starrocks::next_uniq_id(_parent->_meta_scan_node);
         for (auto& path : _parent->_column_access_paths) {
             int root_column_index = tmp_schema->field_index(path->path());
             RETURN_IF(root_column_index < 0, Status::RuntimeError("unknown access path: " + path->path()));

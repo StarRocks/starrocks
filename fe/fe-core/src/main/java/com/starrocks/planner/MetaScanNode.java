@@ -226,6 +226,7 @@ public class MetaScanNode extends AbstractOlapTableScanNode {
 
         if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
             msg.meta_scan_node.setColumn_access_paths(columnAccessPathToThrift());
+            msg.meta_scan_node.setNext_uniq_id(olapTable.getMaxColUniqueId());
         }
     }
 
