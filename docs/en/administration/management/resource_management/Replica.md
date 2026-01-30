@@ -568,9 +568,9 @@ PROPERTIES (
 
 ### Limitations and Recommendations
 
-- Repairing replica is supported for shared-data clusters from v4.1 onwards.
-- Currently, seting `PROPERTIES` is applicable only to shared-data tables.
-- Take the following points into considerations when performing materialized view recovery:
+- Repairing replicas is supported for shared-data clusters from v4.1 onwards.
+- Currently, setting `PROPERTIES` is applicable only to shared-data tables.
+- Take the following points into consideration when performing materialized view recovery:
   - Asynchronous materialized views require a manual refresh after recovery.
   - Synchronous materialized views must use Strict Consistency Recovery to ensure consistency between base tables and rollup data.
 - Recovery is best-effort. A small amount of data loss is expected, depending on the available historical versions and the selected recovery strategy.
