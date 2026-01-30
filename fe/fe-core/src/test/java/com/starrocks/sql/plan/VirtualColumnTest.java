@@ -42,8 +42,7 @@ public class VirtualColumnTest extends PlanTestBase {
         String sql = "select * from t0";
         String plan = getFragmentPlan(sql);
         // Virtual columns should not appear in SELECT * output
-        // This test verifies they're not visible by default
-        System.out.println("SELECT * plan: " + plan);
+        assertNotContains(plan, "_tablet_id_");
     }
     
     @Test

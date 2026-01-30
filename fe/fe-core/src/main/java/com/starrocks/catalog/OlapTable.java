@@ -173,6 +173,9 @@ import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 public class OlapTable extends Table {
     private static final Logger LOG = LogManager.getLogger(OlapTable.class);
 
+    // Virtual column singleton - lazily initialized
+    private static volatile Column TABLET_ID_VIRTUAL_COLUMN = null;
+
     public enum OlapTableState {
         NORMAL,
         ROLLUP,
@@ -816,15 +819,30 @@ public class OlapTable extends Table {
     }
 
     /**
+     * Get or create the singleton tablet_id virtual column.
+     * @return The tablet_id virtual column
+     */
+    private static Column getTabletIdVirtualColumn() {
+        if (TABLET_ID_VIRTUAL_COLUMN == null) {
+            synchronized (OlapTable.class) {
+                if (TABLET_ID_VIRTUAL_COLUMN == null) {
+                    Column col = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
+                    col.setIsVirtual(true);
+                    TABLET_ID_VIRTUAL_COLUMN = col;
+                }
+            }
+        }
+        return TABLET_ID_VIRTUAL_COLUMN;
+    }
+
+    /**
      * Get virtual column by name. Virtual columns are not persisted but are available during query execution.
      * @param name The column name
      * @return The virtual column if it matches a known virtual column name, null otherwise
      */
     private Column getVirtualColumn(String name) {
         if (TABLET_ID_COLUMN_NAME.equalsIgnoreCase(name)) {
-            Column tabletIdCol = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
-            tabletIdCol.setIsVirtual(true);
-            return tabletIdCol;
+            return getTabletIdVirtualColumn();
         }
         return null;
     }
@@ -833,11 +851,10 @@ public class OlapTable extends Table {
      * Get all virtual columns for this OLAP table.
      * @return List of virtual columns
      */
+    @Override
     public List<Column> getVirtualColumns() {
         List<Column> virtualColumns = Lists.newArrayList();
-        Column tabletIdCol = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
-        tabletIdCol.setIsVirtual(true);
-        virtualColumns.add(tabletIdCol);
+        virtualColumns.add(getTabletIdVirtualColumn());
         return virtualColumns;
     }
 

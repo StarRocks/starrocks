@@ -785,6 +785,15 @@ public class QueryAnalyzer {
                     columns.put(field, column);
                     fields.add(field);
                 }
+                
+                // Add virtual columns for sync MV queries as well
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, false,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             } else {
                 List<Column> fullSchema = table.getFullSchema();
                 Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
