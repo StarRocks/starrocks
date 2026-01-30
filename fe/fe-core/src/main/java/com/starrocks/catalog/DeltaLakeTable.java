@@ -114,6 +114,10 @@ public class DeltaLakeTable extends Table {
         }
     }
 
+    public void clearMetadata() {
+        this.deltaSnapshot = null;
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
