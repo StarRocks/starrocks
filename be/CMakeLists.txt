@@ -419,6 +419,7 @@ set(STARROCKS_LINK_LIBS
     Geo
     Simd
     Cache
+    orc
     ${WL_END_GROUP}
     Base
     Gutil
@@ -488,7 +489,6 @@ set(STARROCKS_DEPENDENCIES
     gRPC::grpc
     gRPC::grpc++
     parquet
-    orc
     cctz
     fmt
     ryu
