@@ -644,6 +644,9 @@ struct TOlapScanNode {
   52: optional i64 back_pressure_throttle_time
   53: optional i64 back_pressure_throttle_time_upper_bound
   54: optional i64 back_pressure_num_rows
+
+  // This field is only used for flat json to provide a uniq id
+  55: optional i32 next_uniq_id
 }
 
 struct TJDBCScanNode {
@@ -686,6 +689,8 @@ struct TLakeScanNode {
   42: optional i64 back_pressure_num_rows
 
   43: optional Descriptors.TTableSchemaKey schema_key
+
+  46: optional i32 next_uniq_id
 }
 
 struct TEqJoinCondition {
@@ -1290,6 +1295,7 @@ struct TMetaScanNode {
     // deprecated. use schema key instead
     5: optional i64 schema_id
     6: optional Descriptors.TTableSchemaKey schema_key
+    7: optional i32 next_uniq_id
 }
 
 struct TDecodeNode {

@@ -28,6 +28,7 @@ struct LakeMetaReaderParams : MetaReaderParams {
     // The key of the schema used for reading. no value for legacy compatibility.
     std::optional<TableSchemaKeyPB> schema_key;
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
+    size_t next_uniq_id;
 };
 
 namespace lake {
