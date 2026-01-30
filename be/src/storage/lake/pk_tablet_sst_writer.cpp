@@ -37,8 +37,11 @@ Status PkTabletSSTWriter::append_sst_record(const Chunk& data) {
     if (_pk_sst_builder == nullptr) {
         return Status::InternalError("pk sst writer not initialized");
     }
-    ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
     if (_pk_column == nullptr) {
         vector<uint32_t> pk_columns;
         for (size_t i = 0; i < _tablet_schema_ptr->num_key_columns(); i++) {

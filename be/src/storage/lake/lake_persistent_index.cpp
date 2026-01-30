@@ -796,8 +796,11 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
-    ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
     MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     // Iterate all del files and insert into index.
@@ -916,8 +919,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
-    ASSIGN_OR_RETURN(auto tablet, tablet_mgr->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, tablet_mgr->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
 
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);

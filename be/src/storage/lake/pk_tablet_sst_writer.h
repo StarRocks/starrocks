@@ -60,6 +60,7 @@ private:
     TabletSchemaCSPtr _tablet_schema_ptr;
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
+    std::unique_ptr<Tablet> _tablet;
 };
 
 } // namespace starrocks::lake

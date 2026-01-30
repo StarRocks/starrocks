@@ -238,6 +238,7 @@ private:
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
+    std::unique_ptr<Tablet> _tablet;
 
     // to be destructed after segment iters
     OlapReaderStatistics _stats;

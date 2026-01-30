@@ -127,8 +127,11 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    ASSIGN_OR_RETURN(auto tablet, tablet_mgr->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (_tablet == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, tablet_mgr->get_tablet(_tablet_id));
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
     if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::V2) {
         // more than one key column or V2 encoding
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));

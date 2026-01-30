@@ -64,8 +64,11 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     MutableColumnPtr pk_column;
-    ASSIGN_OR_RETURN(auto tablet, rowset->get_tablet());
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (_tablet == nullptr || _tablet->id() != _tablet_id) {
+        ASSIGN_OR_RETURN(auto tablet, rowset->get_tablet());
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type, true));
 
     if (_segment_iters.empty()) {

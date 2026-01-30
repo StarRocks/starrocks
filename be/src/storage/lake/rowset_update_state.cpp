@@ -136,6 +136,7 @@ void RowsetUpdateState::_reset() {
     _schema_version = 0;
     _segment_iters.clear();
     _rowset_ptr.reset();
+    _tablet.reset();
 }
 
 void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
@@ -321,8 +322,11 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
-    ASSIGN_OR_RETURN(auto tablet, _rowset_ptr->get_tablet());
-    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (_tablet == nullptr || _tablet->id() != _tablet_id) {
+        ASSIGN_OR_RETURN(auto tablet, _rowset_ptr->get_tablet());
+        _tablet = std::make_unique<Tablet>(std::move(tablet));
+    }
+    ASSIGN_OR_RETURN(auto pk_encoding_type, _tablet->primary_key_encoding_type());
     auto& iter = _segment_iters[segment_id];
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
     // Initialize PK iterator with lazy loading if conditions allow (see should_enable_lazy_load for details).

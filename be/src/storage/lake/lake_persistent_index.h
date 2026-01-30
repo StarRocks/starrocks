@@ -39,6 +39,7 @@ class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
+class Tablet;
 
 // LakePersistentIndex is not thread-safe.
 // Caller should take care of the multi-thread safety
@@ -190,6 +191,7 @@ private:
     std::vector<std::shared_ptr<PersistentIndexMemtable>> _inactive_memtables;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    std::unique_ptr<Tablet> _tablet;
     size_t _need_rebuild_file_cnt{0};
     // Collection of sstable fileset, from old to new.
     std::vector<std::unique_ptr<PersistentIndexSstableFileset>> _sstable_filesets;
