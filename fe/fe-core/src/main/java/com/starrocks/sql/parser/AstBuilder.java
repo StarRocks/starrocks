@@ -99,6 +99,7 @@ import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -201,7 +202,6 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTagClause;
-import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -2132,7 +2132,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             action = AlterTaskStmt.AlterAction.SUSPEND;
         } else {
             action = AlterTaskStmt.AlterAction.SET;
-            properties = getCaseInsensitiveProperties(context.propertyList());
+            // get properties
+            List<com.starrocks.sql.parser.StarRocksParser.PropertyContext> propertyContextList = null;
+            com.starrocks.sql.parser.StarRocksParser.PropertyListContext propertyListContext = context.propertyList();
+            if (propertyListContext != null) {
+                propertyContextList = propertyListContext.property();
+            }
+            properties = getProperties(propertyContextList, true);
         }
         return new AlterTaskStmt(taskName, ifExists, action, properties, createPos(context));
     }

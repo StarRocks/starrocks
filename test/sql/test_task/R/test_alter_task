@@ -35,7 +35,6 @@ select count(*) from information_schema.tasks where `DATABASE`='test_alter_task_
 alter task if exists not_exist suspend;
 -- result:
 -- !result
-
 drop task alter_task;
 -- result:
 -- !result
