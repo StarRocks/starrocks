@@ -42,6 +42,7 @@ Usage: $0 <options>
      --with-bench                   enable to build with benchmark
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
+     --build-target TARGET          only build the specified target (e.g. base_test)
      --enable-shared-data           enable to build with shared-data feature support
      --without-starcache            build without starcache library
      --use-staros                   DEPRECATED. an alias of --enable-shared-data option
@@ -92,6 +93,7 @@ OPTS=$(getopt \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+  -l 'build-target:' \
   -l 'without-starcache' \
   -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
@@ -121,6 +123,7 @@ WITH_STARCACHE=ON
 WITH_BRPC_KEEPALIVE=OFF
 WITH_DEBUG_SYMBOL_SPLIT=ON
 BUILD_JAVA_EXT=ON
+BUILD_TARGET=
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
@@ -139,6 +142,7 @@ while true; do
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+        --build-target) BUILD_TARGET=$2; shift 2;;
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -236,7 +240,11 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
 
-${BUILD_SYSTEM} -j${PARALLEL}
+if [[ -n "$BUILD_TARGET" ]]; then
+    ${BUILD_SYSTEM} -j${PARALLEL} ${BUILD_TARGET}
+else
+    ${BUILD_SYSTEM} -j${PARALLEL}
+fi
 
 cd ${STARROCKS_HOME}
 export STARROCKS_TEST_BINARY_BASE_DIR=${CMAKE_BUILD_DIR}
@@ -257,8 +265,12 @@ if [ "x$WITH_DEBUG_SYMBOL_SPLIT" = "xON" ] ; then
             split_debug_symbol "$so"
         done
     fi
-    split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test
-    split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_test
+    fi
+    if [ -f "${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test" ]; then
+        split_debug_symbol ${STARROCKS_TEST_BINARY_BASE_DIR}/test/starrocks_dw_test
+    fi
 fi
 
 echo "*********************************"

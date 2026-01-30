@@ -48,6 +48,26 @@ BUILD_TYPE=ASAN ./build.sh --be
 ./build.sh --be --enable-shared-data  # For shared-data mode
 ```
 
+### Fast UT Build Tip
+
+Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+
+```bash
+CMAKE_BUILD_PREFIX=/path/to/build \
+STARROCKS_THIRDPARTY=/path/to/thirdparty \
+./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+```
+
+### Fast UT Build Tip
+
+Use `run-be-ut.sh` with `--build-target` to compile only a single test binary and speed up iteration, e.g.:
+
+```bash
+CMAKE_BUILD_PREFIX=/path/to/build \
+STARROCKS_THIRDPARTY=/path/to/thirdparty \
+./run-be-ut.sh --build-target base_test --module base_test --without-java-ext --gtest_filter 'StatusTest.*'
+```
+
 ### CMake Options
 
 Key CMake options (see `be/CMakeLists.txt`):
@@ -56,6 +76,18 @@ Key CMake options (see `be/CMakeLists.txt`):
 - `USE_STAROS`: Enable shared-data mode
 - `WITH_GCOV`: Enable code coverage
 - `MAKE_TEST`: Build unit tests
+
+### Unit Test Linking Note
+
+- `TEST_LINK_LIBS` removes `WRAP_LINKER_FLAGS` (the `-Wl,-wrap,__cxa_throw` flags).
+  Some UT binaries (e.g. minimal/base tests) do not link `Util`, where `__wrap___cxa_throw` is defined,
+  so keeping the wrap causes link errors. Non-test targets still keep the wrap via `STARROCKS_LINK_LIBS`.
+
+### Unit Test Linking Note
+
+- `TEST_LINK_LIBS` removes `WRAP_LINKER_FLAGS` (the `-Wl,-wrap,__cxa_throw` flags).
+  Some UT binaries (e.g. minimal/base tests) do not link `Util`, where `__wrap___cxa_throw` is defined,
+  so keeping the wrap causes link errors. Non-test targets still keep the wrap via `STARROCKS_LINK_LIBS`.
 
 ## Code Style
 
