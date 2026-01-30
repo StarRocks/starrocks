@@ -102,6 +102,9 @@ public:
                            RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
+    // Returns the next unique ID. only used in flat json column access path.
+    size_t next_unique_id() const;
+
     ScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
