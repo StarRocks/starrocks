@@ -72,7 +72,11 @@ public class RewriteDuplicateAggregateFnRule extends TransformationRule {
         if (agg1.isDistinct() != agg2.isDistinct()) {
             return false;
         }
-        
+
+        if (agg1.getIgnoreNulls() != agg2.getIgnoreNulls()) {
+            return false;
+        }
+
         List<ScalarOperator> args1 = agg1.getArguments();
         List<ScalarOperator> args2 = agg2.getArguments();
         

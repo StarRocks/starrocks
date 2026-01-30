@@ -164,11 +164,30 @@ public class CompoundPredicateOperator extends PredicateOperator {
 
     @Override
     public boolean equivalent(Object obj) {
-        if (!super.equivalent(obj)) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
         CompoundPredicateOperator that = (CompoundPredicateOperator) obj;
-        return type == that.type;
+        if (type != that.type) {
+            return false;
+        }
+
+        List<ScalarOperator> thisArgs = this.normalizeChildren();
+        List<ScalarOperator> thatArgs = that.normalizeChildren();
+
+        if (thisArgs.size() != thatArgs.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < thisArgs.size(); ++i) {
+            if (!thisArgs.get(i).equivalent(thatArgs.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
