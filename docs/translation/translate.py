@@ -111,11 +111,32 @@ class StarRocksTranslator:
         if not self.synonyms:
             return text
             
-        for bad, good in self.synonyms.items():
-            pattern = re.compile(r'\b' + re.escape(bad) + r'\b', re.IGNORECASE)
-            text = pattern.sub(good, text)        
-        return text
-    
+        # Regex to capture code blocks:
+        # 1. Fenced code blocks (```...```) - matches across newlines
+        # 2. Inline code (`...`) - typically single line, no internal newlines usually
+        code_pattern = r'(```[\s\S]*?```|`[^`\n]+`)'
+        
+        # Split text by code blocks. 
+        # Because we use capturing groups (), re.split includes the separators (the code blocks) in the result list.
+        parts = re.split(code_pattern, text)
+        
+        processed_parts = []
+        for part in parts:
+            # Check if this part is a code block (starts with backtick)
+            # Note: We rely on the regex structure ensuring code blocks start with `
+            if part and part.startswith("`"):
+                processed_parts.append(part) # Preserve code exactly as is
+            else:
+                # This is plain text, apply synonyms
+                temp_text = part
+                for bad, good in self.synonyms.items():
+                    # Strict word boundary (\b) ensures we don't match inside other words
+                    pattern = re.compile(r'\b' + re.escape(bad) + r'\b', re.IGNORECASE)
+                    temp_text = pattern.sub(good, temp_text)
+                processed_parts.append(temp_text)
+                
+        return "".join(processed_parts)
+
     def _load_dict_as_string(self, path: str) -> str:
         if not os.path.exists(path):
             print(f"::warning::Dictionary NOT found at: {path}")
