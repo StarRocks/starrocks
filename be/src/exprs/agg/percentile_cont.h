@@ -495,7 +495,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
 
 // percentile_cont(decimal_value, decimal_rate) -> decimal_value
 // - rate is required to be a constant after FE analysis
-// - FE will cast rate to the same DECIMALV3 type as value (same physical width and scale)
+// - rate can have different precision/scale than value
 template <LogicalType LT>
 struct PercentileDecimalRateState {
     using CppType = RunTimeCppType<LT>;
@@ -512,14 +512,15 @@ struct PercentileDecimalRateState {
     ItemType items;
     GridType grid;
 
-    // rate is stored as a scaled integer: rate_int / 10^scale
+    // rate is stored as a scaled integer: rate_int / 10^rate_scale
     CppType rate_int{};
-    int32_t scale = 0;
+    int32_t value_scale = 0;
+    int32_t rate_scale = 0;
     bool inited = false;
 };
 
 template <typename Int>
-static inline Int gcd_non_negative(Int a, Int b) {
+static Int gcd_non_negative(Int a, Int b) {
     // a,b must be >= 0
     while (b != Int(0)) {
         Int t = a % b;
@@ -529,30 +530,51 @@ static inline Int gcd_non_negative(Int a, Int b) {
     return a;
 }
 
-template <LogicalType LT>
-static inline RunTimeCppType<LT> percentile_cont_decimal_calc_with_double_fallback(RunTimeCppType<LT> junior,
-                                                                                   RunTimeCppType<LT> senior,
-                                                                                   size_t index, double u,
-                                                                                   RunTimeCppType<LT> denom_original) {
-    using CppType = RunTimeCppType<LT>;
-    const auto scale_factor = denom_original;
-    double a = 0;
-    double b = 0;
-    DecimalV3Cast::to_float<CppType, double>(junior, scale_factor, &a);
-    DecimalV3Cast::to_float<CppType, double>(senior, scale_factor, &b);
-    const double res = a + (u - static_cast<double>(index)) * (b - a);
-    double scaled = res * static_cast<double>(scale_factor);
-    scaled = (scaled < 0) ? std::ceil(scaled) : std::floor(scaled);
-    return static_cast<CppType>(scaled);
+template <typename Int>
+static void reduce_delta_and_denom_step(Int& delta, Int& denom) {
+    // Reduce the fraction (delta / denom) by gcd(|delta|, denom) in a way that:
+    // - avoids taking abs(delta) directly (delta can be a wide integer like int256_t)
+    // - does not change the value of (delta * x) / denom for any integer x
+    //
+    // We use the identity:
+    //   gcd(|delta|, denom) == gcd(denom, delta mod denom)
+    //
+    // `delta % denom` can be negative in C++ when `delta` is negative, so we normalize it into [0, denom)
+    // to satisfy gcd_non_negative's precondition (both inputs >= 0).
+    //
+    // Preconditions: denom > 0.
+    Int r = delta % denom;
+    if (r < Int(0)) r += denom;
+    Int g = gcd_non_negative<Int>(denom, r);
+    if (g != Int(0) && g != Int(1)) {
+        delta /= g;
+        denom /= g;
+    }
 }
 
 template <LogicalType LT>
-static inline RunTimeCppType<LT> percentile_cont_decimal_interpolate(RunTimeCppType<LT> junior,
-                                                                     RunTimeCppType<LT> senior, size_t index,
-                                                                     RunTimeCppType<LT> u_numer,
-                                                                     RunTimeCppType<LT> denom,
-                                                                     RunTimeCppType<LT> denom_original) {
+static RunTimeCppType<LT> percentile_cont_decimal_calc_with_double_fallback(RunTimeCppType<LT> junior,
+                                                                            RunTimeCppType<LT> senior, size_t index,
+                                                                            double u,
+                                                                            RunTimeCppType<LT> value_scale_factor) {
     using CppType = RunTimeCppType<LT>;
+    double a = 0;
+    double b = 0;
+    DecimalV3Cast::to_float<CppType, double>(junior, value_scale_factor, &a);
+    DecimalV3Cast::to_float<CppType, double>(senior, value_scale_factor, &b);
+    const double res = a + (u - static_cast<double>(index)) * (b - a);
+    CppType out{};
+    DecimalV3Cast::from_float<double, CppType>(res, value_scale_factor, &out);
+    return out;
+}
+
+template <LogicalType LT>
+static RunTimeCppType<LT> percentile_cont_decimal_interpolate(RunTimeCppType<LT> junior, RunTimeCppType<LT> senior,
+                                                              size_t index, RunTimeCppType<LT> u_numer,
+                                                              RunTimeCppType<LT> denom,
+                                                              RunTimeCppType<LT> value_scale_factor) {
+    using CppType = RunTimeCppType<LT>;
+    const CppType denom_original = denom;
     if (junior == senior) return junior;
     if (u_numer == CppType(0)) return junior;
 
@@ -561,19 +583,13 @@ static inline RunTimeCppType<LT> percentile_cont_decimal_interpolate(RunTimeCppT
 
     CppType delta = senior - junior;
 
-    // one-step reduction: g = gcd(|delta|, denom) == gcd(denom, delta mod denom)
-    CppType r = delta % denom;
-    if (r < CppType(0)) r += denom;
-    CppType g = gcd_non_negative<CppType>(denom, r);
-    if (g != CppType(0) && g != CppType(1)) {
-        delta /= g;
-        denom /= g;
-    }
+    // One-step reduction to lower overflow risk in `delta * frac_numer`.
+    reduce_delta_and_denom_step<CppType>(delta, denom);
 
     CppType prod{};
     if (UNLIKELY(mul_overflow(delta, frac_numer, &prod))) {
         const double u = static_cast<double>(u_numer) / static_cast<double>(denom_original);
-        return percentile_cont_decimal_calc_with_double_fallback<LT>(junior, senior, index, u, denom_original);
+        return percentile_cont_decimal_calc_with_double_fallback<LT>(junior, senior, index, u, value_scale_factor);
     }
 
     const CppType adj = prod / denom; // truncate toward 0
@@ -581,11 +597,12 @@ static inline RunTimeCppType<LT> percentile_cont_decimal_interpolate(RunTimeCppT
 }
 
 template <LogicalType LT>
-static inline void percentile_cont_decimal_finalize_with_double(PercentileDecimalRateState<LT>& st,
-                                                                RunTimeColumnType<LT>* column,
-                                                                RunTimeCppType<LT> denom_original,
-                                                                RunTimeCppType<LT> rate_int, bool items_sorted) {
+static void percentile_cont_decimal_finalize_with_double(PercentileDecimalRateState<LT>& st,
+                                                         RunTimeColumnType<LT>* column,
+                                                         RunTimeCppType<LT> denom_original, RunTimeCppType<LT> rate_int,
+                                                         bool items_sorted) {
     using CppType = RunTimeCppType<LT>;
+    const CppType value_scale_factor = get_scale_factor<CppType>(st.value_scale);
 
     if (st.grid.empty()) {
         auto& items = st.items;
@@ -594,7 +611,14 @@ static inline void percentile_cont_decimal_finalize_with_double(PercentileDecima
         }
         const size_t rows_num = items.size();
         if (rows_num == 0) return;
-        if (rows_num == 1 || rate_int == denom_original) {
+        if (rows_num == 1) {
+            column->append(items.back());
+            return;
+        }
+        if (rate_int == CppType(0)) {
+            column->append(items.front());
+            return;
+        } else if (rate_int == denom_original) {
             column->append(items.back());
             return;
         }
@@ -602,12 +626,8 @@ static inline void percentile_cont_decimal_finalize_with_double(PercentileDecima
         const double u = (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) /
                          static_cast<double>(denom_original);
         const size_t index = static_cast<size_t>(u);
-        if (index >= rows_num - 1) {
-            column->append(items.back());
-            return;
-        }
         column->append(percentile_cont_decimal_calc_with_double_fallback<LT>(items[index], items[index + 1], index, u,
-                                                                             denom_original));
+                                                                             value_scale_factor));
         return;
     }
 
@@ -619,41 +639,19 @@ static inline void percentile_cont_decimal_finalize_with_double(PercentileDecima
     }
     if (rows_num == 0) return;
 
-    // Fast path for exact endpoints to avoid heavy k-way merge.
-    if (rate_int == CppType(0)) {
-        CppType junior{}, senior{};
-        std::vector<CppType> b;
-        std::vector<int> ls;
-        std::vector<int> mp;
-        kWayMergeSort<LT, CppType, false>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-        column->append(junior);
-        return;
-    }
-    if (rate_int == denom_original) {
-        CppType junior{}, senior{};
-        std::vector<CppType> b;
-        std::vector<int> ls;
-        std::vector<int> mp;
-        kWayMergeSort<LT, CppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-        column->append(senior);
-        return;
-    }
-
     const double u =
             (static_cast<double>(rows_num - 1) * static_cast<double>(rate_int)) / static_cast<double>(denom_original);
     const size_t index = static_cast<size_t>(u);
-    if (index >= rows_num - 1) {
-        CppType junior{}, senior{};
-        std::vector<CppType> b;
-        std::vector<int> ls;
-        std::vector<int> mp;
-        kWayMergeSort<LT, CppType, true>(st.grid, b, ls, mp, 0, static_cast<int>(k), junior, senior);
-        column->append(senior);
-        return;
+
+    bool reverse = rows_num > 2 && (rate_int > denom_original / CppType(2));
+    if (rate_int == denom_original || index >= rows_num - 1) {
+        reverse = true;
     }
 
-    const bool reverse = rows_num > 2 && (rate_int * CppType(2) > denom_original);
-    const size_t goal = reverse ? (rows_num - 2 - index) : index;
+    size_t goal = reverse ? (rows_num - 2 - index) : index;
+    if (rate_int == denom_original || index >= rows_num - 1) {
+        goal = 0;
+    }
 
     CppType junior{};
     CppType senior{};
@@ -665,7 +663,27 @@ static inline void percentile_cont_decimal_finalize_with_double(PercentileDecima
     } else {
         kWayMergeSort<LT, CppType, false>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
     }
-    column->append(percentile_cont_decimal_calc_with_double_fallback<LT>(junior, senior, index, u, denom_original));
+
+    if (rate_int == CppType(0)) {
+        column->append(junior);
+        return;
+    } else if (rate_int == denom_original || index >= rows_num - 1) {
+        column->append(senior);
+        return;
+    }
+
+    column->append(percentile_cont_decimal_calc_with_double_fallback<LT>(junior, senior, index, u, value_scale_factor));
+}
+
+template <typename CppType>
+static inline bool rows_num_fits_in_cpp(size_t rows_num_minus1) {
+    if constexpr (std::is_same_v<CppType, int32_t>) {
+        return rows_num_minus1 <= static_cast<size_t>(std::numeric_limits<int32_t>::max());
+    } else if constexpr (std::is_same_v<CppType, int64_t>) {
+        return rows_num_minus1 <= static_cast<size_t>(std::numeric_limits<int64_t>::max());
+    } else {
+        return true;
+    }
 }
 
 template <LogicalType LT>
@@ -685,13 +703,16 @@ public:
             return;
         }
 
+        const auto* value_col = down_cast<const InputColumnType*>(columns[0]);
+        st.value_scale = value_col->scale();
+
         // rate must be a constant DECIMALV3 after FE analysis
         const auto* rate_const = down_cast<const ConstColumn*>(columns[1]);
         const auto* rate_col = down_cast<const InputColumnType*>(rate_const->data_column_raw_ptr());
-        st.scale = rate_col->scale();
+        st.rate_scale = rate_col->scale();
 
         // denom = 10^scale
-        const auto denom = get_scale_factor<InputCppType>(st.scale);
+        const auto denom = get_scale_factor<InputCppType>(st.rate_scale);
 
         const Datum rate_datum = rate_const->get(0);
         if constexpr (LT == TYPE_DECIMAL32) {
@@ -733,22 +754,29 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
 
-        // slice == [scale(int32), rate_int(InputCppType), vector_size(size_t), elements...]
+        // slice == [value_scale(int32), rate_scale(int32), rate_int(InputCppType), vector_size(size_t), elements...]
         const Slice slice = column->get(row_num).get_slice();
         const auto* data = slice.data;
 
-        int32_t scale = *reinterpret_cast<const int32_t*>(data);
+        int32_t value_scale = 0;
+        int32_t rate_scale = 0;
+        memcpy(&value_scale, data, sizeof(int32_t));
         data += sizeof(int32_t);
-        InputCppType rate_int = *reinterpret_cast<const InputCppType*>(data);
+        memcpy(&rate_scale, data, sizeof(int32_t));
+        data += sizeof(int32_t);
+        InputCppType rate_int{};
+        memcpy(&rate_int, data, sizeof(InputCppType));
         data += sizeof(InputCppType);
 
-        size_t items_size = *reinterpret_cast<const size_t*>(data);
+        size_t items_size = 0;
+        memcpy(&items_size, data, sizeof(size_t));
         data += sizeof(size_t);
 
         auto& st = this->data(state);
         // Keep the first seen (constant) parameters; FE ensures they are consistent.
         if (!st.inited) {
-            st.scale = scale;
+            st.value_scale = value_scale;
+            st.rate_scale = rate_scale;
             st.rate_int = rate_int;
             st.inited = true;
         }
@@ -775,17 +803,19 @@ public:
         }
         size_t total_items_size = items_size + grid_items_size;
 
-        // header: scale(int32), rate_int(InputCppType), vector_size(size_t), elements...
-        size_t header_size = sizeof(int32_t) + sizeof(InputCppType) + sizeof(size_t);
+        // header: value_scale(int32), rate_scale(int32), rate_int(InputCppType), vector_size(size_t), elements...
+        size_t header_size = sizeof(int32_t) + sizeof(int32_t) + sizeof(InputCppType) + sizeof(size_t);
         size_t new_size = old_size + header_size + total_items_size * sizeof(InputCppType);
         bytes.resize(new_size);
 
         uint8_t* cur = bytes.data() + old_size;
-        *reinterpret_cast<int32_t*>(cur) = st.scale;
+        memcpy(cur, &st.value_scale, sizeof(int32_t));
         cur += sizeof(int32_t);
-        *reinterpret_cast<InputCppType*>(cur) = st.rate_int;
+        memcpy(cur, &st.rate_scale, sizeof(int32_t));
+        cur += sizeof(int32_t);
+        memcpy(cur, &st.rate_int, sizeof(InputCppType));
         cur += sizeof(InputCppType);
-        *reinterpret_cast<size_t*>(cur) = total_items_size;
+        memcpy(cur, &total_items_size, sizeof(size_t));
         cur += sizeof(size_t);
 
         memcpy(cur, st.items.data(), items_size * sizeof(InputCppType));
@@ -813,9 +843,12 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
 
+        const auto* value_col = down_cast<const InputColumnType*>(src[0].get());
+        int32_t value_scale = value_col->scale();
+
         auto rate_col = down_cast<const ConstColumn*>(src[1].get());
         auto rate_data_col = down_cast<const InputColumnType*>(rate_col->data_column_raw_ptr());
-        int32_t scale = rate_data_col->scale();
+        int32_t rate_scale = rate_data_col->scale();
         InputCppType rate_int{};
         const Datum d = rate_col->get(0);
         if constexpr (LT == TYPE_DECIMAL32) {
@@ -831,16 +864,19 @@ public:
         auto src_column = *down_cast<const InputColumnType*>(src[0].get());
         const InputCppType* src_data = src_column.immutable_data().data();
 
-        size_t header_size = sizeof(int32_t) + sizeof(InputCppType) + sizeof(size_t);
+        size_t header_size = sizeof(int32_t) + sizeof(int32_t) + sizeof(InputCppType) + sizeof(size_t);
         for (auto i = 0; i < chunk_size; ++i) {
             size_t old_size = bytes.size();
             bytes.resize(old_size + header_size + sizeof(InputCppType));
             uint8_t* cur = bytes.data() + old_size;
-            *reinterpret_cast<int32_t*>(cur) = scale;
+            memcpy(cur, &value_scale, sizeof(int32_t));
             cur += sizeof(int32_t);
-            *reinterpret_cast<InputCppType*>(cur) = rate_int;
+            memcpy(cur, &rate_scale, sizeof(int32_t));
+            cur += sizeof(int32_t);
+            memcpy(cur, &rate_int, sizeof(InputCppType));
             cur += sizeof(InputCppType);
-            *reinterpret_cast<size_t*>(cur) = 1UL;
+            size_t one = 1UL;
+            memcpy(cur, &one, sizeof(size_t));
             cur += sizeof(size_t);
             memcpy(cur, &src_data[i], sizeof(InputCppType));
             dst_column->get_offset().push_back(bytes.size());
@@ -848,7 +884,7 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto& st = this->data(state);
+        auto& st = const_cast<PercentileDecimalRateState<LT>&>(this->data(state));
         using ResultColumnType = RunTimeColumnType<LT>;
         auto* column = down_cast<ResultColumnType*>(to);
 
@@ -856,7 +892,8 @@ public:
             return;
         }
 
-        const InputCppType denom_original = get_scale_factor<InputCppType>(st.scale);
+        const InputCppType denom_original = get_scale_factor<InputCppType>(st.rate_scale);
+        const InputCppType value_scale_factor = get_scale_factor<InputCppType>(st.value_scale);
         const auto rate_int = st.rate_int;
 
         // group by (single state)
@@ -865,8 +902,20 @@ public:
             std::sort(items.begin(), items.end());
             const size_t rows_num = items.size();
             if (rows_num == 0) return;
-            if (rows_num == 1 || rate_int == denom_original) {
+            if (rows_num == 1) {
                 column->append(items.back());
+                return;
+            }
+            if (rate_int == InputCppType(0)) {
+                column->append(items.front());
+                return;
+            } else if (rate_int == denom_original) {
+                column->append(items.back());
+                return;
+            }
+
+            if (UNLIKELY(!rows_num_fits_in_cpp<InputCppType>(rows_num - 1))) {
+                percentile_cont_decimal_finalize_with_double<LT>(st, column, denom_original, rate_int, true);
                 return;
             }
 
@@ -877,13 +926,9 @@ public:
             }
 
             size_t index = static_cast<size_t>(u_numer / denom_original);
-            if (index >= rows_num - 1) {
-                column->append(items.back());
-                return;
-            }
 
             InputCppType out = percentile_cont_decimal_interpolate<LT>(items[index], items[index + 1], index, u_numer,
-                                                                       denom_original, denom_original);
+                                                                       denom_original, value_scale_factor);
             column->append(out);
             return;
         }
@@ -896,6 +941,29 @@ public:
         }
         if (rows_num == 0) return;
 
+        if (rate_int == InputCppType(0) || rate_int == denom_original) {
+            const bool reverse = (rate_int == denom_original);
+            const size_t goal = 0;
+            InputCppType junior{};
+            InputCppType senior{};
+            std::vector<InputCppType> b;
+            std::vector<int> ls;
+            std::vector<int> mp;
+            if (reverse) {
+                kWayMergeSort<LT, InputCppType, true>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
+                column->append(senior);
+            } else {
+                kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
+                column->append(junior);
+            }
+            return;
+        }
+
+        if (UNLIKELY(!rows_num_fits_in_cpp<InputCppType>(rows_num - 1))) {
+            percentile_cont_decimal_finalize_with_double<LT>(st, column, denom_original, rate_int, false);
+            return;
+        }
+
         InputCppType u_numer{};
         if (UNLIKELY(mul_overflow(InputCppType(rows_num - 1), rate_int, &u_numer))) {
             percentile_cont_decimal_finalize_with_double<LT>(st, column, denom_original, rate_int, false);
@@ -905,14 +973,12 @@ public:
         size_t index = static_cast<size_t>(u_numer / denom_original);
 
         // choose direction based on rate > 0.5
-        const bool reverse = rows_num > 2 && (rate_int * InputCppType(2) > denom_original);
+        // NOTE: avoid `rate_int * 2` overflow for large DECIMAL scales.
+        bool reverse = rows_num > 2 && (rate_int > denom_original / InputCppType(2));
 
         // When reverse is enabled, we need the "distance from the end" instead of index.
         // For integer a, ceil(a - u) == a - floor(u). Here a == rows_num - 2, floor(u) == index.
         size_t goal = reverse ? (rows_num - 2 - index) : index;
-        if (rate_int == denom_original) {
-            goal = 0;
-        }
 
         InputCppType junior{};
         InputCppType senior{};
@@ -925,8 +991,8 @@ public:
             kWayMergeSort<LT, InputCppType, false>(st.grid, b, ls, mp, goal, static_cast<int>(k), junior, senior);
         }
 
-        InputCppType out =
-                percentile_cont_decimal_interpolate<LT>(junior, senior, index, u_numer, denom_original, denom_original);
+        InputCppType out = percentile_cont_decimal_interpolate<LT>(junior, senior, index, u_numer, denom_original,
+                                                                   value_scale_factor);
         column->append(out);
     }
 

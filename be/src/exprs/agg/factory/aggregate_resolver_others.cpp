@@ -83,7 +83,8 @@ void AggregateFuncResolver::register_others() {
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DATE>());
 
     // percentile_cont(decimal_value, decimal_rate) -> decimal_value
-    // FE will cast rate to the same DECIMALV3 type as value.
+    // The rate can use a different precision/scale than the value, as long as both are DECIMALV3 with the same
+    // underlying width (DECIMAL32/64/128/256), so that the aggregator can interpret the rate as a rational number.
     add_aggregate_mapping_variadic<TYPE_DECIMAL32, TYPE_DECIMAL32, PercentileDecimalRateState<TYPE_DECIMAL32>>(
             "percentile_cont", false,
             AggregateFactory::MakePercentileContDecimalRateAggregateFunction<TYPE_DECIMAL32>());
