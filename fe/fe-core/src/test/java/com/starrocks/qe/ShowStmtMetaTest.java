@@ -14,7 +14,6 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableName;
@@ -23,11 +22,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.sql.ShowTemporaryTableStmt;
-=======
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
->>>>>>> 8fa8ced33d ([Enhancement] Add ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT status output (#68455))
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
