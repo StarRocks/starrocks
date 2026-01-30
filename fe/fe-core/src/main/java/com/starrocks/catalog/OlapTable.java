@@ -130,6 +130,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -163,6 +164,7 @@ import javax.annotation.Nullable;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW;
+import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 
 /**
  * Internal representation of tableFamilyGroup-related metadata. A
@@ -799,6 +801,44 @@ public class OlapTable extends Table {
     @Override
     public Column getColumn(ColumnId id) {
         return idToColumn.get(id);
+    }
+
+    @Override
+    public Column getColumn(String name) {
+        // First check regular columns
+        Column column = super.getColumn(name);
+        if (column != null) {
+            return column;
+        }
+        
+        // Check if this is a virtual column
+        return getVirtualColumn(name);
+    }
+
+    /**
+     * Get virtual column by name. Virtual columns are not persisted but are available during query execution.
+     * @param name The column name
+     * @return The virtual column if it matches a known virtual column name, null otherwise
+     */
+    private Column getVirtualColumn(String name) {
+        if (TABLET_ID_COLUMN_NAME.equalsIgnoreCase(name)) {
+            Column tabletIdCol = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
+            tabletIdCol.setIsVirtual(true);
+            return tabletIdCol;
+        }
+        return null;
+    }
+
+    /**
+     * Get all virtual columns for this OLAP table.
+     * @return List of virtual columns
+     */
+    public List<Column> getVirtualColumns() {
+        List<Column> virtualColumns = Lists.newArrayList();
+        Column tabletIdCol = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
+        tabletIdCol.setIsVirtual(true);
+        virtualColumns.add(tabletIdCol);
+        return virtualColumns;
     }
 
     public Map<ColumnId, Column> getIdToColumn() {

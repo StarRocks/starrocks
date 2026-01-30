@@ -887,9 +887,8 @@ public class QueryAnalyzer {
             List<Column> columns = new ArrayList<>();
             // Add _tablet_id_ virtual column for OLAP tables
             if (table.isNativeTableOrMaterializedView()) {
-                Column tabletIdCol = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
-                tabletIdCol.setIsVirtual(true);
-                columns.add(tabletIdCol);
+                OlapTable olapTable = (OlapTable) table;
+                columns.addAll(olapTable.getVirtualColumns());
             }
             return columns;
         }
