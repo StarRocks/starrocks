@@ -57,6 +57,7 @@ Status LakeMetaScanner::_real_init() {
     // Pass column access paths and extend schema similar to OLAP path
     if (_parent->_meta_scan_node.__isset.column_access_paths && !_parent->_column_access_paths.empty()) {
         reader_params.column_access_paths = &_parent->_column_access_paths;
+        reader_params.next_uniq_id = starrocks::next_uniq_id(_parent->_meta_scan_node);
     }
 
     _reader = std::make_unique<LakeMetaReader>();
