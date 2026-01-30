@@ -317,8 +317,15 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         List<ScalarOperator> inPredicateArgs = Lists.newArrayList();
         inPredicateArgs.add(skewColumn);
+<<<<<<< HEAD
         skewValues.remove(ConstantOperator.createNull(ScalarType.NULL));
         inPredicateArgs.addAll(skewValues);
+=======
+        // build a defensive copy and remove NULL from it
+        List<ScalarOperator> nonNullSkewValues = Lists.newArrayList(skewValues);
+        nonNullSkewValues.removeIf(ScalarOperator::isConstantNull);
+        inPredicateArgs.addAll(nonNullSkewValues);
+>>>>>>> 61e7922924 ([Enhancement] Improve skew join v2 rewrite with stats-based detection and NULL skew (#68680))
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
         List<ScalarOperator> when = Lists.newArrayList();
@@ -356,8 +363,14 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         Map<ColumnRefOperator, ScalarOperator> valueProjectMap = Maps.newHashMap();
         // use skew value to generate array
+<<<<<<< HEAD
         List<Type> skewTypes = skewValues.stream().map(ScalarOperator::getType).collect(Collectors.toList());
         ArrayType arrayType = new ArrayType(Type.getCommonType(
+=======
+        List<com.starrocks.type.Type> skewTypes =
+                skewValues.stream().map(v -> v.getType()).collect(Collectors.toList());
+        ArrayType arrayType = new ArrayType(TypeManager.getCommonType(
+>>>>>>> 61e7922924 ([Enhancement] Improve skew join v2 rewrite with stats-based detection and NULL skew (#68680))
                 skewTypes.toArray(new Type[0]), 0, skewTypes.size()));
         ArrayOperator arrayOperator = new ArrayOperator(arrayType, true, skewValues);
 
