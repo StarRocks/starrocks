@@ -256,6 +256,9 @@ def main():
     with open(report_path, "a", encoding="utf-8") as f:
         if not report_exists:
             f.write("### 📝 Translation Report\n\n")
+        else:
+            # Ensure new language section starts on a new line when appending
+            f.write("\n")
         
         f.write(f"#### 🌐 Language: {args.lang.upper()}\n")
         if translator.successes:
