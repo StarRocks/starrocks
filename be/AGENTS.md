@@ -133,6 +133,14 @@ Use `#pragma once` instead of traditional include guards:
 #include "storage/rowset.h"
 ```
 
+## Module Boundaries
+
+### gutil
+- **No StarRocks module deps**: `be/src/gutil` must not include headers from other BE modules (e.g. `common/*`, `util/*`, `storage/*`).
+- **Allowed deps**: `gutil/*`, system headers, and third-party base/butil headers.
+- **Logging**: use `gutil/logging.h` (glog wrapper) instead of `common/logging.h`.
+- **Compiler macros**: use `gutil/compiler_util.h` (do not include `common/compiler_util.h` from gutil).
+
 ## Common Patterns
 
 ### Status and StatusOr

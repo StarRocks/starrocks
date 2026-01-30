@@ -9,12 +9,11 @@
 
 #pragma once
 
-#include <common/logging.h>
-
 #include <cassert> // for use with down_cast<>
 #include <climits> // for enumeration casts and tests
 #include <cstring> // for memcpy
 
+#include "gutil/logging.h"
 #include "gutil/macros.h"
 #include "gutil/template_util.h"
 #include "gutil/type_traits.h"

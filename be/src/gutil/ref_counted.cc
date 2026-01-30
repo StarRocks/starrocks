@@ -4,9 +4,8 @@
 
 #include "gutil/ref_counted.h"
 
-#include <common/logging.h>
-
 #include "gutil/atomic_refcount.h"
+#include "gutil/logging.h"
 
 namespace starrocks::subtle {
 
