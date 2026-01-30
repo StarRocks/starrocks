@@ -611,7 +611,9 @@ FUNCTION(ADD_BE_LIB LIB_NAME)
         # support build and install component 
         # ${CMAKE_CMD} -DCOMPONENT=$LIB_NAME -P cmake_install.cmake
         ADD_LIBRARY(${LIB_NAME} SHARED ${ARGN})
-        target_link_libraries(${LIB_NAME} PRIVATE ${WRAP_LINKER_FLAGS} ${DEP_SANITIZE_LIBS})
+        # Don't apply wrap flags to shared libs; __wrap___cxa_throw is provided by Util and
+        # base/other shared libs should not depend on it.
+        target_link_libraries(${LIB_NAME} PRIVATE ${DEP_SANITIZE_LIBS})
         install(TARGETS ${LIB_NAME}
             LIBRARY DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 
             ARCHIVE DESTINATION ${OUTPUT_DIR}/lib COMPONENT ${LIB_NAME} 

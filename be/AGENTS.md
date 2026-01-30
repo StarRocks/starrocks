@@ -81,6 +81,10 @@ Key CMake options (see `be/CMakeLists.txt`):
 
 - Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
   which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
+- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
+  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
+- When `ENABLE_MULTI_DYNAMIC_LIBS=ON`, shared BE libs are built without `WRAP_LINKER_FLAGS` to avoid
+  undefined `__wrap___cxa_throw` in libs that don’t link `Util`.
 
 ### Unit Test Linking Note
 
