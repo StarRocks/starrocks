@@ -164,11 +164,22 @@ jobs:
           cd pr_code
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           if [[ -n $(git status --porcelain docs/) ]]; then
             git add docs/
             git commit -m "docs: automated translation via Gemini [skip ci]"
-            git pull --rebase origin ${{ steps.pr_data.outputs.head_ref }}
+
+            # ------------------------------------------------------------------
+            # CRITICAL AUTH FIX: Use PAT to push to Fork
+            # This injects the PAT into the remote URL so we can write to the user's repo
+            # ------------------------------------------------------------------
+            git remote set-url origin https://x-access-token:${{ secrets.DOC_MEMBERSHIP_PAT }}@github.com/${{ steps.pr_data.outputs.head_repo_name }}.git
+
+            # Fetch the specific branch and rebase to ensure a clean history
+            git fetch origin ${{ steps.pr_data.outputs.head_ref }}
+            git rebase origin/${{ steps.pr_data.outputs.head_ref }}
+
+            # Push changes
             git push origin HEAD:refs/heads/${{ steps.pr_data.outputs.head_ref }}
           else
             echo "No translation changes to commit."
