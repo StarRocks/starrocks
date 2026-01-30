@@ -1101,7 +1101,8 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    private void clearExternalResources() {
+    @Override
+    public void clearExternalResources() {
         for (ScanNode scanNode : jobSpec.getScanNodes()) {
             try {
                 scanNode.clear();

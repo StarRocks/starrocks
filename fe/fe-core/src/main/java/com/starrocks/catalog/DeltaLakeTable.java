@@ -120,6 +120,11 @@ public class DeltaLakeTable extends Table {
         return metastoreTable.getCloudConfiguration();
     }
 
+    public void clearMetadata() {
+        this.deltaSnapshot = null;
+        this.deltaEngine = null;
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()

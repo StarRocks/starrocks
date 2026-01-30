@@ -81,7 +81,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
@@ -92,8 +91,6 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
     // Debug hook: set -Diceberg.debug.throw_after_scanrange=N to throw after N scan ranges are produced.
-    private static final int DEBUG_THROW_AFTER_SCAN_RANGE = 2000;
-    private static final AtomicInteger DEBUG_SCAN_RANGE_COUNTER = new AtomicInteger();
 
     private final IcebergTable table;
     private final TupleDescriptor desc;
@@ -218,6 +215,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                             // we can eliminate the equality delete files.
                         }
                     }
+                }
             }
             return res;
         }

@@ -107,6 +107,21 @@ public class DeltaLakeScanNode extends ScanNode {
         reachLimit = true;
     }
 
+    @Override
+    public void clear() {
+        try {
+            if (deltaLakeTable != null) {
+                deltaLakeTable.clearMetadata();
+            }
+            if (scanRangeSource != null) {
+                scanRangeSource.close();
+            }
+        } catch (Exception e) {
+            LOG.warn("close DeltaLake scanRangeSource failed", e);
+        }
+        scanRangeSource = null;
+    }
+
     public void setupScanRangeSource(ScalarOperator predicate, List<String> fieldNames,
                                      PartitionIdGenerator partitionIdGenerator,
                                      boolean enableIncrementalScanRanges)
