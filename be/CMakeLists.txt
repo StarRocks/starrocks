@@ -393,8 +393,6 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
-    Gutil
-    Base
     ${WL_START_GROUP}
     Agent
     Common
@@ -415,7 +413,6 @@ set(STARROCKS_LINK_LIBS
     Udf
     Util
     Script
-    StarRocksGen
     Webserver
     TestUtil
     Tools
@@ -423,6 +420,9 @@ set(STARROCKS_LINK_LIBS
     Simd
     Cache
     ${WL_END_GROUP}
+    Base
+    Gutil
+    StarRocksGen
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
