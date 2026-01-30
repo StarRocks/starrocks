@@ -166,12 +166,21 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/ast/AstVisitor.java
     default R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
     default R visitRecoverDbStatement(RecoverDbStmt statement, C context) {
         return visitDDLStatement(statement, context);
+=======
+    default R visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    default R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitShowStatement(statement, context);
+>>>>>>> 8fa8ced33d ([Enhancement] Add ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT status output (#68455)):fe/fe-parser/src/main/java/com/starrocks/sql/ast/AstVisitor.java
     }
 
     default R visitShowDataStatement(ShowDataStmt statement, C context) {

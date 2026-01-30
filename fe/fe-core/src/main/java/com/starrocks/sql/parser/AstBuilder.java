@@ -149,6 +149,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -2624,6 +2625,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue(), pos);
         }
         return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null, pos);
+    }
+
+    @Override
+    public ParseNode visitAdminShowAutomatedSnapshotStatement(
+            com.starrocks.sql.parser.StarRocksParser.AdminShowAutomatedSnapshotStatementContext context) {
+        return new AdminShowAutomatedSnapshotStmt(createPos(context));
     }
 
     @Override
