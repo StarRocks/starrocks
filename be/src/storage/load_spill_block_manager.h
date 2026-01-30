@@ -99,6 +99,8 @@ public:
 
     bool is_initialized() const { return _initialized; }
 
+    Status clear_parent_path();
+
     // acquire Block from BlockManager
     StatusOr<spill::BlockPtr> acquire_block(size_t block_size, bool force_remote = false);
     // return Block to BlockManager
