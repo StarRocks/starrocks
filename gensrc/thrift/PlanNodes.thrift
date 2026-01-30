@@ -1291,6 +1291,10 @@ struct TProjectNode {
     1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
     // Used for common operator compute result reuse
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+    // SQL form of projection expressions for profile
+    3: optional string sql_project_exprs
+    // SQL form of common subexpressions for profile
+    4: optional string sql_common_exprs
 }
 
 struct TSelectNode {

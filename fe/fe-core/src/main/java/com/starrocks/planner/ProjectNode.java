@@ -66,6 +66,19 @@ public class ProjectNode extends PlanNode {
         slotMap.forEach((key, value) -> msg.project_node.putToSlot_map(key.asInt(), ExprToThrift.treeToThrift(value)));
         commonSlotMap.forEach((key, value) -> msg.project_node.putToCommon_slot_map(
                 key.asInt(), ExprToThrift.treeToThrift(value)));
+        if (!slotMap.isEmpty()) {
+            String sqlProjectExprs = slotMap.entrySet().stream()
+                    .map(e -> e.getKey() + "->" + explainExpr(e.getValue()))
+                    .collect(Collectors.joining(", "));
+            msg.project_node.setSql_project_exprs(sqlProjectExprs);
+        }
+
+        if (!commonSlotMap.isEmpty()) {
+            String sqlCommonExprs = commonSlotMap.entrySet().stream()
+                    .map(e -> e.getKey() + "->" + explainExpr(e.getValue()))
+                    .collect(Collectors.joining(", "));
+            msg.project_node.setSql_common_exprs(sqlCommonExprs);
+        }
     }
 
     @Override
