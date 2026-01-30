@@ -51,7 +51,7 @@ ADMIN REPAIR TABLE table_name [PARTITION (p1,...)] [PROPERTIES ("key" = "value",
     ADMIN REPAIR TABLE tbl1 PARTITION (p1, p2);
     ```
 
-3. バージョンの不整合を許容し、回復のために空のタブレットを作成することを許可して、存算分離テーブル（shared-data table）を修復しようとする
+3. バージョンの不整合を許容し、回復のために空のタブレットを作成することを許可して、共有データクラスタ内のクラウドネイティブテーブルを修復しようとする
 
     ```sql
     ADMIN REPAIR TABLE cloud_tbl PROPERTIES (
