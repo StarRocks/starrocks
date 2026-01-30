@@ -71,7 +71,6 @@ set(SRC_FILES
     #$${GEN_CPP_DIR}/opcode/vector-functions.cc
     #$${GEN_CPP_DIR}/opcode/opcode-registry-init.cc
     ${GEN_CPP_DIR}/RuntimeFilter_types.cpp
-    ${GEN_CPP_DIR}/version.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
     ${GEN_CPP_DIR}/ShortCircuit_types.cpp
     ${GEN_CPP_DIR}/DataCache_types.cpp
@@ -88,4 +87,3 @@ set_source_files_properties(${SRC_FILES} PROPERTIES GENERATED TRUE)
 
 #add_dependencies(StarRocksGen thrift-cpp)
 #add_dependencies(Opcode function)
-

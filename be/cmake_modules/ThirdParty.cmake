@@ -26,7 +26,9 @@ endif()
 #
 set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
-add_library(build_version OBJECT ${BUILD_VERSION_CC})
+set(BUILD_VERSION_CPP ${GENSRC_DIR}/gen_cpp/version.cpp)
+set_source_files_properties(${BUILD_VERSION_CPP} PROPERTIES GENERATED TRUE)
+add_library(build_version OBJECT ${BUILD_VERSION_CC} ${BUILD_VERSION_CPP})
 target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
 
 # Add common cmake prefix path and link library path
