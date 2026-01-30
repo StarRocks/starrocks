@@ -14,6 +14,7 @@ The Backend is responsible for:
 
 ```
 be/src/
+├── base/             # Base primitives (Status, StatusOr, logging, macros)
 ├── storage/          # Storage engine (tablets, segments, compaction)
 ├── exec/             # Query execution (operators, pipeline, scan)
 ├── column/           # Column types and operations
@@ -22,7 +23,7 @@ be/src/
 ├── formats/          # File formats (Parquet, ORC, etc.)
 ├── connector/        # External data source connectors
 ├── util/             # Utilities and helpers
-├── common/           # Common types, status, config
+├── common/           # Common config, tracing, process utilities
 ├── http/             # HTTP service endpoints
 ├── service/          # Thrift services
 └── simd/             # SIMD utilities
@@ -129,11 +130,15 @@ Use `#pragma once` instead of traditional include guards:
 
 #include <glog/logging.h>    // Third-party
 
-#include "common/status.h"   // StarRocks
+#include "base/status.h"     // StarRocks
 #include "storage/rowset.h"
 ```
 
 ## Module Boundaries
+
+### base
+- **Minimal deps only**: `be/src/base` may only depend on `gen_cpp/*`, `gutil/*`, system headers, and third-party libraries.
+- **No other BE modules**: do not include headers from `common/*`, `util/*`, `storage/*`, etc.
 
 ### gutil
 - **No StarRocks module deps**: `be/src/gutil` must not include headers from other BE modules (e.g. `common/*`, `util/*`, `storage/*`).
