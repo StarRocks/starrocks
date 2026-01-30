@@ -12,23 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
-ADD_BE_LIB(Common
-  daemon.cpp
-  greplog.cpp
-  logconfig.cpp
-  configbase.cpp
-  config.cpp
-  s3_uri.cpp
-  tracer.cpp
-  process_exit.cpp
-  prof/heap_prof.cpp
+ADD_BE_LIB(Base
+  status.cpp
+  statusor.cpp
 )
-
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    target_sources(Common PRIVATE minidump.cpp)
-endif()
-
-# Generate env_config.h according to env_config.h.in
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/env_config.h.in ${GENSRC_DIR}/common/env_config.h)

@@ -2,15 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
-#include "common/status.h"
+#include "base/status.h"
 
 #include <fmt/format.h>
 
-#include "common/config.h"
+#include <algorithm>
+#include <limits>
+#include <sstream>
+
 #include "gen_cpp/StatusCode_types.h"
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
+#include "gutil/strings/split.h"
+
+#if defined(ENABLE_STATUS_FAILED)
+namespace starrocks::config {
+extern int32_t cardinality_of_inject;
+extern std::string directory_of_inject;
+} // namespace starrocks::config
+#endif
 
 namespace starrocks {
 

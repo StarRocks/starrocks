@@ -14,6 +14,5 @@
 
 #pragma once
 
-// Backward-compatible shim. Canonical definitions live in gutil to avoid
-// introducing BE module dependencies into gutil.
-#include "gutil/compiler_util.h"
+// Backward-compatible shim. Canonical definitions live in base.
+#include "base/compiler_util.h"
