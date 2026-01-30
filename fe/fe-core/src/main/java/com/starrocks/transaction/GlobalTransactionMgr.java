@@ -182,6 +182,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
                     "The cluster is under safe mode state, all load jobs are rejected.");
         }
 
+        if (sourceType != LoadJobSourceType.REPLICATION && sourceType != LoadJobSourceType.LAKE_COMPACTION) {
+            if (GlobalStateMgr.getCurrentState().getFailoverGroupMgr().isSecondaryReadonly(dbId, tableIdList)) {
+                throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                        "Table is readonly in secondary failover group");
+            }
+        }
+
         switch (sourceType) {
             case BACKEND_STREAMING:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second, Config.min_load_timeout_second);

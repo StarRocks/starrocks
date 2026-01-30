@@ -5,6 +5,9 @@ package com.starrocks.epack.failover;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -41,6 +44,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 
 public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessable {
@@ -227,6 +231,53 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
 
     public Collection<FailoverGroup> getFailoverGroups() {
         return idToFailoverGroup.values();
+    }
+
+    public boolean isSecondaryReadonly(long dbId, List<Long> tableIdList) {
+        if (tableIdList == null || tableIdList.isEmpty()) {
+            return false;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Database id {} not found when checking failover group readonly", dbId);
+            return false;
+        }
+
+        for (FailoverGroup failoverGroup : idToFailoverGroup.values()) {
+            if (!FailoverGroupRole.SECONDARY.equals(failoverGroup.getRole())) {
+                continue;
+            }
+
+            IncludeObjectMgr includeMgr = failoverGroup.getIncludeMgr();
+            ExcludeObjectMgr excludeMgr = failoverGroup.getExcludeMgr();
+
+            if (includeMgr == null) {
+                continue;
+            }
+
+            for (Long tableId : tableIdList) {
+                Table table = db.getTable(tableId);
+                if (table == null) {
+                    LOG.warn("Table id {} not found in database {} when checking failover group {}",
+                            tableId, db.getFullName(), failoverGroup.getName());
+                    continue;
+                }
+
+                if (!includeMgr.isIncludeTable(db, table)) {
+                    continue;
+                }
+
+                if (excludeMgr != null && excludeMgr.isExcludeTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        db.getFullName(), table.getName())) {
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public TFailoverGroupHandshakeResponse handleHandshakeRequest(TFailoverGroupHandshakeRequest request)
