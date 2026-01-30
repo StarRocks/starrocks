@@ -19,6 +19,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -154,6 +155,54 @@ public class HiveMetaClientTest {
         client.getTable("db", "tbl");
         Assertions.assertEquals(1, client.getClientSize());
 
+    }
+
+    @Test
+    public void testRecyclableClientFinishClosesWhenPoolFull(
+            @Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
+        new Expectations() {
+            {
+                metaStoreClient.getTable(anyString, anyString);
+                result = new Table();
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<RetryingMetaStoreClient>() {
+            @Mock
+            public IMetaStoreClient getProxy(Configuration hiveConf, HiveMetaHookLoader hookLoader,
+                                             ConcurrentHashMap<String, Long> metaCallTimeMap, String mscClassName,
+                                             boolean allowEmbedded) throws MetaException {
+                return metaStoreClient;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, "2");
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+
+        ExecutorService es = Executors.newFixedThreadPool(3);
+        for (int i = 0; i < 3; i++) {
+            es.execute(() -> {
+                try {
+                    client.getTable("db", "tbl");
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+        es.shutdown();
+        es.awaitTermination(10, TimeUnit.SECONDS);
+
+        Assertions.assertEquals(2, client.getClientSize());
+
+        new Verifications() {
+            {
+                metaStoreClient.close();
+                times = 1;
+            }
+        };
     }
 
     @Test
