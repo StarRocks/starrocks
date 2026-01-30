@@ -34,47 +34,7 @@ ${never_translate}
 - Add a space when switching between alphabets and Japanese characters including Kanji, Hiragana, and Katagana.
 - For inline formatting (italic, bold, strikethrough, inline code) in Chinese, consider adding spaces before and after when applying to part of a word/phrase. For example "_A_ and _B_" should be translated as "_A_ 和 _B_", not "_A_和_B_". Without spaces, the translated markdown does not work.
 - Do not treat capitalized words as proper nouns requiring leaving them in the source language unless the phrase appears in the translation dictionary.
-
-## High-Level Instructions for Evidence-Based Narrative
-1. Clarity and Precision:
-  - Write with clarity and precision, avoiding jargon or overly complex language.
-  - Each sentence should convey a clear and specific idea.
-  - Avoid ambiguous terms and ensure that every statement is easily understandable.
-2. Evidence-Driven Assertions:
-  - Base every claim on concrete evidence, using data, statistics, and factual information.
-  - Provide specific numbers, dates, and sources to back up assertions.
-  - Example: "Cobot has raised $41.625M to date, including a $30M Series A led by Sequoia Capital in July 2023."
-3. Logical Flow and Structure:
-  - Structure the narrative logically, with each paragraph leading naturally to the next.
-  - Use clear transitions to guide the reader through the argument or narrative.
-  - Ensure that the overall flow supports a cohesive and compelling story.
-4. Active Voice:
-  - Use active voice to make sentences more direct and impactful.
-  - Example: "Cobot deployed its first robots in January 2024" instead of "The first robots were deployed by Cobot in January 2024."
-5. Conciseness:
-  - Be concise, eliminating unnecessary words and focusing on essential information.
-  - Each sentence and paragraph should add value to the narrative.
-  - Example: "Our robot can pull carts up to 1500lbs and travel up to 8mph" instead of "Our robot has the capability to pull carts that can weigh as much as 1500lbs and can travel at speeds up to 8mph."
-6. Compelling Storytelling:
-  - Frame the narrative to tell a compelling story, highlighting the journey, challenges, and achievements.
-  - Use storytelling techniques to engage the reader and make the narrative more relatable and interesting.
-  - Example: "In just two years, Cobot transformed the landscape of material handling with innovative robotics solutions."
-7. Customer and Market Focus:
-  - Emphasize customer needs and market opportunities.
-  - Show how the product or solution addresses specific pain points and offers tangible benefits.
-  - Example: "In highly automated facilities, our robots reduce injuries and increase productivity by automating heavy lifting tasks."
-8. Credibility and Authority:
-  - Establish credibility by mentioning reputable investors, notable team members, and successful deployments.
-  - Highlight the expertise and experience of the team to build trust.
-  - Example: "Our team includes former directors from Amazon and NASA JPL, bringing unparalleled expertise in robotics."
-9. Balanced Tone:
-  - Maintain a balanced tone that is confident yet humble.
-  - Avoid exaggeration and hyperbole; let the evidence speak for itself.
-  - Example: "We aim to revolutionize the industry with practical, reliable robotics solutions, grounded in years of research and field experience."
-10. Conclusion with impact
-  - End with a strong conclusion that reinforces the main points and leaves a lasting impression.
-  - Include a clear call to action or next steps.
-  - Example: "Join us as we continue to innovate and lead the future of robotics. Our next funding round closes on March 15th."
+- **HTML Entities:** If the source text contains HTML entities like `&lt;`, `&gt;`, or `&amp;`, preserve them EXACTLY as they are. Do not unescape them to `<` or `>`. Do not translate them.
 
 ### CRITICAL FORMATTING RULES ###
 1. **PRESERVE HTML TAGS**: The source text may contain HTML tags like <ul>, <li>, <br>, or <table> inside Markdown tables.
