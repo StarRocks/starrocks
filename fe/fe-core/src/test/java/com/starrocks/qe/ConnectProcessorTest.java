@@ -653,12 +653,12 @@ public class ConnectProcessorTest extends DDLTestBase {
             }
         };
         processor.processOnce();
-        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
         // verify customSessionName is set during query execution
-        Assert.assertEquals("session_name", customSessionName.get());
+        Assertions.assertEquals("session_name", customSessionName.get());
         // customSessionName is NOT cleared after query finished
-        Assert.assertEquals("session_name", ctx.getCustomSessionName());
-        Assert.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
+        Assertions.assertEquals("session_name", ctx.getCustomSessionName());
+        Assertions.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
     }
 
     @Test

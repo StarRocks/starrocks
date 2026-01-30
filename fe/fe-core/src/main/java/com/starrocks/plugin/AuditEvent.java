@@ -160,9 +160,11 @@ public class AuditEvent {
     @AuditField(value = "SessionId")
     public String sessionId = "";
     
-<<<<<<< HEAD
     @AuditField(value = "CustomQueryId")
     public String customQueryId = "";
+
+    @AuditField(value = "CustomSessionName")
+    public String customSessionName = "";
 
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
@@ -202,10 +204,6 @@ public class AuditEvent {
             return 0;
         }
     }
-=======
-    @AuditField(value = "CustomSessionName")
-    public String customSessionName = "";
->>>>>>> d97d1ac4998 ([Enhancement] Introduce customSessionName)
 
     public static class AuditEventBuilder {
 
@@ -470,9 +468,13 @@ public class AuditEvent {
             return this;
         }
 
-<<<<<<< HEAD
         public AuditEventBuilder setCustomQueryId(String customQueryId) {
             auditEvent.customQueryId = customQueryId;
+            return this;
+        }
+
+        public AuditEventBuilder setCustomSessionName(String customSessionName) {
+            auditEvent.customSessionName = customSessionName;
             return this;
         }
 
@@ -497,10 +499,6 @@ public class AuditEvent {
 
         public AuditEventBuilder setPreparedStmtId(String preparedStmtId) {
             auditEvent.preparedStmtId = preparedStmtId;
-=======
-        public AuditEventBuilder setCustomSessionName(String customSessionName) {
-            auditEvent.customSessionName = customSessionName;
->>>>>>> d97d1ac4998 ([Enhancement] Introduce customSessionName)
             return this;
         }
 

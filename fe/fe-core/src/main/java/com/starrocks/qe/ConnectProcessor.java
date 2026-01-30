@@ -375,7 +375,7 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName())
                 .setCustomQueryId(ctx.getCustomQueryId())
-                .setCustomSessionName(ctx.getCustomSessionName());``
+                .setCustomSessionName(ctx.getCustomSessionName())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.

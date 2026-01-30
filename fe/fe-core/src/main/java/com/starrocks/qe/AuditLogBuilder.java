@@ -120,13 +120,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (Config.audit_log_json_format) {
                     logMap.put(fieldName, value);
                 } else {
-                    // Prevent inserting strings which may break log format
-                    String strValue = value == null ? "null" : value.toString();
-                    strValue = strValue.replace("\n", "\\n")
-                                    .replace("\r", "\\r")
-                                    .replace("|", "")
-                                    .replace("=", "");
-                    sb.append("|").append(fieldName).append("=").append(strValue);
+                    sb.append("|").append(af.value()).append("=").append(value);
                 }
             }
 
