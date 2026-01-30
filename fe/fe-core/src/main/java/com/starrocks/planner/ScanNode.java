@@ -152,6 +152,13 @@ public abstract class ScanNode extends PlanNode {
     }
 
     /**
+     * Hook for subclasses that hold external resources (scan range sources, iterators, etc.)
+     * to release them when query finishes/cancels. Default no-op.
+     */
+    public void clear() {
+    }
+
+    /**
      * cast expr to SlotDescriptor type
      */
     protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {

@@ -261,4 +261,10 @@ public abstract class Coordinator {
     public abstract String getResourceGroupName();
 
     public abstract boolean isShortCircuit();
+
+    /**
+     * Release external resources held by scan nodes or connectors. Default no-op.
+     */
+    public void clearExternalResources() {
+    }
 }

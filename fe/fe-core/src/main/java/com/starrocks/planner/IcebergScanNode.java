@@ -108,6 +108,21 @@ public class IcebergScanNode extends ScanNode {
     }
 
     @Override
+    public void clear() {
+        try {
+            if (icebergTable != null) {
+                icebergTable.clearMetadata();
+            }
+            if (scanRangeSource != null) {
+                scanRangeSource.close();
+            }
+        } catch (Exception e) {
+            LOG.warn("close Iceberg scanRangeSource failed", e);
+        }
+        scanRangeSource = null;
+    }
+
+    @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         if (snapshotId.isEmpty() || scanRangeSource == null) {
             return List.of();
