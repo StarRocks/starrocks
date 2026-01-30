@@ -30,7 +30,7 @@ collected only when the FE configuration `enable_collect_query_detail_info` is e
 This API requires HTTP Basic authentication. There is no additional privilege check beyond a successful login. Any
 authenticated user can access the endpoint and can view all cached query details unless a `user` filter is applied.
 
-### QueryDetail fields
+## QueryDetail fields
 
 | Field | Type | Description |
 | --- | --- | --- |

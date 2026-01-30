@@ -30,7 +30,7 @@ displayed_sidebar: docs
 この API は HTTP Basic 認証が必要です。ログイン認証以外の追加権限チェックはありません。認証済みユーザーであれば
 誰でもアクセスでき、`user` パラメータでフィルタしない限りキャッシュされた query detail をすべて参照できます。
 
-### QueryDetail フィールド
+## QueryDetail フィールド
 
 | フィールド | 型 | 説明 |
 | --- | --- | --- |
