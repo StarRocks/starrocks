@@ -413,7 +413,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to specify custom name of current session, analog of `applicationName` or `program_name` in DMBS like MySQL or PostgreSQL. Can be set using `SET SESSION custom_session_name = 'my session name';`. Value can be found in audit logs in `customSessionName` field.
 * **Default**: ""
 * **Data type**: String
-* **Introduced in**: v4.0.0
+* **Introduced in**: v4.1.0
 
 ### datacache_sharing_work_period
 
