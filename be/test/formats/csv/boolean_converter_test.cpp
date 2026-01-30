@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -141,7 +141,7 @@ TEST(BooleanConverterTest, test_write_string_as_integral_value) {
     col->append_datum(true);
     col->append_datum(false);
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, opts).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, opts).ok());
@@ -168,7 +168,7 @@ TEST(BooleanConverterTest, test_write_string_as_textual_value) {
     col->append_datum(true);
     col->append_datum(false);
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, opts).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, opts).ok());

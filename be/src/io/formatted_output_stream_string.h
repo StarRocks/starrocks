@@ -14,13 +14,13 @@
 
 #pragma once
 
-#include "formats/csv/output_stream.h"
+#include "io/formatted_output_stream.h"
 
-namespace starrocks::csv {
+namespace starrocks::io {
 
-class OutputStreamString final : public OutputStream {
+class FormattedOutputStreamString final : public FormattedOutputStream {
 public:
-    explicit OutputStreamString(size_t capacity = 64) : OutputStream(capacity) {}
+    explicit FormattedOutputStreamString(size_t capacity = 64) : FormattedOutputStream(capacity) {}
 
     const std::string& as_string() const { return _str; }
 
@@ -34,4 +34,4 @@ private:
     std::string _str;
 };
 
-} // namespace starrocks::csv
+} // namespace starrocks::io

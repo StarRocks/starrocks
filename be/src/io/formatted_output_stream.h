@@ -22,21 +22,21 @@
 #include "types/timestamp_value.h"
 #include "util/mysql_global.h"
 
-namespace starrocks::csv {
+namespace starrocks::io {
 
-class OutputStream {
+class FormattedOutputStream {
 public:
     constexpr static const size_t kMinBuffSize = 128;
 
-    explicit OutputStream(size_t capacity)
+    explicit FormattedOutputStream(size_t capacity)
             : _buff(new char[std::max(kMinBuffSize, capacity)]),
               _pos(_buff),
               _end(_buff + std::max(kMinBuffSize, capacity)) {}
 
-    virtual ~OutputStream() { delete[] _buff; }
+    virtual ~FormattedOutputStream() { delete[] _buff; }
 
-    OutputStream(const OutputStream&) = delete;
-    void operator=(const OutputStream&) = delete;
+    FormattedOutputStream(const FormattedOutputStream&) = delete;
+    void operator=(const FormattedOutputStream&) = delete;
 
     template <typename T, std::enable_if_t<std::is_integral_v<T>, void**> = nullptr>
     Status write(T number) {
@@ -142,4 +142,4 @@ private:
     char* _end;
 };
 
-} // namespace starrocks::csv
+} // namespace starrocks::io

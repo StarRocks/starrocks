@@ -18,7 +18,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -53,7 +53,7 @@ TEST(MapConverterTest, test_read_write_map_int_string) {
     EXPECT_EQ("{2:NULL,1:NULL}", col->debug_item(3));
 
     // write
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
@@ -102,7 +102,7 @@ TEST(MapConverterTest, test_read_write_nest_map) {
     EXPECT_EQ("{11:{2:NULL,1:NULL},22:{2:'unique'}}", col->debug_item(5));
 
     // write
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());

@@ -21,7 +21,7 @@
 
 namespace starrocks::csv {
 
-Status JsonConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status JsonConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                    const Options& options) const {
     auto data_column = down_cast<const JsonColumn*>(&column);
     auto json_value = data_column->get_object(row_num);
@@ -29,7 +29,7 @@ Status JsonConverter::write_string(OutputStream* os, const Column& column, size_
     return os->write(json_str);
 }
 
-Status JsonConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status JsonConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                           const Options& options) const {
     RETURN_IF_ERROR(os->write('"'));
     RETURN_IF_ERROR(write_string(os, column, row_num, options));

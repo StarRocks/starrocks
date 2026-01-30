@@ -21,8 +21,8 @@
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
+#include "io/formatted_output_stream.h"
 #include "runtime/runtime_state.h"
 #include "util/uid_util.h"
 
