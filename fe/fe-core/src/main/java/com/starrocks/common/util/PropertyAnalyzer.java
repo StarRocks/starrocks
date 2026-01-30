@@ -288,6 +288,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENFORCE_CONSISTENT_VERSION = "enforce_consistent_version";
     // Allows empty tablet recovery of tablets with no valid metadata
     public static final String PROPERTIES_ALLOW_EMPTY_TABLET_RECOVERY = "allow_empty_tablet_recovery";
+    // If true, just return the repair plan without executing it
+    public static final String PROPERTIES_DRY_RUN = "dry_run";
 
     /**
      * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
