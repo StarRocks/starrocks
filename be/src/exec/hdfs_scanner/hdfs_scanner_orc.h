@@ -69,6 +69,8 @@ private:
     Filter _chunk_filter;
     SkipRowsContextPtr _skip_rows_ctx;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
+
+    StoragePageCache* _cache = nullptr;
 };
 
 } // namespace starrocks

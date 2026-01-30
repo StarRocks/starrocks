@@ -234,8 +234,7 @@ StatusOr<std::string_view> PageReader::_peek(size_t size) {
 
 void PageReader::_init_page_cache_key() {
     auto& filename = _opts.file->filename();
-    std::string key =
-            ParquetUtils::get_file_cache_key(CacheType::PAGE, filename, _opts.modification_time, _opts.file_size);
+    std::string key = get_file_cache_key(CacheType::PAGE, filename, _opts.modification_time, _opts.file_size);
     _page_cache_key.resize(22);
     char* data = _page_cache_key.data();
     memcpy(data, key.data(), key.size());
