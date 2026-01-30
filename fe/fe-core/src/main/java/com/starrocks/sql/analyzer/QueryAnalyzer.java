@@ -122,6 +122,7 @@ import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_TIMESTAMP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_VERSION_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 
 public class QueryAnalyzer {
     private final ConnectContext session;
@@ -831,6 +832,15 @@ public class QueryAnalyzer {
                         fields.add(field);
                     }
                 }
+
+                // Add virtual columns for OLAP tables
+                for (Column column : getVirtualColumns(table)) {
+                    SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
+                    Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
+                            column.isAllowNull());
+                    columns.put(field, column);
+                    fields.add(field);
+                }
             }
 
             node.setColumns(columns.build());
@@ -869,6 +879,17 @@ public class QueryAnalyzer {
             columns.add(new Column(BINLOG_VERSION_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_SEQ_ID_COLUMN_NAME, IntegerType.BIGINT));
             columns.add(new Column(BINLOG_TIMESTAMP_COLUMN_NAME, IntegerType.BIGINT));
+            return columns;
+        }
+
+        private List<Column> getVirtualColumns(Table table) {
+            List<Column> columns = new ArrayList<>();
+            // Add _tablet_id_ virtual column for OLAP tables
+            if (table.isNativeTableOrMaterializedView()) {
+                Column tabletIdCol = new Column(TABLET_ID_COLUMN_NAME, IntegerType.BIGINT);
+                tabletIdCol.setIsVirtual(true);
+                columns.add(tabletIdCol);
+            }
             return columns;
         }
 
