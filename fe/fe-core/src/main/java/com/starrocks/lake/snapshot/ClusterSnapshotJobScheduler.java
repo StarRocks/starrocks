@@ -32,7 +32,7 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
     // cluster snapshot information used for start
     protected final RestoredSnapshotInfo restoredSnapshotInfo;
 
-    protected long lastAutomatedJobStartTimeMs;
+    protected volatile long lastAutomatedJobStartTimeMs;
     protected volatile ClusterSnapshotJob runningJob;
 
     public ClusterSnapshotJobScheduler(CheckpointController feController,
@@ -78,6 +78,10 @@ public class ClusterSnapshotJobScheduler extends FrontendDaemon implements Snaps
             --retryTime;
         }
         return null;
+    }
+
+    public long getLastAutomatedJobStartTimeMs() {
+        return lastAutomatedJobStartTimeMs;
     }
 
     @Override
