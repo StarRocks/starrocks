@@ -60,6 +60,8 @@ jobs:
         run: |
           PR_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             "${{ github.event.issue.pull_request.url }}")
+          # NEW: Get the exact SHA of the base
+          echo "base_sha=$(echo $PR_JSON | jq -r '.base.sha')" >> $GITHUB_OUTPUT
           echo "base_ref=$(echo $PR_JSON | jq -r '.base.ref')" >> $GITHUB_OUTPUT
           echo "head_ref=$(echo $PR_JSON | jq -r '.head.ref')" >> $GITHUB_OUTPUT
           echo "head_repo_name=$(echo $PR_JSON | jq -r '.head.repo.full_name')" >> $GITHUB_OUTPUT
@@ -72,6 +74,12 @@ jobs:
           ref: ${{ steps.pr_data.outputs.head_ref }}
           path: pr_code
           fetch-depth: 0
+
+      - name: Fetch Upstream Base
+        run: |
+          cd pr_code
+          git remote add upstream https://github.com/${{ github.repository }}.git
+          git fetch upstream ${{ steps.pr_data.outputs.base_sha }}
 
       - name: Checkout Trusted Tools
         uses: actions/checkout@v4
@@ -87,7 +95,7 @@ jobs:
         uses: tj-actions/changed-files@v44
         with:
           path: pr_code
-          base_sha: ${{ steps.pr_data.outputs.base_ref }}
+          base_sha: ${{ steps.pr_data.outputs.base_sha }}
           json: true
 
       - name: Get Checkbox State
