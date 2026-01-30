@@ -28,6 +28,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment.h"
 
 namespace starrocks::lake {
@@ -215,6 +216,29 @@ size_t Tablet::num_rows() const {
         LOG(WARNING) << "failed to get tablet rows num" << _id << "num rows: " << num_rows.status();
         return 0;
     }
+}
+
+StatusOr<PrimaryKeyEncodingType> Tablet::primary_key_encoding_type() const {
+    if (_primary_key_encoding_type.has_value()) {
+        return _primary_key_encoding_type.value();
+    }
+
+    TabletMetadataPtr metadata = _tablet_metadata;
+    if (metadata == nullptr) {
+        metadata = _mgr->get_latest_cached_tablet_metadata(_id);
+    }
+    if (metadata == nullptr && _version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, _mgr->get_tablet_metadata(_id, _version_hint, /*fill_cache=*/true));
+    }
+    if (metadata == nullptr) {
+        return Status::NotFound("tablet metadata not found");
+    }
+    if (metadata->schema().keys_type() != KeysType::PRIMARY_KEYS) {
+        return Status::InternalError("tablet is not a primary key tablet");
+    }
+
+    _primary_key_encoding_type = metadata->has_range() ? PrimaryKeyEncodingType::V2 : PrimaryKeyEncodingType::V1;
+    return _primary_key_encoding_type.value();
 }
 
 } // namespace starrocks::lake

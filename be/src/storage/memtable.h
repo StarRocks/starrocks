@@ -23,6 +23,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
+#include "storage/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -85,7 +86,8 @@ public:
     ~MemTable();
 
     // prepare the memtable for writing which must be called before writing any data
-    Status prepare();
+    // for any memtable for share nothing, should always use PrimaryKeyEncodingType::V1
+    Status prepare(std::optional<PrimaryKeyEncodingType> pk_encoding_type);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -171,6 +173,7 @@ private:
     size_t _aggregator_bytes_usage = 0;
 
     MemtableStats _stats;
+    std::optional<PrimaryKeyEncodingType> _pk_encoding_type;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

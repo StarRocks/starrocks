@@ -127,9 +127,11 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
 
     OlapReaderStatistics stats;
     MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1) {
-        // more than one key column
-        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+    ASSIGN_OR_RETURN(auto tablet, tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_RETURN(auto pk_encoding_type, tablet.primary_key_encoding_type());
+    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::V2) {
+        // more than one key column or V2 encoding
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
     }
     vector<uint32_t> rowids;
     rowids.reserve(4096);
@@ -163,7 +165,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                     const Column* pkc = nullptr;
                     if (pk_column) {
                         pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
+                                                  pk_encoding_type);
                         pkc = pk_column.get();
                     } else {
                         pkc = chunk->columns()[0].get();

@@ -23,6 +23,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/tablet.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 
@@ -178,6 +179,8 @@ public:
     void check_global_dict(SegmentWriter* segment_writer);
 
     const FileInfo& lcrm_file() const { return _lcrm_file; }
+
+    StatusOr<Tablet> get_tablet() const { return _tablet_mgr->get_tablet(_tablet_id); }
 
 protected:
     TabletManager* _tablet_mgr;
