@@ -28,6 +28,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -769,8 +770,9 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            totalRowsOfTable = partition.getLatestBaseIndex().getRowCount() + totalRowsOfTable;
-            totalBytesOfTable = partition.getLatestBaseIndex().getDataSize() + totalBytesOfTable;
+            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+            totalRowsOfTable = baseIndex.getRowCount() + totalRowsOfTable;
+            totalBytesOfTable = baseIndex.getDataSize() + totalBytesOfTable;
         }
         // TABLE_ROWS
         info.setTable_rows(totalRowsOfTable);

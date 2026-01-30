@@ -1920,6 +1920,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
+        long txnId = request.getTxn_id();
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("immutable partition failed. error: txn %d does not exist", txnId)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
         Set<Long> updatePartitionIds = Sets.newHashSet();
@@ -1987,8 +1996,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
-                    buildPartitions(olapTable, physicalPartition, partitions, tPartition);
-                    buildTablets(physicalPartition, tablets, olapTable, computeResource);
+                    buildPartitions(olapTable, physicalPartition, partitions, tPartition, txnState);
+                    buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
                 }
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
@@ -2007,7 +2016,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildPartitions(OlapTable olapTable, PhysicalPartition physicalPartition,
-                                        List<TOlapTablePartition> partitions, TOlapTablePartition tPartition) {
+                                        List<TOlapTablePartition> partitions, TOlapTablePartition tPartition,
+                                        TransactionState txnState) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
@@ -2059,8 +2069,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
+
+        List<Long> indexIds = Lists.newArrayList();
         for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            // Because multiple versions of a materialized index cannot be loaded simultaneously,
+            // the `TOlapTableIndexTablets.index_id` is set to the `index meta id`.
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getMetaId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
@@ -2070,16 +2084,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 return tTablet;
             }).collect(Collectors.toList()));
             tPartition.addToIndexes(tIndex);
+            indexIds.add(index.getId());
         }
         partitions.add(tPartition);
+        txnState.addPartitionLoadedIndexes(olapTable.getId(), physicalPartition.getId(), indexIds);
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable, ComputeResource computeResource) throws StarRocksException {
+                                     OlapTable olapTable, ComputeResource computeResource, TransactionState txnState)
+            throws StarRocksException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
-        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(
-                MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index : txnState.getPartitionLoadedIndexes(olapTable.getId(), physicalPartition)) {
             if (olapTable.isCloudNativeTable()) {
                 for (Tablet tablet : index.getTablets()) {
                     try {
@@ -2509,7 +2525,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<Long> indexIds = Lists.newArrayList();
         PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
         for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getId(), index.getTabletIdsInOrder());
+            // Because multiple versions of a materialized index cannot be loaded simultaneously,
+            // the `TOlapTableIndexTablets.index_id` is set to the `index meta id`.
+            TOlapTableIndexTablets tIndex = new TOlapTableIndexTablets(index.getMetaId(), index.getTabletIdsInOrder());
             tIndex.setTablets(index.getTablets().stream().map(tablet -> {
                 TOlapTableTablet tTablet = new TOlapTableTablet();
                 tTablet.setId(tablet.getId());
