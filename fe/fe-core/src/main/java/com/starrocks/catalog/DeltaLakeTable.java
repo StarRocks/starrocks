@@ -119,6 +119,17 @@ public class DeltaLakeTable extends Table {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public CloudConfiguration getCloudConfiguration() {
+        return metastoreTable.getCloudConfiguration();
+    }
+
+    public void clearMetadata() {
+        this.deltaSnapshot = null;
+    }
+
+>>>>>>> 70d1c246d8 ([BugFix] fix lake table mem leak (#68678))
     @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
