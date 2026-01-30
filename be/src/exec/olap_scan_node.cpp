@@ -267,6 +267,7 @@ void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
     }
+    Expr::close(this->_partition_exprs, state);
     (void)exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
