@@ -1,0 +1,108 @@
+-- name: test_flat_json_after_schema_change
+CREATE TABLE `t_json_schema_change` (
+  `id` bigint(20) NOT NULL,
+  `data` json NULL,
+  `col1` int NULL,
+  `col2` int NULL,
+  `col3` int NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+INSERT INTO t_json_schema_change VALUES
+(1, parse_json('{"name": "alice", "age": 30, "city": "seattle"}'), 1, 2, 3),
+(2, parse_json('{"name": "bob", "age": 25, "city": "boston"}'), 4, 5, 6),
+(3, parse_json('{"name": "charlie", "age": 35, "city": "chicago"}'), 7, 8, 9);
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change ADD COLUMN col4 int;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change ADD COLUMN col5 int;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change ADD COLUMN col6 int;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change DROP COLUMN col1;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change DROP COLUMN col2;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change DROP COLUMN col3;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change ADD COLUMN col7 int;
+-- result:
+-- !result
+ALTER TABLE t_json_schema_change ADD COLUMN col8 int;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+INSERT INTO t_json_schema_change (id, data, col4, col5, col6, col7, col8) VALUES
+(4, parse_json('{"name": "david", "age": 40, "city": "denver"}'), 10, 11, 12, 13, 14),
+(5, parse_json('{"name": "eve", "age": 28, "city": "detroit"}'), 15, 16, 17, 18, 19);
+-- result:
+-- !result
+SELECT id, get_json_string(data, '$.name') as name FROM t_json_schema_change ORDER BY id;
+-- result:
+1	alice
+2	bob
+3	charlie
+4	david
+5	eve
+-- !result
+SELECT id, get_json_int(data, '$.age') as age FROM t_json_schema_change ORDER BY id;
+-- result:
+1	30
+2	25
+3	35
+4	40
+5	28
+-- !result
+SELECT id, get_json_string(data, '$.city') as city FROM t_json_schema_change ORDER BY id;
+-- result:
+1	seattle
+2	boston
+3	chicago
+4	denver
+5	detroit
+-- !result
+SELECT id, 
+       get_json_string(data, '$.name') as name,
+       get_json_int(data, '$.age') as age,
+       get_json_string(data, '$.city') as city
+FROM t_json_schema_change 
+ORDER BY id;
+-- result:
+1	alice	30	seattle
+2	bob	25	boston
+3	charlie	35	chicago
+4	david	40	denver
+5	eve	28	detroit
+-- !result
+SELECT id, json_query(data, '$.name') as name FROM t_json_schema_change ORDER BY id;
+-- result:
+1	"alice"
+2	"bob"
+3	"charlie"
+4	"david"
+5	"eve"
+-- !result
+SELECT id, data->'name' as name FROM t_json_schema_change ORDER BY id;
+-- result:
+1	"alice"
+2	"bob"
+3	"charlie"
+4	"david"
+5	"eve"
+-- !result
