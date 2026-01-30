@@ -35,6 +35,7 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -731,6 +732,18 @@ public class ShowResultMetaFactory implements AstVisitor<ShowResultSetMetaData, 
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                          Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Enabled", ScalarType.createVarcharType(5)))
+                .addColumn(new Column("Interval", ScalarType.createVarcharType(32)))
+                .addColumn(new Column("StorageVolume", ScalarType.createVarcharType(256)))
+                .addColumn(new Column("LastSnapshotTime", ScalarType.createVarcharType(20)))
+                .addColumn(new Column("NextSnapshotTime", ScalarType.createVarcharType(20)))
+                .build();
     }
 
     @Override
