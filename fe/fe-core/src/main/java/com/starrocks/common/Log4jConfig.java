@@ -41,12 +41,14 @@ import groovy.lang.Tuple3;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.ConfigurationSource;
 import org.apache.logging.log4j.core.config.xml.XmlConfiguration;
 import org.apache.logging.log4j.core.lookup.Interpolator;
 import org.apache.logging.log4j.core.lookup.StrSubstitutor;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -413,16 +415,29 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     public static synchronized void initLogging() throws IOException {
-        sysLogLevel = Config.sys_log_level;
-        verboseModules = Config.sys_log_verbose_modules;
-        auditModules = Config.audit_log_modules;
-        dumpModules = Config.dump_log_modules;
-        bigQueryModules = Config.big_query_log_modules;
-        internalModules = Config.internal_log_modules;
-        compressSysLog = Config.sys_log_enable_compress;
-        compressAuditLog = Config.audit_log_enable_compress;
-        warnModules = Config.sys_log_warn_modules;
-        reconfig();
+        String customConfig = System.getProperty("log4j.configurationFile");
+
+        if (StringUtils.isNotBlank(customConfig)) {
+            try {
+                ConfigurationSource source = new ConfigurationSource(new FileInputStream(customConfig.replace("file:", "")));
+                LoggerContext context = (LoggerContext) LogManager.getContext(false);
+                Configuration config = new Log4jConfig(source);
+                context.start(config);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to init logging: " + customConfig, e);
+            }
+        } else {
+            sysLogLevel = Config.sys_log_level;
+            verboseModules = Config.sys_log_verbose_modules;
+            auditModules = Config.audit_log_modules;
+            dumpModules = Config.dump_log_modules;
+            bigQueryModules = Config.big_query_log_modules;
+            internalModules = Config.internal_log_modules;
+            compressSysLog = Config.sys_log_enable_compress;
+            compressAuditLog = Config.audit_log_enable_compress;
+            warnModules = Config.sys_log_warn_modules;
+            reconfig();
+        }
     }
 
     public static synchronized Tuple3<String, String[], String[]> updateLogging(

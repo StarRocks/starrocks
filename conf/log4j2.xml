@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Configuration status="info" packages="com.starrocks.common" monitorInterval="30">
+  <Appenders>
+    <Console name="ConsoleErr" target="SYSTEM_ERR" follow="true">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n"/>
+    </Console>
+    <RollingFile name="Sys" fileName="/opt/starrocks/fe/log/fe.log" filePattern="/opt/starrocks/fe/log/fe.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.log.*" />
+          <IfLastModified age="7d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="SysWF" fileName="/opt/starrocks/fe/log/fe.warn.log" filePattern="/opt/starrocks/fe/log/fe.warn.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.warn.log.*" />
+          <IfLastModified age="7d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="Auditfile" fileName="/opt/starrocks/fe/log/fe.audit.log" filePattern="/opt/starrocks/fe/log/fe.audit.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="90" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.audit.log.*" />
+          <IfLastModified age="30d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="dumpFile" fileName="/opt/starrocks/fe/log/fe.dump.log" filePattern="/opt/starrocks/fe/log/fe.dump.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.dump.log.*" />
+          <IfLastModified age="7d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="BigQueryFile" fileName="/opt/starrocks/fe/log/fe.big_query.log" filePattern="/opt/starrocks/fe/log/fe.big_query.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.big_query.log.*" />
+          <IfLastModified age="7d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="ProfileFile" fileName="/opt/starrocks/fe/log/fe.profile.log" filePattern="/opt/starrocks/fe/log/fe.profile.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="5" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.profile.log.*" />
+          <IfLastModified age="1d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="FeaturesFile" fileName="/opt/starrocks/fe/log/fe.features.log"        filePattern="/opt/starrocks/fe/log/fe.features.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="5" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.features.log.*" />
+          <IfLastModified age="3d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+    <RollingFile name="InternalFile" fileName="/opt/starrocks/fe/log/fe.internal.log" filePattern="/opt/starrocks/fe/log/fe.internal.log.%d{yyyyMMdd}-%i">
+      <PatternLayout charset="UTF-8" pattern="%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy/>
+        <SizeBasedTriggeringPolicy size="1024MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="90" fileIndex="min">
+        <Delete basePath="/opt/starrocks/fe/log/" maxDepth="1" followLinks="true">
+          <IfFileName glob="fe.internal.log.*" />
+          <IfLastModified age="7d" />
+        </Delete>
+      </DefaultRolloverStrategy>
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <Root level="INFO">
+      <AppenderRef ref="Sys"/>
+      <AppenderRef ref="SysWF" level="WARN"/>
+    </Root>
+    <Logger name="audit" level="ERROR" additivity="false">
+      <AppenderRef ref="Auditfile"/>
+    </Logger>
+    <Logger name="dump" level="ERROR" additivity="false">
+      <AppenderRef ref="dumpFile"/>
+    </Logger>
+    <Logger name="big_query" level="ERROR" additivity="false">
+      <AppenderRef ref="BigQueryFile"/>
+    </Logger>
+    <Logger name="profile" level="INFO" additivity="false">
+      <AppenderRef ref="ProfileFile"/>
+    </Logger>
+    <Logger name="features" level="INFO" additivity="false">
+      <AppenderRef ref="FeaturesFile"/>
+    </Logger>
+    <Logger name='internal.base' level="INFO" additivity="false"> 
+      <AppenderRef ref="InternalFile"/>
+    </Logger>
+    <Logger name='internal.statistic' level="INFO" additivity="false"> 
+      <AppenderRef ref="InternalFile"/>
+    </Logger>
+    <Logger name='audit.slow_query' level='INFO'/>
+    <Logger name='audit.query' level='INFO'/>
+    <Logger name='dump.query' level='INFO'/>
+    <Logger name='big_query.query' level='INFO'/>
+    <Logger name='org.apache.kafka' level='WARN'><AppenderRef ref='SysWF'/></Logger>
+    <Logger name='org.apache.hudi' level='WARN'><AppenderRef ref='SysWF'/></Logger>
+    <Logger name='org.apache.hadoop.io.compress' level='WARN'><AppenderRef ref='SysWF'/></Logger>
+  </Loggers>
+</Configuration>
