@@ -16,13 +16,21 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <functional>
+#include <memory>
 #include <thread>
 
+#include "column/chunk.h"
 #include "column/column_access_path.h"
+#include "column/column_helper.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
@@ -30,6 +38,7 @@
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/RuntimeProfile_types.h"
@@ -38,12 +47,14 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/time_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "types/date_value.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
@@ -110,6 +121,18 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
                              << "index: " << i << ", error: " << st.status();
             }
         }
+    }
+
+    if (_olap_scan_node.__isset.partition_conjuncts) {
+        const auto& partition_conjuncts = _olap_scan_node.partition_conjuncts;
+        _partition_exprs.resize(partition_conjuncts.size());
+        for (int i = 0; i < partition_conjuncts.size(); ++i) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, partition_conjuncts[i], &_partition_exprs[i], state));
+        }
+
+        // need open in init phase, because it's will used in build morsel queue and start scan phase
+        RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
+        RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
     }
 
     if (tnode.olap_scan_node.__isset.enable_topn_filter_back_pressure &&
@@ -410,13 +433,134 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
+StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc, const TKeyRange& column_range,
+                                                ObjectPool* obj_pool, RuntimeState* state) {
+    if (column_range.__isset.list_values && !column_range.list_values.empty()) {
+        std::vector<ExprContext*> ctxs;
+        for (const auto& obj : column_range.list_values) {
+            RETURN_IF_ERROR(Expr::create_expr_tree(obj_pool, obj, &ctxs.emplace_back(), state));
+            DCHECK(ctxs.back()->root()->is_constant());
+        }
+        RETURN_IF_ERROR(Expr::prepare(ctxs, state));
+        RETURN_IF_ERROR(Expr::open(ctxs, state));
+
+        auto col = ColumnHelper::create_column(slot_desc->type(), true, false, column_range.list_values.size(), false);
+        for (auto* ctx : ctxs) {
+            ASSIGN_OR_RETURN(ColumnPtr v, ctx->root()->evaluate_const(ctx));
+            col->append(*v, 0, 1);
+        }
+        Expr::close(ctxs, state);
+        return col;
+    } else if (column_range.__isset.begin_key && column_range.__isset.end_key) {
+        if (slot_desc->type().is_date_type()) {
+            auto lower_julian = date::from_date_literal(column_range.begin_key);
+            auto upper_julian = date::from_date_literal(column_range.end_key);
+
+            auto col =
+                    ColumnHelper::create_column(slot_desc->type(), true, false, upper_julian - lower_julian + 1, false);
+            for (JulianDate date = lower_julian; date <= upper_julian; date++) {
+                col->append_datum(Datum(DateValue{date}));
+            }
+            return col;
+        } else if (slot_desc->type().is_integer_type()) {
+            size_t size = column_range.end_key - column_range.begin_key + 1;
+            auto col = ColumnHelper::create_column(slot_desc->type(), true, false, size, false);
+            for (int64_t v = column_range.begin_key; v <= column_range.end_key; v++) {
+                col->append_datum(Datum(v));
+            }
+            return col;
+        } else {
+            DCHECK(false) << "Unsupported partition column range, column name: " << column_range.column_name;
+            return Status::InternalError("Unsupported partition column range");
+        }
+    } else {
+        DCHECK(false) << "Unsupported partition column range, column name: " << column_range.column_name;
+        return Status::InternalError("Unsupported partition column range");
+    }
+}
+
+Status OlapScanNode::_prune_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges,
+                                        std::vector<TScanRangeParams>* pruned_scan_ranges) {
+    if (_partition_exprs.empty()) {
+        *pruned_scan_ranges = scan_ranges;
+        return Status::OK();
+    }
+
+    std::unordered_map<std::string, SlotDescriptor*> column_name_to_id;
+    auto* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
+
+    for (const auto& slot : tuple_desc->slots()) {
+        column_name_to_id[slot->col_name()] = slot;
+    }
+
+    ObjectPool obj_pool;
+    std::vector<TScanRangeParams> temp;
+    for (const auto& scan_range : scan_ranges) {
+        auto& olap_range = scan_range.scan_range.internal_scan_range;
+        if (!olap_range.__isset.partition_column_ranges || olap_range.partition_column_ranges.empty()) {
+            temp.emplace_back(scan_range);
+            continue;
+        }
+
+        bool is_pruned = false;
+        for (const auto& partition_column_range : olap_range.partition_column_ranges) {
+            auto* slot = column_name_to_id[partition_column_range.column_name];
+            DCHECK(slot != nullptr) << "Failed to find slot for partition column: "
+                                    << partition_column_range.column_name;
+
+            ASSIGN_OR_RETURN(auto col,
+                             _build_partition_col_values(slot, partition_column_range, &obj_pool, runtime_state()));
+
+            Chunk partition_cols_chunk;
+            Filter filter(col->size(), 1);
+            partition_cols_chunk.append_column(std::move(col), slot->id());
+
+            for (auto* ctx : _partition_exprs) {
+                auto* ref = ctx->root()->get_column_ref();
+                if (!partition_cols_chunk.is_slot_exist(ref->slot_id())) {
+                    continue;
+                }
+                ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(&partition_cols_chunk, filter.data()));
+                size_t true_count = ColumnHelper::count_true_with_notnull(column);
+                if (true_count == column->size()) {
+                    // all hit, skip
+                    continue;
+                } else if (0 == true_count) {
+                    is_pruned = true;
+                    break;
+                } else {
+                    bool all_zero = false;
+                    ColumnHelper::merge_two_filters(column, &filter, &all_zero);
+                    if (all_zero) {
+                        is_pruned = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!is_pruned) {
+            temp.emplace_back(scan_range);
+        }
+    }
+    pruned_scan_ranges->swap(temp);
+    return Status::OK();
+}
+
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
+    // daynamic partition pruning
+    std::vector<TScanRangeParams> pruned_scan_ranges;
+
+    if (!_prune_scan_ranges(scan_ranges, &pruned_scan_ranges).ok()) {
+        pruned_scan_ranges = scan_ranges;
+    }
+
     pipeline::Morsels morsels;
     [[maybe_unused]] bool has_more_morsel = false;
-    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+    pipeline::ScanMorsel::build_scan_morsels(node_id, pruned_scan_ranges, accept_empty_scan_ranges(), &morsels,
                                              &has_more_morsel);
     DCHECK(has_more_morsel == false);
 
@@ -453,14 +597,14 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     int64_t scan_dop;
     int64_t splitted_scan_rows;
     ASSIGN_OR_RETURN(auto could,
-                     _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                     _could_tablet_internal_parallel(pruned_scan_ranges, pipeline_dop, num_total_scan_ranges,
                                                      tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
 
     // Split tablet physically.
-    ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(scan_ranges));
+    ASSIGN_OR_RETURN(bool ok, _could_split_tablet_physically(pruned_scan_ranges));
     if (ok) {
         return std::make_unique<pipeline::PhysicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
     }

@@ -92,7 +92,7 @@ public class ScanNodeComputeScanRangeTest {
         };
 
         Assertions.assertDoesNotThrow(() -> scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex,
-                selectedIndex.getTablets(), -1));
+                selectedIndex.getTablets(), List.of(), -1));
         Assertions.assertEquals(1, invokeCounter.get());
     }
 
