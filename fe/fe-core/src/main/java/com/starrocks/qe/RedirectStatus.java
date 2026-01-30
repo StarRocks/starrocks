@@ -30,6 +30,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -713,6 +714,16 @@ public class RedirectStatus {
         @Override
         public RedirectStatus visitAdminShowConfigStatement(AdminShowConfigStmt statement, Void context) {
             return visitShowStatement(statement, context);
+        }
+
+        @Override
+        public RedirectStatus visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                                       Void context) {
+            if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            } else {
+                return RedirectStatus.NO_FORWARD;
+            }
         }
 
         @Override

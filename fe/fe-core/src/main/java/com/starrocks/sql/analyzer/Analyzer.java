@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
@@ -456,6 +457,13 @@ public class Analyzer {
         @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt adminShowConfigStmt, ConnectContext session) {
             AdminStmtAnalyzer.analyze(adminShowConfigStmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowAutomatedSnapshotStatement(AdminShowAutomatedSnapshotStmt statement,
+                                                             ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
 
