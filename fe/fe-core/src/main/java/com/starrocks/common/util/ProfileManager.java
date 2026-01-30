@@ -291,7 +291,7 @@ public class ProfileManager implements MemoryTrackable {
     public long estimateSize() {
         readLock.lock();
         try {
-            return Estimator.estimate(profileMap, 10, 20);
+            return Estimator.estimate(profileMap, 10);
         } finally {
             readLock.unlock();
         }
