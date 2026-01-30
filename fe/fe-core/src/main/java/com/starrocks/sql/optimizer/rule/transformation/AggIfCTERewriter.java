@@ -50,26 +50,28 @@ import java.util.stream.Collectors;
  *
  * The optimization splits agg_if functions into two steps:
  * 1. Filter rows where condition is true, then apply the base aggregate function (without _if)
- * 2. Join the result with main query using LEFT JOIN
+ * 2. Join the result with main query using FULL JOIN or LEFT JOIN
  *
+ * For agg_if functions without group by:
  * e.g:
  * Before:
- *          Agg[array_agg_if(x, condition), sum(v4), max(v5)]
+ *          Agg[array_agg_if(x, cd1), min_by_if(x, cd1), sum(v4), max(v5)]
  *                      |
  *                  Child Plan
  *
  * After:
  *                     CTEAnchor
  *                   /           \
- *           CTEProduce           Left join
- *             /                 /          \
- *      Child Plan        Left join       Agg[sum(v4), max(v5)]
- *                        /          \            \
- *                 Agg[array_agg(x)]  ...         CTEConsume
- *                 (with filter)              (main CTE)
- *                     /               \
- *                CTEConsume        CTEConsume
- *                (filtered)        (main)
+ *           CTEProduce           full join
+ *             /                 /           \
+ *      Child Plan        full join       Agg[sum(v4), max(v5)]
+ *                        /      \               \
+ *               Agg[agg(x)]  Agg[agg(x)]   CTEConsume
+ *                    |            |
+ *               Filter[cd1]   Filter[cd2]
+ *                    |            |
+ *                CTEConsume   CTEConsume
+ *
  *
  * For agg_if functions with group by:
  * Before:
@@ -82,15 +84,11 @@ import java.util.stream.Collectors;
  *                   /            \
  *           CTEProduce         Left join (on group keys)
  *             /                 /                  \
- *      Child Plan       Left join(v3 <=> v3)     Agg[sum(v4)]
- *                        /          \               group by v3
- *                       /            \                   \
- *                 Agg[array_agg(x)]   ...              CTEConsume
- *                 group by v3                          (main)
- *                 (with filter)                            \
- *                     /                                     \
- *                CTEConsume                              CTEConsume
- *                (filtered)                              (main)
+ *      Child Plan       Agg[sum(v4)]             Agg[array_agg(v4)]
+ *                           |                            |
+ *                       CTEConsume                   Filter[cd1]
+ *                                                        |
+ *                                                    CTEConsume
  */
 public class AggIfCTERewriter {
 
