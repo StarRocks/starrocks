@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
@@ -120,7 +122,8 @@ public:
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
+                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
+                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
