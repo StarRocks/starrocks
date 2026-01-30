@@ -56,6 +56,24 @@ static const std::string ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";
 static const std::string ALIYUN_OSS_SECRET_KEY = "aliyun.oss.secret_key";
 static const std::string ALIYUN_OSS_ENDPOINT = "aliyun.oss.endpoint";
 
+<<<<<<< HEAD
+=======
+// Configuration for Azure
+// Currently only supported for Azure Blob Storage
+static const std::string AZURE_BLOB_SHARED_KEY = "azure.blob.shared_key";
+static const std::string AZURE_BLOB_SAS_TOKEN = "azure.blob.sas_token";
+static const std::string AZURE_BLOB_OAUTH2_CLIENT_ID = "azure.blob.oauth2_client_id";
+static const std::string AZURE_BLOB_OAUTH2_CLIENT_SECRET = "azure.blob.oauth2_client_secret";
+static const std::string AZURE_BLOB_OAUTH2_TENANT_ID = "azure.blob.oauth2_tenant_id";
+
+// Credentials for Huawei OBS
+static const std::string HUAWEI_OBS_ACCESS_KEY = "fs.obs.access_key";
+static const std::string HUAWEI_OBS_SECRET_KEY = "fs.obs.secret_key";
+static const std::string HUAWEI_OBS_ACCESS_KEY_DOT = "fs.obs.access.key";
+static const std::string HUAWEI_OBS_SECRET_KEY_DOT = "fs.obs.secret.key";
+static const std::string HUAWEI_OBS_ENDPOINT = "fs.obs.endpoint";
+
+>>>>>>> 1cbe33774f ([BugFix] masking OBS ak/sk in ui (#65462))
 class CloudConfigurationFactory {
 public:
     static const AWSCloudConfiguration create_aws(const TCloudConfiguration& t_cloud_configuration) {
