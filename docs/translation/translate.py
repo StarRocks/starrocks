@@ -131,7 +131,7 @@ class StarRocksTranslator:
     def validate_mdx(self, original: str, translated: str) -> tuple[bool, str]:
         clean_orig = self._strip_code_blocks(original)
         clean_trans = self._strip_code_blocks(translated)
-        tag_pattern = r'<\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)\b[^>]*?>'
+        tag_pattern = r'<(?!\!--)\s*/?\s*([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])[^>]*?>'
         
         def get_tag_fingerprints(text):
             fingerprints = []
