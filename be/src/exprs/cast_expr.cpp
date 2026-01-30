@@ -48,6 +48,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
+#include "util/numeric_types.h"
 #include "types/large_int_value.h"
 #include "types/logical_type.h"
 #include "util/date_func.h"
@@ -476,6 +477,34 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
     return value.to_timestamp_literal();
 }
 
+// Helper function to parse string to integer with float fallback.
+// If string_to_int fails, try to parse as float and convert to integer.
+// This aligns with JSON scanner's behavior in add_column_with_string_value.
+template <typename IntType>
+static bool string_to_int_with_float_fallback(const char* data, size_t size, IntType* result,
+                                              StringParser::ParseResult* parse_result) {
+    *result = StringParser::string_to_int<IntType>(data, size, parse_result);
+    if (*parse_result == StringParser::PARSE_SUCCESS) {
+        return true;
+    }
+
+    // Attempt to parse the string as float, then convert to integer.
+    // This handles cases like "46047.0" which should be converted to 46047.
+    StringParser::ParseResult float_result = StringParser::PARSE_SUCCESS;
+    double d = StringParser::string_to_float<double>(data, size, &float_result);
+    if (float_result == StringParser::PARSE_SUCCESS) {
+        // Check for overflow when converting from double to integer
+        if (!check_signed_number_overflow<double, IntType>(d)) {
+            *result = static_cast<IntType>(d);
+            *parse_result = StringParser::PARSE_SUCCESS;
+            return true;
+        }
+    }
+
+    *parse_result = StringParser::PARSE_FAILURE;
+    return false;
+}
+
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     StringParser::ParseResult result;
@@ -486,7 +515,8 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
         auto slice = input->get_slice(0);
-        auto r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+        RunTimeCppType<ToType> r;
+        string_to_int_with_float_fallback<RunTimeCppType<ToType>>(slice.data, slice.size, &r, &result);
         if (result != StringParser::PARSE_SUCCESS) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -507,7 +537,8 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
-                res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+                string_to_int_with_float_fallback<RunTimeCppType<ToType>>(slice.data, slice.size, &res_data[i],
+                                                                          &result);
                 if constexpr (AllowThrowException) {
                     if (result != StringParser::PARSE_SUCCESS) {
                         THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -525,7 +556,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         bool has_null = false;
         for (int i = 0; i < sz; ++i) {
             auto slice = data_column->get_slice(i);
-            res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+            string_to_int_with_float_fallback<RunTimeCppType<ToType>>(slice.data, slice.size, &res_data[i], &result);
             null_data[i] = (result != StringParser::PARSE_SUCCESS);
             if constexpr (AllowThrowException) {
                 if (result != StringParser::PARSE_SUCCESS) {
