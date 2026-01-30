@@ -28,6 +28,8 @@ public class AdminRepairTableStmt extends DdlStmt {
     private boolean enforceConsistentVersion = true;
     // Allows empty tablet recovery of tablets with no valid metadata
     private boolean allowEmptyTabletRecovery = false;
+    // If true, just return the repair plan without executing it
+    private boolean dryRun = false;
 
     public AdminRepairTableStmt(TableRef tblRef, Map<String, String> properties, NodePosition pos) {
         super(pos);
@@ -65,6 +67,14 @@ public class AdminRepairTableStmt extends DdlStmt {
 
     public void setAllowEmptyTabletRecovery(boolean allowEmptyTabletRecovery) {
         this.allowEmptyTabletRecovery = allowEmptyTabletRecovery;
+    }
+
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    public void setDryRun(boolean dryRun) {
+        this.dryRun = dryRun;
     }
 
     @Override
