@@ -29,6 +29,7 @@ import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.alter.reshard.IdenticalTablet;
+import com.starrocks.alter.reshard.MergeTabletJob;
 import com.starrocks.alter.reshard.MergingTablet;
 import com.starrocks.alter.reshard.ReshardingTablet;
 import com.starrocks.alter.reshard.SplitTabletJob;
@@ -423,7 +424,8 @@ public class RuntimeTypeAdapterTypes {
 
         final RuntimeTypeAdapterFactory<TabletReshardJob> tablet_reshard_job_runtime_type_adapter_factory =
                 RuntimeTypeAdapterFactory.of(TabletReshardJob.class, "clazz")
-                        .registerSubtype(SplitTabletJob.class, "SplitTabletJob");
+                        .registerSubtype(SplitTabletJob.class, "SplitTabletJob")
+                        .registerSubtype(MergeTabletJob.class, "MergeTabletJob");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(TabletReshardJob.class,
                 tablet_reshard_job_runtime_type_adapter_factory);
 
