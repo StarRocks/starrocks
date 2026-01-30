@@ -49,10 +49,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 
 /*
- * SplitTabletJob is for tablet splitting.
+ * MergeTabletJob is for tablet merging.
  */
-public class SplitTabletJob extends TabletReshardJob {
-    private static final Logger LOG = LogManager.getLogger(SplitTabletJob.class);
+public class MergeTabletJob extends TabletReshardJob {
+    private static final Logger LOG = LogManager.getLogger(MergeTabletJob.class);
 
     @SerializedName(value = "dbId")
     protected final long dbId;
@@ -72,9 +72,9 @@ public class SplitTabletJob extends TabletReshardJob {
     @SerializedName(value = "endTransactionId")
     protected long endTransactionId;
 
-    public SplitTabletJob(long jobId, long dbId, long tableId,
+    public MergeTabletJob(long jobId, long dbId, long tableId,
             Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions) {
-        super(jobId, JobType.SPLIT_TABLET);
+        super(jobId, JobType.MERGE_TABLET);
         this.dbId = dbId;
         this.tableId = tableId;
         this.reshardingPhysicalPartitions = reshardingPhysicalPartitions;
@@ -170,14 +170,14 @@ public class SplitTabletJob extends TabletReshardJob {
     }
 
     /*
-     * 1. Publish the split transaction, update new tablet ranges
+     * 1. Publish the merge transaction, update new tablet ranges
      * 2. Add the new versions of materialized index to catalog
      * 3. Get end transaction id
      * 4. Set job state to CLEANING
      */
     @Override
     protected void runRunningJob() {
-        // 1. Publish the split transaction, update new tablet ranges
+        // 1. Publish the merge transaction, update new tablet ranges
         boolean allPartitionFinished = true;
         ThreadPoolExecutor publishThreadPool = GlobalStateMgr.getCurrentState().getPublishVersionDaemon()
                 .getTaskExecutor();
@@ -216,34 +216,19 @@ public class SplitTabletJob extends TabletReshardJob {
                     allPartitionFinished = false;
                 } else if (publishResult.publishState() == PublishState.SUCCESS) {
                     // Publish success, update new tablet ranges
-                    // Note this will be executed repeatedly when retry job, it should be idempotent
                     Map<Long, TabletRange> tabletRanges = publishResult.tabletRanges();
                     for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
                             .getReshardingIndexes().values()) {
                         MaterializedIndex newIndex = reshardingIndex.getMaterializedIndex();
                         for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
-                            SplittingTablet splittingTablet = reshardingTablet.getSplittingTablet();
-                            if (splittingTablet != null) {
-                                List<Long> newTabletIds = splittingTablet.getNewTabletIds();
-                                for (Long tabletId : newTabletIds) {
-                                    TabletRange tabletRange = tabletRanges.get(tabletId);
-                                    if (tabletRange != null) {
-                                        Tablet newTablet = newIndex.getTablet(tabletId);
-                                        Preconditions.checkNotNull(newTablet, "Not found tablet " + tabletId);
-                                        newTablet.setRange(tabletRange);
-                                    } else {
-                                        // If splitting tablet failed, will fallback to identical tablet,
-                                        // in this case, BE will only return the range of the first tablet
-                                        List<Long> toRemoveTabletIds = newTabletIds.subList(1, newTabletIds.size());
-                                        Preconditions.checkState(tabletId == toRemoveTabletIds.get(0),
-                                                "Range of tablet " + tabletId + " not found");
-                                        for (long toRemoveTabletId : toRemoveTabletIds) {
-                                            newIndex.removeTablet(toRemoveTabletId);
-                                        }
-                                        splittingTablet.fallbackToIdenticalTablet();
-                                        break;
-                                    }
-                                }
+                            MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
+                            if (mergingTablet != null) {
+                                long newTabletId = mergingTablet.getNewTabletId();
+                                TabletRange tabletRange = tabletRanges.get(newTabletId);
+                                Preconditions.checkNotNull(tabletRange, "Range of tablet " + newTabletId + " not found");
+                                Tablet newTablet = newIndex.getTablet(newTabletId);
+                                Preconditions.checkNotNull(newTablet, "Not found tablet " + newTabletId);
+                                newTablet.setRange(tabletRange);
                             }
                         }
                         // Share adjacent tablet range bounds to reduce memory usage
@@ -299,13 +284,13 @@ public class SplitTabletJob extends TabletReshardJob {
         // 4. Set tablet state to NORMAL
         setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
 
-        // 6. Set job state to FINISHED
+        // 5. Set job state to FINISHED
         setJobState(JobState.FINISHED);
     }
 
     @Override
     protected void runFinishedJob() {
-        LOG.info("Split tablet job is finished. {}", this);
+        LOG.info("Merge tablet job is finished. {}", this);
     }
 
     /*
@@ -335,7 +320,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     protected void runAbortedJob() {
-        LOG.info("Split tablet job is aborted. {}", this);
+        LOG.info("Merge tablet job is aborted. {}", this);
     }
 
     // Can abort only when job state is PENDING
@@ -347,7 +332,7 @@ public class SplitTabletJob extends TabletReshardJob {
     // Correspond to job added
     @Override
     protected void replayPendingJob() {
-        LOG.info("Split tablet job replayed pending job. {}", this);
+        LOG.info("Merge tablet job replayed pending job. {}", this);
     }
 
     // Correspond to runPendingJob()
@@ -357,20 +342,20 @@ public class SplitTabletJob extends TabletReshardJob {
         updateNextVersions();
         addTabletsToInvertedIndex();
         registerReshardingTablets();
-        LOG.info("Split tablet job replayed preparing job. {}", this);
+        LOG.info("Merge tablet job replayed preparing job. {}", this);
     }
 
     // Correspond to runPreparingJob()
     @Override
     protected void replayRunningJob() {
-        LOG.info("Split tablet job replayed running job. {}", this);
+        LOG.info("Merge tablet job replayed running job. {}", this);
     }
 
     // Correspond to runRunningJob()
     @Override
     protected void replayCleaningJob() {
         addNewMaterializedIndexes();
-        LOG.info("Split tablet job replayed cleaning job. {}", this);
+        LOG.info("Merge tablet job replayed cleaning job. {}", this);
     }
 
     // Correspond to runCleaningJob()
@@ -379,13 +364,13 @@ public class SplitTabletJob extends TabletReshardJob {
         removeOldMaterializedIndexes();
         unregisterReshardingTablets();
         setTableState(OlapTable.OlapTableState.TABLET_RESHARD, OlapTable.OlapTableState.NORMAL);
-        LOG.info("Split tablet job replayed finished job. {}", this);
+        LOG.info("Merge tablet job replayed finished job. {}", this);
     }
 
     // Correspond to job abort
     @Override
     protected void replayAbortingJob() {
-        LOG.info("Split tablet job replayed aborting job. {}", this);
+        LOG.info("Merge tablet job replayed aborting job. {}", this);
     }
 
     // Correspond to runAbortingJob()
@@ -394,7 +379,7 @@ public class SplitTabletJob extends TabletReshardJob {
         unregisterReshardingTablets();
         removeTabletsFromInvertedIndex();
         setTableState(null, OlapTable.OlapTableState.NORMAL);
-        LOG.info("Split tablet job replayed aborted job. {}", this);
+        LOG.info("Merge tablet job replayed aborted job. {}", this);
     }
 
     @Override
@@ -408,7 +393,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("SplitTabletJob: {");
+        StringBuilder sb = new StringBuilder("MergeTabletJob: {");
         sb.append("job_id: ").append(jobId);
         sb.append(", job_type: ").append(jobType);
         sb.append(", job_state: ").append(jobState);
