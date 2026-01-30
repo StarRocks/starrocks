@@ -104,8 +104,7 @@ public:
                       std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type, std::shared_ptr<ParquetWriterOptions> writer_options,
-                      const std::function<void()>& rollback_action,
-                      const std::vector<bool>& nullable = {});
+                      const std::function<void()>& rollback_action, const std::vector<bool>& nullable = {});
 
     ~ParquetFileWriter() override;
 

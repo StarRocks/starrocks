@@ -219,8 +219,7 @@ ParquetFileWriter::ParquetFileWriter(std::string location, std::shared_ptr<arrow
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                      TCompressionType::type compression_type,
                                      std::shared_ptr<ParquetWriterOptions> writer_options,
-                                     const std::function<void()>& rollback_action,
-                                     const std::vector<bool>& nullable)
+                                     const std::function<void()>& rollback_action, const std::vector<bool>& nullable)
         : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
           _column_names(std::move(column_names)),
@@ -242,9 +241,9 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::
     for (int i = 0; i < type_descs.size(); i++) {
         ::parquet::Repetition::type repetition =
                 (nullable.empty() || nullable[i]) ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED;
-        ARROW_ASSIGN_OR_RAISE(auto node, parquet::ParquetBuildHelper::make_schema_node(
-                                                 column_names[i], type_descs[i], repetition,
-                                                 file_column_ids[i], schema_options))
+        ARROW_ASSIGN_OR_RAISE(auto node,
+                              parquet::ParquetBuildHelper::make_schema_node(column_names[i], type_descs[i], repetition,
+                                                                            file_column_ids[i], schema_options))
         DCHECK(node != nullptr);
         fields.push_back(std::move(node));
     }
@@ -260,8 +259,8 @@ Status ParquetFileWriter::init() {
 
     auto status = [&]() {
         if (_writer_options->column_ids.has_value()) {
-            ARROW_ASSIGN_OR_RAISE(_schema,
-                                  _make_schema(_column_names, _type_descs, _writer_options->column_ids.value(), _nullable));
+            ARROW_ASSIGN_OR_RAISE(
+                    _schema, _make_schema(_column_names, _type_descs, _writer_options->column_ids.value(), _nullable));
         } else {
             std::vector<FileColumnId> column_ids(_type_descs.size());
             ARROW_ASSIGN_OR_RAISE(_schema, _make_schema(_column_names, _type_descs, column_ids, _nullable));
