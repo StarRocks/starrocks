@@ -30,7 +30,7 @@ Note:
 
 **PROPERTIES**
 
-- `enforce_consistent_version`: Whether to enforce all tablets in a partition to rollback to a consistent version. Default: `true`. If this item is set to `true`, the system will search for a consistent version in the history that is valid for all tablets to perform the rollback, ensuring data version alignment across the partition. If it is set to `false`, each tablet in the partition is allowed to rollback to its latest available valid version. The versions of different tablets may be inconsistent, but this maximizes data preservation.
+- `enforce_consistent_version`: Whether to enforce all tablets in a partition to roll back to a consistent version. Default: `true`. If this item is set to `true`, the system will search for a consistent version in the history that is valid for all tablets to perform the rollback, ensuring data version alignment across the partition. If it is set to `false`, each tablet in the partition is allowed to rollback to its latest available valid version. The versions of different tablets may be inconsistent, but this maximizes data preservation.
 - `allow_empty_tablet_recovery`: Whether to allow recovery by creating empty tablets. Default: `false`. This item takes effect only when `enforce_consistent_version` is `false`. If this item is set to `true`, when metadata is missing for all versions of some tablets but valid metadata exists for at least one tablet, the system attempts to create empty tablets to fill the missing versions. If metadata for all versions of all tablets is lost, recovery is impossible.
 
 ## Examples
