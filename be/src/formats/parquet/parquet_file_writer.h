@@ -104,7 +104,7 @@ public:
                       std::vector<std::string> column_names, std::vector<TypeDescriptor> type_descs,
                       std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       TCompressionType::type compression_type, std::shared_ptr<ParquetWriterOptions> writer_options,
-                      const std::function<void()>& rollback_action, const std::vector<bool>& nullable = {});
+                      std::function<void()> rollback_action, std::vector<bool> nullable = {});
 
     ~ParquetFileWriter() override;
 
@@ -154,7 +154,7 @@ public:
                              std::map<std::string, std::string> options, std::vector<std::string> column_names,
                              std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
                              std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
-                             RuntimeState* runtime_state, const std::vector<bool>& nullable = {});
+                             RuntimeState* runtime_state, std::vector<bool> nullable = {});
 
     Status init() override;
 

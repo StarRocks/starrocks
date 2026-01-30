@@ -219,7 +219,7 @@ ParquetFileWriter::ParquetFileWriter(std::string location, std::shared_ptr<arrow
                                      std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                      TCompressionType::type compression_type,
                                      std::shared_ptr<ParquetWriterOptions> writer_options,
-                                     const std::function<void()>& rollback_action, const std::vector<bool>& nullable)
+                                     std::function<void()> rollback_action, std::vector<bool> nullable)
         : _location(std::move(location)),
           _output_stream(std::move(output_stream)),
           _column_names(std::move(column_names)),
@@ -227,8 +227,8 @@ ParquetFileWriter::ParquetFileWriter(std::string location, std::shared_ptr<arrow
           _column_evaluators(std::move(column_evaluators)),
           _compression_type(compression_type),
           _writer_options(std::move(writer_options)),
-          _rollback_action(std::move(rollback_action)),
-          _nullable(nullable) {}
+          _nullable(std::move(nullable)),
+          _rollback_action(std::move(rollback_action)) {}
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::_make_schema(
         const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
@@ -295,7 +295,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(
         std::map<std::string, std::string> options, std::vector<std::string> column_names,
         std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators,
         std::optional<std::vector<formats::FileColumnId>> field_ids, PriorityThreadPool* executors,
-        RuntimeState* runtime_state, const std::vector<bool>& nullable)
+        RuntimeState* runtime_state, std::vector<bool> nullable)
         : _fs(std::move(fs)),
           _compression_type(compression_type),
           _field_ids(std::move(field_ids)),
@@ -304,7 +304,7 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors),
           _runtime_state(runtime_state),
-          _nullable(nullable) {}
+          _nullable(std::move(nullable)) {}
 
 Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
