@@ -18,7 +18,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "formats/csv/output_stream_string.h"
+#include "io/formatted_output_stream_string.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -461,7 +461,7 @@ TEST(ArrayConverterTest, test_write_string) {
     auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
 
-    csv::OutputStreamString buff;
+    io::FormattedOutputStreamString buff;
     col->append_datum(DatumArray{});
     col->append_datum(DatumArray{Datum()}); // [NULL]
     col->append_datum(DatumArray{DateValue::create(1999, 9, 1)});
@@ -474,7 +474,7 @@ TEST(ArrayConverterTest, test_write_string) {
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("[][null][\"1999-09-01\"][\"2000-09-01\",\"2001-09-01\"]", buff.as_string());
 
-    csv::OutputStreamString buff2;
+    io::FormattedOutputStreamString buff2;
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());

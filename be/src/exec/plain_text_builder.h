@@ -26,8 +26,11 @@ namespace starrocks {
 
 namespace csv {
 class Converter;
-class OutputStream;
 } // namespace csv
+
+namespace io {
+class FormattedOutputStream;
+} // namespace io
 
 class ExprContext;
 class FileWriter;
@@ -55,7 +58,7 @@ private:
     const static size_t OUTSTREAM_BUFFER_SIZE_BYTES;
     const PlainTextBuilderOptions _options;
     const std::vector<ExprContext*>& _output_expr_ctxs;
-    std::unique_ptr<csv::OutputStream> _output_stream;
+    std::unique_ptr<io::FormattedOutputStream> _output_stream;
     std::vector<std::unique_ptr<csv::Converter>> _converters;
     bool _init;
 

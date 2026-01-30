@@ -7,9 +7,9 @@
 #include "exprs/expr.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_escape.h"
-#include "formats/csv/output_stream.h"
-#include "formats/csv/output_stream_file.h"
 #include "gutil/strings/substitute.h"
+#include "io/formatted_output_stream.h"
+#include "io/formatted_output_stream_file.h"
 #include "util/date_func.h"
 #include "util/mysql_row_buffer.h"
 
@@ -21,8 +21,8 @@ PlainTextBuilder::PlainTextBuilder(PlainTextBuilderOptions options, std::unique_
                                    const std::vector<ExprContext*>& output_expr_ctxs)
         : _options(std::move(options)),
           _output_expr_ctxs(output_expr_ctxs),
-          _output_stream(
-                  std::make_unique<csv::OutputStreamFile>(std::move(writable_file), OUTSTREAM_BUFFER_SIZE_BYTES)),
+          _output_stream(std::make_unique<io::FormattedOutputStreamFile>(std::move(writable_file),
+                                                                         OUTSTREAM_BUFFER_SIZE_BYTES)),
           _init(false) {}
 
 PlainTextBuilder::~PlainTextBuilder() = default;
