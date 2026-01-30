@@ -140,7 +140,7 @@ public class ArrowFlightSqlTicketManagerTest {
         ticketManager.validateProxyFormat("grpcs://hostname:443");
         ticketManager.validateProxyFormat("hostname:1");
         ticketManager.validateProxyFormat("hostname:65535");
-        ticketManager.validateProxyFormat(""); // empty is valid
+        ticketManager.validateProxyFormat("");
     }
 
     @Test
