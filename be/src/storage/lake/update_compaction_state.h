@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
-#include <memory>
 
 #include "common/status.h"
 #include "storage/lake/types_fwd.h"
