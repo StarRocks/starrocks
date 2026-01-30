@@ -639,7 +639,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
-    public void testQueryWithCustomSessionName(@Mocked StmtExecutor executor) throws Exception {
+    public void testQueryWithCustomSessionName() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
         ctx.getSessionVariable().setCustomSessionName("session_name");
 
@@ -650,6 +650,11 @@ public class ConnectProcessorTest extends DDLTestBase {
             @Mock
             public void execute() throws Exception {
                 customSessionName.set(ctx.getCustomSessionName());
+            }
+            
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
             }
         };
         processor.processOnce();
