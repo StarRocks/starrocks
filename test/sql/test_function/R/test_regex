@@ -310,7 +310,7 @@ SELECT regexp_position(column_0, '01', 12, 2) FROM (VALUES ('2024-01-01T01:61:00
 -- !result
 SELECT regexp_position(column_0, '(unclosed') FROM (VALUES ('oops')) AS tmp;
 -- result:
-E: (1064, 'Invalid regex expression: (unclosed backend [id=10004] [')
+[REGEX].*Invalid regex expression: \(unclosed.*
 -- !result
 SELECT regexp_position(column_0, 'x') FROM (VALUES (NULL)) AS tmp;
 -- result:
