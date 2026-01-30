@@ -55,3 +55,99 @@ select percentile_cont(db, cast(1.5 as double)) from test_pc;
 select percentile_cont(1, cast(1.0 as double));
 select percentile_cont(1, cast(0.5 as double));
 select percentile_cont(1, cast(1.5 as double));
+
+CREATE TABLE `test_pc_decimal` (
+  `id` int(11) NULL COMMENT "",
+  `v0` decimal(9,0) NULL COMMENT "",
+  `v2` decimal(9,2) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into test_pc_decimal values (1, 0, 1.00);
+insert into test_pc_decimal values (2, 10, 2.00);
+insert into test_pc_decimal values (3, 20, 3.00);
+insert into test_pc_decimal values (4, 30, 4.00);
+insert into test_pc_decimal values (NULL, NULL, NULL);
+
+select percentile_cont(v0, cast(0 as decimal(9,2))) from test_pc_decimal;
+select percentile_cont(v0, cast(1 as decimal(9,2))) from test_pc_decimal;
+select percentile_cont(v0, cast(0.5 as decimal(9,2))) from test_pc_decimal;
+select percentile_cont(v0, cast(0.5 as decimal(9,4))) from test_pc_decimal;
+select percentile_cont(v2, cast(0.5 as decimal(9,2))) from test_pc_decimal;
+select percentile_cont(v0, cast(1.1 as decimal(9,2))) from test_pc_decimal;
+
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_cont(v0, cast(0 as decimal(9,2)))
+from test_pc_decimal;
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ percentile_cont(v0, cast(1 as decimal(9,2)))
+from test_pc_decimal;
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ id % 2 as g,
+       percentile_cont(v0, cast(0.5 as decimal(9,2)))
+from test_pc_decimal
+group by g
+order by g;
+
+select /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_streaming') */
+       percentile_cont(v0, cast(0.5 as decimal(9,2)))
+from test_pc_decimal;
+select /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_preaggregation') */
+       percentile_cont(v0, cast(0.5 as decimal(9,2)))
+from test_pc_decimal;
+
+select /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_streaming') */
+       id % 2 as g, percentile_cont(v0, cast(0.5 as decimal(9,2)))
+from test_pc_decimal
+group by g
+order by g;
+select /*+ SET_VAR (new_planner_agg_stage = '2', streaming_preaggregation_mode = 'force_preaggregation') */
+       id % 2 as g, percentile_cont(v0, cast(0.5 as decimal(9,2)))
+from test_pc_decimal
+group by g
+order by g;
+
+CREATE TABLE `test_pc_decimal_fallback` (
+  `vfb` decimal(9,2) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`vfb`)
+DISTRIBUTED BY HASH(`vfb`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into test_pc_decimal_fallback values (0.00);
+insert into test_pc_decimal_fallback values (9000000.00);
+
+select percentile_cont(vfb, cast(0.5 as decimal(9,4))) from test_pc_decimal_fallback;
+
+CREATE TABLE `test_pc_decimal_big` (
+  `v2` decimal(9,2) NULL COMMENT "",
+  `g` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`g`)
+DISTRIBUTED BY HASH(`g`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+insert into test_pc_decimal_big
+select cast(generate_series as decimal(9,2)) as v2, generate_series % 2 as g
+from TABLE(generate_series(0, 99999));
+
+select percentile_cont(v2, cast(0.5 as decimal(9,2))) from test_pc_decimal_big;
+select /*+ SET_VAR (new_planner_agg_stage = '2') */ g,
+       percentile_cont(v2, cast(0.5 as decimal(9,2)))
+from test_pc_decimal_big
+group by g
+order by g;

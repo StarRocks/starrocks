@@ -21,10 +21,20 @@ INSERT INTO t_percentile_cont_decimal VALUES
     (5, 6.00);
 -- result:
 -- !result
--- rate is DECIMAL(9,3), FE should auto-cast to DECIMAL(9,2)
+-- rate is DECIMAL(9,3), precision/scale mismatch is allowed
 SELECT percentile_cont(v, CAST(0.300 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
 -- result:
 3.20
+-- !result
+-- rate == 0 => min
+SELECT percentile_cont(v, CAST(0.000 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
+-- result:
+2.00
+-- !result
+-- rate == 1 => max
+SELECT percentile_cont(v, CAST(1.000 AS DECIMAL64(9,3))) FROM t_percentile_cont_decimal;
+-- result:
+6.00
 -- !result
 -- truncate semantics: [1.00, 1.01], rate=0.50 => 1.005 -> 1.00
 DROP TABLE IF EXISTS t_percentile_cont_decimal_trunc;
@@ -54,4 +64,3 @@ SELECT percentile_cont(v, CAST(0.500 AS DECIMAL64(9,3))) FROM t_percentile_cont_
 SELECT percentile_cont(v, v) FROM t_percentile_cont_decimal;
 -- result:
 [REGEX].*percentile_cont.*second parameter.*constant.*
-
