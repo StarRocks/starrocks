@@ -16,6 +16,11 @@ package com.starrocks.sql.plan;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * Test virtual columns functionality.
+ * Virtual columns are dynamically computed metadata columns that exist only during query execution.
+ * They are managed by VirtualColumnRegistry for scalability.
+ */
 public class VirtualColumnTest extends PlanTestBase {
     
     @Test
@@ -52,4 +57,52 @@ public class VirtualColumnTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "_tablet_id_");
     }
+    
+    /**
+     * This test demonstrates the scalability of the virtual column registry.
+     * When new virtual columns like _segment_id_ and _row_id_ are added to the registry,
+     * they will automatically work in queries without any code changes beyond the registry.
+     * 
+     * To enable these tests:
+     * 1. Uncomment the virtual column definitions in VirtualColumnRegistry
+     * 2. Uncomment the constants in PlanNodes.thrift
+     * 3. Uncomment the test methods below
+     */
+    
+    // @Test
+    // public void testSegmentIdVirtualColumn() throws Exception {
+    //     // Test _segment_id_ virtual column (when enabled in registry)
+    //     String sql = "select v1, _segment_id_ from t0";
+    //     String plan = getFragmentPlan(sql);
+    //     assertContains(plan, "_segment_id_");
+    //     
+    //     // Test filtering by segment_id
+    //     sql = "select v1 from t0 where _segment_id_ = 5";
+    //     plan = getFragmentPlan(sql);
+    //     assertContains(plan, "_segment_id_");
+    // }
+    
+    // @Test
+    // public void testRowIdVirtualColumn() throws Exception {
+    //     // Test _row_id_ virtual column (when enabled in registry)
+    //     String sql = "select v1, _row_id_ from t0";
+    //     String plan = getFragmentPlan(sql);
+    //     assertContains(plan, "_row_id_");
+    // }
+    
+    // @Test
+    // public void testMultipleVirtualColumns() throws Exception {
+    //     // Test using multiple virtual columns together (when enabled in registry)
+    //     String sql = "select _tablet_id_, _segment_id_, _row_id_, v1 from t0";
+    //     String plan = getFragmentPlan(sql);
+    //     assertContains(plan, "_tablet_id_");
+    //     assertContains(plan, "_segment_id_");
+    //     assertContains(plan, "_row_id_");
+    //     
+    //     // Test group by multiple virtual columns
+    //     sql = "select _tablet_id_, _segment_id_, count(*) from t0 group by _tablet_id_, _segment_id_";
+    //     plan = getFragmentPlan(sql);
+    //     assertContains(plan, "_tablet_id_");
+    //     assertContains(plan, "_segment_id_");
+    // }
 }
