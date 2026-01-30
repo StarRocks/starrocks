@@ -14,6 +14,6 @@
 
 #pragma once
 
-// Backward-compatible shim. Canonical definitions live in gutil to avoid
-// introducing BE module dependencies into gutil.
-#include "gutil/compiler_util.h"
+// This is including a glog internal file. We want this to expose the
+// function to get the stack trace.
+#include <glog/logging.h>

@@ -4,14 +4,13 @@
 
 #include "gutil/strings/stringpiece.h"
 
-#include <common/logging.h>
-
 #include <algorithm>
 #include <climits>
 #include <cstring>
 #include <string>
 
 #include "gutil/hash/hash.h"
+#include "gutil/logging.h"
 #include "gutil/stl_util.h"
 #include "gutil/strings/memutil.h"
 
