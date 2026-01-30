@@ -124,6 +124,15 @@ public class SubqueryTest extends PlanTestBase {
     }
 
     @Test
+    public void testCorrelatedScalarSubqueryLimitOne() throws Exception {
+        String sql = "select t0.v1 from t0 where t0.v2 > "
+                + "(select t1.v5 from t1 where t0.v1 = t1.v4 limit 1)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "LEFT OUTER JOIN");
+        assertContains(plan, "any_value");
+    }
+
+    @Test
     public void testUnionSubqueryDefaultLimit() throws Exception {
         connectContext.getSessionVariable().setSqlSelectLimit(2);
         String sql = "select * from (select * from t0 union all select * from t0) xx limit 10;";
