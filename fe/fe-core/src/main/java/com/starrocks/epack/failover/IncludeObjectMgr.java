@@ -335,6 +335,17 @@ public class IncludeObjectMgr {
         return includeTables.remove(tableId) != null;
     }
 
+    public boolean isIncludeTable(Database database, Table table) {
+        if (database == null || table == null) {
+            return false;
+        }
+        if (includeCatalogs.containsKey(InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID)
+                && !database.isSystemDatabase() && !database.isStatisticsDatabase()) {
+            return true;
+        }
+        return includeDatabases.containsKey(database.getId()) || includeTables.containsKey(table.getId());
+    }
+
     public Map<Catalog, Map<Long, Database>> getIncludeCatalogs() {
         Map<Catalog, Map<Long, Database>> catalogs = Maps.newHashMapWithExpectedSize(includeCatalogs.size());
         for (IncludeCatalog includeCatalog : includeCatalogs.values()) {

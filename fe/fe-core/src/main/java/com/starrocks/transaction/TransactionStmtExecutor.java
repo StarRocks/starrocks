@@ -165,6 +165,8 @@ public class TransactionStmtExecutor {
         TransactionState transactionState = explicitTxnState.getTransactionState();
 
         try {
+            checkSecondaryReadonly(transactionState, database.getId(), targetTable.getId());
+
             if (transactionState.getDbId() == 0) {
                 transactionState.setDbId(database.getId());
                 DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
@@ -216,6 +218,8 @@ public class TransactionStmtExecutor {
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         TransactionState transactionState = explicitTxnState.getTransactionState();
 
+        checkSecondaryReadonly(transactionState, dbId, tableId);
+
         if (transactionState.getDbId() == 0) {
             transactionState.setDbId(dbId);
             DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
@@ -234,6 +238,23 @@ public class TransactionStmtExecutor {
                 buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
                         transactionState.getTransactionId(), dbId));
         LOG.info("load database {} table {} item {} txn {}", dbId, tableId, item, context.getTxnId());
+    }
+
+    private static void checkSecondaryReadonly(TransactionState transactionState, long dbId, long tableId)
+            throws StarRocksException {
+        if (transactionState == null) {
+            return;
+        }
+        TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
+        if (sourceType == TransactionState.LoadJobSourceType.REPLICATION
+                || sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+            return;
+        }
+        if (GlobalStateMgr.getCurrentState().getFailoverGroupMgr()
+                .isSecondaryReadonly(dbId, Lists.newArrayList(tableId))) {
+            throw ErrorReportException.report(ErrorCode.ERR_BEGIN_TXN_FAILED,
+                    "Table is readonly in secondary failover group");
+        }
     }
 
     public static void commitStmt(ConnectContext context, CommitStmt stmt) {
