@@ -11,6 +11,11 @@ displayed_sidebar: docs
 对于存算一体集群中的内表，此语句会尝试优先调度副本修复操作。
 
 对于存算分离集群中的云原生表，当元数据或数据文件丢失时，它会尝试回滚到历史可用版本。请注意，**这可能会导致某些分区丢失最新数据**。
+<<<<<<< HEAD
+=======
+
+详细操作指南请参阅[管理副本](../../../../administration/management/resource_management/Replica.md)。
+>>>>>>> 31c8936032 ([Doc] Add repair cloud native table doc (#68395))
 
 :::tip
 

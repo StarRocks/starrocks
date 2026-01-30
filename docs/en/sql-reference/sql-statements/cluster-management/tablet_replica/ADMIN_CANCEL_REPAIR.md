@@ -7,6 +7,11 @@ displayed_sidebar: docs
 Cancels the prioritized schedule of repairing operations on specified tables or partitions. This statement only indicates that the system will no longer repair sharding replicas of specified tables or partitions with high priority. It still repairs these copies by default scheduling.
 
 ADMIN CANCEL REPAIR applies only to native tables in shared-nothing clusters.
+<<<<<<< HEAD
+=======
+
+For detailed instructions, see [Manage Replica](../../../../administration/management/resource_management/Replica.md).
+>>>>>>> 31c8936032 ([Doc] Add repair cloud native table doc (#68395))
 
 :::tip
 
