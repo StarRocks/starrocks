@@ -394,6 +394,7 @@ set(WL_LINK_DYNAMIC "-Wl,-Bdynamic")
 # Set starrocks libraries
 set(STARROCKS_LINK_LIBS
     Gutil
+    Base
     ${WL_START_GROUP}
     Agent
     Common
@@ -724,6 +725,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/base)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
