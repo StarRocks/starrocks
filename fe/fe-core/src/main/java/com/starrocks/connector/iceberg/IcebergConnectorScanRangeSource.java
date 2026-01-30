@@ -88,6 +88,7 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
 public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
+
     private final IcebergTable table;
     private final TupleDescriptor desc;
     private final IcebergMORParams morParams;
@@ -150,6 +151,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     public boolean sourceHasMoreOutput() {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.hasMoreOutput")) {
             return remoteFileInfoSource.hasMoreOutput();
+        }
+    }
+
+    @Override
+    public void close() {
+        try {
+            remoteFileInfoSource.close();
+        } catch (Exception e) {
+            LOG.warn("close RemoteFileInfoSource failed", e);
         }
     }
 
