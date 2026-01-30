@@ -79,15 +79,13 @@ Key CMake options (see `be/CMakeLists.txt`):
 
 ### Unit Test Linking Note
 
-- `TEST_LINK_LIBS` removes `WRAP_LINKER_FLAGS` (the `-Wl,-wrap,__cxa_throw` flags).
-  Some UT binaries (e.g. minimal/base tests) do not link `Util`, where `__wrap___cxa_throw` is defined,
-  so keeping the wrap causes link errors. Non-test targets still keep the wrap via `STARROCKS_LINK_LIBS`.
+- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
+  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
 
 ### Unit Test Linking Note
 
-- `TEST_LINK_LIBS` removes `WRAP_LINKER_FLAGS` (the `-Wl,-wrap,__cxa_throw` flags).
-  Some UT binaries (e.g. minimal/base tests) do not link `Util`, where `__wrap___cxa_throw` is defined,
-  so keeping the wrap causes link errors. Non-test targets still keep the wrap via `STARROCKS_LINK_LIBS`.
+- Minimal UT binaries like `base_test` avoid `WRAP_LINKER_FLAGS` because they don’t link `Util`,
+  which provides `__wrap___cxa_throw`. Other UTs still use the default wrap via `TEST_LINK_LIBS`.
 
 ## Code Style
 

@@ -648,8 +648,6 @@ set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
     gtest
     ${WL_END_GROUP}
 )
-# Unit tests may not link Util (which provides __wrap___cxa_throw). Remove wrap flags to avoid link errors.
-list(REMOVE_ITEM TEST_LINK_LIBS "${WRAP_LINKER_FLAGS}")
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
