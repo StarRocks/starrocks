@@ -3334,6 +3334,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
 - 引入版本：-
 
+##### enable_table_metrics_collect
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否在 FE 中导出表级指标。关闭后，FE 将跳过导出表级指标（如表扫描/导入计数器及表大小指标），但仍会在内存中记录计数器。
+- 引入版本：-
+
 ##### enable_mv_post_image_reload_cache
 
 - 默认值：true
