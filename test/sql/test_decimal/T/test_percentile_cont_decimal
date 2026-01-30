@@ -1,4 +1,4 @@
--- name: test_percentile_cont
+-- name: test_percentile_cont_decimal
 
 DROP TABLE IF EXISTS t_percentile_cont_decimal;
 
